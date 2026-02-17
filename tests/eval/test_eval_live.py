@@ -7,7 +7,6 @@ Run:
     uv run pytest tests/eval/test_eval_live.py -m "eval and e2e" -v
 """
 
-import asyncio
 from dataclasses import fields
 
 import mlflow.genai
@@ -51,13 +50,14 @@ def report_to_outputs(report: ZoningReport) -> dict:
 class TestLiveEval:
     """Run the full pipeline for each golden address and score results."""
 
-    def test_live_pipeline(self, golden_data, all_scorers):
+    @pytest.mark.asyncio
+    async def test_live_pipeline(self, golden_data, all_scorers):
         """Run pipeline for each golden address, evaluate against expectations."""
         live_data = []
 
         for sample in golden_data:
             address = sample["inputs"]["address"]
-            report = asyncio.run(lookup_address(address))
+            report = await lookup_address(address)
 
             if report is None:
                 outputs = {
