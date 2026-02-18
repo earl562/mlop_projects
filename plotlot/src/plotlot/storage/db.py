@@ -22,12 +22,19 @@ def _get_engine():
     global _engine
     if _engine is None:
         kwargs: dict = {"echo": False}
+        connect_args: dict = {"timeout": 10}  # 10s connection timeout for asyncpg
         if settings.database_require_ssl:
             import ssl
 
             ctx = ssl.create_default_context()
-            kwargs["connect_args"] = {"ssl": ctx}
-        _engine = create_async_engine(settings.database_url, **kwargs)
+            connect_args["ssl"] = ctx
+        kwargs["connect_args"] = connect_args
+        _engine = create_async_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            **kwargs,
+        )
     return _engine
 
 

@@ -6,6 +6,7 @@ Run:
     plotlot-api
 """
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -35,8 +36,10 @@ async def lifespan(app: FastAPI):
     redacted_host = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
     logger.info("Connecting to database at %s/%s", redacted_host, parsed.path.lstrip("/"))
     try:
-        await init_db()
+        await asyncio.wait_for(init_db(), timeout=15)
         logger.info("Database initialized successfully")
+    except asyncio.TimeoutError:
+        logger.error("Database initialization timed out after 15s — API will start in degraded mode")
     except Exception as e:
         logger.error("Database initialization failed: %s — API will start in degraded mode", e)
     logger.info("PlotLot API ready")
