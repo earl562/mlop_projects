@@ -139,7 +139,7 @@ async def debug_llm():
         "max_tokens": 5,
     }
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)) as client:
         # NVIDIA NIM
         if _s.nvidia_api_key:
             try:

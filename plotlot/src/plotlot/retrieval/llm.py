@@ -16,7 +16,7 @@ import logging
 import httpx
 
 # Granular timeouts: fail fast on connect, generous on read (LLM generation)
-LLM_TIMEOUT = httpx.Timeout(connect=10.0, read=40.0, write=10.0, pool=5.0)
+LLM_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
 from plotlot.config import settings
 from plotlot.observability.tracing import start_span, trace
