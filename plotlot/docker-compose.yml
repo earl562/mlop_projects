@@ -19,7 +19,6 @@ services:
   api:
     build:
       context: .
-      target: api
     ports:
       - "8000:8000"
     env_file: .env
@@ -61,7 +60,7 @@ services:
   prefect-worker:
     build:
       context: .
-      target: worker
+    command: ["prefect", "worker", "start", "--pool", "plotlot-pool", "--type", "process"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@db:5432/plotlot
