@@ -1,0 +1,15 @@
+frontend/
+data/
+notebooks/
+configs/
+tests/
+docs/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+*.md
+.env
+.env.*
+How_I_Built_PlotLot.docx

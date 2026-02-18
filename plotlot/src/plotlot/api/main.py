@@ -29,8 +29,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize DB on startup, cleanup on shutdown."""
     setup_logging(json_format=settings.log_json, level=settings.log_level)
-    logger.info("Initializing database...")
-    await init_db()
+    # Log the database URL (redacted) for debugging deployment issues
+    from urllib.parse import urlparse
+    parsed = urlparse(settings.database_url)
+    redacted_host = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+    logger.info("Connecting to database at %s/%s", redacted_host, parsed.path.lstrip("/"))
+    try:
+        await init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error("Database initialization failed: %s — API will start in degraded mode", e)
     logger.info("PlotLot API ready")
     yield
     logger.info("Shutting down")
