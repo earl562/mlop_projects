@@ -11,6 +11,9 @@ dependencies = [
     "asyncpg>=0.29",
     "pgvector>=0.3",
     "beautifulsoup4>=4.12",
+    "mlflow>=2.16",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
 ]
 
 [project.optional-dependencies]
@@ -19,12 +22,17 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
 ]
+eval = [
+    "jsonschema>=4.21",
+    "pytest-cov>=5.0",
+]
 prefect = ["prefect>=3.0"]
 
 [project.scripts]
 plotlot = "plotlot.cli:main"
 plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
+plotlot-api = "plotlot.api.main:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -33,6 +41,11 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "eval: evaluation tests against golden dataset",
+    "e2e: end-to-end pipeline regression tests",
+    "integration: tests requiring live external services (DB, APIs, LLM)",
+]
 
 [tool.ruff]
 target-version = "py312"

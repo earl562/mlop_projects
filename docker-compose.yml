@@ -2,18 +2,76 @@ services:
   db:
     image: pgvector/pgvector:pg16
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: plotlot
       POSTGRES_PASSWORD: plotlot
       POSTGRES_DB: plotlot
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-mlflow.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U plotlot"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@db:5432/plotlot
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://plotlot:plotlot@db:5432/plotlot_mlflow
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    volumes:
+      - mlflow-artifacts:/mlflow/artifacts
+    command: >
+      bash -c "pip install psycopg2-binary --quiet &&
+      mlflow server
+      --backend-store-uri postgresql://plotlot:plotlot@db:5432/plotlot_mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  prefect-server:
+    image: prefecthq/prefect:3-python3.13
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    command: prefect server start --host 0.0.0.0
+
+  prefect-worker:
+    build:
+      context: .
+      target: worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@db:5432/plotlot
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PREFECT_API_URL: http://prefect-server:4200/api
+    depends_on:
+      - prefect-server
+      - db
+
 volumes:
   pgdata:
+  mlflow-artifacts:
+  prefect-data:

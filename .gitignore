@@ -25,3 +25,10 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# MLflow local artifacts
+mlflow.db
+mlruns/
+
+# Frontend (separate build)
+frontend/node_modules/

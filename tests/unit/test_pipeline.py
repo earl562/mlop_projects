@@ -121,7 +121,7 @@ class TestIngestMunicipality:
             depth=2,
         )
 
-        mock_embedding = [0.1] * 768
+        mock_embedding = [0.1] * 1024
 
         with patch("plotlot.ingestion.discovery.get_municode_configs", new_callable=AsyncMock) as mock_disc, \
              patch("plotlot.pipeline.ingest.MunicodeScraper") as MockScraper, \
@@ -165,7 +165,7 @@ class TestIngestMunicipality:
             mock_disc.return_value = dict(MUNICODE_CONFIGS)
             mock_instance = MockScraper.return_value
             mock_instance.scrape_zoning_chapter = AsyncMock(return_value=[mock_section])
-            mock_embed.return_value = [[0.1] * 768]
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_session = AsyncMock()
             mock_session.commit.side_effect = Exception("DB error")

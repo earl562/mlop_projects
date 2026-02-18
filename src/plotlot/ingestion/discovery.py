@@ -19,8 +19,11 @@ Discovery flow per municipality:
 """
 
 import asyncio
+import json
 import logging
 import re
+import time
+from pathlib import Path
 
 import httpx
 
@@ -31,7 +34,18 @@ logger = logging.getLogger(__name__)
 LIBRARY_API_URL = "https://library.municode.com/api"
 LIBRARY_HEADERS = {"X-CSRF": "1", "Accept": "application/json"}
 
-ZONING_KEYWORDS = ["zoning", "land development", "land use", "uldc", "unified land"]
+ZONING_KEYWORDS = [
+    "zoning", "land development", "land use", "uldc", "unified land",
+    "development code", "development regulations", "planning and zoning",
+    "building and zoning", "comprehensive zoning", "zoning regulations",
+    "zoning ordinance", "land development code", "land development regulations",
+    "appendix a", "appendix b",  # some munis put zoning in appendices
+]
+
+# Disk cache settings
+CACHE_DIR = Path.home() / ".plotlot"
+CACHE_FILE = CACHE_DIR / "discovery_cache.json"
+CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 # All target municipalities by county label.
 # These are the 104 municipalities + 3 unincorporated areas across
@@ -75,6 +89,13 @@ _NAME_MAP: dict[str, str] = {
     "Indian Creek Village": "Indian Creek",
     "Opa-locka": "Opa-Locka",
     "Lauderdale-by-the-Sea": "Lauderdale-By-The-Sea",
+    "Lake Worth Beach": "Lake Worth",
+    "Sea Ranch Lakes": "Sea Ranch Lakes",
+    "Glen Ridge": "Glen Ridge",
+    "Cloud Lake": "Cloud Lake",
+    "Bal Harbour": "Bal Harbour Village",
+    "West Park": "West Park",
+    "Pembroke Park": "Pembroke Park",
 }
 
 # Module-level cache
@@ -91,10 +112,58 @@ def _get_lock() -> asyncio.Lock:
 
 
 def clear_cache() -> None:
-    """Clear the cached configs. Useful for tests and forced re-discovery."""
+    """Clear the in-memory and disk caches. Useful for tests and forced re-discovery."""
     global _cached_configs, _cache_lock
     _cached_configs = None
     _cache_lock = None
+
+
+def _write_disk_cache(configs: dict[str, MunicodeConfig]) -> None:
+    """Persist discovery results to disk as JSON."""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "timestamp": time.time(),
+            "configs": {
+                key: {
+                    "municipality": cfg.municipality,
+                    "county": cfg.county,
+                    "client_id": cfg.client_id,
+                    "product_id": cfg.product_id,
+                    "job_id": cfg.job_id,
+                    "zoning_node_id": cfg.zoning_node_id,
+                }
+                for key, cfg in configs.items()
+            },
+        }
+        CACHE_FILE.write_text(json.dumps(payload, indent=2))
+        logger.info("Wrote discovery cache to %s (%d entries)", CACHE_FILE, len(configs))
+    except OSError as e:
+        logger.warning("Failed to write discovery cache: %s", e)
+
+
+def _read_disk_cache() -> dict[str, MunicodeConfig] | None:
+    """Read discovery results from disk if fresh enough."""
+    if not CACHE_FILE.exists():
+        return None
+    try:
+        payload = json.loads(CACHE_FILE.read_text())
+        age = time.time() - payload.get("timestamp", 0)
+        if age > CACHE_TTL_SECONDS:
+            logger.info("Discovery cache expired (%.1f hours old)", age / 3600)
+            return None
+        configs = {
+            key: MunicodeConfig(**data)
+            for key, data in payload.get("configs", {}).items()
+        }
+        logger.info(
+            "Loaded %d configs from disk cache (%.1f hours old)",
+            len(configs), age / 3600,
+        )
+        return configs
+    except (OSError, json.JSONDecodeError, TypeError) as e:
+        logger.warning("Failed to read discovery cache: %s", e)
+        return None
 
 
 def _make_key(name: str) -> str:
@@ -173,6 +242,40 @@ def _search_toc_for_zoning(toc_items: list[dict]) -> list[dict]:
     return matches
 
 
+async def _deep_search_toc(
+    client: httpx.AsyncClient,
+    product_id: int,
+    job_id: int,
+    root_toc: list[dict],
+) -> list[dict]:
+    """Search one level deeper in the TOC for zoning chapters.
+
+    Some municipalities nest zoning under "Part II", "Code of Ordinances",
+    or "Appendices" — this checks children of top-level nodes.
+    """
+    matches = _search_toc_for_zoning(root_toc)
+    if matches:
+        return matches
+
+    # Search children of top-level nodes
+    for item in root_toc:
+        node_id = str(
+            item.get("Id") or item.get("id")
+            or item.get("NodeId") or item.get("nodeId") or ""
+        )
+        if not node_id:
+            continue
+        children = await _fetch_json(
+            client, "codesToc/children",
+            productId=product_id, jobId=job_id, nodeId=node_id,
+        )
+        if children and isinstance(children, list):
+            child_matches = _search_toc_for_zoning(children)
+            matches.extend(child_matches)
+
+    return matches
+
+
 async def _fetch_json(
     client: httpx.AsyncClient, path: str, **params: str | int,
 ) -> dict | list | None:
@@ -238,7 +341,7 @@ async def _discover_municipality(
             if not toc or not isinstance(toc, list):
                 continue
 
-            matches = _search_toc_for_zoning(toc)
+            matches = await _deep_search_toc(client, product_id, job_id, toc)
             if not matches:
                 continue
 
@@ -345,6 +448,13 @@ async def get_municode_configs(
         if _cached_configs is not None and not force_refresh:
             return _cached_configs
 
+        # Check disk cache before hitting the API
+        if not force_refresh:
+            disk_configs = _read_disk_cache()
+            if disk_configs:
+                _cached_configs = disk_configs
+                return _cached_configs
+
         logger.info("Running Municode auto-discovery...")
         try:
             configs = await discover_all()
@@ -366,5 +476,6 @@ async def get_municode_configs(
                 configs[key] = fallback
 
         _cached_configs = configs
+        _write_disk_cache(configs)
         logger.info("Cached %d municipality configs", len(_cached_configs))
         return _cached_configs

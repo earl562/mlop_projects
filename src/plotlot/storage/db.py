@@ -6,6 +6,7 @@ All consumers go through get_session() for connection management.
 
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from plotlot.config import settings
@@ -25,10 +26,40 @@ def _get_engine():
 
 
 async def init_db() -> None:
-    """Create all tables if they don't exist."""
+    """Create all tables and install triggers if they don't exist."""
     engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Auto-populate search_vector on INSERT/UPDATE via trigger
+        await conn.execute(text("""
+            CREATE OR REPLACE FUNCTION ordinance_chunks_search_vector_update()
+            RETURNS trigger AS $$
+            BEGIN
+                NEW.search_vector := to_tsvector('english', COALESCE(NEW.chunk_text, ''));
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_search_vector_update'
+                ) THEN
+                    CREATE TRIGGER trg_search_vector_update
+                    BEFORE INSERT OR UPDATE OF chunk_text
+                    ON ordinance_chunks
+                    FOR EACH ROW
+                    EXECUTE FUNCTION ordinance_chunks_search_vector_update();
+                END IF;
+            END $$;
+        """))
+        # GIN index for fast full-text search
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_search_vector
+            ON ordinance_chunks USING GIN (search_vector);
+        """))
+
     logger.info("Database initialized")
 
 

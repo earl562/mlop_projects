@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for pgvector storage."""
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase
 
@@ -24,6 +24,7 @@ class OrdinanceChunk(Base):
     zone_codes = Column(ARRAY(String), default=[])
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, default=0)
-    embedding = Column(Vector(768))
+    embedding = Column(Vector(1024))
     municode_node_id = Column(String(200))
     search_vector = Column(TSVECTOR)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

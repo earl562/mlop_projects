@@ -51,22 +51,43 @@ Earl is building 4 projects that map to the complete ML/LLMOps lifecycle. Each p
 | **Agent Forge** | Developer Tools | Multi-agent architectures, tool use, LangGraph/PydanticAI, streaming, deployment |
 | **Agent Eval** | ML Testing | LLM evaluation frameworks, RAGAS/DeepEval, regression testing, CI integration |
 
+## North Star
+
+**Get Earl a high 6-7 figure ML/LLMOps engineering role** by building production-grade projects, then sharing them on YouTube, LinkedIn, Medium, Substack, and GitHub. Every feature we build must be:
+1. **Demonstrably production-grade** — not a tutorial, not a toy
+2. **Explainable in an interview** — "I built X because Y, here's the trade-off I navigated"
+3. **Shareable as content** — each milestone is a blog post, video, or LinkedIn post
+
 ## Current Focus: PlotLot v2
 
 PlotLot v2 is the flagship project. The core product:
 1. User enters a South Florida property address (Miami-Dade, Broward, Palm Beach counties — 104 municipalities)
-2. System retrieves: Google Maps image, zoning code, zoning setbacks, lot dimensions (L x W)
-3. AI agent determines max allowable units based on that municipality's specific zoning ordinances
-4. Returns structured investment analysis
+2. System retrieves: zoning code, lot dimensions, property data from county ArcGIS APIs
+3. AI agent analyzes zoning ordinances and extracts numeric dimensional standards
+4. Deterministic calculator computes max allowable dwelling units with constraint breakdown
+5. Returns structured investment analysis
 
 **Technical architecture:**
 - Geocodio API → county/municipality identification
+- County ArcGIS REST APIs → property records + spatial zoning queries (MDC, Broward, Palm Beach)
 - Municode API → zoning ordinance retrieval (73 municipalities with auto-discovery)
-- pgvector hybrid search → relevant zoning sections
-- LLM structured extraction (Instructor + Pydantic) → setbacks, FAR, density, height limits
-- Agent orchestration → property analysis pipeline
+- pgvector hybrid search (RRF fusion) → relevant zoning sections
+- Agentic LLM analysis (Kimi K2.5 on NVIDIA NIM, DeepSeek V3.2 fallback) → numeric extraction via tool calling
+- Deterministic calculator → max units from density, lot area, FAR, buildable envelope constraints
 
-**Phase 1 status:** Complete. 280+ tests passing. Scraper, chunker, embedder, hybrid search, property lookup pipeline all working.
+### What's Built (Phases 1 + 3)
+- **Phase 1 DATA:** Municode auto-discovery (73 municipalities), scraper, chunker, embedder, pgvector hybrid search, multi-county property lookup (MDC two-layer zoning, Broward parcels, Palm Beach)
+- **Phase 3 BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with constraint breakdown, CLI output
+- **164 unit tests passing.** E2E verified on Miami Gardens (R-1, max units=1, HIGH) and Miramar (RS5, max units=1, MEDIUM)
+
+### What's Next: MLflow Integration (Phases 2 + 4 + 6)
+**MLflow is the unified backbone** for everything that comes next:
+- **Tracing:** Instrument every pipeline run — geocode, property lookup, search, LLM calls, calculator. Full observability.
+- **Evaluation:** Golden dataset eval tracked as MLflow experiments. Extraction accuracy, retrieval quality, E2E regression — all logged with metrics and artifacts.
+- **Experiment tracking:** Prompt variants, model comparisons (Kimi vs DeepSeek), embedding model eval — each tracked as an MLflow run.
+- **Model registry:** Prompt templates and pipeline configs versioned and promotable.
+
+This collapses Phase 4 (EVAL) and Phase 6 (MONITOR) into one system and makes Phase 2 (TRAIN) seamless when we get to MangoAI.
 
 ## Rules
 
@@ -74,5 +95,7 @@ PlotLot v2 is the flagship project. The core product:
 2. **Explain production relevance.** When building a feature, note: "In production at [scale], this pattern handles [problem]. Here's how to talk about it."
 3. **Interview prep is embedded.** After completing a significant feature, suggest how Earl should describe it in a system design interview or behavioral question.
 4. **No over-engineering.** Build what's needed now. Document what's needed later. Ship fast, iterate.
-5. **Track everything.** MLflow experiments, git commits with clear messages, decision logs. The paper trail IS the portfolio.
-6. **Use Claude Sonnet for email generation** as specified in global config.
+5. **Track everything in MLflow.** Every pipeline run, every experiment, every eval. The paper trail IS the portfolio. MLflow is the single pane of glass for all MLOps/LLMOps observability.
+6. **Content-first milestones.** After each significant feature, identify the content angle: blog post, video, LinkedIn post. Building without sharing is wasted potential.
+7. **Follow the lifecycle phases.** Reference `docs/ML_LLMOPS_LIFECYCLE_PHASES.md` for the build order. Don't skip ahead or lose focus.
+8. **Use Claude Sonnet for email generation** as specified in global config.
