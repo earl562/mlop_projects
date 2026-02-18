@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: plotlot-api
+    runtime: docker
+    dockerfilePath: ./plotlot/Dockerfile
+    dockerContext: ./plotlot
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEOCODIO_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: '["https://plotlot.vercel.app","http://localhost:3000"]'
+      - key: MLFLOW_TRACKING_URI
+        value: sqlite:///tmp/mlflow.db
