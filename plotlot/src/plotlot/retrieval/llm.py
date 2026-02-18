@@ -29,7 +29,7 @@ NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NVIDIA_MODEL = "moonshotai/kimi-k2.5"
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
+OPENROUTER_MODEL = "google/gemini-2.5-flash"
 
 MAX_RETRIES = 2
 BASE_DELAY = 1.0

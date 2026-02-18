@@ -143,7 +143,7 @@ async def debug_llm():
         ("nvidia", _s.nvidia_api_key, "https://integrate.api.nvidia.com/v1/chat/completions",
          "moonshotai/kimi-k2.5", {}),
         ("openrouter", _s.openrouter_api_key, "https://openrouter.ai/api/v1/chat/completions",
-         "deepseek/deepseek-v3.2", {"HTTP-Referer": "https://plotlot.dev"}),
+         "google/gemini-2.5-flash", {"HTTP-Referer": "https://plotlot.dev"}),
     ]
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)) as client:
