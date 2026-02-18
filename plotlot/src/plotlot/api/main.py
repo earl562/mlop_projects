@@ -125,6 +125,56 @@ async def health():
     return {"status": status, "checks": checks}
 
 
+@app.get("/debug/llm")
+async def debug_llm():
+    """Test LLM provider connectivity — returns latency or error per provider."""
+    import time
+    import httpx
+    from plotlot.config import settings as _s
+
+    results = {}
+    test_payload = {
+        "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
+        "temperature": 0,
+        "max_tokens": 5,
+    }
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0)) as client:
+        # NVIDIA NIM
+        if _s.nvidia_api_key:
+            try:
+                t0 = time.monotonic()
+                resp = await client.post(
+                    "https://integrate.api.nvidia.com/v1/chat/completions",
+                    json={**test_payload, "model": "moonshotai/kimi-k2.5"},
+                    headers={"Authorization": f"Bearer {_s.nvidia_api_key}", "Content-Type": "application/json"},
+                )
+                elapsed = round(time.monotonic() - t0, 2)
+                results["nvidia"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
+            except Exception as e:
+                results["nvidia"] = {"error": str(e)}
+        else:
+            results["nvidia"] = {"error": "no_api_key"}
+
+        # OpenRouter
+        if _s.openrouter_api_key:
+            try:
+                t0 = time.monotonic()
+                resp = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    json={**test_payload, "model": "deepseek/deepseek-v3.2"},
+                    headers={"Authorization": f"Bearer {_s.openrouter_api_key}", "Content-Type": "application/json"},
+                )
+                elapsed = round(time.monotonic() - t0, 2)
+                results["openrouter"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
+            except Exception as e:
+                results["openrouter"] = {"error": str(e)}
+        else:
+            results["openrouter"] = {"error": "no_api_key"}
+
+    return results
+
+
 def run():
     """Entry point for plotlot-api console script."""
     uvicorn.run("plotlot.api.main:app", host="0.0.0.0", port=8000, reload=True)

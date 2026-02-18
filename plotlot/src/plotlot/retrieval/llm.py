@@ -15,6 +15,9 @@ import logging
 
 import httpx
 
+# Granular timeouts: fail fast on connect, generous on read (LLM generation)
+LLM_TIMEOUT = httpx.Timeout(connect=10.0, read=40.0, write=10.0, pool=5.0)
+
 from plotlot.config import settings
 from plotlot.observability.tracing import start_span, trace
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
@@ -146,7 +149,7 @@ async def call_llm(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
 
-    async with httpx.AsyncClient(timeout=45.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             nvidia_headers = {
@@ -200,7 +203,7 @@ async def call_llm_stream(messages: list[dict]):
         "stream": True,
     }
 
-    async with httpx.AsyncClient(timeout=45.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             headers = {
@@ -384,7 +387,7 @@ async def analyze_zoning(
         "max_tokens": 2000,
     }
 
-    async with httpx.AsyncClient(timeout=90.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             nvidia_headers = {

@@ -32,7 +32,7 @@ from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
 
-MAX_ANALYSIS_TURNS = 5
+MAX_ANALYSIS_TURNS = 3
 PIPELINE_VERSION = "v2.1"
 
 

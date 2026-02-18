@@ -132,23 +132,41 @@ async def analyze_stream(request: AnalyzeRequest):
             })
 
             # Step 4: Agentic LLM analysis
+            # Render's proxy has a 30s idle timeout — send heartbeats to keep alive
             yield _sse_event("status", {
                 "step": "analysis",
                 "message": "AI analyzing zoning code...",
             })
-            try:
-                report = await asyncio.wait_for(
-                    _agentic_analysis(
-                        address=request.address,
-                        geo=geo,
-                        prop_record=prop_record,
-                        search_results=search_results,
-                        municipality=municipality,
-                        county=county,
-                    ),
-                    timeout=90,
+
+            analysis_task = asyncio.create_task(
+                _agentic_analysis(
+                    address=request.address,
+                    geo=geo,
+                    prop_record=prop_record,
+                    search_results=search_results,
+                    municipality=municipality,
+                    county=county,
                 )
-            except asyncio.TimeoutError:
+            )
+
+            report = None
+            for _tick in range(6):  # 6 × 15s = 90s max
+                done, _ = await asyncio.wait({analysis_task}, timeout=15)
+                if done:
+                    try:
+                        report = analysis_task.result()
+                    except Exception as e:
+                        logger.error("Analysis task failed: %s", e)
+                    break
+                # Heartbeat keeps SSE connection alive through Render proxy
+                yield _sse_event("status", {
+                    "step": "analysis",
+                    "message": "AI analyzing zoning code...",
+                })
+
+            if report is None:
+                if not analysis_task.done():
+                    analysis_task.cancel()
                 logger.error("LLM analysis timed out for: %s", request.address)
                 from plotlot.pipeline.lookup import _build_fallback_report
                 report = _build_fallback_report(
