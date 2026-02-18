@@ -28,8 +28,9 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Copy the virtual environment from builder
+# Copy venv AND source from builder (uv editable install needs src/)
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
 
 # Put venv on PATH
 ENV PATH="/app/.venv/bin:$PATH"
