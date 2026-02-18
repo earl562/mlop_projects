@@ -30,5 +30,5 @@ htmlcov/
 mlflow.db
 mlruns/
 
-# Frontend (separate build)
-frontend/node_modules/
+# Frontend
+**/node_modules/

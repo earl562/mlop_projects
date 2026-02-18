@@ -1,0 +1,5 @@
+# Ignore all data artifacts (large files, model outputs, embeddings)
+*
+!.gitignore
+!golden/
+!golden/**
