@@ -93,7 +93,6 @@ class TestAnalyzeZoning:
 
         with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
              patch("plotlot.retrieval.llm.settings") as mock_settings:
-            mock_settings.groq_api_key = ""  # skip Groq to test NVIDIA path
             mock_settings.nvidia_api_key = "test_nvidia_key"
             mock_settings.openrouter_api_key = "test_or_key"
 
@@ -155,7 +154,6 @@ class TestAnalyzeZoning:
     @pytest.mark.asyncio
     async def test_no_api_keys(self):
         with patch("plotlot.retrieval.llm.settings") as mock_settings:
-            mock_settings.groq_api_key = ""
             mock_settings.nvidia_api_key = ""
             mock_settings.openrouter_api_key = ""
 

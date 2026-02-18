@@ -42,10 +42,19 @@ class Settings(BaseSettings):
     hf_token: str = ""
     openrouter_api_key: str = ""
     nvidia_api_key: str = ""
-    groq_api_key: str = ""
 
     # Jina.ai search
     jina_api_key: str = ""
+
+    @model_validator(mode="after")
+    def _strip_api_keys(self) -> "Settings":
+        """Strip whitespace/newlines from API keys — common paste error in dashboards."""
+        for field in ("geocodio_api_key", "hf_token", "openrouter_api_key",
+                      "nvidia_api_key", "jina_api_key"):
+            val = getattr(self, field)
+            if val and val != val.strip():
+                setattr(self, field, val.strip())
+        return self
 
     # Google Workspace (Sheets/Docs creation)
     google_client_id: str = ""

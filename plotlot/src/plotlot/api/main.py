@@ -140,8 +140,6 @@ async def debug_llm():
     }
 
     providers = [
-        ("groq", _s.groq_api_key, "https://api.groq.com/openai/v1/chat/completions",
-         "llama-3.3-70b-versatile", {}),
         ("nvidia", _s.nvidia_api_key, "https://integrate.api.nvidia.com/v1/chat/completions",
          "moonshotai/kimi-k2.5", {}),
         ("openrouter", _s.openrouter_api_key, "https://openrouter.ai/api/v1/chat/completions",
@@ -153,14 +151,22 @@ async def debug_llm():
             if not api_key:
                 results[name] = {"error": "no_api_key"}
                 continue
+            # Detect whitespace/linebreak issues in API key (common Render paste bug)
+            key_info = {
+                "key_len": len(api_key),
+                "key_prefix": api_key[:8] + "...",
+                "has_whitespace": api_key != api_key.strip(),
+                "has_newline": "\n" in api_key or "\r" in api_key,
+            }
+            clean_key = api_key.strip()
             try:
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **extra_headers}
+                headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json", **extra_headers}
                 t0 = time.monotonic()
                 resp = await client.post(url, json={**test_payload, "model": model}, headers=headers)
                 elapsed = round(time.monotonic() - t0, 2)
-                results[name] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
+                results[name] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200], **key_info}
             except Exception as e:
-                results[name] = {"error": f"{type(e).__name__}: {e}", "key_prefix": api_key[:8] + "..."}
+                results[name] = {"error": f"{type(e).__name__}: {e}", **key_info}
 
     return results
 

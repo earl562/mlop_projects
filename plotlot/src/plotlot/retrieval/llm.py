@@ -1,12 +1,12 @@
-"""LLM client — multi-provider with automatic fallback.
+"""LLM client — NVIDIA NIM primary, OpenRouter fallback.
 
 Supports three modes:
   1. Agentic tool-use: call_llm() returns tool_calls for the agent loop
   2. Direct analysis: analyze_zoning() for non-agentic one-shot analysis
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
-Provider priority: Groq (fast, free) → NVIDIA NIM → OpenRouter
-All APIs are OpenAI-compatible chat completions endpoints.
+Both APIs are OpenAI-compatible chat completions endpoints.
+NVIDIA NIM (Kimi K2.5) is the default. OpenRouter (DeepSeek V3.2) is fallback.
 """
 
 import asyncio
@@ -24,10 +24,7 @@ from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 
 logger = logging.getLogger(__name__)
 
-# Provider configs — tried in order: Groq → NVIDIA NIM → OpenRouter
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
-
+# Provider configs
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NVIDIA_MODEL = "moonshotai/kimi-k2.5"
 
@@ -152,28 +149,8 @@ async def call_llm(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
 
-    def _wrap(message):
-        return {
-            "content": message.get("content") or "",
-            "tool_calls": message.get("tool_calls") or [],
-        }
-
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: Groq (fast, free tier, great tool calling)
-        if settings.groq_api_key:
-            groq_headers = {
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            }
-            groq_payload = {**payload, "model": GROQ_MODEL}
-            message = await _call_provider_raw(
-                client, GROQ_URL, groq_headers, groq_payload, "Groq",
-            )
-            if message:
-                return _wrap(message)
-            logger.warning("Groq failed, falling back to NVIDIA NIM")
-
-        # Fallback 1: NVIDIA NIM
+        # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
@@ -184,10 +161,13 @@ async def call_llm(
                 client, NVIDIA_CHAT_URL, nvidia_headers, nvidia_payload, "NVIDIA",
             )
             if message:
-                return _wrap(message)
+                return {
+                    "content": message.get("content") or "",
+                    "tool_calls": message.get("tool_calls") or [],
+                }
             logger.warning("NVIDIA NIM failed, falling back to OpenRouter")
 
-        # Fallback 2: OpenRouter
+        # Fallback: OpenRouter
         if settings.openrouter_api_key:
             or_headers = {
                 "Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -200,7 +180,10 @@ async def call_llm(
                 client, OPENROUTER_URL, or_headers, or_payload, "OpenRouter",
             )
             if message:
-                return _wrap(message)
+                return {
+                    "content": message.get("content") or "",
+                    "tool_calls": message.get("tool_calls") or [],
+                }
 
     logger.error("All LLM providers failed")
     return None
@@ -221,23 +204,7 @@ async def call_llm_stream(messages: list[dict]):
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: Groq (fast, free)
-        if settings.groq_api_key:
-            headers = {
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            }
-            try:
-                async for chunk in _stream_provider(
-                    client, GROQ_URL, headers,
-                    {**payload, "model": GROQ_MODEL}, "Groq",
-                ):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.warning("Groq streaming failed: %s, falling back", e)
-
-        # Fallback 1: NVIDIA NIM
+        # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
@@ -253,7 +220,7 @@ async def call_llm_stream(messages: list[dict]):
             except Exception as e:
                 logger.warning("NVIDIA streaming failed: %s, falling back", e)
 
-        # Fallback 2: OpenRouter
+        # Fallback: OpenRouter
         if settings.openrouter_api_key:
             headers = {
                 "Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -421,36 +388,39 @@ async def analyze_zoning(
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Try providers in priority order
-        providers = []
-        if settings.groq_api_key:
-            providers.append(("Groq", GROQ_URL, {
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            }, GROQ_MODEL))
+        # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
-            providers.append(("NVIDIA", NVIDIA_CHAT_URL, {
+            nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
                 "Content-Type": "application/json",
-            }, NVIDIA_MODEL))
-        if settings.openrouter_api_key:
-            providers.append(("OpenRouter", OPENROUTER_URL, {
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://plotlot.dev",
-                "X-Title": "PlotLot Zoning Analysis",
-            }, OPENROUTER_MODEL))
-
-        for name, url, headers, model in providers:
+            }
             message = await _call_provider_raw(
-                client, url, headers,
-                {**payload_base, "model": model}, name,
+                client, NVIDIA_CHAT_URL, nvidia_headers,
+                {**payload_base, "model": NVIDIA_MODEL}, "NVIDIA",
             )
             if message and message.get("content"):
                 try:
                     return _parse_llm_content(message["content"])
                 except json.JSONDecodeError as e:
-                    logger.error("Failed to parse %s response: %s", name, e)
+                    logger.error("Failed to parse NVIDIA response: %s", e)
+
+        # Fallback: OpenRouter
+        if settings.openrouter_api_key:
+            or_headers = {
+                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://plotlot.dev",
+                "X-Title": "PlotLot Zoning Analysis",
+            }
+            message = await _call_provider_raw(
+                client, OPENROUTER_URL, or_headers,
+                {**payload_base, "model": OPENROUTER_MODEL}, "OpenRouter",
+            )
+            if message and message.get("content"):
+                try:
+                    return _parse_llm_content(message["content"])
+                except json.JSONDecodeError as e:
+                    logger.error("Failed to parse OpenRouter response: %s", e)
 
     logger.error("All LLM providers failed")
     return {}
