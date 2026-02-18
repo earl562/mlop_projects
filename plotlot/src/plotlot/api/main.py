@@ -152,7 +152,7 @@ async def debug_llm():
                 elapsed = round(time.monotonic() - t0, 2)
                 results["nvidia"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
             except Exception as e:
-                results["nvidia"] = {"error": str(e)}
+                results["nvidia"] = {"error": f"{type(e).__name__}: {e}", "key_prefix": _s.nvidia_api_key[:8] + "..."}
         else:
             results["nvidia"] = {"error": "no_api_key"}
 
@@ -168,7 +168,7 @@ async def debug_llm():
                 elapsed = round(time.monotonic() - t0, 2)
                 results["openrouter"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
             except Exception as e:
-                results["openrouter"] = {"error": str(e)}
+                results["openrouter"] = {"error": f"{type(e).__name__}: {e}"}
         else:
             results["openrouter"] = {"error": "no_api_key"}
 
