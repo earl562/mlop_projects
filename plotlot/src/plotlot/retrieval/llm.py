@@ -6,7 +6,7 @@ Supports three modes:
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
 Both APIs are OpenAI-compatible chat completions endpoints.
-NVIDIA NIM (Kimi K2.5) is the default. OpenRouter (DeepSeek V3.2) is fallback.
+NVIDIA NIM (Kimi K2.5) is the default. Google Gemini is fallback.
 """
 
 import asyncio
@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NVIDIA_MODEL = "moonshotai/kimi-k2.5"
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "google/gemini-2.5-flash"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 MAX_RETRIES = 2
 BASE_DELAY = 1.0
@@ -165,19 +165,17 @@ async def call_llm(
                     "content": message.get("content") or "",
                     "tool_calls": message.get("tool_calls") or [],
                 }
-            logger.warning("NVIDIA NIM failed, falling back to OpenRouter")
+            logger.warning("NVIDIA NIM failed, falling back to Gemini")
 
-        # Fallback: OpenRouter
-        if settings.openrouter_api_key:
-            or_headers = {
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
+        # Fallback: Google Gemini (free tier, OpenAI-compatible)
+        if settings.gemini_api_key:
+            gemini_headers = {
+                "Authorization": f"Bearer {settings.gemini_api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://plotlot.dev",
-                "X-Title": "PlotLot Zoning Analysis",
             }
-            or_payload = {**payload, "model": OPENROUTER_MODEL}
+            gemini_payload = {**payload, "model": GEMINI_MODEL}
             message = await _call_provider_raw(
-                client, OPENROUTER_URL, or_headers, or_payload, "OpenRouter",
+                client, GEMINI_URL, gemini_headers, gemini_payload, "Gemini",
             )
             if message:
                 return {
@@ -220,23 +218,21 @@ async def call_llm_stream(messages: list[dict]):
             except Exception as e:
                 logger.warning("NVIDIA streaming failed: %s, falling back", e)
 
-        # Fallback: OpenRouter
-        if settings.openrouter_api_key:
+        # Fallback: Google Gemini
+        if settings.gemini_api_key:
             headers = {
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Authorization": f"Bearer {settings.gemini_api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://plotlot.dev",
-                "X-Title": "PlotLot Zoning Analysis",
             }
             try:
                 async for chunk in _stream_provider(
-                    client, OPENROUTER_URL, headers,
-                    {**payload, "model": OPENROUTER_MODEL}, "OpenRouter",
+                    client, GEMINI_URL, headers,
+                    {**payload, "model": GEMINI_MODEL}, "Gemini",
                 ):
                     yield chunk
                 return
             except Exception as e:
-                logger.error("OpenRouter streaming failed: %s", e)
+                logger.error("Gemini streaming failed: %s", e)
 
     logger.error("All LLM providers failed for streaming")
 
@@ -404,23 +400,21 @@ async def analyze_zoning(
                 except json.JSONDecodeError as e:
                     logger.error("Failed to parse NVIDIA response: %s", e)
 
-        # Fallback: OpenRouter
-        if settings.openrouter_api_key:
-            or_headers = {
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
+        # Fallback: Google Gemini
+        if settings.gemini_api_key:
+            gemini_headers = {
+                "Authorization": f"Bearer {settings.gemini_api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://plotlot.dev",
-                "X-Title": "PlotLot Zoning Analysis",
             }
             message = await _call_provider_raw(
-                client, OPENROUTER_URL, or_headers,
-                {**payload_base, "model": OPENROUTER_MODEL}, "OpenRouter",
+                client, GEMINI_URL, gemini_headers,
+                {**payload_base, "model": GEMINI_MODEL}, "Gemini",
             )
             if message and message.get("content"):
                 try:
                     return _parse_llm_content(message["content"])
                 except json.JSONDecodeError as e:
-                    logger.error("Failed to parse OpenRouter response: %s", e)
+                    logger.error("Failed to parse Gemini response: %s", e)
 
     logger.error("All LLM providers failed")
     return {}
