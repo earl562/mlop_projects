@@ -9,10 +9,9 @@ import asyncio
 import logging
 
 import httpx
-import mlflow
-from mlflow.entities import SpanType
 
 from plotlot.config import settings
+from plotlot.observability.tracing import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +109,8 @@ async def embed_texts(
             batch = texts[i : i + BATCH_SIZE]
             batch = [t[:2000] for t in batch]
 
-            with mlflow.start_span(
-                name=f"embed_batch_{batch_idx}", span_type=SpanType.EMBEDDING,
+            with start_span(
+                name=f"embed_batch_{batch_idx}", span_type="EMBEDDING",
             ) as span:
                 span.set_inputs({"batch_size": len(batch), "input_type": input_type})
                 batch_embeddings = await _embed_batch(client, batch, headers, input_type)

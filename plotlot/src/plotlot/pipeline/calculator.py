@@ -9,10 +9,8 @@ The governing constraint is whichever yields the fewest units.
 import math
 import re
 
-import mlflow
-from mlflow.entities import SpanType
-
 from plotlot.core.types import ConstraintResult, DensityAnalysis, NumericZoningParams
+from plotlot.observability.tracing import trace
 
 SQFT_PER_ACRE = 43_560
 
@@ -30,7 +28,7 @@ def parse_lot_dimensions(dims: str) -> tuple[float | None, float | None]:
     return float(m.group(1)), float(m.group(2))
 
 
-@mlflow.trace(name="calculate_max_units", span_type=SpanType.TOOL)
+@trace(name="calculate_max_units", span_type="TOOL")
 def calculate_max_units(
     lot_size_sqft: float,
     params: NumericZoningParams,

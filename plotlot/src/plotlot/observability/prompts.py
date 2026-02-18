@@ -8,7 +8,7 @@ Extracts prompt strings into a versionable module so that:
 
 import logging
 
-import mlflow
+from plotlot.observability.tracing import log_text, set_tag
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,6 @@ def log_prompt_to_run(name: str) -> None:
     Call this inside an active `mlflow.start_run()` context.
     """
     version, text = _PROMPT_REGISTRY[name]
-    mlflow.log_text(text, f"prompts/{name}_{version}.txt")
-    mlflow.set_tag(f"prompt_{name}_version", version)
+    log_text(text, f"prompts/{name}_{version}.txt")
+    set_tag(f"prompt_{name}_version", version)
     logger.debug("Logged prompt %s (%s) to MLflow run", name, version)

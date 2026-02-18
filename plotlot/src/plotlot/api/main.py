@@ -111,13 +111,15 @@ async def health():
             await session.close()
 
     # MLflow connectivity
-    try:
-        import mlflow
-
-        mlflow.search_experiments(max_results=1)
-        checks["mlflow"] = "ok"
-    except Exception as e:
-        checks["mlflow"] = f"error: {e}"
+    from plotlot.observability.tracing import mlflow as _mlflow
+    if _mlflow is not None:
+        try:
+            _mlflow.search_experiments(max_results=1)
+            checks["mlflow"] = "ok"
+        except Exception as e:
+            checks["mlflow"] = f"error: {e}"
+    else:
+        checks["mlflow"] = "not_installed"
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     return {"status": status, "checks": checks}

@@ -15,10 +15,9 @@ import logging
 import re
 
 import httpx
-import mlflow
-from mlflow.entities import SpanType
 
 from plotlot.core.types import PropertyRecord
+from plotlot.observability.tracing import start_span, trace
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +140,7 @@ async def _query_arcgis(
     limit: int | None = 5,
 ) -> list[dict]:
     """Execute an ArcGIS REST query and return features."""
-    with mlflow.start_span(name="arcgis_query", span_type=SpanType.TOOL) as span:
+    with start_span(name="arcgis_query", span_type="TOOL") as span:
         span.set_inputs({"url": url, "where": where[:200], "limit": limit})
 
         params = {
@@ -173,7 +172,7 @@ async def _spatial_query_zoning(
     url: str, lat: float, lng: float,
 ) -> tuple[str, str]:
     """Point-in-polygon spatial query to get zoning code for coordinates."""
-    with mlflow.start_span(name="spatial_query_zoning", span_type=SpanType.TOOL) as span:
+    with start_span(name="spatial_query_zoning", span_type="TOOL") as span:
         span.set_inputs({"url": url, "lat": lat, "lng": lng})
 
         params = {
@@ -226,7 +225,7 @@ async def _spatial_query_zoning(
 
 async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
     """Look up property in Miami-Dade County."""
-    with mlflow.start_span(name="lookup_miami_dade", span_type=SpanType.TOOL) as span:
+    with start_span(name="lookup_miami_dade", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
         street = _normalize_address(address)
 
@@ -307,7 +306,7 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
 
 async def _lookup_broward(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
     """Look up property in Broward County."""
-    with mlflow.start_span(name="lookup_broward", span_type=SpanType.TOOL) as span:
+    with start_span(name="lookup_broward", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
         street = _normalize_address(address)
         tokens = street.split()
@@ -400,7 +399,7 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
 
 async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
     """Look up property in Palm Beach County."""
-    with mlflow.start_span(name="lookup_palm_beach", span_type=SpanType.TOOL) as span:
+    with start_span(name="lookup_palm_beach", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
         street = _normalize_address(address)
 
@@ -462,7 +461,7 @@ _COUNTY_HANDLERS = {
 }
 
 
-@mlflow.trace(name="lookup_property", span_type=SpanType.TOOL)
+@trace(name="lookup_property", span_type="TOOL")
 async def lookup_property(
     address: str,
     county: str,

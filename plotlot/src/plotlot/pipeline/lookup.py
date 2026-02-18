@@ -13,10 +13,16 @@ import json
 import logging
 from dataclasses import fields as dataclass_fields
 
-import mlflow
-from mlflow.entities import SpanType
-
 from plotlot.core.types import NumericZoningParams, Setbacks, ZoningReport
+from plotlot.observability.tracing import (
+    log_dict,
+    log_metrics,
+    log_params,
+    set_tag,
+    start_run,
+    start_span,
+    trace,
+)
 from plotlot.observability.prompts import get_active_prompt, log_prompt_to_run
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
 from plotlot.retrieval.geocode import geocode_address
@@ -92,7 +98,7 @@ def report_to_dict(report: ZoningReport) -> dict:
     return result
 
 
-@mlflow.trace(name="lookup_address", span_type=SpanType.CHAIN)
+@trace(name="lookup_address", span_type="CHAIN")
 async def lookup_address(address: str) -> ZoningReport | None:
     """Run the full address → zoning report pipeline.
 
@@ -111,8 +117,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
     Returns:
         ZoningReport or None if geocoding fails.
     """
-    with mlflow.start_run(run_name=f"lookup_{address[:30]}"):
-        mlflow.log_params({"address": address, "pipeline_version": PIPELINE_VERSION})
+    with start_run(run_name=f"lookup_{address[:30]}"):
+        log_params({"address": address, "pipeline_version": PIPELINE_VERSION})
         log_prompt_to_run("analysis")
 
         # ── Phase 1: Deterministic data gathering ──
@@ -121,8 +127,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
         geo = await geocode_address(address)
         if not geo:
             logger.error("Geocoding failed for: %s", address)
-            mlflow.set_tag("status", "failed")
-            mlflow.set_tag("failure_reason", "geocoding")
+            set_tag("status", "failed")
+            set_tag("failure_reason", "geocoding")
             return None
 
         municipality = geo["municipality"]
@@ -165,7 +171,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
         logger.info("Search: %d chunks for query '%s' in %s", len(search_results), search_query, municipality)
 
         # Log Phase 1 results as params
-        mlflow.log_params({
+        log_params({
             "county": county,
             "municipality": municipality,
             "has_property_record": str(bool(prop_record)),
@@ -205,24 +211,24 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         # Log analysis metrics
         confidence_map = {"high": 1.0, "medium": 0.5, "low": 0.0}
-        mlflow.log_metrics({
+        log_metrics({
             "confidence_score": confidence_map.get(report.confidence, 0.0),
             "source_count": float(len(report.sources)),
             "has_numeric_params": 1.0 if report.numeric_params else 0.0,
         })
         if report.density_analysis:
-            mlflow.log_metrics({
+            log_metrics({
                 "max_units": float(report.density_analysis.max_units),
             })
 
         # Log full report as artifact
-        mlflow.log_dict(report_to_dict(report), "report.json")
-        mlflow.set_tag("status", "success")
+        log_dict(report_to_dict(report), "report.json")
+        set_tag("status", "success")
 
         return report
 
 
-@mlflow.trace(name="agentic_analysis", span_type=SpanType.AGENT)
+@trace(name="agentic_analysis", span_type="AGENT")
 async def _agentic_analysis(
     address: str,
     geo: dict,
@@ -349,7 +355,7 @@ async def _agentic_analysis(
     for turn in range(MAX_ANALYSIS_TURNS):
         logger.info("Analysis turn %d/%d", turn + 1, MAX_ANALYSIS_TURNS)
 
-        with mlflow.start_span(name=f"llm_turn_{turn + 1}", span_type=SpanType.CHAT_MODEL) as span:
+        with start_span(name=f"llm_turn_{turn + 1}", span_type="CHAT_MODEL") as span:
             span.set_inputs({"turn": turn + 1, "message_count": len(messages)})
             response = await call_llm(messages, tools=tools)
             if not response:
@@ -402,7 +408,7 @@ async def _agentic_analysis(
 
             if fn_name == "search_zoning_ordinance":
                 logger.info("Agent requesting additional search: %s", fn_args.get("query", ""))
-                with mlflow.start_span(name="agent_search", span_type=SpanType.TOOL) as tool_span:
+                with start_span(name="agent_search", span_type="TOOL") as tool_span:
                     tool_span.set_inputs(fn_args)
                     session = await get_session()
                     try:

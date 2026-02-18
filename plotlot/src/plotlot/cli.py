@@ -4,16 +4,15 @@ import asyncio
 import logging
 import sys
 
-import mlflow
-
 from plotlot.config import settings
+from plotlot.observability.tracing import enable_async_logging, set_experiment, set_tracking_uri
 
 
 def _init_mlflow() -> None:
     """Initialize MLflow tracking for the current process."""
-    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment(settings.mlflow_experiment_name)
-    mlflow.config.enable_async_logging()
+    set_tracking_uri(settings.mlflow_tracking_uri)
+    set_experiment(settings.mlflow_experiment_name)
+    enable_async_logging()
 
 
 def main() -> None:

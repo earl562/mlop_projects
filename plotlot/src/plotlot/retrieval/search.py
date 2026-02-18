@@ -2,13 +2,12 @@
 
 import logging
 
-import mlflow
-from mlflow.entities import SpanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plotlot.core.types import SearchResult
 from plotlot.ingestion.embedder import embed_texts
+from plotlot.observability.tracing import trace
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 RRF_K = 60
 
 
-@mlflow.trace(name="hybrid_search", span_type=SpanType.RETRIEVER)
+@trace(name="hybrid_search", span_type="RETRIEVER")
 async def hybrid_search(
     session: AsyncSession,
     municipality: str,

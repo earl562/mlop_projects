@@ -14,10 +14,9 @@ import json
 import logging
 
 import httpx
-import mlflow
-from mlflow.entities import SpanType
 
 from plotlot.config import settings
+from plotlot.observability.tracing import start_span, trace
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 
 logger = logging.getLogger(__name__)
@@ -45,8 +44,8 @@ async def _call_provider_raw(
     provider_name: str,
 ) -> dict | None:
     """Call a provider and return the raw message dict (content + tool_calls)."""
-    with mlflow.start_span(
-        name=f"llm_provider_{provider_name.lower()}", span_type=SpanType.CHAT_MODEL,
+    with start_span(
+        name=f"llm_provider_{provider_name.lower()}", span_type="CHAT_MODEL",
     ) as span:
         span.set_inputs({
             "provider": provider_name,
@@ -122,7 +121,7 @@ async def _call_provider_raw(
 # Agentic mode: call_llm() — returns tool_calls for the agent loop
 # ---------------------------------------------------------------------------
 
-@mlflow.trace(name="call_llm", span_type=SpanType.CHAT_MODEL)
+@trace(name="call_llm", span_type="CHAT_MODEL")
 async def call_llm(
     messages: list[dict],
     tools: list[dict] | None = None,

@@ -8,17 +8,16 @@ import logging
 import re
 
 import httpx
-import mlflow
-from mlflow.entities import SpanType
 
 from plotlot.config import settings
+from plotlot.observability.tracing import trace
 
 logger = logging.getLogger(__name__)
 
 GEOCODIO_URL = "https://api.geocod.io/v1.7/geocode"
 
 
-@mlflow.trace(name="geocode_address", span_type=SpanType.TOOL)
+@trace(name="geocode_address", span_type="TOOL")
 async def geocode_address(address: str) -> dict | None:
     """Geocode an address and extract municipality info.
 
