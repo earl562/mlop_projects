@@ -93,6 +93,7 @@ class TestAnalyzeZoning:
 
         with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
              patch("plotlot.retrieval.llm.settings") as mock_settings:
+            mock_settings.groq_api_key = ""  # skip Groq to test NVIDIA path
             mock_settings.nvidia_api_key = "test_nvidia_key"
             mock_settings.openrouter_api_key = "test_or_key"
 
@@ -139,6 +140,7 @@ class TestAnalyzeZoning:
         with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
              patch("plotlot.retrieval.llm.settings") as mock_settings, \
              patch("plotlot.retrieval.llm.BASE_DELAY", 0.01):
+            mock_settings.groq_api_key = ""  # skip Groq to test NVIDIA→OpenRouter fallback
             mock_settings.nvidia_api_key = "test_nvidia_key"
             mock_settings.openrouter_api_key = "test_or_key"
 
@@ -147,12 +149,13 @@ class TestAnalyzeZoning:
             )
 
         assert result["zoning_district"] == "B-2"
-        # NVIDIA retries (3 + 1 final) + OpenRouter (1 success)
+        # NVIDIA retries + OpenRouter (1 success)
         assert call_count["n"] >= 2
 
     @pytest.mark.asyncio
     async def test_no_api_keys(self):
         with patch("plotlot.retrieval.llm.settings") as mock_settings:
+            mock_settings.groq_api_key = ""
             mock_settings.nvidia_api_key = ""
             mock_settings.openrouter_api_key = ""
 

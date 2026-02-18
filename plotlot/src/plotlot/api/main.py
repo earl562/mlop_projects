@@ -139,38 +139,28 @@ async def debug_llm():
         "max_tokens": 5,
     }
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)) as client:
-        # NVIDIA NIM
-        if _s.nvidia_api_key:
-            try:
-                t0 = time.monotonic()
-                resp = await client.post(
-                    "https://integrate.api.nvidia.com/v1/chat/completions",
-                    json={**test_payload, "model": "moonshotai/kimi-k2.5"},
-                    headers={"Authorization": f"Bearer {_s.nvidia_api_key}", "Content-Type": "application/json"},
-                )
-                elapsed = round(time.monotonic() - t0, 2)
-                results["nvidia"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
-            except Exception as e:
-                results["nvidia"] = {"error": f"{type(e).__name__}: {e}", "key_prefix": _s.nvidia_api_key[:8] + "..."}
-        else:
-            results["nvidia"] = {"error": "no_api_key"}
+    providers = [
+        ("groq", _s.groq_api_key, "https://api.groq.com/openai/v1/chat/completions",
+         "llama-3.3-70b-versatile", {}),
+        ("nvidia", _s.nvidia_api_key, "https://integrate.api.nvidia.com/v1/chat/completions",
+         "moonshotai/kimi-k2.5", {}),
+        ("openrouter", _s.openrouter_api_key, "https://openrouter.ai/api/v1/chat/completions",
+         "deepseek/deepseek-v3.2", {"HTTP-Referer": "https://plotlot.dev"}),
+    ]
 
-        # OpenRouter
-        if _s.openrouter_api_key:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)) as client:
+        for name, api_key, url, model, extra_headers in providers:
+            if not api_key:
+                results[name] = {"error": "no_api_key"}
+                continue
             try:
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **extra_headers}
                 t0 = time.monotonic()
-                resp = await client.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    json={**test_payload, "model": "deepseek/deepseek-v3.2"},
-                    headers={"Authorization": f"Bearer {_s.openrouter_api_key}", "Content-Type": "application/json"},
-                )
+                resp = await client.post(url, json={**test_payload, "model": model}, headers=headers)
                 elapsed = round(time.monotonic() - t0, 2)
-                results["openrouter"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
+                results[name] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200]}
             except Exception as e:
-                results["openrouter"] = {"error": f"{type(e).__name__}: {e}"}
-        else:
-            results["openrouter"] = {"error": "no_api_key"}
+                results[name] = {"error": f"{type(e).__name__}: {e}", "key_prefix": api_key[:8] + "..."}
 
     return results
 

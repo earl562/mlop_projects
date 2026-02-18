@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     hf_token: str = ""
     openrouter_api_key: str = ""
     nvidia_api_key: str = ""
+    groq_api_key: str = ""
 
     # Jina.ai search
     jina_api_key: str = ""
