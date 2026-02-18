@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["https://mlopprojects.vercel.app", "http://localhost:3000"]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
