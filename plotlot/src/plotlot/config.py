@@ -1,25 +1,24 @@
 """PlotLot configuration — all external service credentials and settings."""
 
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
-
-# asyncpg-compatible URL query parameters (strip libpq-only params like channel_binding)
-_ASYNCPG_PARAMS = {"sslmode", "ssl", "application_name", "options"}
 
 
 class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+    database_require_ssl: bool = False
 
     @model_validator(mode="after")
     def _normalize_database_url(self) -> "Settings":
         """Rewrite DATABASE_URL for SQLAlchemy+asyncpg compatibility.
 
         Handles scheme rewriting (postgres:// → postgresql+asyncpg://) and
-        strips libpq-only query params (e.g. channel_binding) that asyncpg
-        doesn't understand.  Neon, Railway, and Supabase all need this.
+        strips ALL query params (asyncpg doesn't accept libpq params like
+        sslmode, channel_binding through the URL).  SSL is detected from
+        sslmode=require and stored as database_require_ssl for the engine.
         """
         url = self.database_url
         if url.startswith("postgres://"):
@@ -27,12 +26,13 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://") and "+asyncpg" not in url:
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        # Strip query params asyncpg doesn't support
+        # Detect SSL requirement, then strip all query params
         parsed = urlparse(url)
         if parsed.query:
             params = parse_qs(parsed.query)
-            filtered = {k: v for k, v in params.items() if k in _ASYNCPG_PARAMS}
-            url = urlunparse(parsed._replace(query=urlencode(filtered, doseq=True)))
+            if "sslmode" in params and params["sslmode"][0] in ("require", "verify-ca", "verify-full"):
+                self.database_require_ssl = True
+            url = urlunparse(parsed._replace(query=""))
 
         self.database_url = url
         return self

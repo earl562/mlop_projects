@@ -21,7 +21,13 @@ _session_factory = None
 def _get_engine():
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.database_url, echo=False)
+        kwargs: dict = {"echo": False}
+        if settings.database_require_ssl:
+            import ssl
+
+            ctx = ssl.create_default_context()
+            kwargs["connect_args"] = {"ssl": ctx}
+        _engine = create_async_engine(settings.database_url, **kwargs)
     return _engine
 
 
@@ -29,6 +35,7 @@ async def init_db() -> None:
     """Create all tables and install triggers if they don't exist."""
     engine = _get_engine()
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         await conn.run_sync(Base.metadata.create_all)
 
         # Auto-populate search_vector on INSERT/UPDATE via trigger
