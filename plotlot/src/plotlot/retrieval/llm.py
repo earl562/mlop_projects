@@ -28,8 +28,8 @@ NVIDIA_MODEL = "moonshotai/kimi-k2.5"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
 
-MAX_RETRIES = 3
-BASE_DELAY = 2.0
+MAX_RETRIES = 2
+BASE_DELAY = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ async def call_llm(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=45.0) as client:
         # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             nvidia_headers = {
@@ -200,7 +200,7 @@ async def call_llm_stream(messages: list[dict]):
         "stream": True,
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=45.0) as client:
         # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             headers = {

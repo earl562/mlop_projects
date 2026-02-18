@@ -136,14 +136,25 @@ async def analyze_stream(request: AnalyzeRequest):
                 "step": "analysis",
                 "message": "AI analyzing zoning code...",
             })
-            report = await _agentic_analysis(
-                address=request.address,
-                geo=geo,
-                prop_record=prop_record,
-                search_results=search_results,
-                municipality=municipality,
-                county=county,
-            )
+            try:
+                report = await asyncio.wait_for(
+                    _agentic_analysis(
+                        address=request.address,
+                        geo=geo,
+                        prop_record=prop_record,
+                        search_results=search_results,
+                        municipality=municipality,
+                        county=county,
+                    ),
+                    timeout=90,
+                )
+            except asyncio.TimeoutError:
+                logger.error("LLM analysis timed out for: %s", request.address)
+                from plotlot.pipeline.lookup import _build_fallback_report
+                report = _build_fallback_report(
+                    request.address, geo, prop_record,
+                    [f"{r.section} — {r.section_title}" for r in search_results if r.section],
+                )
 
             yield _sse_event("status", {
                 "step": "analysis",
