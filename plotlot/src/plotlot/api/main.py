@@ -127,48 +127,118 @@ async def health():
 
 @app.get("/debug/llm")
 async def debug_llm():
-    """Test LLM provider connectivity — returns latency or error per provider."""
+    """Network diagnostics + multi-model LLM connectivity test.
+
+    Tests DNS resolution, TCP connect, and multiple NVIDIA models to
+    pinpoint whether the issue is network-level or model-specific.
+    """
+    import socket
     import time
     import httpx
     from plotlot.config import settings as _s
 
-    results = {}
+    diag: dict = {}
+
+    # --- Step 1: DNS resolution ---
+    host = "integrate.api.nvidia.com"
+    try:
+        t0 = time.monotonic()
+        addrs = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
+        dns_ms = round((time.monotonic() - t0) * 1000, 1)
+        resolved_ips = list({a[4][0] for a in addrs})
+        diag["dns"] = {"host": host, "ips": resolved_ips, "latency_ms": dns_ms}
+    except Exception as e:
+        diag["dns"] = {"host": host, "error": f"{type(e).__name__}: {e}"}
+
+    # --- Step 2: TCP connect to resolved IP ---
+    if diag["dns"].get("ips"):
+        ip = diag["dns"]["ips"][0]
+        try:
+            t0 = time.monotonic()
+            sock = socket.create_connection((ip, 443), timeout=10)
+            tcp_ms = round((time.monotonic() - t0) * 1000, 1)
+            sock.close()
+            diag["tcp"] = {"ip": ip, "port": 443, "latency_ms": tcp_ms}
+        except Exception as e:
+            diag["tcp"] = {"ip": ip, "port": 443, "error": f"{type(e).__name__}: {e}"}
+
+    # --- Step 3: Test multiple NVIDIA models ---
     test_payload = {
         "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
         "temperature": 0,
         "max_tokens": 5,
     }
 
-    providers = [
-        ("nvidia", _s.nvidia_api_key, "https://integrate.api.nvidia.com/v1/chat/completions",
-         "moonshotai/kimi-k2.5", {}),
-        ("gemini", _s.gemini_api_key, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-         "gemini-2.5-flash", {}),
+    nvidia_models = [
+        "moonshotai/kimi-k2.5",
+        "meta/llama-3.3-70b-instruct",
+        "minimaxai/minimax-m2.1",
     ]
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)) as client:
-        for name, api_key, url, model, extra_headers in providers:
-            if not api_key:
-                results[name] = {"error": "no_api_key"}
-                continue
-            # Detect whitespace/linebreak issues in API key (common Render paste bug)
-            key_info = {
-                "key_len": len(api_key),
-                "key_prefix": api_key[:8] + "...",
-                "has_whitespace": api_key != api_key.strip(),
-                "has_newline": "\n" in api_key or "\r" in api_key,
-            }
-            clean_key = api_key.strip()
-            try:
-                headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json", **extra_headers}
-                t0 = time.monotonic()
-                resp = await client.post(url, json={**test_payload, "model": model}, headers=headers)
-                elapsed = round(time.monotonic() - t0, 2)
-                results[name] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:200], **key_info}
-            except Exception as e:
-                results[name] = {"error": f"{type(e).__name__}: {e}", **key_info}
+    api_key = _s.nvidia_api_key
+    if not api_key:
+        diag["nvidia_models"] = {"error": "no_api_key"}
+    else:
+        key_info = {
+            "key_len": len(api_key),
+            "key_prefix": api_key[:8] + "...",
+            "has_whitespace": api_key != api_key.strip(),
+            "has_newline": "\n" in api_key or "\r" in api_key,
+        }
+        diag["nvidia_key"] = key_info
+        diag["nvidia_models"] = {}
 
-    return results
+        headers = {
+            "Authorization": f"Bearer {api_key.strip()}",
+            "Content-Type": "application/json",
+        }
+        url = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
+        ) as client:
+            for model in nvidia_models:
+                try:
+                    t0 = time.monotonic()
+                    resp = await client.post(
+                        url, json={**test_payload, "model": model}, headers=headers,
+                    )
+                    elapsed = round(time.monotonic() - t0, 2)
+                    diag["nvidia_models"][model] = {
+                        "status": resp.status_code,
+                        "latency_s": elapsed,
+                        "body": resp.text[:300],
+                    }
+                except Exception as e:
+                    elapsed = round(time.monotonic() - t0, 2)
+                    diag["nvidia_models"][model] = {
+                        "error": f"{type(e).__name__}: {e}",
+                        "elapsed_s": elapsed,
+                    }
+
+    # --- Step 4: Gemini connectivity (if key exists) ---
+    if _s.gemini_api_key:
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
+            ) as client:
+                t0 = time.monotonic()
+                resp = await client.post(
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    json={**test_payload, "model": "gemini-2.5-flash"},
+                    headers={
+                        "Authorization": f"Bearer {_s.gemini_api_key.strip()}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                elapsed = round(time.monotonic() - t0, 2)
+                diag["gemini"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:300]}
+        except Exception as e:
+            diag["gemini"] = {"error": f"{type(e).__name__}: {e}"}
+    else:
+        diag["gemini"] = {"error": "no_api_key"}
+
+    return diag
 
 
 def run():
