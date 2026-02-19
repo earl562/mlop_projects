@@ -90,26 +90,35 @@ that knowledge.
 ## Your Tools
 
 ### Research Tools
-1. **search_zoning_ordinance** — Search the local zoning ordinance database for specific \
+1. **geocode_address** — Resolve a street address to its municipality, county, and coordinates. \
+   ALWAYS call this FIRST when a user gives you an address — it tells you the exact municipality \
+   and county so you can use the other tools correctly.
+2. **search_zoning_ordinance** — Search the local zoning ordinance database for specific \
    regulations. Use this when you need precise code language about setbacks, uses, variances, etc.
-2. **web_search** — Search the web via Jina.ai for current information about municipalities, \
+3. **web_search** — Search the web via Jina.ai for current information about municipalities, \
    recent zoning changes, market data, or anything not in the local database.
-3. **search_properties** — Search county property databases for properties matching criteria. \
+4. **search_properties** — Search county property databases for properties matching criteria. \
    Supports filters by land use type (vacant, residential, commercial), city, ownership duration, \
    lot size, sale price, assessed value, year built, and owner name. Covers Miami-Dade, Broward, \
    and Palm Beach counties. Results are stored in your session for further analysis.
-4. **filter_dataset** — Filter, sort, or slice the current search results. Use after search_properties \
+5. **filter_dataset** — Filter, sort, or slice the current search results. Use after search_properties \
    to narrow down by additional criteria or get summary statistics.
-5. **get_dataset_info** — Check what's in the current dataset — record count, sample records, \
+6. **get_dataset_info** — Check what's in the current dataset — record count, sample records, \
    field names, and summary stats.
 
 ### Output Tools
-6. **create_spreadsheet** — Create a Google Sheets spreadsheet with structured data. Returns a \
+7. **create_spreadsheet** — Create a Google Sheets spreadsheet with structured data. Returns a \
    shareable link.
-7. **create_document** — Create a Google Docs document with text content. Returns a shareable link.
-8. **export_dataset** — Export current search results to a Google Spreadsheet with one click. \
+8. **create_document** — Create a Google Docs document with text content. Returns a shareable link.
+9. **export_dataset** — Export current search results to a Google Spreadsheet with one click. \
    Automatically formats all records with proper headers. Use this (not create_spreadsheet) after \
    a property search.
+
+## Address Workflow
+When a user gives you a street address:
+1. ALWAYS call geocode_address FIRST to get the municipality and county
+2. Then use search_zoning_ordinance with that municipality to look up zoning rules
+3. NEVER ask the user what municipality or county their address is in — use the geocode tool
 
 ## Research Workflow
 When a user asks you to find or research properties:
@@ -223,6 +232,27 @@ def _build_report_context(report) -> str:
 # ---------------------------------------------------------------------------
 
 CHAT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "geocode_address",
+            "description": (
+                "Resolve a street address to its municipality, county, and coordinates. "
+                "ALWAYS call this FIRST when a user gives you an address. "
+                "Returns the exact municipality and county so you can use other tools."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "string",
+                        "description": "Full street address (e.g., '117 NE 171st St, Miami, FL')",
+                    },
+                },
+                "required": ["address"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -475,6 +505,25 @@ CHAT_TOOLS = [
 # Tool execution
 # ---------------------------------------------------------------------------
 
+async def _execute_geocode(address: str) -> str:
+    """Geocode an address to get municipality, county, and coordinates."""
+    from plotlot.retrieval.geocode import geocode_address
+    try:
+        result = await geocode_address(address)
+        if result:
+            return json.dumps({
+                "status": "success",
+                "municipality": result["municipality"],
+                "county": result["county"],
+                "formatted_address": result["formatted_address"],
+                "lat": result.get("lat"),
+                "lng": result.get("lng"),
+            })
+        return json.dumps({"status": "not_found", "message": f"Could not geocode: {address}"})
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Geocoding failed: {str(e)}"})
+
+
 async def _execute_zoning_search(municipality: str, query: str) -> str:
     """Search the local zoning ordinance database."""
     session = await get_session()
@@ -719,7 +768,9 @@ async def _execute_export_dataset(session_id: str, args: dict) -> str:
 
 async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
     """Route a tool call to the appropriate handler."""
-    if name == "search_zoning_ordinance":
+    if name == "geocode_address":
+        return await _execute_geocode(args.get("address", ""))
+    elif name == "search_zoning_ordinance":
         return await _execute_zoning_search(
             args.get("municipality", ""),
             args.get("query", ""),
@@ -838,6 +889,7 @@ async def chat(request: ChatRequest):
 
                     # Tell the frontend a tool is being used
                     tool_messages = {
+                        "geocode_address": "Resolving address...",
                         "search_zoning_ordinance": "Searching zoning ordinances...",
                         "web_search": "Searching the web...",
                         "create_spreadsheet": "Creating spreadsheet...",
