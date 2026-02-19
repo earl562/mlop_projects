@@ -36,6 +36,8 @@ CRITICAL RULES:
 - Be specific with numbers when available from the ordinance text.
 - Note if the property appears non-conforming.
 - NEVER return plain text — ALWAYS call submit_report.
+- NEVER ask the user for more information. You have all the data you will get. Analyze it and submit.
+- NEVER ask for folio numbers, addresses, or any other identifiers. Just analyze what you have.
 
 NUMERIC EXTRACTION — THIS IS CRITICAL:
 When you find dimensional standards in the ordinance text, you MUST extract NUMERIC VALUES \
