@@ -119,23 +119,32 @@ that knowledge.
    Automatically formats all records with proper headers. Use this (not create_spreadsheet) after \
    a property search.
 
-## Address Workflow — CRITICAL
+## Address Workflow — CRITICAL (3 steps, ALWAYS follow this order)
 When a user gives you a street address, your job is to deliver a SPECIFIC zoning analysis:
-1. ALWAYS call geocode_address FIRST — this gives you the exact municipality (e.g. "Miami Gardens", NOT just "Miami-Dade") and county
-2. Call search_zoning_ordinance with that SPECIFIC municipality to look up zoning rules
-3. From the search results, extract and present these SPECIFIC values:
-   - **Zoning District Code** (e.g. "RS-1", "T4-L", "B-2") — the exact code for this parcel
-   - **Allowed Uses** — what can be built (single-family, multifamily, mixed-use, etc.)
-   - **Setbacks** — front, side, and rear in feet
-   - **Max Building Height** — in feet or stories
-   - **Max Density** — units per acre
-   - **Min Lot Size** — square feet per unit
-   - **FAR** — floor area ratio if applicable
-   - **Max Allowable Units** — calculate this from density × lot size when possible
-4. NEVER give vague answers like "governed by sections..." — always extract the SPECIFIC numbers
-5. If you can't find a specific value, say so explicitly: "I couldn't find the rear setback for RS-1"
-6. NEVER ask the user what municipality or county their address is in — use the geocode tool
-7. Always identify the municipality by name (e.g. "Miami Gardens" not "Miami-Dade County")
+
+**Step 1: geocode_address** → Gets municipality, county, lat/lng
+**Step 2: lookup_property_info** → Gets the EXACT zoning code (e.g. RS-1), lot size, owner
+**Step 3: search_zoning_ordinance** → Search for that SPECIFIC zoning code's regulations
+
+Example flow:
+- geocode_address("2850 NW 27th Ave, Miami") → municipality="Miami", county="Miami-Dade", lat=25.8, lng=-80.2
+- lookup_property_info(address, county, lat, lng) → zoning_code="T3-R", lot_size=7500 sqft
+- search_zoning_ordinance(municipality="Miami", query="T3-R setbacks density height")
+
+Then present these SPECIFIC values from the results:
+- **Zoning District**: The exact code and description (e.g. "T3-R — Sub-Urban Transect Zone")
+- **Lot Size**: From the property record (e.g. "7,500 sqft")
+- **Setbacks**: Front, side, and rear in feet
+- **Max Building Height**: In feet or stories
+- **Max Density**: Units per acre
+- **Max Allowable Units**: Calculate from density × lot_size / 43,560
+
+Rules:
+- NEVER skip Step 2 — without the zoning code, you'll give vague answers
+- NEVER give vague answers like "governed by sections..." — extract SPECIFIC numbers
+- If you can't find a value, say explicitly: "I couldn't find the rear setback for T3-R"
+- NEVER ask the user for municipality, county, or folio — use your tools
+- Always identify the municipality by name (e.g. "Miami Gardens" not "Miami-Dade County")
 
 ## Research Workflow
 When a user asks you to find or research properties:
@@ -254,9 +263,9 @@ CHAT_TOOLS = [
         "function": {
             "name": "geocode_address",
             "description": (
-                "MANDATORY first step for ANY address. You MUST call this before any "
-                "other tool when a user mentions an address. Returns municipality, "
-                "county, and coordinates needed by all other tools."
+                "MANDATORY Step 1 of 3 for ANY address. Returns municipality, "
+                "county, lat, lng. ALWAYS follow with lookup_property_info (Step 2) "
+                "to get the zoning code, then search_zoning_ordinance (Step 3)."
             ),
             "parameters": {
                 "type": "object",
@@ -273,11 +282,47 @@ CHAT_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "lookup_property_info",
+            "description": (
+                "MANDATORY second step after geocode_address. Looks up a specific property's "
+                "record from the county Property Appraiser (ArcGIS). Returns the EXACT zoning "
+                "code (e.g. RS-1, T4-L, B-2), lot size, owner, assessed value, and building "
+                "info. You MUST call this to get the zoning code before searching ordinances."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "string",
+                        "description": "Full street address from geocode result",
+                    },
+                    "county": {
+                        "type": "string",
+                        "enum": ["Miami-Dade", "Broward", "Palm Beach"],
+                        "description": "County from geocode result",
+                    },
+                    "lat": {
+                        "type": "number",
+                        "description": "Latitude from geocode result (needed for spatial zoning query)",
+                    },
+                    "lng": {
+                        "type": "number",
+                        "description": "Longitude from geocode result (needed for spatial zoning query)",
+                    },
+                },
+                "required": ["address", "county", "lat", "lng"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_zoning_ordinance",
             "description": (
-                "REQUIRED for verifying ANY zoning rule. Always prefer this over general "
-                "knowledge. Searches 3,000+ ordinance chunks across 104 municipalities. "
-                "Use specific zoning codes or topics as the query."
+                "Search zoning ordinance text for SPECIFIC regulations. Use AFTER "
+                "lookup_property_info — search for the EXACT zoning code returned by the "
+                "property lookup (e.g. 'RS-1 setbacks' or 'T4-L density'). "
+                "Searches 3,000+ ordinance chunks across 104 municipalities."
             ),
             "parameters": {
                 "type": "object",
@@ -521,7 +566,7 @@ CHAT_TOOLS = [
 # Tool groups for dynamic masking (Notion/CloudQuery pattern:
 # reduce context bloat by only showing relevant tools per turn)
 CORE_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
-    "geocode_address", "search_zoning_ordinance", "web_search", "search_properties",
+    "geocode_address", "lookup_property_info", "search_zoning_ordinance", "web_search", "search_properties",
 }]
 DATASET_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
     "filter_dataset", "get_dataset_info", "export_dataset",
@@ -568,10 +613,46 @@ async def _execute_geocode(address: str) -> str:
                 "formatted_address": result["formatted_address"],
                 "lat": result.get("lat"),
                 "lng": result.get("lng"),
+                "next_step": "Now call lookup_property_info with this address, county, lat, lng to get the zoning code",
             })
         return json.dumps({"status": "not_found", "message": f"Could not geocode: {address}"})
     except Exception as e:
         return json.dumps({"status": "error", "message": f"Geocoding failed: {str(e)}"})
+
+
+async def _execute_lookup_property(address: str, county: str, lat: float, lng: float) -> str:
+    """Look up property info from county Property Appraiser ArcGIS APIs."""
+    from plotlot.retrieval.property import lookup_property
+    try:
+        record = await lookup_property(address, county, lat=lat, lng=lng)
+        if record:
+            result = {
+                "status": "success",
+                "folio": record.folio,
+                "address": record.address,
+                "municipality": record.municipality,
+                "county": record.county,
+                "owner": record.owner,
+                "zoning_code": record.zoning_code,
+                "zoning_description": record.zoning_description,
+                "lot_size_sqft": record.lot_size_sqft,
+                "lot_dimensions": record.lot_dimensions,
+                "bedrooms": record.bedrooms,
+                "year_built": record.year_built,
+                "assessed_value": record.assessed_value,
+                "living_area_sqft": record.living_area_sqft,
+                "living_units": record.living_units,
+            }
+            if record.zoning_code:
+                result["next_step"] = (
+                    f"Now call search_zoning_ordinance with municipality='{record.municipality}' "
+                    f"and query='{record.zoning_code} setbacks density height' to get the "
+                    f"specific regulations for this zoning district"
+                )
+            return json.dumps(result)
+        return json.dumps({"status": "not_found", "message": f"No property record found for {address} in {county}"})
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
 
 
 async def _execute_zoning_search(municipality: str, query: str) -> str:
@@ -820,6 +901,13 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
     """Route a tool call to the appropriate handler."""
     if name == "geocode_address":
         return await _execute_geocode(args.get("address", ""))
+    elif name == "lookup_property_info":
+        return await _execute_lookup_property(
+            args.get("address", ""),
+            args.get("county", ""),
+            args.get("lat", 0.0),
+            args.get("lng", 0.0),
+        )
     elif name == "search_zoning_ordinance":
         return await _execute_zoning_search(
             args.get("municipality", ""),
@@ -966,6 +1054,7 @@ async def chat(request: ChatRequest):
                     # Tell the frontend a tool is being used
                     tool_messages = {
                         "geocode_address": "Resolving address...",
+                        "lookup_property_info": "Looking up property record...",
                         "search_zoning_ordinance": "Searching zoning ordinances...",
                         "web_search": "Searching the web...",
                         "create_spreadsheet": "Creating spreadsheet...",
