@@ -30,6 +30,19 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize DB on startup, cleanup on shutdown."""
     setup_logging(json_format=settings.log_json, level=settings.log_level)
+
+    # Initialize MLflow tracing
+    from plotlot.observability.tracing import (
+        set_tracking_uri, set_experiment, enable_async_logging, mlflow as _mlflow_mod,
+    )
+    if _mlflow_mod is not None:
+        set_tracking_uri(settings.mlflow_tracking_uri)
+        set_experiment(settings.mlflow_experiment_name)
+        enable_async_logging()
+        logger.info("MLflow tracing enabled: %s", settings.mlflow_tracking_uri)
+    else:
+        logger.info("MLflow not installed — tracing disabled")
+
     # Log the database URL (redacted) for debugging deployment issues
     from urllib.parse import urlparse
     parsed = urlparse(settings.database_url)
@@ -123,6 +136,41 @@ async def health():
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     return {"status": status, "checks": checks}
+
+
+@app.get("/debug/traces")
+async def debug_traces(limit: int = 10):
+    """View recent MLflow traces — pipeline runs, LLM calls, tool use."""
+    from plotlot.observability.tracing import mlflow as _mlflow
+    if _mlflow is None:
+        return {"error": "MLflow not installed"}
+
+    try:
+        client = _mlflow.MlflowClient()
+        experiments = client.search_experiments(max_results=5)
+        traces_out = []
+
+        for exp in experiments:
+            runs = client.search_runs(
+                experiment_ids=[exp.experiment_id],
+                max_results=limit,
+                order_by=["start_time DESC"],
+            )
+            for run in runs:
+                traces_out.append({
+                    "run_id": run.info.run_id,
+                    "run_name": run.info.run_name,
+                    "status": run.info.status,
+                    "start_time": run.info.start_time,
+                    "end_time": run.info.end_time,
+                    "params": dict(run.data.params),
+                    "metrics": dict(run.data.metrics),
+                    "tags": {k: v for k, v in run.data.tags.items() if not k.startswith("mlflow.")},
+                })
+
+        return {"experiment_count": len(experiments), "traces": traces_out[:limit]}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 @app.get("/debug/llm")

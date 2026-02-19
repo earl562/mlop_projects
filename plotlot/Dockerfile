@@ -16,11 +16,11 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra mlflow --no-install-project
 
 # Copy source and install project
 COPY src/ src/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra mlflow
 
 
 # ── Stage 2: Runtime (API server by default) ──
@@ -36,8 +36,8 @@ COPY --from=builder /app/src /app/src
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Non-root user
-RUN useradd --create-home appuser
+# Non-root user + writable MLflow directory
+RUN useradd --create-home appuser && mkdir -p /app/mlruns && chown appuser:appuser /app/mlruns
 USER appuser
 
 EXPOSE 8000
