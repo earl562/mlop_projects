@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import ZoningReport from "@/components/ZoningReport";
 import AnalysisStream from "@/components/AnalysisStream";
 import {
@@ -470,7 +472,31 @@ export default function Home() {
                           : "text-stone-700"
                       }`}
                     >
-                      {msg.content}
+                      {msg.role === "assistant" ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            strong: ({ children }) => <strong className="font-semibold text-stone-800">{children}</strong>,
+                            ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>,
+                            li: ({ children }) => <li>{children}</li>,
+                            h1: ({ children }) => <h1 className="mb-2 text-lg font-bold text-stone-800">{children}</h1>,
+                            h2: ({ children }) => <h2 className="mb-2 text-base font-bold text-stone-800">{children}</h2>,
+                            h3: ({ children }) => <h3 className="mb-1 text-sm font-bold text-stone-800">{children}</h3>,
+                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-amber-700 underline hover:text-amber-600">{children}</a>,
+                            code: ({ children }) => <code className="rounded bg-stone-100 px-1 py-0.5 text-xs font-mono text-stone-700">{children}</code>,
+                            table: ({ children }) => <div className="mb-2 overflow-x-auto"><table className="min-w-full text-xs border border-stone-200">{children}</table></div>,
+                            thead: ({ children }) => <thead className="bg-stone-100">{children}</thead>,
+                            th: ({ children }) => <th className="border border-stone-200 px-2 py-1 text-left font-semibold">{children}</th>,
+                            td: ({ children }) => <td className="border border-stone-200 px-2 py-1">{children}</td>,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.content
+                      )}
                       {msg.isStreaming && msg.content && (
                         <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-amber-600" />
                       )}
