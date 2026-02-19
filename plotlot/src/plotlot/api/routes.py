@@ -9,7 +9,7 @@ import json
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 
 from plotlot.api.schemas import AnalyzeRequest, ErrorResponse, ZoningReportResponse
@@ -307,61 +307,95 @@ async def chunk_stats():
         await session.close()
 
 
+# In-memory ingestion status tracker
+_ingest_status: dict[str, dict] = {}
+
+
+async def _run_ingestion(municipality_key: str, delete_existing: bool) -> None:
+    """Background ingestion task."""
+    from plotlot.pipeline.ingest import ingest_municipality, _resolve_config
+    from plotlot.storage.db import init_db
+
+    _ingest_status[municipality_key] = {"status": "running", "step": "initializing"}
+    try:
+        await init_db()
+
+        if delete_existing:
+            from sqlalchemy import delete as sql_delete
+            from plotlot.storage.models import OrdinanceChunk
+
+            _ingest_status[municipality_key]["step"] = "deleting_existing"
+            config = await _resolve_config(municipality_key)
+            muni_name = config.municipality
+            session = await get_session()
+            try:
+                result = await session.execute(
+                    sql_delete(OrdinanceChunk).where(
+                        OrdinanceChunk.municipality.ilike(f"%{muni_name}%")
+                    )
+                )
+                await session.commit()
+                deleted = result.rowcount
+                logger.info("Deleted %d existing chunks for %s", deleted, muni_name)
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+
+        _ingest_status[municipality_key]["step"] = "scraping_and_embedding"
+        count = await ingest_municipality(municipality_key)
+        _ingest_status[municipality_key] = {
+            "status": "complete",
+            "chunks_stored": count,
+        }
+        logger.info("Ingestion complete for %s: %d chunks", municipality_key, count)
+
+    except Exception as e:
+        logger.exception("Background ingestion failed for: %s", municipality_key)
+        _ingest_status[municipality_key] = {
+            "status": "failed",
+            "error": str(e),
+        }
+
+
 @router.post("/admin/ingest")
 async def ingest_municipality_endpoint(
     municipality_key: str,
+    background_tasks: BackgroundTasks,
     delete_existing: bool = False,
 ):
-    """Ingest zoning ordinances for a municipality from Municode.
+    """Start ingestion for a municipality (runs in background).
 
     Runs the full pipeline: discover → scrape → chunk → embed → store.
-    Set delete_existing=true to replace existing data for that municipality.
-
-    This runs synchronously — expect 30-120s depending on municipality size.
+    Returns immediately. Poll GET /admin/ingest/status?key=X to check progress.
     """
-    from plotlot.pipeline.ingest import ingest_municipality
-    from plotlot.storage.db import init_db
-
-    await init_db()
-
-    # Optionally delete existing chunks first
-    if delete_existing:
-        from sqlalchemy import delete as sql_delete
-        from plotlot.storage.models import OrdinanceChunk
-
-        session = await get_session()
-        try:
-            # Resolve the config to get the actual municipality name
-            from plotlot.pipeline.ingest import _resolve_config
-            config = await _resolve_config(municipality_key)
-            muni_name = config.municipality
-
-            result = await session.execute(
-                sql_delete(OrdinanceChunk).where(
-                    OrdinanceChunk.municipality.ilike(f"%{muni_name}%")
-                )
-            )
-            await session.commit()
-            deleted = result.rowcount
-            logger.info("Deleted %d existing chunks for %s", deleted, muni_name)
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
-
-    try:
-        count = await ingest_municipality(municipality_key)
+    # Check if already running
+    existing = _ingest_status.get(municipality_key, {})
+    if existing.get("status") == "running":
         return {
             "municipality_key": municipality_key,
-            "chunks_stored": count,
-            "status": "success" if count > 0 else "no_data",
+            "status": "already_running",
+            "step": existing.get("step"),
         }
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.exception("Ingestion failed for: %s", municipality_key)
-        raise HTTPException(status_code=502, detail=str(e))
+
+    background_tasks.add_task(_run_ingestion, municipality_key, delete_existing)
+    _ingest_status[municipality_key] = {"status": "queued"}
+
+    return {
+        "municipality_key": municipality_key,
+        "status": "started",
+        "message": "Ingestion started in background. Poll /admin/ingest/status for progress.",
+    }
+
+
+@router.get("/admin/ingest/status")
+async def ingest_status(key: str | None = None):
+    """Check ingestion status for a municipality or all active ingestions."""
+    if key:
+        status = _ingest_status.get(key, {"status": "not_found"})
+        return {"municipality_key": key, **status}
+    return {"ingestions": dict(_ingest_status)}
 
 
 @router.delete("/admin/chunks")
