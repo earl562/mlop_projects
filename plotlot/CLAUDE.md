@@ -100,29 +100,28 @@ PlotLot v2 is the flagship project. The core product:
 - County ArcGIS REST APIs → property records + spatial zoning queries (MDC, Broward, Palm Beach)
 - Municode API → zoning ordinance retrieval (73 municipalities with auto-discovery)
 - pgvector hybrid search (RRF fusion) → relevant zoning sections
-- Agentic LLM analysis (Gemini 2.5 Flash primary, NVIDIA NIM Kimi K2.5 fallback) → numeric extraction via tool calling
+- Agentic LLM analysis (NVIDIA NIM Llama 3.3 70B primary, Gemini 2.5 Flash fallback) → numeric extraction via tool calling
 - Deterministic calculator → max units from density, lot area, FAR, buildable envelope constraints
 
 **Deployment stack:**
 - **Backend:** Render free tier (FastAPI + Docker)
-- **Database:** Neon free tier (PostgreSQL + pgvector, 3,043 chunks across 3 municipalities)
+- **Database:** Neon free tier (PostgreSQL + pgvector, 8,142 chunks across 5 municipalities)
 - **Frontend:** Vercel free tier (Next.js 16 + React 19 + Tailwind CSS 4)
-- **LLM:** Gemini 2.5 Flash (primary, free tier), NVIDIA NIM (fallback)
-- **Observability:** MLflow with SQLite backend on Render
+- **LLM:** NVIDIA NIM Llama 3.3 70B (primary), Gemini 2.5 Flash (fallback), per-model circuit breakers
+- **Observability:** MLflow tracing with Neon PostgreSQL backend (persistent across deploys)
 
 ### What's Built
-- **DATA:** Municode auto-discovery (73 municipalities), scraper, chunker, embedder, pgvector hybrid search, multi-county property lookup (MDC two-layer zoning, Broward parcels, Palm Beach)
-- **BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with constraint breakdown
-- **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. Multi-provider LLM fallback with Gemini primary.
-- **CHAT:** Agentic chat with 9 tools (geocode, zoning search, web search, property search, filter, dataset info, export, spreadsheet, document creation)
-- **OBSERVABILITY:** MLflow tracing enabled in production, /debug/llm diagnostics endpoint, /debug/traces endpoint
+- **DATA:** Municode auto-discovery (88 municipalities), scraper, chunker, NVIDIA embedder (1024d), pgvector hybrid search (RRF fusion), multi-county property lookup (MDC two-layer zoning, Broward parcels, Palm Beach spatial zoning), admin ingestion endpoint
+- **BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with 4-constraint breakdown (density, min lot area, FAR, buildable envelope)
+- **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. NVIDIA NIM primary → Gemini fallback with per-model circuit breakers. Intra-NVIDIA model fallback chain (Llama 3.3 → Kimi K2.5).
+- **CHAT:** Agentic chat with 10 tools (geocode, lookup_property_info, zoning search, web search, property search, filter, dataset info, export, spreadsheet, document creation). 3-step workflow: geocode → lookup_property_info → search_zoning_ordinance. Session-level geocode cache for lat/lng precision.
+- **OBSERVABILITY:** MLflow tracing to Neon PostgreSQL (persistent), /debug/llm diagnostics, /debug/traces endpoint, per-model token tracking
 
 ### Current Issues (as of 2026-02-19)
-1. **Data coverage gaps:** Only Fort Lauderdale (136 chunks), Miramar (241 chunks), and Miami-Dade (2,666 chunks) are ingested. Many municipalities return empty results.
-2. **Fort Lauderdale data quality:** Ingested HR/personnel rules instead of zoning ordinances — retrieval returns irrelevant content.
-3. **MLflow traces not persisting:** SQLite URI may need absolute path on Render. Experiments exist but runs are empty.
-4. **Chat agent tool-use quality:** Gemini sometimes ignores tool definitions and goes conversational instead of using tools. Requires strong prompt constraints.
-5. **Frontend UX:** Current dark chat bubble design needs refresh to clean, modern Gemini-like centered layout.
+1. **Data coverage**: 5 municipalities ingested (Miami Gardens 3,561, MDC 2,666, Boca Raton 1,538, Miramar 241, Fort Lauderdale 136). 88 municipalities discoverable on Municode. West Palm Beach moved to enCodePlus (not on Municode).
+2. **Chat retrieval quality**: Chat agent finds correct zoning codes but sometimes pulls wrong ordinance sections for dimensional standards. Pipeline endpoint has better quality via structured submit_report tool.
+3. **Admin ingestion**: POST /admin/ingest endpoint enables remote data population. Background task pattern for Render's 30s proxy timeout.
+4. **Frontend UX:** Current dark chat bubble design needs refresh to clean, modern Gemini-like centered layout.
 
 ## Rules
 
