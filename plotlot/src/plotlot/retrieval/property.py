@@ -82,6 +82,10 @@ PBC_PROPERTY_FIELDS = (
     "PROPERTY_USE,YRBLT,ACRES,ASSESSED_VAL,TOTAL_MARKET,"
     "PRICE,SALE_DATE,LEGAL1"
 )
+PBC_ZONING_URL = (
+    "https://maps.co.palm-beach.fl.us/arcgis/rest/services"
+    "/OpenData/Planning_Open_Data/MapServer/9/query"
+)
 
 
 def _normalize_address(address: str) -> str:
@@ -200,13 +204,13 @@ async def _spatial_query_zoning(
             # Check multiple possible field names; strip whitespace since some
             # layers return " " (space) for empty values
             zone = ""
-            for key in ("ZONE", "ZONING", "ZONE_", "ZONE_NAME"):
+            for key in ("ZONE", "ZONING", "ZONE_", "ZONE_NAME", "FCODE"):
                 val = str(attrs.get(key) or "").strip()
                 if val:
                     zone = val
                     break
             desc = ""
-            for key in ("ZONE_DESC", "ZONING_DESC", "SHORT_DESC", "DESCRIPTION"):
+            for key in ("ZONE_DESC", "ZONING_DESC", "SHORT_DESC", "DESCRIPTION", "FNAME"):
                 val = str(attrs.get(key) or "").strip()
                 if val:
                     desc = val
@@ -349,11 +353,16 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
         ]
         full_addr = " ".join(p for p in addr_parts if p).strip()
 
+        # Extract coordinates from feature geometry as fallback (Miami-Dade pattern)
+        geom = features[0].get("geometry", {})
+        feat_lat = lat or geom.get("y")
+        feat_lng = lng or geom.get("x")
+
         # Spatial zoning query for Broward
         zoning_code, zoning_desc = "", ""
-        if lat and lng:
+        if feat_lat and feat_lng:
             zoning_code, zoning_desc = await _spatial_query_zoning(
-                BROWARD_ZONING_URL, lat, lng,
+                BROWARD_ZONING_URL, feat_lat, feat_lng,
             )
 
         # Query Parcels layer for lot size (SHAPE.STArea() in sqft, EPSG 2236)
@@ -388,8 +397,8 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
             living_area_sqft=_safe_float(attrs.get("UNDER_AIR_SQFT")),
             year_built=int(attrs.get("BLDG_YEAR_BUILT") or 0),
             assessed_value=_safe_float(attrs.get("JUST_BUILDING_VALUE")),
-            lat=lat,
-            lng=lng,
+            lat=feat_lat,
+            lng=feat_lng,
         )
 
 
@@ -428,14 +437,23 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
             except (ValueError, OSError):
                 sale_date = str(sale_date)
 
+        # Spatial zoning query for Palm Beach
+        zoning_code, zoning_desc = "", ""
+        if lat and lng:
+            zoning_code, zoning_desc = await _spatial_query_zoning(
+                PBC_ZONING_URL, lat, lng,
+            )
+
         folio = str(attrs.get("PARCEL_NUMBER") or "")
-        span.set_outputs({"folio": folio})
+        span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(
             folio=folio,
             address=str(attrs.get("SITE_ADDR_STR") or ""),
             municipality=str(attrs.get("MUNICIPALITY") or ""),
             county="Palm Beach",
             owner=str(attrs.get("OWNER_NAME1") or ""),
+            zoning_code=zoning_code,
+            zoning_description=zoning_desc,
             land_use_code=str(attrs.get("PROPERTY_USE") or ""),
             lot_size_sqft=lot_sqft,
             year_built=year_built,

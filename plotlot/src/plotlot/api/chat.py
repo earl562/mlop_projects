@@ -46,6 +46,7 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 _conversations: dict[str, list[dict]] = defaultdict(list)
 _datasets: dict[str, DatasetInfo | None] = {}
+_last_geocode: dict[str, dict] = {}  # session_id → last geocode result (full precision)
 
 MAX_MEMORY_MESSAGES = 50   # Keep last 50 messages per session
 MAX_AGENT_TURNS = 8        # Max tool-use loops per chat message
@@ -600,12 +601,16 @@ def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
 # Tool execution
 # ---------------------------------------------------------------------------
 
-async def _execute_geocode(address: str) -> str:
+async def _execute_geocode(address: str, session_id: str = "") -> str:
     """Geocode an address to get municipality, county, and coordinates."""
     from plotlot.retrieval.geocode import geocode_address
     try:
         result = await geocode_address(address)
         if result:
+            # Store full-precision coords in session so lookup_property_info
+            # can use them even if the LLM truncates the values
+            if session_id:
+                _last_geocode[session_id] = result
             return json.dumps({
                 "status": "success",
                 "municipality": result["municipality"],
@@ -620,9 +625,19 @@ async def _execute_geocode(address: str) -> str:
         return json.dumps({"status": "error", "message": f"Geocoding failed: {str(e)}"})
 
 
-async def _execute_lookup_property(address: str, county: str, lat: float, lng: float) -> str:
+async def _execute_lookup_property(address: str, county: str, lat: float, lng: float, session_id: str = "") -> str:
     """Look up property info from county Property Appraiser ArcGIS APIs."""
     from plotlot.retrieval.property import lookup_property
+
+    # Use full-precision coords from session geocode if the LLM truncated them
+    if session_id and session_id in _last_geocode:
+        geo = _last_geocode[session_id]
+        precise_lat = geo.get("lat")
+        precise_lng = geo.get("lng")
+        if precise_lat and precise_lng:
+            lat = precise_lat
+            lng = precise_lng
+
     try:
         record = await lookup_property(address, county, lat=lat, lng=lng)
         if record:
@@ -900,13 +915,14 @@ async def _execute_export_dataset(session_id: str, args: dict) -> str:
 async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
     """Route a tool call to the appropriate handler."""
     if name == "geocode_address":
-        return await _execute_geocode(args.get("address", ""))
+        return await _execute_geocode(args.get("address", ""), session_id=session_id)
     elif name == "lookup_property_info":
         return await _execute_lookup_property(
             args.get("address", ""),
             args.get("county", ""),
             args.get("lat", 0.0),
             args.get("lng", 0.0),
+            session_id=session_id,
         )
     elif name == "search_zoning_ordinance":
         return await _execute_zoning_search(
