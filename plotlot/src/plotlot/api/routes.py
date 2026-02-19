@@ -127,7 +127,7 @@ async def analyze_stream(request: AnalyzeRequest):
                 })
                 return
 
-            accuracy = geo.get("accuracy", "").lower()
+            accuracy = str(geo.get("accuracy", "")).lower()
             if accuracy and accuracy not in ACCEPTABLE_ACCURACY:
                 yield _sse_event("error", {
                     "detail": (
