@@ -28,7 +28,11 @@ logger = logging.getLogger(__name__)
 
 # Provider configs
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NVIDIA_MODEL = "moonshotai/kimi-k2.5"
+NVIDIA_MODELS = [
+    "meta/llama-3.3-70b-instruct",      # Fast, reliable tool use
+    "moonshotai/kimi-k2.5",              # Strong reasoning, sometimes slow
+]
+NVIDIA_MODEL = NVIDIA_MODELS[0]  # Default primary
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -87,8 +91,10 @@ class CircuitBreaker:
 
 
 # Per-provider circuit breakers (module-level singletons)
+# Each NVIDIA model gets its own breaker so one slow model doesn't block others
 _breakers: dict[str, CircuitBreaker] = {
-    "NVIDIA": CircuitBreaker(),
+    "NVIDIA/llama-3.3-70b-instruct": CircuitBreaker(),
+    "NVIDIA/kimi-k2.5": CircuitBreaker(),
     "Gemini": CircuitBreaker(),
 }
 
@@ -109,8 +115,11 @@ async def _call_provider_raw(
     Integrates circuit breaker (skip providers that are failing) and
     token usage extraction (log to MLflow for cost tracking).
     """
-    breaker = _breakers.get(provider_name)
-    if breaker and not breaker.allow_request():
+    # Auto-create breakers for new provider/model combos
+    if provider_name not in _breakers:
+        _breakers[provider_name] = CircuitBreaker()
+    breaker = _breakers[provider_name]
+    if not breaker.allow_request():
         logger.info("Circuit breaker OPEN for %s — skipping", provider_name)
         return None
 
@@ -246,22 +255,24 @@ async def call_llm(
         payload["tool_choice"] = "auto"
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: NVIDIA NIM (Kimi K2.5 — reliable, good tool use)
+        # Primary: NVIDIA NIM — try each model in the fallback chain
         if settings.nvidia_api_key:
             nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
                 "Content-Type": "application/json",
             }
-            nvidia_payload = {**payload, "model": NVIDIA_MODEL}
-            message = await _call_provider_raw(
-                client, NVIDIA_CHAT_URL, nvidia_headers, nvidia_payload, "NVIDIA",
-            )
-            if message:
-                return {
-                    "content": message.get("content") or "",
-                    "tool_calls": message.get("tool_calls") or [],
-                }
-            logger.warning("NVIDIA failed, falling back to Gemini")
+            for model in NVIDIA_MODELS:
+                nvidia_payload = {**payload, "model": model}
+                message = await _call_provider_raw(
+                    client, NVIDIA_CHAT_URL, nvidia_headers, nvidia_payload,
+                    f"NVIDIA/{model.split('/')[-1]}",
+                )
+                if message:
+                    return {
+                        "content": message.get("content") or "",
+                        "tool_calls": message.get("tool_calls") or [],
+                    }
+                logger.warning("NVIDIA %s failed, trying next model", model)
 
         # Fallback: Google Gemini
         if settings.gemini_api_key:
@@ -298,21 +309,22 @@ async def call_llm_stream(messages: list[dict]):
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: NVIDIA NIM
+        # Primary: NVIDIA NIM — try each model in the fallback chain
         if settings.nvidia_api_key:
             headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
                 "Content-Type": "application/json",
             }
-            try:
-                async for chunk in _stream_provider(
-                    client, NVIDIA_CHAT_URL, headers,
-                    {**payload, "model": NVIDIA_MODEL}, "NVIDIA",
-                ):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.warning("NVIDIA streaming failed: %s, falling back", e)
+            for model in NVIDIA_MODELS:
+                try:
+                    async for chunk in _stream_provider(
+                        client, NVIDIA_CHAT_URL, headers,
+                        {**payload, "model": model}, f"NVIDIA/{model.split('/')[-1]}",
+                    ):
+                        yield chunk
+                    return
+                except Exception as e:
+                    logger.warning("NVIDIA %s streaming failed: %s, trying next", model, e)
 
         # Fallback: Google Gemini
         if settings.gemini_api_key:
@@ -480,21 +492,23 @@ async def analyze_zoning(
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: NVIDIA NIM
+        # Primary: NVIDIA NIM — try each model in the fallback chain
         if settings.nvidia_api_key:
             nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
                 "Content-Type": "application/json",
             }
-            message = await _call_provider_raw(
-                client, NVIDIA_CHAT_URL, nvidia_headers,
-                {**payload_base, "model": NVIDIA_MODEL}, "NVIDIA",
-            )
-            if message and message.get("content"):
-                try:
-                    return _parse_llm_content(message["content"])
-                except json.JSONDecodeError as e:
-                    logger.error("Failed to parse NVIDIA response: %s", e)
+            for model in NVIDIA_MODELS:
+                message = await _call_provider_raw(
+                    client, NVIDIA_CHAT_URL, nvidia_headers,
+                    {**payload_base, "model": model},
+                    f"NVIDIA/{model.split('/')[-1]}",
+                )
+                if message and message.get("content"):
+                    try:
+                        return _parse_llm_content(message["content"])
+                    except json.JSONDecodeError as e:
+                        logger.error("Failed to parse NVIDIA %s response: %s", model, e)
 
         # Fallback: Google Gemini
         if settings.gemini_api_key:
