@@ -80,7 +80,8 @@ async def geocode_address(address: str) -> dict | None:
         "county": county_clean,
         "lat": location.get("lat"),
         "lng": location.get("lng"),
-        "accuracy": top.get("accuracy"),
+        "accuracy": top.get("accuracy"),  # numeric score (0-1)
+        "accuracy_type": top.get("accuracy_type", ""),  # string type (rooftop, etc.)
     }
 
     # Cache the result

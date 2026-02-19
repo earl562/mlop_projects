@@ -169,12 +169,14 @@ async def lookup_address(address: str) -> ZoningReport | None:
             )
 
         # Geocoding accuracy check — reject low-confidence matches
-        accuracy = str(geo.get("accuracy", "")).lower()
-        if accuracy and accuracy not in ACCEPTABLE_ACCURACY:
+        # Geocodio returns numeric `accuracy` (0-1) AND string `accuracy_type`
+        accuracy_score = geo.get("accuracy")
+        accuracy_type = str(geo.get("accuracy_type", "")).lower()
+        if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
             set_tag("status", "rejected")
             set_tag("failure_reason", "low_accuracy_geocode")
             raise ValueError(
-                f"Could not confidently locate this address (geocoding accuracy: {accuracy}). "
+                f"Could not confidently locate this address (geocoding accuracy: {accuracy_score}). "
                 f"Please check the address and try again."
             )
 

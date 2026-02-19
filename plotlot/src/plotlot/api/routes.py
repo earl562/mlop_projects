@@ -127,12 +127,12 @@ async def analyze_stream(request: AnalyzeRequest):
                 })
                 return
 
-            accuracy = str(geo.get("accuracy", "")).lower()
-            if accuracy and accuracy not in ACCEPTABLE_ACCURACY:
+            accuracy_score = geo.get("accuracy")
+            if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
                 yield _sse_event("error", {
                     "detail": (
                         f"Could not confidently locate this address "
-                        f"(geocoding accuracy: {accuracy}). Please check the address."
+                        f"(geocoding accuracy: {accuracy_score}). Please check the address."
                     ),
                     "error_type": "low_accuracy",
                 })
