@@ -321,8 +321,13 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
             return None
 
         street_num = tokens[0]
-        # Join remaining as street name, removing common suffixes for broader match
-        street_name = " ".join(tokens[1:])
+        # Join remaining as street name, removing directional prefixes and type suffixes
+        # Broward stores direction in SITUS_STREET_DIRECTION, not in SITUS_STREET_NAME
+        remaining = tokens[1:]
+        # Strip leading directional (N, S, E, W, NE, NW, SE, SW)
+        if remaining and remaining[0] in {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}:
+            remaining = remaining[1:]
+        street_name = " ".join(remaining)
         # Remove type suffixes for LIKE match
         for suffix in ["BLVD", "AVE", "ST", "DR", "CT", "LN", "PL", "RD", "TER", "WAY", "CIR"]:
             street_name = re.sub(rf"\b{suffix}\b", "", street_name).strip()

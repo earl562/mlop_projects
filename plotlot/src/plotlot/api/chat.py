@@ -830,10 +830,10 @@ async def _execute_filter_dataset(session_id: str, args: dict) -> str:
         reverse = args.get("sort_order", "desc") == "desc"
         records = sorted(records, key=lambda r: r.get(sort_by, 0) or 0, reverse=reverse)
 
-    # Apply limit
+    # Apply limit (cast to int — LLM may pass as string)
     limit = args.get("limit")
     if limit:
-        records = records[:limit]
+        records = records[:int(limit)]
 
     # Summary only mode
     if args.get("summary_only"):
