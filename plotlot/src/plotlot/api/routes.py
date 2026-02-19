@@ -276,6 +276,94 @@ async def analyze_stream(request: AnalyzeRequest):
 # Admin endpoints — data management
 # ---------------------------------------------------------------------------
 
+@router.get("/admin/chunks/stats")
+async def chunk_stats():
+    """Show ordinance chunk counts per municipality."""
+    from sqlalchemy import func, select
+    from plotlot.storage.models import OrdinanceChunk
+
+    session = await get_session()
+    try:
+        result = await session.execute(
+            select(
+                OrdinanceChunk.municipality,
+                OrdinanceChunk.county,
+                func.count().label("chunks"),
+            )
+            .group_by(OrdinanceChunk.municipality, OrdinanceChunk.county)
+            .order_by(func.count().desc())
+        )
+        rows = result.fetchall()
+        total = sum(r.chunks for r in rows)
+        return {
+            "total_chunks": total,
+            "municipalities": len(rows),
+            "breakdown": [
+                {"municipality": r.municipality, "county": r.county, "chunks": r.chunks}
+                for r in rows
+            ],
+        }
+    finally:
+        await session.close()
+
+
+@router.post("/admin/ingest")
+async def ingest_municipality_endpoint(
+    municipality_key: str,
+    delete_existing: bool = False,
+):
+    """Ingest zoning ordinances for a municipality from Municode.
+
+    Runs the full pipeline: discover → scrape → chunk → embed → store.
+    Set delete_existing=true to replace existing data for that municipality.
+
+    This runs synchronously — expect 30-120s depending on municipality size.
+    """
+    from plotlot.pipeline.ingest import ingest_municipality
+    from plotlot.storage.db import init_db
+
+    await init_db()
+
+    # Optionally delete existing chunks first
+    if delete_existing:
+        from sqlalchemy import delete as sql_delete
+        from plotlot.storage.models import OrdinanceChunk
+
+        session = await get_session()
+        try:
+            # Resolve the config to get the actual municipality name
+            from plotlot.pipeline.ingest import _resolve_config
+            config = await _resolve_config(municipality_key)
+            muni_name = config.municipality
+
+            result = await session.execute(
+                sql_delete(OrdinanceChunk).where(
+                    OrdinanceChunk.municipality.ilike(f"%{muni_name}%")
+                )
+            )
+            await session.commit()
+            deleted = result.rowcount
+            logger.info("Deleted %d existing chunks for %s", deleted, muni_name)
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+    try:
+        count = await ingest_municipality(municipality_key)
+        return {
+            "municipality_key": municipality_key,
+            "chunks_stored": count,
+            "status": "success" if count > 0 else "no_data",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("Ingestion failed for: %s", municipality_key)
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.delete("/admin/chunks")
 async def delete_chunks(municipality: str, confirm: bool = False):
     """Delete ordinance chunks for a municipality (e.g., bad data cleanup).
