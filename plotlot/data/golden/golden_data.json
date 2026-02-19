@@ -86,5 +86,39 @@
       },
       "numeric_tolerance": 0.5
     }
+  },
+  {
+    "_comment": "BOUNDARY: Orlando address should be rejected (outside coverage area)",
+    "inputs": {"address": "100 S Orange Ave, Orlando, FL 32801"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "outside_coverage",
+      "error_contains": "PlotLot covers Miami-Dade, Broward, and Palm Beach counties only"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Fake/nonsense address should be rejected (geocode failure or low accuracy)",
+    "inputs": {"address": "99999 Nonexistent Blvd, Fakeville, FL 00000"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "geocoding_failed"
+    }
+  },
+  {
+    "_comment": "DATA QUALITY: Fort Lauderdale has HR/personnel chunks — should still return zoning, not HR rules",
+    "inputs": {"address": "100 N Andrews Ave, Fort Lauderdale, FL 33301"},
+    "outputs": {
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "has_summary": true
+    },
+    "expectations": {
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "confidence_min": "low",
+      "summary_must_not_contain": ["personnel", "human resources", "employee benefits", "HR"]
+    }
   }
 ]

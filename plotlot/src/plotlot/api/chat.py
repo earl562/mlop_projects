@@ -34,6 +34,7 @@ from plotlot.retrieval.google_workspace import create_document, create_spreadshe
 from plotlot.retrieval.llm import call_llm
 from plotlot.retrieval.search import hybrid_search
 from plotlot.storage.db import get_session
+from plotlot.observability.tracing import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,12 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 _conversations: dict[str, list[dict]] = defaultdict(list)
 _datasets: dict[str, DatasetInfo | None] = {}
 
-MAX_MEMORY_MESSAGES = 50  # Keep last 50 messages per session
-MAX_AGENT_TURNS = 8       # Max tool-use loops per chat message
+MAX_MEMORY_MESSAGES = 50   # Keep last 50 messages per session
+MAX_AGENT_TURNS = 8        # Max tool-use loops per chat message
+MAX_TOKENS_PER_SESSION = 50_000  # Cost cap — prevent runaway token spend
+
+# Per-session token usage tracking
+_session_tokens: dict[str, int] = defaultdict(int)
 
 # ---------------------------------------------------------------------------
 # Agent personality
@@ -237,9 +242,9 @@ CHAT_TOOLS = [
         "function": {
             "name": "geocode_address",
             "description": (
-                "Resolve a street address to its municipality, county, and coordinates. "
-                "ALWAYS call this FIRST when a user gives you an address. "
-                "Returns the exact municipality and county so you can use other tools."
+                "MANDATORY first step for ANY address. You MUST call this before any "
+                "other tool when a user mentions an address. Returns municipality, "
+                "county, and coordinates needed by all other tools."
             ),
             "parameters": {
                 "type": "object",
@@ -258,9 +263,9 @@ CHAT_TOOLS = [
         "function": {
             "name": "search_zoning_ordinance",
             "description": (
-                "Search the local zoning ordinance database for specific regulations, "
-                "code sections, setback rules, permitted uses, variance procedures, etc. "
-                "Use this for precise municipal zoning code language."
+                "REQUIRED for verifying ANY zoning rule. Always prefer this over general "
+                "knowledge. Searches 3,000+ ordinance chunks across 104 municipalities. "
+                "Use specific zoning codes or topics as the query."
             ),
             "parameters": {
                 "type": "object",
@@ -283,9 +288,9 @@ CHAT_TOOLS = [
         "function": {
             "name": "web_search",
             "description": (
-                "Search the web for current information about zoning changes, municipal "
-                "news, market data, development trends, or anything not in the local database. "
-                "Powered by Jina.ai."
+                "LAST RESORT — ONLY use when search_zoning_ordinance returns nothing "
+                "relevant. For current events, market data, or municipal news not in "
+                "the local database."
             ),
             "parameters": {
                 "type": "object",
@@ -499,6 +504,39 @@ CHAT_TOOLS = [
         },
     },
 ]
+
+
+# Tool groups for dynamic masking (Notion/CloudQuery pattern:
+# reduce context bloat by only showing relevant tools per turn)
+CORE_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+    "geocode_address", "search_zoning_ordinance", "web_search", "search_properties",
+}]
+DATASET_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+    "filter_dataset", "get_dataset_info", "export_dataset",
+}]
+CREATION_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+    "create_spreadsheet", "create_document",
+}]
+
+
+def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
+    """Dynamic tool selection — only show tools relevant to the conversation state.
+
+    Reduces context bloat and improves tool-use compliance. Inspired by
+    Notion's context engineering pattern (context rot at 50-150k tokens).
+    """
+    tools = list(CORE_TOOLS)
+
+    # Show dataset tools only when there's an active dataset in session
+    if _datasets.get(session_id):
+        tools.extend(DATASET_TOOLS)
+
+    # Show creation tools when the user mentions export/document keywords
+    creation_keywords = {"spreadsheet", "document", "export", "report", "download", "sheet", "doc"}
+    if any(kw in message.lower() for kw in creation_keywords):
+        tools.extend(CREATION_TOOLS)
+
+    return tools
 
 
 # ---------------------------------------------------------------------------
@@ -847,13 +885,39 @@ async def chat(request: ChatRequest):
             # Save user message to memory
             memory.append({"role": "user", "content": request.message})
 
+            # MLflow span for the entire chat request (Notion replay pattern)
+            _span_ctx = start_span(name="chat_request", span_type="CHAIN")
+            chat_span = _span_ctx.__enter__()
+            try:
+                chat_span.set_inputs({
+                    "session_id": session_id,
+                    "message": request.message[:200],
+                    "has_report_context": bool(request.report_context),
+                })
+            except AttributeError:
+                pass  # No-op span in test env
+
+            # Token budget check — prevent runaway cost
+            if _session_tokens[session_id] >= MAX_TOKENS_PER_SESSION:
+                yield _sse_event("token", {
+                    "content": "I've reached the token limit for this session. "
+                    "Please start a new conversation to continue."
+                })
+                yield _sse_event("done", {})
+                return
+
             # Agent loop — may use tools before responding
             for turn in range(MAX_AGENT_TURNS):
-                response = await call_llm(messages, tools=CHAT_TOOLS)
+                turn_tools = _get_tools_for_turn(session_id, request.message)
+                response = await call_llm(messages, tools=turn_tools)
 
                 if not response:
                     yield _sse_event("error", {"detail": "LLM returned empty response"})
                     return
+
+                # Track token usage from response (estimated from content length)
+                content_len = len(response.get("content", ""))
+                _session_tokens[session_id] += content_len // 4 + len(request.message) // 4
 
                 content = response.get("content", "")
                 tool_calls = response.get("tool_calls", [])
@@ -932,6 +996,15 @@ async def chat(request: ChatRequest):
         except Exception as e:
             logger.exception("Chat error")
             yield _sse_event("error", {"detail": str(e)})
+        finally:
+            try:
+                chat_span.set_outputs({"session_tokens": _session_tokens.get(session_id, 0)})
+            except (AttributeError, Exception):
+                pass
+            try:
+                _span_ctx.__exit__(None, None, None)
+            except Exception:
+                pass  # Don't let tracing errors break chat
 
     return StreamingResponse(
         event_generator(),

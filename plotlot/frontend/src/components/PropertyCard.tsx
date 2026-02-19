@@ -10,9 +10,9 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   if (!value || value === 0) return null;
   const display = typeof value === "number" ? value.toLocaleString() : value;
   return (
-    <div className="rounded-lg bg-zinc-800/30 p-2.5">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-600">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-zinc-200">{display}</div>
+    <div className="rounded-lg bg-stone-50 p-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-stone-500">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold text-stone-800">{display}</div>
     </div>
   );
 }
@@ -20,7 +20,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 export default function PropertyCard({ record }: PropertyCardProps) {
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">
         Property Record
       </h3>
 
@@ -40,7 +40,7 @@ export default function PropertyCard({ record }: PropertyCardProps) {
       </div>
 
       {record.owner && (
-        <div className="text-xs text-zinc-600">Owner: {record.owner}</div>
+        <div className="text-xs text-stone-500">Owner: {record.owner}</div>
       )}
     </div>
   );

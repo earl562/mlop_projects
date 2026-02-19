@@ -1,14 +1,15 @@
 """Ingestion pipeline: scrape → chunk → embed → validate → store.
 
 Orchestrates the full data pipeline for loading zoning ordinances
-into pgvector for hybrid search. Supports both direct async execution
-and Prefect-decorated flows for scheduled runs.
+into pgvector for hybrid search. Uses Prefect flows/tasks for
+retry logic, caching, and observability (Snorkel AI pattern).
 
 Uses auto-discovery to find all municipalities, with fallback to
 hardcoded configs when the Library API is unavailable.
 """
 
 import logging
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +25,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Optional Prefect decorators — graceful no-op when prefect isn't installed.
 # ---------------------------------------------------------------------------
+_PREFECT_AVAILABLE = False
 try:
     from prefect import flow, task
+    from prefect.tasks import task_input_hash
+
+    _PREFECT_AVAILABLE = True
 except ImportError:
+
+    def task_input_hash(*args, **kwargs):  # type: ignore[misc]
+        return None
 
     def flow(**kwargs):  # type: ignore[misc]
         def wrapper(fn):
@@ -246,9 +254,20 @@ async def chunk_sections_task(sections):
     return chunks
 
 
-@task(name="embed-chunks", retries=3, retry_delay_seconds=10)
+@task(
+    name="embed-chunks",
+    retries=3,
+    retry_delay_seconds=10,
+    cache_key_fn=task_input_hash,
+    cache_expiration=timedelta(hours=24),
+)
 async def embed_chunks_task(chunks):
-    """Prefect task: generate embeddings via HF Inference API."""
+    """Prefect task: generate embeddings via HF Inference API.
+
+    Caches results for 24h — re-running ingestion for an unchanged municipality
+    skips the embedding step entirely (Snorkel AI pattern: task-level caching
+    for expensive LLM/embedding operations).
+    """
     texts = [c.text for c in chunks]
     embeddings = await embed_texts(texts)
     logger.info("Embedded %d chunks", len(embeddings))

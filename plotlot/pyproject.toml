@@ -20,8 +20,9 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
+    "mypy>=1.10",
 ]
-mlflow = ["mlflow>=2.16"]
+mlflow = ["mlflow>=2.16", "psycopg2-binary>=2.9"]
 eval = [
     "jsonschema>=4.21",
     "pytest-cov>=5.0",
@@ -41,11 +42,18 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
     "eval: evaluation tests against golden dataset",
     "e2e: end-to-end pipeline regression tests",
     "integration: tests requiring live external services (DB, APIs, LLM)",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py312"

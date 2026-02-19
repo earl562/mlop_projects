@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_refresh_token: str = ""
 
-    # MLflow
+    # MLflow — uses MLFLOW_TRACKING_URI env var in production (Neon PostgreSQL),
+    # falls back to local SQLite for development.
     mlflow_tracking_uri: str = "sqlite:///mlruns/mlflow.db"
     mlflow_experiment_name: str = "plotlot-rag"
 

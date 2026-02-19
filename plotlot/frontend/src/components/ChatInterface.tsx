@@ -53,7 +53,6 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
       history.push({ role: "user", content: text.trim() });
 
       // Add streaming placeholder
-      const placeholderIndex = messages.length + 1;
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "", isStreaming: true },
@@ -129,12 +128,12 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="flex h-[500px] flex-col rounded-xl border border-zinc-800 bg-zinc-900/50">
+    <div className="flex h-[500px] flex-col rounded-xl border border-stone-200 bg-white shadow-sm">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-        <div className="h-2 w-2 rounded-full bg-emerald-400" />
-        <span className="text-sm font-semibold text-zinc-300">PlotLot Agent</span>
-        <span className="text-xs text-zinc-600">
+      <div className="flex items-center gap-2 border-b border-stone-200 px-4 py-3">
+        <div className="h-2 w-2 rounded-full bg-amber-500" />
+        <span className="text-sm font-semibold text-stone-700">PlotLot Agent</span>
+        <span className="text-xs text-stone-500">
           {report.zoning_district} | {report.municipality}
         </span>
       </div>
@@ -146,12 +145,12 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-zinc-800 text-zinc-200"
+                  ? "bg-amber-50 text-stone-800"
+                  : "bg-stone-50 text-stone-700"
               }`}
             >
               {msg.content || (
-                <span className="inline-flex items-center gap-1 text-zinc-500">
+                <span className="inline-flex items-center gap-1 text-stone-400">
                   <span className="animate-pulse">Thinking</span>
                   <span className="animate-bounce" style={{ animationDelay: "0.1s" }}>.</span>
                   <span className="animate-bounce" style={{ animationDelay: "0.2s" }}>.</span>
@@ -159,7 +158,7 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
                 </span>
               )}
               {msg.isStreaming && msg.content && (
-                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-emerald-400" />
+                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-amber-600" />
               )}
             </div>
           </div>
@@ -175,7 +174,7 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
               key={s}
               onClick={() => sendMessage(s)}
               disabled={isStreaming}
-              className="rounded-lg bg-zinc-800/50 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-40"
+              className="rounded-lg bg-[#f5f0eb] px-2.5 py-1 text-xs text-stone-500 transition-colors hover:bg-[#ede8e0] hover:text-stone-700 disabled:opacity-40"
             >
               {s}
             </button>
@@ -184,7 +183,7 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
       )}
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="border-t border-zinc-800 p-3">
+      <form onSubmit={handleSubmit} className="border-t border-stone-200 p-3">
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -193,12 +192,12 @@ export default function ChatInterface({ report }: ChatInterfaceProps) {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about this property's zoning..."
             disabled={isStreaming}
-            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500"
+            className="flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 placeholder-stone-400 outline-none ring-amber-500/20 focus:border-amber-500 focus:ring-2"
           />
           <button
             type="submit"
             disabled={!input.trim() || isStreaming}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Send
           </button>

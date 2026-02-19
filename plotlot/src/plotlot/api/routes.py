@@ -28,6 +28,28 @@ router = APIRouter(prefix="/api/v1", tags=["analysis"])
 PIPELINE_TIMEOUT = 120  # seconds
 
 
+def _apply_confidence_metadata(response: ZoningReportResponse) -> None:
+    """Populate confidence warning and suggested next steps (Klarna pattern)."""
+    if response.confidence == "low":
+        response.confidence_warning = (
+            "Low confidence: Limited zoning data was found for this address. "
+            "Results may be incomplete or estimated."
+        )
+        response.suggested_next_steps = [
+            "Verify zoning with your local municipality",
+            "Contact a licensed zoning attorney",
+            "Check the county property appraiser website",
+        ]
+    elif response.confidence == "medium":
+        response.confidence_warning = (
+            "Medium confidence: Some zoning parameters could not be verified. "
+            "Key figures should be confirmed with the municipality."
+        )
+        response.suggested_next_steps = [
+            "Confirm density and setback values with the municipality",
+        ]
+
+
 @router.post(
     "/analyze",
     response_model=ZoningReportResponse,
@@ -49,6 +71,8 @@ async def analyze(request: AnalyzeRequest):
             status_code=504,
             detail=f"Pipeline timed out after {PIPELINE_TIMEOUT}s",
         )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("Pipeline error for address: %s", request.address)
         raise HTTPException(status_code=502, detail=str(e))
@@ -59,7 +83,9 @@ async def analyze(request: AnalyzeRequest):
             detail=f"Could not geocode address: {request.address}",
         )
 
-    return ZoningReportResponse(**asdict(report))
+    response = ZoningReportResponse(**asdict(report))
+    _apply_confidence_metadata(response)
+    return response
 
 
 def _sse_event(event: str, data: dict) -> str:
@@ -87,6 +113,30 @@ async def analyze_stream(request: AnalyzeRequest):
             county = geo["county"]
             lat = geo.get("lat")
             lng = geo.get("lng")
+
+            # Boundary enforcement — reject addresses outside South Florida
+            county_lower = county.lower() if county else ""
+            from plotlot.pipeline.lookup import VALID_COUNTIES, ACCEPTABLE_ACCURACY
+            if county_lower not in VALID_COUNTIES:
+                yield _sse_event("error", {
+                    "detail": (
+                        f"Address is in {county} County. "
+                        f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
+                    ),
+                    "error_type": "outside_coverage",
+                })
+                return
+
+            accuracy = geo.get("accuracy", "").lower()
+            if accuracy and accuracy not in ACCEPTABLE_ACCURACY:
+                yield _sse_event("error", {
+                    "detail": (
+                        f"Could not confidently locate this address "
+                        f"(geocoding accuracy: {accuracy}). Please check the address."
+                    ),
+                    "error_type": "low_accuracy",
+                })
+                return
 
             yield _sse_event("status", {
                 "step": "geocoding",
@@ -220,3 +270,59 @@ async def analyze_stream(request: AnalyzeRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints — data management
+# ---------------------------------------------------------------------------
+
+@router.delete("/admin/chunks")
+async def delete_chunks(municipality: str, confirm: bool = False):
+    """Delete ordinance chunks for a municipality (e.g., bad data cleanup).
+
+    Requires confirm=true as a safety check.
+    """
+    if not confirm:
+        # Dry run — show what would be deleted
+        from sqlalchemy import func, select
+        from plotlot.storage.models import OrdinanceChunk
+        session = await get_session()
+        try:
+            result = await session.execute(
+                select(func.count()).where(
+                    OrdinanceChunk.municipality.ilike(municipality)
+                )
+            )
+            count = result.scalar() or 0
+            return {
+                "municipality": municipality,
+                "chunks_to_delete": count,
+                "confirmed": False,
+                "message": f"Would delete {count} chunks. Add confirm=true to proceed.",
+            }
+        finally:
+            await session.close()
+
+    # Actual delete
+    from sqlalchemy import delete as sql_delete
+    from plotlot.storage.models import OrdinanceChunk
+    session = await get_session()
+    try:
+        result = await session.execute(
+            sql_delete(OrdinanceChunk).where(
+                OrdinanceChunk.municipality.ilike(municipality)
+            )
+        )
+        await session.commit()
+        deleted = result.rowcount
+        logger.info("Deleted %d chunks for municipality: %s", deleted, municipality)
+        return {
+            "municipality": municipality,
+            "chunks_deleted": deleted,
+            "confirmed": True,
+        }
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()

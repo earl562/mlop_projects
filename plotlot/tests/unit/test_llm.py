@@ -73,7 +73,7 @@ class TestAnalyzeZoning:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_gemini_primary_success(self):
+    async def test_nvidia_primary_success(self):
         llm_response = {
             "choices": [{"message": {"content": json.dumps({
                 "zoning_district": "RS-4",
@@ -101,34 +101,34 @@ class TestAnalyzeZoning:
             )
 
         assert result["zoning_district"] == "RS-4"
-        # Should only call once (Gemini succeeds)
+        # Should only call once (NVIDIA primary succeeds)
         assert mock_client.post.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_gemini_fails_nvidia_fallback(self):
+    async def test_nvidia_fails_gemini_fallback(self):
         import httpx
 
-        gemini_error = httpx.HTTPStatusError(
+        nvidia_error = httpx.HTTPStatusError(
             "Server Error", request=MagicMock(), response=MagicMock(status_code=500),
         )
-        gemini_error.response.text = "Internal Server Error"
+        nvidia_error.response.text = "Internal Server Error"
 
-        nvidia_response = MagicMock()
-        nvidia_response.json.return_value = {
+        gemini_response = MagicMock()
+        gemini_response.json.return_value = {
             "choices": [{"message": {"content": json.dumps({
                 "zoning_district": "B-2",
                 "confidence": "medium",
             })}}]
         }
-        nvidia_response.raise_for_status = MagicMock()
+        gemini_response.raise_for_status = MagicMock()
 
         call_count = {"n": 0}
 
         async def mock_post(url, **kwargs):
             call_count["n"] += 1
-            if "googleapis" in url:
-                raise gemini_error
-            return nvidia_response
+            if "nvidia" in url:
+                raise nvidia_error
+            return gemini_response
 
         mock_client = AsyncMock()
         mock_client.post = mock_post
@@ -146,7 +146,7 @@ class TestAnalyzeZoning:
             )
 
         assert result["zoning_district"] == "B-2"
-        # Gemini retries + NVIDIA (1 success)
+        # NVIDIA retries + Gemini (1 success)
         assert call_count["n"] >= 2
 
     @pytest.mark.asyncio

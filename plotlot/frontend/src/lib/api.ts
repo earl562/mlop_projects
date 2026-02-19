@@ -105,6 +105,8 @@ export interface ZoningReportData {
   summary: string;
   sources: string[];
   confidence: string;
+  confidence_warning?: string;
+  suggested_next_steps?: string[];
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

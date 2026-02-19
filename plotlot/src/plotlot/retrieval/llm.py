@@ -1,4 +1,4 @@
-"""LLM client — Google Gemini primary, NVIDIA NIM fallback.
+"""LLM client — NVIDIA NIM primary, Google Gemini fallback.
 
 Supports three modes:
   1. Agentic tool-use: call_llm() returns tool_calls for the agent loop
@@ -6,12 +6,14 @@ Supports three modes:
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
 Both APIs are OpenAI-compatible chat completions endpoints.
-Google Gemini 2.5 Flash is the default. NVIDIA NIM is fallback.
+NVIDIA NIM (Kimi K2.5) is the default. Google Gemini 2.5 Flash is fallback.
 """
 
 import asyncio
 import json
 import logging
+import time
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -19,7 +21,7 @@ import httpx
 LLM_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
 from plotlot.config import settings
-from plotlot.observability.tracing import start_span, trace
+from plotlot.observability.tracing import log_metrics, start_span, trace
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,62 @@ BASE_DELAY = 1.0
 
 
 # ---------------------------------------------------------------------------
+# Circuit Breaker — Stripe "contain, verify, restrict" pattern
+# Prevents wasting retries on a provider that's already failing.
+# States: CLOSED (normal) → OPEN (failing) → HALF_OPEN (testing recovery)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CircuitBreaker:
+    """Per-provider circuit breaker for LLM API calls."""
+
+    failure_threshold: int = 5
+    reset_seconds: int = 60
+    _failure_count: int = field(default=0, repr=False)
+    _last_failure_time: float = field(default=0.0, repr=False)
+    _state: str = field(default="closed", repr=False)  # closed, open, half_open
+
+    @property
+    def state(self) -> str:
+        if self._state == "open":
+            if time.monotonic() - self._last_failure_time >= self.reset_seconds:
+                self._state = "half_open"
+        return self._state
+
+    def allow_request(self) -> bool:
+        """Check if a request should be allowed through."""
+        current = self.state
+        if current == "closed":
+            return True
+        if current == "half_open":
+            return True  # Allow one test request
+        return False  # open — skip this provider
+
+    def record_success(self) -> None:
+        """Record a successful call — reset to closed."""
+        self._failure_count = 0
+        self._state = "closed"
+
+    def record_failure(self) -> None:
+        """Record a failed call — may trip to open."""
+        self._failure_count += 1
+        self._last_failure_time = time.monotonic()
+        if self._failure_count >= self.failure_threshold:
+            self._state = "open"
+            logger.warning(
+                "Circuit breaker OPEN after %d failures (reset in %ds)",
+                self._failure_count, self.reset_seconds,
+            )
+
+
+# Per-provider circuit breakers (module-level singletons)
+_breakers: dict[str, CircuitBreaker] = {
+    "NVIDIA": CircuitBreaker(),
+    "Gemini": CircuitBreaker(),
+}
+
+
+# ---------------------------------------------------------------------------
 # Core provider call (shared by agentic and direct modes)
 # ---------------------------------------------------------------------------
 
@@ -46,7 +104,16 @@ async def _call_provider_raw(
     payload: dict,
     provider_name: str,
 ) -> dict | None:
-    """Call a provider and return the raw message dict (content + tool_calls)."""
+    """Call a provider and return the raw message dict (content + tool_calls).
+
+    Integrates circuit breaker (skip providers that are failing) and
+    token usage extraction (log to MLflow for cost tracking).
+    """
+    breaker = _breakers.get(provider_name)
+    if breaker and not breaker.allow_request():
+        logger.info("Circuit breaker OPEN for %s — skipping", provider_name)
+        return None
+
     with start_span(
         name=f"llm_provider_{provider_name.lower()}", span_type="CHAT_MODEL",
     ) as span:
@@ -64,11 +131,28 @@ async def _call_provider_raw(
                 data = resp.json()
                 message = data["choices"][0]["message"]
                 logger.info("LLM response from %s (model=%s)", provider_name, payload.get("model"))
+
+                # Extract token usage for cost tracking
+                usage = data.get("usage", {})
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
+
                 span.set_outputs({
                     "has_content": bool(message.get("content")),
                     "has_tool_calls": bool(message.get("tool_calls")),
                     "retries": retries_used,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
                 })
+                if prompt_tokens or completion_tokens:
+                    log_metrics({
+                        f"{provider_name.lower()}_prompt_tokens": float(prompt_tokens),
+                        f"{provider_name.lower()}_completion_tokens": float(completion_tokens),
+                        f"{provider_name.lower()}_total_tokens": float(prompt_tokens + completion_tokens),
+                    })
+
+                if breaker:
+                    breaker.record_success()
                 return message
 
             except httpx.HTTPStatusError as e:
@@ -87,10 +171,14 @@ async def _call_provider_raw(
                         provider_name, e.response.status_code,
                         e.response.text[:200] if hasattr(e.response, 'text') else str(e),
                     )
+                    if breaker:
+                        breaker.record_failure()
                     span.set_outputs({"error": f"http_{e.response.status_code}", "retries": retries_used})
                     return None
             except (KeyError, IndexError) as e:
                 logger.error("Unexpected %s response structure: %s", provider_name, e)
+                if breaker:
+                    breaker.record_failure()
                 span.set_outputs({"error": f"parse_error: {e}", "retries": retries_used})
                 return None
             except httpx.TimeoutException:
@@ -108,14 +196,22 @@ async def _call_provider_raw(
             resp.raise_for_status()
             data = resp.json()
             message = data["choices"][0]["message"]
+
+            usage = data.get("usage", {})
             span.set_outputs({
                 "has_content": bool(message.get("content")),
                 "has_tool_calls": bool(message.get("tool_calls")),
                 "retries": retries_used,
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
             })
+            if breaker:
+                breaker.record_success()
             return message
         except Exception as e:
             logger.error("%s failed after all retries: %s", provider_name, e)
+            if breaker:
+                breaker.record_failure()
             span.set_outputs({"error": str(e), "retries": retries_used})
             return None
 
@@ -150,24 +246,7 @@ async def call_llm(
         payload["tool_choice"] = "auto"
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: Google Gemini (fast, free tier, reliable)
-        if settings.gemini_api_key:
-            gemini_headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            gemini_payload = {**payload, "model": GEMINI_MODEL}
-            message = await _call_provider_raw(
-                client, GEMINI_URL, gemini_headers, gemini_payload, "Gemini",
-            )
-            if message:
-                return {
-                    "content": message.get("content") or "",
-                    "tool_calls": message.get("tool_calls") or [],
-                }
-            logger.warning("Gemini failed, falling back to NVIDIA NIM")
-
-        # Fallback: NVIDIA NIM
+        # Primary: NVIDIA NIM (Kimi K2.5 — reliable, good tool use)
         if settings.nvidia_api_key:
             nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
@@ -176,6 +255,23 @@ async def call_llm(
             nvidia_payload = {**payload, "model": NVIDIA_MODEL}
             message = await _call_provider_raw(
                 client, NVIDIA_CHAT_URL, nvidia_headers, nvidia_payload, "NVIDIA",
+            )
+            if message:
+                return {
+                    "content": message.get("content") or "",
+                    "tool_calls": message.get("tool_calls") or [],
+                }
+            logger.warning("NVIDIA failed, falling back to Gemini")
+
+        # Fallback: Google Gemini
+        if settings.gemini_api_key:
+            gemini_headers = {
+                "Authorization": f"Bearer {settings.gemini_api_key}",
+                "Content-Type": "application/json",
+            }
+            gemini_payload = {**payload, "model": GEMINI_MODEL}
+            message = await _call_provider_raw(
+                client, GEMINI_URL, gemini_headers, gemini_payload, "Gemini",
             )
             if message:
                 return {
@@ -202,23 +298,7 @@ async def call_llm_stream(messages: list[dict]):
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: Google Gemini
-        if settings.gemini_api_key:
-            headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            try:
-                async for chunk in _stream_provider(
-                    client, GEMINI_URL, headers,
-                    {**payload, "model": GEMINI_MODEL}, "Gemini",
-                ):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.warning("Gemini streaming failed: %s, falling back", e)
-
-        # Fallback: NVIDIA NIM
+        # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
@@ -232,7 +312,23 @@ async def call_llm_stream(messages: list[dict]):
                     yield chunk
                 return
             except Exception as e:
-                logger.error("NVIDIA streaming failed: %s", e)
+                logger.warning("NVIDIA streaming failed: %s, falling back", e)
+
+        # Fallback: Google Gemini
+        if settings.gemini_api_key:
+            headers = {
+                "Authorization": f"Bearer {settings.gemini_api_key}",
+                "Content-Type": "application/json",
+            }
+            try:
+                async for chunk in _stream_provider(
+                    client, GEMINI_URL, headers,
+                    {**payload, "model": GEMINI_MODEL}, "Gemini",
+                ):
+                    yield chunk
+                return
+            except Exception as e:
+                logger.error("Gemini streaming failed: %s", e)
 
     logger.error("All LLM providers failed for streaming")
 
@@ -384,23 +480,7 @@ async def analyze_zoning(
     }
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        # Primary: Google Gemini
-        if settings.gemini_api_key:
-            gemini_headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            message = await _call_provider_raw(
-                client, GEMINI_URL, gemini_headers,
-                {**payload_base, "model": GEMINI_MODEL}, "Gemini",
-            )
-            if message and message.get("content"):
-                try:
-                    return _parse_llm_content(message["content"])
-                except json.JSONDecodeError as e:
-                    logger.error("Failed to parse Gemini response: %s", e)
-
-        # Fallback: NVIDIA NIM
+        # Primary: NVIDIA NIM
         if settings.nvidia_api_key:
             nvidia_headers = {
                 "Authorization": f"Bearer {settings.nvidia_api_key}",
@@ -415,6 +495,22 @@ async def analyze_zoning(
                     return _parse_llm_content(message["content"])
                 except json.JSONDecodeError as e:
                     logger.error("Failed to parse NVIDIA response: %s", e)
+
+        # Fallback: Google Gemini
+        if settings.gemini_api_key:
+            gemini_headers = {
+                "Authorization": f"Bearer {settings.gemini_api_key}",
+                "Content-Type": "application/json",
+            }
+            message = await _call_provider_raw(
+                client, GEMINI_URL, gemini_headers,
+                {**payload_base, "model": GEMINI_MODEL}, "Gemini",
+            )
+            if message and message.get("content"):
+                try:
+                    return _parse_llm_content(message["content"])
+                except json.JSONDecodeError as e:
+                    logger.error("Failed to parse Gemini response: %s", e)
 
     logger.error("All LLM providers failed")
     return {}

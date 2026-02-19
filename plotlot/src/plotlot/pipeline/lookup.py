@@ -9,8 +9,10 @@ steps are always the same, so we don't waste LLM turns on orchestration.
 The LLM focuses on what it's good at: reasoning over the data.
 """
 
+import hashlib
 import json
 import logging
+import time
 from dataclasses import fields as dataclass_fields
 
 from plotlot.core.types import NumericZoningParams, Setbacks, ZoningReport
@@ -33,7 +35,17 @@ from plotlot.storage.db import get_session
 logger = logging.getLogger(__name__)
 
 MAX_ANALYSIS_TURNS = 3
-PIPELINE_VERSION = "v2.1"
+PIPELINE_VERSION = "v2.2"
+
+# Pipeline result cache — 30min TTL (Care Access: 86% cost reduction with caching)
+_pipeline_cache: dict[str, tuple["ZoningReport", float]] = {}
+PIPELINE_CACHE_TTL = 1800  # 30 minutes
+
+# Geographic boundary — PlotLot covers South Florida tri-county area only
+VALID_COUNTIES = {"miami-dade", "broward", "palm beach"}
+
+# Geocodio accuracy levels that indicate a confident location match
+ACCEPTABLE_ACCURACY = {"rooftop", "range_interpolation", "nearest_rooftop_match", "point"}
 
 
 def report_to_dict(report: ZoningReport) -> dict:
@@ -117,6 +129,14 @@ async def lookup_address(address: str) -> ZoningReport | None:
     Returns:
         ZoningReport or None if geocoding fails.
     """
+    # Check pipeline cache first
+    cache_key = hashlib.sha256(address.strip().lower().encode()).hexdigest()[:16]
+    if cache_key in _pipeline_cache:
+        cached_report, cached_time = _pipeline_cache[cache_key]
+        if time.monotonic() - cached_time < PIPELINE_CACHE_TTL:
+            logger.info("Pipeline cache hit for: %s", address[:40])
+            return cached_report
+
     with start_run(run_name=f"lookup_{address[:30]}"):
         log_params({"address": address, "pipeline_version": PIPELINE_VERSION})
         log_prompt_to_run("analysis")
@@ -137,6 +157,26 @@ async def lookup_address(address: str) -> ZoningReport | None:
         lng = geo.get("lng")
 
         logger.info("Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng)
+
+        # Boundary enforcement — reject addresses outside our coverage area
+        county_lower = county.lower() if county else ""
+        if county_lower not in VALID_COUNTIES:
+            set_tag("status", "rejected")
+            set_tag("failure_reason", "outside_coverage")
+            raise ValueError(
+                f"Address is in {county} County. "
+                f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
+            )
+
+        # Geocoding accuracy check — reject low-confidence matches
+        accuracy = geo.get("accuracy", "").lower()
+        if accuracy and accuracy not in ACCEPTABLE_ACCURACY:
+            set_tag("status", "rejected")
+            set_tag("failure_reason", "low_accuracy_geocode")
+            raise ValueError(
+                f"Could not confidently locate this address (geocoding accuracy: {accuracy}). "
+                f"Please check the address and try again."
+            )
 
         # Step 2: Property Appraiser lookup
         prop_record = await lookup_property(address, county, lat=lat, lng=lng)
@@ -210,7 +250,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
             )
 
         # Log analysis metrics
-        confidence_map = {"high": 1.0, "medium": 0.5, "low": 0.0}
+        confidence_map = {"high": 1.0, "medium": 0.66, "low": 0.33}
         log_metrics({
             "confidence_score": confidence_map.get(report.confidence, 0.0),
             "source_count": float(len(report.sources)),
@@ -224,6 +264,9 @@ async def lookup_address(address: str) -> ZoningReport | None:
         # Log full report as artifact
         log_dict(report_to_dict(report), "report.json")
         set_tag("status", "success")
+
+        # Cache the result
+        _pipeline_cache[cache_key] = (report, time.monotonic())
 
         return report
 

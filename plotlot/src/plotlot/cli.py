@@ -215,8 +215,8 @@ def ingest_main() -> None:
     if sys.argv[1] == "--discover":
         _run_discover()
     elif sys.argv[1] == "--all":
-        from plotlot.pipeline.ingest import ingest_all
-        results = asyncio.run(ingest_all())
+        from plotlot.pipeline.ingest import ingest_all_flow
+        results = asyncio.run(ingest_all_flow())
         print("\nIngestion results:")
         for key, count in sorted(results.items()):
             print(f"  {key}: {count} chunks")
@@ -224,8 +224,8 @@ def ingest_main() -> None:
         print(f"\nTotal: {total} chunks across {len(results)} municipalities")
     else:
         key = sys.argv[1]
-        from plotlot.pipeline.ingest import ingest_municipality
-        count = asyncio.run(ingest_municipality(key))
+        from plotlot.pipeline.ingest import ingest_municipality_flow
+        count = asyncio.run(ingest_municipality_flow(key))
         print(f"\nIngested {count} chunks for {key}")
 
 

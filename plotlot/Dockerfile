@@ -16,11 +16,11 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra mlflow --no-install-project
+RUN uv sync --frozen --no-dev --extra mlflow --extra prefect --no-install-project
 
 # Copy source and install project
 COPY src/ src/
-RUN uv sync --frozen --no-dev --extra mlflow
+RUN uv sync --frozen --no-dev --extra mlflow --extra prefect
 
 
 # ── Stage 2: Runtime (API server by default) ──

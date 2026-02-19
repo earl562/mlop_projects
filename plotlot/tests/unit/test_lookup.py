@@ -195,6 +195,10 @@ class TestLookupAddress:
     async def test_llm_failure_returns_fallback(self):
         mock_session = AsyncMock()
 
+        # Clear pipeline cache to avoid hits from prior tests
+        from plotlot.pipeline.lookup import _pipeline_cache
+        _pipeline_cache.clear()
+
         with patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()), \
              patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()), \
              patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]), \

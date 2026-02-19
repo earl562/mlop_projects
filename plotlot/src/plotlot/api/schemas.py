@@ -121,6 +121,10 @@ class ZoningReportResponse(BaseModel):
     sources: list[str] = []
     confidence: str = ""
 
+    # Progressive autonomy metadata (Klarna confidence-gated pattern)
+    confidence_warning: str = ""
+    suggested_next_steps: list[str] = []
+
 
 class ErrorResponse(BaseModel):
     """Error response body."""

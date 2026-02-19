@@ -2,10 +2,14 @@
 
 Uses the Geocodio API to geocode an address and extract the municipality
 (city/place) for mapping into Municode configs.
+
+Includes in-memory cache with 1hr TTL (Care Access pattern: 86% cost reduction).
 """
 
+import hashlib
 import logging
 import re
+import time
 
 import httpx
 
@@ -15,6 +19,16 @@ from plotlot.observability.tracing import trace
 logger = logging.getLogger(__name__)
 
 GEOCODIO_URL = "https://api.geocod.io/v1.7/geocode"
+
+# In-memory geocode cache — 1hr TTL, SHA256 key
+_geocode_cache: dict[str, tuple[dict | None, float]] = {}
+GEOCODE_CACHE_TTL = 3600  # 1 hour
+
+
+def _cache_key(address: str) -> str:
+    """Generate a stable cache key from an address."""
+    normalized = address.strip().lower()
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
 @trace(name="geocode_address", span_type="TOOL")
@@ -28,6 +42,14 @@ async def geocode_address(address: str) -> dict | None:
     if not settings.geocodio_api_key:
         logger.error("GEOCODIO_API_KEY not set")
         return None
+
+    # Check cache first
+    key = _cache_key(address)
+    if key in _geocode_cache:
+        cached_result, cached_time = _geocode_cache[key]
+        if time.monotonic() - cached_time < GEOCODE_CACHE_TTL:
+            logger.info("Geocode cache hit for: %s", address[:40])
+            return cached_result
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(
@@ -52,7 +74,7 @@ async def geocode_address(address: str) -> dict | None:
     # Geocodio returns county as "Miami-Dade County" — normalize
     county_clean = re.sub(r"\s+County$", "", county).strip()
 
-    return {
+    result = {
         "formatted_address": top.get("formatted_address", address),
         "municipality": city,
         "county": county_clean,
@@ -60,6 +82,10 @@ async def geocode_address(address: str) -> dict | None:
         "lng": location.get("lng"),
         "accuracy": top.get("accuracy"),
     }
+
+    # Cache the result
+    _geocode_cache[key] = (result, time.monotonic())
+    return result
 
 
 def address_to_municipality_key(municipality: str) -> str:

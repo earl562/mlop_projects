@@ -28,7 +28,6 @@ interface DisplayMessage {
   role: "user" | "assistant" | "system";
   content: string;
   isStreaming?: boolean;
-  // Embedded rich content
   pipelineSteps?: PipelineStatus[];
   report?: ZoningReportData;
   saveStatus?: "idle" | "saving" | "saved" | "error";
@@ -43,13 +42,10 @@ const FL_PATTERNS = /\b(miami|fort lauderdale|hollywood|hialeah|pembroke|miramar
 const ADDRESS_PATTERN = /\d+\s+\w+\s+(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ter|terrace|ct|court|ln|lane|way|pl|place|cir|circle)\b/i;
 
 function extractAddress(text: string): string | null {
-  // Must look like it has a street address AND a Florida reference
   if (ADDRESS_PATTERN.test(text) && FL_PATTERNS.test(text)) {
     return text.trim();
   }
-  // Or user explicitly asks to "analyze" or "look up" something with FL references
   if (/\b(analyze|look up|lookup|check|search|zoning for|what can .* build)\b/i.test(text) && FL_PATTERNS.test(text)) {
-    // Try to extract just the address part
     const match = text.match(/\d+\s+[\w\s]+(?:,\s*[\w\s]+){0,3}/);
     if (match) return match[0].trim();
     return text.replace(/^.*?(analyze|look up|lookup|check|search|zoning for)\s*/i, "").trim();
@@ -58,13 +54,14 @@ function extractAddress(text: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Suggestions for fresh conversation
+// Suggestions
 // ---------------------------------------------------------------------------
 
 const WELCOME_SUGGESTIONS = [
-  { label: "171 NE 209th Ter, Miami, FL 33179", desc: "Miami Gardens" },
-  { label: "2600 SW 3rd Ave, Miami, FL 33129", desc: "Miami" },
-  { label: "1600 S Andrews Ave, Fort Lauderdale, FL 33316", desc: "Fort Lauderdale" },
+  { label: "171 NE 209th Ter, Miami, FL 33179", icon: "\u{1F3E0}" },
+  { label: "Find vacant lots in Miami-Dade", icon: "\u{1F4CA}" },
+  { label: "Zoning rules in Miramar", icon: "\u{1F4CB}" },
+  { label: "What can I build on my lot?", icon: "\u{1F3D7}\uFE0F" },
 ];
 
 const FOLLOWUP_SUGGESTIONS = [
@@ -81,14 +78,7 @@ const FOLLOWUP_SUGGESTIONS = [
 let msgCounter = 0;
 
 export default function Home() {
-  const [messages, setMessages] = useState<DisplayMessage[]>([
-    {
-      id: msgCounter++,
-      role: "assistant",
-      content:
-        "Hey! I'm PlotLot, your South Florida zoning analyst. Give me any address in Miami-Dade, Broward, or Palm Beach County and I'll analyze what you can build there. Or just ask me a zoning question.",
-    },
-  ]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentReport, setCurrentReport] = useState<ZoningReportData | null>(null);
@@ -100,7 +90,6 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input on load
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -117,10 +106,9 @@ export default function Home() {
     );
   }, []);
 
-  // Run the full analysis pipeline, showing progress in chat
+  // Run the full analysis pipeline
   const runAnalysis = useCallback(
     async (address: string) => {
-      // Add a system message for pipeline progress
       const progressId = addMessage({
         role: "system",
         content: "",
@@ -150,7 +138,6 @@ export default function Home() {
           (report) => {
             finalReport = report;
             setCurrentReport(report);
-            // Update the progress message to include the report
             updateMessage(progressId, { report, pipelineSteps: undefined });
           },
           (error) => {
@@ -164,7 +151,6 @@ export default function Home() {
 
         if (finalReport) {
           const r = finalReport as ZoningReportData;
-          // Add a summary chat message after the report
           const summary = [];
           summary.push(`**${r.zoning_district}** — ${r.zoning_description} in ${r.municipality}, ${r.county} County.`);
           if (r.density_analysis) {
@@ -189,34 +175,30 @@ export default function Home() {
     [addMessage, updateMessage],
   );
 
-  // Send a chat message (with or without analysis)
+  // Send a chat message
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isProcessing) return;
       setIsProcessing(true);
       setInput("");
 
-      // Add user message
       addMessage({ role: "user", content: text.trim() });
 
-      // Check if this looks like an address to analyze
       const address = extractAddress(text);
       if (address && !currentReport) {
-        // First analysis — run full pipeline
         await runAnalysis(address);
         setIsProcessing(false);
         return;
       }
 
       if (address && currentReport) {
-        // User wants to analyze a NEW address
         setCurrentReport(null);
         await runAnalysis(address);
         setIsProcessing(false);
         return;
       }
 
-      // Regular chat — stream response with report context
+      // Regular chat
       const assistantId = addMessage({
         role: "assistant",
         content: "",
@@ -224,10 +206,9 @@ export default function Home() {
         toolActivity: [],
       });
 
-      // Build history from previous messages (skip system/report messages)
       const history: ChatMessageData[] = messages
         .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
-        .slice(-10) // last 10 messages for context window
+        .slice(-10)
         .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
       try {
@@ -311,13 +292,86 @@ export default function Home() {
     sendMessage(input);
   };
 
+  const isWelcome = messages.length === 0;
   const hasReport = messages.some((m) => m.report);
 
+  // ─── Welcome State ────────────────────────────────────────────────────
+  if (isWelcome) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center px-4">
+        {/* Greeting */}
+        <div className="mb-8 text-center">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 2L12.5 7.5L18 10L12.5 12.5L10 18L7.5 12.5L2 10L7.5 7.5L10 2Z" clipRule="evenodd" />
+            </svg>
+            <span className="text-lg font-medium text-stone-500">Hi there</span>
+          </div>
+          <h1 className="text-4xl font-semibold tracking-tight text-stone-800">
+            What property should we analyze?
+          </h1>
+        </div>
+
+        {/* Input bar */}
+        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-2xl">
+          <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-lg transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Enter a South Florida address or ask a question..."
+              disabled={isProcessing}
+              className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isProcessing}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
+            >
+              {isProcessing ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </form>
+
+        {/* Suggestion chips */}
+        <div className="flex flex-wrap justify-center gap-2.5">
+          {WELCOME_SUGGESTIONS.map((s) => (
+            <button
+              key={s.label}
+              onClick={() => sendMessage(s.label)}
+              disabled={isProcessing}
+              className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-600 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 hover:shadow disabled:opacity-40"
+            >
+              <span className="mr-1.5">{s.icon}</span>
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <p className="mt-10 text-center text-xs text-stone-400">
+          PlotLot covers 104 municipalities across Miami-Dade, Broward &amp; Palm Beach counties
+        </p>
+      </div>
+    );
+  }
+
+  // ─── Conversation State ───────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="mx-auto max-w-3xl space-y-4">
+        <div className="mx-auto max-w-3xl space-y-5">
           {messages.map((msg) => (
             <div key={msg.id}>
               {/* Pipeline progress */}
@@ -331,16 +385,35 @@ export default function Home() {
               {msg.report && (
                 <div className="space-y-3">
                   <ZoningReport report={msg.report} />
+                  {msg.report.confidence_warning && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-amber-800">{msg.report.confidence_warning}</p>
+                          {msg.report.suggested_next_steps && msg.report.suggested_next_steps.length > 0 && (
+                            <ul className="mt-1.5 space-y-0.5">
+                              {msg.report.suggested_next_steps.map((step, i) => (
+                                <li key={i} className="text-xs text-amber-700">&#8226; {step}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-end">
                     <button
                       onClick={() => handleSave(msg.id, msg.report!)}
                       disabled={msg.saveStatus === "saving" || msg.saveStatus === "saved"}
                       className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${
                         msg.saveStatus === "saved"
-                          ? "bg-emerald-500/20 text-emerald-400"
+                          ? "bg-lime-100 text-lime-700"
                           : msg.saveStatus === "error"
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                            ? "bg-red-100 text-red-600"
+                            : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
                       }`}
                     >
                       {msg.saveStatus === "saving"
@@ -355,25 +428,25 @@ export default function Home() {
 
               {/* Tool activity indicators */}
               {msg.toolActivity && msg.toolActivity.length > 0 && (
-                <div className="flex justify-start mb-2">
-                  <div className="flex items-start gap-3 max-w-[85%]">
-                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-xs font-black text-white">
+                <div className="mb-2 flex justify-start">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-800 text-[10px] font-black text-white">
                       P
                     </div>
                     <div className="space-y-1">
                       {msg.toolActivity.map((t, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-zinc-400">
+                        <div key={i} className="flex items-center gap-2 text-xs text-stone-500">
                           {t.status === "running" ? (
-                            <svg className="h-3.5 w-3.5 animate-spin text-amber-400" viewBox="0 0 24 24" fill="none">
+                            <svg className="h-3.5 w-3.5 animate-spin text-amber-600" viewBox="0 0 24 24" fill="none">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
                           ) : (
-                            <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+                            <svg className="h-3.5 w-3.5 text-lime-600" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
-                          <span className={t.status === "complete" ? "text-zinc-500" : "text-zinc-300"}>{t.message}</span>
+                          <span className={t.status === "complete" ? "text-stone-400" : "text-stone-600"}>{t.message}</span>
                         </div>
                       ))}
                     </div>
@@ -381,28 +454,28 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Regular message bubble */}
+              {/* Regular message */}
               {msg.content && msg.role !== "system" && (
                 <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className="flex items-start gap-3 max-w-[85%]">
+                  <div className="flex items-start gap-3 max-w-[80%]">
                     {msg.role === "assistant" && (
-                      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-xs font-black text-white">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-800 text-[10px] font-black text-white">
                         P
                       </div>
                     )}
                     <div
-                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      className={`text-sm leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-zinc-800/80 text-zinc-200"
+                          ? "rounded-2xl bg-amber-50 px-4 py-3 text-stone-800"
+                          : "text-stone-700"
                       }`}
                     >
                       {msg.content}
                       {msg.isStreaming && msg.content && (
-                        <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-emerald-400" />
+                        <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-amber-600" />
                       )}
                       {msg.isStreaming && !msg.content && (
-                        <span className="inline-flex items-center gap-1 text-zinc-500">
+                        <span className="inline-flex items-center gap-1 text-stone-400">
                           <span className="animate-pulse">Thinking</span>
                           <span className="animate-bounce" style={{ animationDelay: "0.1s" }}>.</span>
                           <span className="animate-bounce" style={{ animationDelay: "0.2s" }}>.</span>
@@ -419,23 +492,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Suggestions */}
+      {/* Follow-up suggestions */}
       <div className="mx-auto w-full max-w-3xl px-4">
-        {!hasReport && messages.length <= 1 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            <span className="text-xs text-zinc-500">Try an address:</span>
-            {WELCOME_SUGGESTIONS.map((s) => (
-              <button
-                key={s.label}
-                onClick={() => sendMessage(s.label)}
-                disabled={isProcessing}
-                className="rounded-lg bg-zinc-800/50 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-40"
-              >
-                <span className="font-medium text-zinc-300">{s.desc}:</span> {s.label}
-              </button>
-            ))}
-          </div>
-        )}
         {hasReport && !isProcessing && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
           <div className="mb-3 flex flex-wrap gap-2">
             {FOLLOWUP_SUGGESTIONS.map((s) => (
@@ -443,7 +501,7 @@ export default function Home() {
                 key={s}
                 onClick={() => sendMessage(s)}
                 disabled={isProcessing}
-                className="rounded-lg bg-zinc-800/50 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-40"
+                className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-500 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 disabled:opacity-40"
               >
                 {s}
               </button>
@@ -453,38 +511,35 @@ export default function Home() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-zinc-800/50 bg-zinc-950 px-4 py-4">
+      <div className="border-t border-stone-200 bg-white/80 px-4 py-4 backdrop-blur-sm">
         <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-          <div className="flex gap-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20">
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={hasReport ? "Ask about this property's zoning..." : "Enter a South Florida address or ask a zoning question..."}
+              placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
               disabled={isProcessing}
-              className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none ring-emerald-500/40 transition-all focus:border-emerald-500 focus:ring-2"
+              className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
             />
             <button
               type="submit"
               disabled={!input.trim() || isProcessing}
-              className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
             >
               {isProcessing ? (
-                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               ) : (
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                 </svg>
               )}
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-zinc-600">
-            PlotLot covers 104 municipalities across Miami-Dade, Broward &amp; Palm Beach counties
-          </p>
         </form>
       </div>
     </div>
