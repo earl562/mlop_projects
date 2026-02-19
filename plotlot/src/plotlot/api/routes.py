@@ -314,11 +314,9 @@ _ingest_status: dict[str, dict] = {}
 async def _run_ingestion(municipality_key: str, delete_existing: bool) -> None:
     """Background ingestion task."""
     from plotlot.pipeline.ingest import ingest_municipality, _resolve_config
-    from plotlot.storage.db import init_db
 
     _ingest_status[municipality_key] = {"status": "running", "step": "initializing"}
     try:
-        await init_db()
 
         if delete_existing:
             from sqlalchemy import delete as sql_delete
@@ -378,6 +376,10 @@ async def ingest_municipality_endpoint(
             "status": "already_running",
             "step": existing.get("step"),
         }
+
+    # Ensure DB is initialized before starting the background task
+    from plotlot.storage.db import init_db
+    await init_db()
 
     background_tasks.add_task(_run_ingestion, municipality_key, delete_existing)
     _ingest_status[municipality_key] = {"status": "queued"}

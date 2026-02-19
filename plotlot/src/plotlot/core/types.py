@@ -113,6 +113,30 @@ _FALLBACK_CONFIGS: dict[str, MunicodeConfig] = {
         job_id=482747,
         zoning_node_id="UNLADERE_CH47UNLADERE_ARTIIZODIRE",
     ),
+    "miami_gardens": MunicodeConfig(
+        municipality="Miami Gardens",
+        county="miami_dade",
+        client_id=13114,
+        product_id=14432,
+        job_id=481139,
+        zoning_node_id="SPBLADECO",
+    ),
+    "west_palm_beach": MunicodeConfig(
+        municipality="West Palm Beach",
+        county="palm_beach",
+        client_id=4897,
+        product_id=10017,
+        job_id=480641,
+        zoning_node_id="PTIICOOR_CH94ZOLADERE",
+    ),
+    "miramar": MunicodeConfig(
+        municipality="Miramar",
+        county="broward",
+        client_id=3289,
+        product_id=13202,
+        job_id=479943,
+        zoning_node_id="APXAFESC",
+    ),
 }
 
 MUNICODE_CONFIGS = _FALLBACK_CONFIGS
