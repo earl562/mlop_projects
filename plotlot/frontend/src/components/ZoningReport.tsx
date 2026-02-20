@@ -111,7 +111,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       </Section>
 
       {/* Setbacks */}
-      {(report.setbacks.front || report.setbacks.side || report.setbacks.rear) && (
+      {report.setbacks && (report.setbacks.front || report.setbacks.side || report.setbacks.rear) && (
         <Section title="Setbacks">
           <div className="grid grid-cols-3 gap-3">
             {[

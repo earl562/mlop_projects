@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, FormEvent, useId } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ZoningReport from "@/components/ZoningReport";
@@ -26,7 +26,7 @@ interface ToolActivity {
 }
 
 interface DisplayMessage {
-  id: number;
+  id: string;
   role: "user" | "assistant" | "system";
   content: string;
   isStreaming?: boolean;
@@ -47,10 +47,10 @@ function extractAddress(text: string): string | null {
   if (ADDRESS_PATTERN.test(text) && FL_PATTERNS.test(text)) {
     return text.trim();
   }
-  if (/\b(analyze|look up|lookup|check|search|zoning for|what can .* build)\b/i.test(text) && FL_PATTERNS.test(text)) {
+  if (/\b(analyze|look up|lookup|check|search|zoning (?:for|rules|regulations|code)|what can .* build)\b/i.test(text) && FL_PATTERNS.test(text)) {
     const match = text.match(/\d+\s+[\w\s]+(?:,\s*[\w\s]+){0,3}/);
     if (match) return match[0].trim();
-    return text.replace(/^.*?(analyze|look up|lookup|check|search|zoning for)\s*/i, "").trim();
+    return text.replace(/^.*?(analyze|look up|lookup|check|search|zoning (?:for|rules|regulations|code))\s*/i, "").trim();
   }
   return null;
 }
@@ -60,7 +60,7 @@ function extractAddress(text: string): string | null {
 // ---------------------------------------------------------------------------
 
 const WELCOME_SUGGESTIONS = [
-  { label: "171 NE 209th Ter, Miami, FL 33179", icon: "\u{1F3E0}" },
+  { label: "Analyze a property in Miami Gardens", icon: "\u{1F3E0}" },
   { label: "Find vacant lots in Miami-Dade", icon: "\u{1F4CA}" },
   { label: "Zoning rules in Miramar", icon: "\u{1F4CB}" },
   { label: "What can I build on my lot?", icon: "\u{1F3D7}\uFE0F" },
@@ -77,8 +77,6 @@ const FOLLOWUP_SUGGESTIONS = [
 // Component
 // ---------------------------------------------------------------------------
 
-let msgCounter = 0;
-
 export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -87,22 +85,26 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const idPrefix = useId();
+  const msgCounterRef = useRef(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Re-focus input on mount and when switching from welcome to conversation
+  const isWelcome = messages.length === 0;
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+  }, [isWelcome]);
 
   const addMessage = useCallback((msg: Omit<DisplayMessage, "id">) => {
-    const newMsg = { ...msg, id: msgCounter++ };
+    const newMsg = { ...msg, id: `${idPrefix}-${msgCounterRef.current++}` };
     setMessages((prev) => [...prev, newMsg]);
     return newMsg.id;
-  }, []);
+  }, [idPrefix]);
 
-  const updateMessage = useCallback((id: number, updates: Partial<DisplayMessage>) => {
+  const updateMessage = useCallback((id: string, updates: Partial<DisplayMessage>) => {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...updates } : m)),
     );
@@ -208,10 +210,13 @@ export default function Home() {
         toolActivity: [],
       });
 
-      const history: ChatMessageData[] = messages
-        .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
-        .slice(-10)
-        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      const history: ChatMessageData[] = [
+        ...messages
+          .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
+          .slice(-9)
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        { role: "user" as const, content: text.trim() },
+      ];
 
       try {
         await streamChat(
@@ -227,8 +232,8 @@ export default function Home() {
               ),
             );
           },
-          () => {
-            updateMessage(assistantId, { isStreaming: false });
+          (fullContent: string) => {
+            updateMessage(assistantId, { content: fullContent, isStreaming: false });
           },
           (error) => {
             updateMessage(assistantId, {
@@ -277,7 +282,7 @@ export default function Home() {
   );
 
   const handleSave = useCallback(
-    async (msgId: number, report: ZoningReportData) => {
+    async (msgId: string, report: ZoningReportData) => {
       updateMessage(msgId, { saveStatus: "saving" });
       try {
         await saveAnalysis(report);
@@ -294,13 +299,12 @@ export default function Home() {
     sendMessage(input);
   };
 
-  const isWelcome = messages.length === 0;
   const hasReport = messages.some((m) => m.report);
 
   // ─── Welcome State ────────────────────────────────────────────────────
   if (isWelcome) {
     return (
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-4">
+      <div className="flex h-[calc(100vh-3rem)] flex-col items-center justify-center px-4">
         {/* Greeting */}
         <div className="mb-8 text-center animate-fade-up">
           <div className="mb-3 flex items-center justify-center gap-2 animate-fade-up delay-1">
@@ -332,6 +336,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={!input.trim() || isProcessing}
+              aria-label="Send message"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
             >
               {isProcessing ? (
@@ -373,9 +378,9 @@ export default function Home() {
 
   // ─── Conversation State ───────────────────────────────────────────────
   return (
-    <div className="relative flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="relative flex h-[calc(100vh-3rem)] flex-col">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto pb-40">
+      <div className="flex-1 overflow-y-auto pb-52">
         <div className="mx-auto max-w-3xl px-4 py-6 space-y-6">
           {messages.map((msg) => (
             <div key={msg.id} className="animate-fade-up">
@@ -529,7 +534,7 @@ export default function Home() {
 
         <div className="bg-[#f7f5f2] px-4 pb-4">
           {/* Follow-up suggestions */}
-          {hasReport && !isProcessing && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
+          {!isProcessing && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
             <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2">
               {FOLLOWUP_SUGGESTIONS.map((s) => (
                 <button
@@ -559,7 +564,8 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={!input.trim() || isProcessing}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
+                aria-label="Send message"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
               >
                 {isProcessing ? (
                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
