@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
 import PropertyCard from "./PropertyCard";
@@ -62,8 +63,10 @@ function UsesList({ title, uses, color }: { title: string; uses: string[]; color
 }
 
 export default function ZoningReport({ report }: ZoningReportProps) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+
   return (
-    <div className="w-full space-y-6 rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
+    <div className="w-full space-y-6 rounded-xl border-l-4 border-l-amber-400 border border-stone-200 bg-white p-6 shadow-sm">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -74,16 +77,18 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <ConfidenceBadge level={report.confidence} />
-          <div className="text-right">
-            <div className="text-2xl font-bold text-amber-700">{report.zoning_district}</div>
-            <div className="text-xs text-stone-500">{report.zoning_description}</div>
-          </div>
         </div>
+      </div>
+
+      {/* Zoning district — prominent standalone line */}
+      <div className="flex items-baseline gap-3">
+        <span className="text-3xl font-black text-amber-700">{report.zoning_district}</span>
+        <span className="text-sm text-stone-500">{report.zoning_description}</span>
       </div>
 
       {/* Summary */}
       {report.summary && (
-        <div className="rounded-lg bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
+        <div className="rounded-lg bg-[#faf8f5] p-4 text-sm leading-relaxed text-stone-600">
           {report.summary}
         </div>
       )}
@@ -114,7 +119,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
               { label: "Side", value: report.setbacks.side },
               { label: "Rear", value: report.setbacks.rear },
             ].map((s) => (
-              <div key={s.label} className="rounded-lg bg-stone-50 p-3 text-center">
+              <div key={s.label} className="rounded-lg bg-stone-50 p-3 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
                 <div className="text-xs text-stone-500">{s.label}</div>
                 <div className="mt-1 text-lg font-semibold text-stone-800">{s.value || "N/A"}</div>
               </div>
@@ -137,19 +142,33 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <PropertyCard record={report.property_record} />
       )}
 
-      {/* Sources */}
+      {/* Sources — collapsible */}
       {report.sources.length > 0 && (
-        <Section title="Sources">
-          <div className="space-y-1">
-            {report.sources.map((source, i) => (
-              <div key={i} className="text-xs text-stone-500">
-                {source}
-              </div>
-            ))}
-          </div>
-        </Section>
+        <div className="space-y-2">
+          <button
+            onClick={() => setSourcesOpen(!sourcesOpen)}
+            className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-stone-500 transition-colors hover:text-stone-700"
+          >
+            <svg
+              className={`h-3.5 w-3.5 transition-transform ${sourcesOpen ? "rotate-90" : ""}`}
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+            </svg>
+            View {report.sources.length} source{report.sources.length !== 1 ? "s" : ""}
+          </button>
+          {sourcesOpen && (
+            <div className="space-y-1 animate-fade-in">
+              {report.sources.map((source, i) => (
+                <div key={i} className="text-xs text-stone-500">
+                  {source}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
-
     </div>
   );
 }

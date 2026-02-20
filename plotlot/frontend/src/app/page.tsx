@@ -300,22 +300,25 @@ export default function Home() {
   // ─── Welcome State ────────────────────────────────────────────────────
   if (isWelcome) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center px-4">
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-4">
         {/* Greeting */}
-        <div className="mb-8 text-center">
-          <div className="mb-3 flex items-center justify-center gap-2">
+        <div className="mb-8 text-center animate-fade-up">
+          <div className="mb-3 flex items-center justify-center gap-2 animate-fade-up delay-1">
             <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 2L12.5 7.5L18 10L12.5 12.5L10 18L7.5 12.5L2 10L7.5 7.5L10 2Z" clipRule="evenodd" />
             </svg>
             <span className="text-lg font-medium text-stone-500">Hi there</span>
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-stone-800">
-            What property should we analyze?
+          <h1 className="text-4xl font-semibold tracking-tight text-stone-800 animate-fade-up delay-2">
+            Analyze any property in South Florida
           </h1>
+          <p className="mt-2 text-sm text-stone-400 animate-fade-up delay-3">
+            Zoning codes, density limits, and development potential — in seconds
+          </p>
         </div>
 
         {/* Input bar */}
-        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-2xl">
+        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-2xl animate-fade-up delay-3">
           <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-lg transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20">
             <input
               ref={inputRef}
@@ -346,13 +349,13 @@ export default function Home() {
         </form>
 
         {/* Suggestion chips */}
-        <div className="flex flex-wrap justify-center gap-2.5">
+        <div className="flex flex-wrap justify-center gap-2.5 animate-fade-up delay-4">
           {WELCOME_SUGGESTIONS.map((s) => (
             <button
               key={s.label}
               onClick={() => sendMessage(s.label)}
               disabled={isProcessing}
-              className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-600 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 hover:shadow disabled:opacity-40"
+              className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-600 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50/50 hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40"
             >
               <span className="mr-1.5">{s.icon}</span>
               {s.label}
@@ -361,7 +364,7 @@ export default function Home() {
         </div>
 
         {/* Footer */}
-        <p className="mt-10 text-center text-xs text-stone-400">
+        <p className="mt-10 text-center text-xs text-stone-400 animate-fade-in delay-4">
           PlotLot covers 104 municipalities across Miami-Dade, Broward &amp; Palm Beach counties
         </p>
       </div>
@@ -370,15 +373,18 @@ export default function Home() {
 
   // ─── Conversation State ───────────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="relative flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="mx-auto max-w-3xl space-y-5">
+      <div className="flex-1 overflow-y-auto pb-40">
+        <div className="mx-auto max-w-3xl px-4 py-6 space-y-6">
           {messages.map((msg) => (
-            <div key={msg.id}>
-              {/* Pipeline progress */}
+            <div key={msg.id} className="animate-fade-up">
+              {/* Pipeline progress — inline stepper */}
               {msg.pipelineSteps && msg.pipelineSteps.length > 0 && !msg.report && (
-                <div className="mx-auto max-w-lg">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
+                    P
+                  </div>
                   <AnalysisStream steps={msg.pipelineSteps} error={null} />
                 </div>
               )}
@@ -432,19 +438,16 @@ export default function Home() {
               {msg.toolActivity && msg.toolActivity.length > 0 && (
                 <div className="mb-2 flex justify-start">
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-800 text-[10px] font-black text-white">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
                       P
                     </div>
                     <div className="space-y-1">
                       {msg.toolActivity.map((t, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs text-stone-500">
                           {t.status === "running" ? (
-                            <svg className="h-3.5 w-3.5 animate-spin text-amber-600" viewBox="0 0 24 24" fill="none">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
+                            <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                           ) : (
-                            <svg className="h-3.5 w-3.5 text-lime-600" viewBox="0 0 20 20" fill="currentColor">
+                            <svg className="h-3.5 w-3.5 text-stone-400" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
@@ -459,20 +462,18 @@ export default function Home() {
               {/* Regular message */}
               {msg.content && msg.role !== "system" && (
                 <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className="flex items-start gap-3 max-w-[80%]">
-                    {msg.role === "assistant" && (
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-800 text-[10px] font-black text-white">
+                  {msg.role === "user" ? (
+                    /* User message — right-aligned plain text, no bubble */
+                    <div className="max-w-[75%] text-sm leading-relaxed text-stone-600">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    /* Assistant message — left-aligned with avatar */
+                    <div className="flex items-start gap-3 max-w-[85%]">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
                         P
                       </div>
-                    )}
-                    <div
-                      className={`text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "rounded-2xl bg-amber-50 px-4 py-3 text-stone-800"
-                          : "text-stone-700"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
+                      <div className="text-sm leading-relaxed text-stone-700 min-w-0">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -485,31 +486,34 @@ export default function Home() {
                             h2: ({ children }) => <h2 className="mb-2 text-base font-bold text-stone-800">{children}</h2>,
                             h3: ({ children }) => <h3 className="mb-1 text-sm font-bold text-stone-800">{children}</h3>,
                             a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-amber-700 underline hover:text-amber-600">{children}</a>,
-                            code: ({ children }) => <code className="rounded bg-stone-100 px-1 py-0.5 text-xs font-mono text-stone-700">{children}</code>,
-                            table: ({ children }) => <div className="mb-2 overflow-x-auto"><table className="min-w-full text-xs border border-stone-200">{children}</table></div>,
+                            code: ({ children }) => <code className="rounded bg-stone-100 px-1.5 py-0.5 text-xs font-mono text-stone-700">{children}</code>,
+                            pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded-lg bg-stone-100 p-3 text-xs">{children}</pre>,
+                            table: ({ children }) => (
+                              <div className="my-2 overflow-x-auto rounded-lg border border-stone-200">
+                                <table className="min-w-full text-xs">{children}</table>
+                              </div>
+                            ),
                             thead: ({ children }) => <thead className="bg-stone-100">{children}</thead>,
-                            th: ({ children }) => <th className="border border-stone-200 px-2 py-1 text-left font-semibold">{children}</th>,
-                            td: ({ children }) => <td className="border border-stone-200 px-2 py-1">{children}</td>,
+                            tbody: ({ children }) => <tbody className="[&>tr:nth-child(even)]:bg-stone-50">{children}</tbody>,
+                            th: ({ children }) => <th className="border-b border-stone-200 px-3 py-1.5 text-left font-semibold text-stone-700">{children}</th>,
+                            td: ({ children }) => <td className="border-b border-stone-100 px-3 py-1.5 text-stone-600">{children}</td>,
                           }}
                         >
                           {msg.content}
                         </ReactMarkdown>
-                      ) : (
-                        msg.content
-                      )}
-                      {msg.isStreaming && msg.content && (
-                        <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-amber-600" />
-                      )}
-                      {msg.isStreaming && !msg.content && (
-                        <span className="inline-flex items-center gap-1 text-stone-400">
-                          <span className="animate-pulse">Thinking</span>
-                          <span className="animate-bounce" style={{ animationDelay: "0.1s" }}>.</span>
-                          <span className="animate-bounce" style={{ animationDelay: "0.2s" }}>.</span>
-                          <span className="animate-bounce" style={{ animationDelay: "0.3s" }}>.</span>
-                        </span>
-                      )}
+                        {/* Streaming cursor — pulsing dot */}
+                        {msg.isStreaming && msg.content && (
+                          <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
+                        )}
+                        {msg.isStreaming && !msg.content && (
+                          <span className="inline-flex items-center gap-1 text-stone-400">
+                            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
+                            <span className="text-xs">Thinking...</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -518,55 +522,59 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Follow-up suggestions */}
-      <div className="mx-auto w-full max-w-3xl px-4">
-        {hasReport && !isProcessing && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {FOLLOWUP_SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => sendMessage(s)}
-                disabled={isProcessing}
-                className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-500 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 disabled:opacity-40"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Bottom area — gradient fade + suggestions + floating input */}
+      <div className="absolute bottom-0 left-0 right-0">
+        {/* Gradient fade */}
+        <div className="input-fade-bg h-8 pointer-events-none" />
 
-      {/* Input bar */}
-      <div className="border-t border-stone-200 bg-white/80 px-4 py-4 backdrop-blur-sm">
-        <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-          <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20">
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
-              disabled={isProcessing}
-              className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isProcessing}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
-            >
-              {isProcessing ? (
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </form>
+        <div className="bg-[#f7f5f2] px-4 pb-4">
+          {/* Follow-up suggestions */}
+          {hasReport && !isProcessing && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
+            <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2">
+              {FOLLOWUP_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => sendMessage(s)}
+                  disabled={isProcessing}
+                  className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-500 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50/50 hover:-translate-y-0.5 disabled:opacity-40"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Floating input bar */}
+          <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+            <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-lg transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
+                disabled={isProcessing}
+                className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isProcessing}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30"
+              >
+                {isProcessing ? (
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

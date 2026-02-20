@@ -10,7 +10,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   if (!value || value === 0) return null;
   const display = typeof value === "number" ? value.toLocaleString() : value;
   return (
-    <div className="rounded-lg bg-stone-50 p-2.5">
+    <div className="rounded-lg bg-stone-50 p-2.5 transition-all hover:scale-[1.02] hover:shadow-sm">
       <div className="text-[10px] uppercase tracking-wider text-stone-500">{label}</div>
       <div className="mt-0.5 text-sm font-semibold text-stone-800">{display}</div>
     </div>
@@ -24,7 +24,7 @@ export default function PropertyCard({ record }: PropertyCardProps) {
         Property Record
       </h3>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Folio" value={record.folio} />
         <Stat label="Lot Size" value={`${record.lot_size_sqft.toLocaleString()} sqft`} />
         <Stat label="Lot Dims" value={record.lot_dimensions} />

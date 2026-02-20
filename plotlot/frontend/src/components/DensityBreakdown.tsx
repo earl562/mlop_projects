@@ -21,7 +21,12 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
           </p>
         </div>
         <div className="text-right">
-          <div className="text-4xl font-black text-amber-700">{analysis.max_units}</div>
+          <div
+            className="text-4xl font-black text-amber-700"
+            style={{ textShadow: "0 1px 2px rgba(180, 83, 9, 0.15)" }}
+          >
+            {analysis.max_units}
+          </div>
           <div className="text-xs text-stone-500">
             {analysis.lot_size_sqft.toLocaleString()} sqft lot
           </div>
@@ -38,7 +43,7 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-stone-700">{c.name}</span>
                   {c.is_governing && (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
                       GOVERNING
                     </span>
                   )}
@@ -50,7 +55,9 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
               <div className="h-2 overflow-hidden rounded-full bg-stone-200">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    c.is_governing ? "bg-amber-500" : "bg-stone-400"
+                    c.is_governing
+                      ? "bg-gradient-to-r from-amber-400 to-amber-600"
+                      : "bg-stone-400"
                   }`}
                   style={{ width: `${pct}%` }}
                 />
