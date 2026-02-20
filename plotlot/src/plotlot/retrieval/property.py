@@ -169,7 +169,7 @@ async def _query_arcgis(
         if not features:
             logger.debug("ArcGIS query returned 0 features: %s", where)
         span.set_outputs({"feature_count": len(features)})
-        return features
+        return features  # type: ignore[no-any-return]
 
 
 async def _spatial_query_zoning(

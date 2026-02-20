@@ -21,7 +21,7 @@ class OrdinanceChunk(Base):
     chapter = Column(String(500))
     section = Column(String(200))
     section_title = Column(String(500))
-    zone_codes = Column(ARRAY(String), default=[])
+    zone_codes: Column = Column(ARRAY(String), default=[])
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, default=0)
     embedding = Column(Vector(1024))

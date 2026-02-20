@@ -100,20 +100,20 @@ PlotLot v2 is the flagship project. The core product:
 - County ArcGIS REST APIs → property records + spatial zoning queries (MDC, Broward, Palm Beach)
 - Municode API → zoning ordinance retrieval (73 municipalities with auto-discovery)
 - pgvector hybrid search (RRF fusion) → relevant zoning sections
-- Agentic LLM analysis (NVIDIA NIM Llama 3.3 70B primary, Gemini 2.5 Flash fallback) → numeric extraction via tool calling
+- Agentic LLM analysis (NVIDIA NIM Llama 3.3 70B primary, Kimi K2.5 fallback) → numeric extraction via tool calling
 - Deterministic calculator → max units from density, lot area, FAR, buildable envelope constraints
 
 **Deployment stack:**
 - **Backend:** Render free tier (FastAPI + Docker)
 - **Database:** Neon free tier (PostgreSQL + pgvector, 8,142 chunks across 5 municipalities)
 - **Frontend:** Vercel free tier (Next.js 16 + React 19 + Tailwind CSS 4)
-- **LLM:** NVIDIA NIM Llama 3.3 70B (primary), Gemini 2.5 Flash (fallback), per-model circuit breakers
+- **LLM:** NVIDIA NIM Llama 3.3 70B (primary), Kimi K2.5 (fallback), per-model circuit breakers
 - **Observability:** MLflow tracing with Neon PostgreSQL backend (persistent across deploys)
 
 ### What's Built
 - **DATA:** Municode auto-discovery (88 municipalities), scraper, chunker, NVIDIA embedder (1024d), pgvector hybrid search (RRF fusion), multi-county property lookup (MDC two-layer zoning, Broward parcels, Palm Beach spatial zoning), admin ingestion endpoint
 - **BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with 4-constraint breakdown (density, min lot area, FAR, buildable envelope)
-- **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. NVIDIA NIM primary → Gemini fallback with per-model circuit breakers. Intra-NVIDIA model fallback chain (Llama 3.3 → Kimi K2.5).
+- **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. NVIDIA NIM Llama-only with intra-model fallback chain (Llama 3.3 70B → Kimi K2.5). Per-model circuit breakers.
 - **CHAT:** Agentic chat with 10 tools (geocode, lookup_property_info, zoning search, web search, property search, filter, dataset info, export, spreadsheet, document creation). 3-step workflow: geocode → lookup_property_info → search_zoning_ordinance. Session-level geocode cache for lat/lng precision.
 - **OBSERVABILITY:** MLflow tracing to Neon PostgreSQL (auto-derived from DATABASE_URL), /debug/llm diagnostics, /debug/traces endpoint, per-model token tracking
 - **HARDENING:** Bounded session memory (LRU eviction, 100 sessions max, 1hr TTL), retry with exponential backoff on network-bound pipeline steps (scrape, embed), token budget per chat session (50K cap), dynamic tool masking per turn

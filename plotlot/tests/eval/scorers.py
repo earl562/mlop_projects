@@ -21,7 +21,7 @@ def zoning_district_match(outputs: dict, expectations: dict) -> bool:
     """Exact match on zoning district code (case-insensitive)."""
     expected = expectations.get("zoning_district", "")
     actual = outputs.get("zoning_district", "")
-    return actual.strip().lower() == expected.strip().lower()
+    return bool(actual.strip().lower() == expected.strip().lower())
 
 
 @scorer
@@ -29,7 +29,7 @@ def municipality_match(outputs: dict, expectations: dict) -> bool:
     """Exact match on municipality name (case-insensitive)."""
     expected = expectations.get("municipality", "")
     actual = outputs.get("municipality", "")
-    return actual.strip().lower() == expected.strip().lower()
+    return bool(actual.strip().lower() == expected.strip().lower())
 
 
 @scorer
@@ -47,7 +47,7 @@ def governing_constraint_match(outputs: dict, expectations: dict) -> bool:
     """Exact match on governing constraint name."""
     expected = expectations.get("governing_constraint", "")
     actual = outputs.get("governing_constraint", "")
-    return actual.strip().lower() == expected.strip().lower()
+    return bool(actual.strip().lower() == expected.strip().lower())
 
 
 @scorer

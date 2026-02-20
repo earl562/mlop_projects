@@ -333,7 +333,7 @@ async def _run_ingestion(municipality_key: str, delete_existing: bool) -> None:
                     )
                 )
                 await session.commit()
-                deleted = result.rowcount
+                deleted = result.rowcount  # type: ignore[attr-defined]
                 logger.info("Deleted %d existing chunks for %s", deleted, muni_name)
             except Exception:
                 await session.rollback()
@@ -599,7 +599,7 @@ async def delete_chunks(municipality: str, confirm: bool = False):
             )
         )
         await session.commit()
-        deleted = result.rowcount
+        deleted = result.rowcount  # type: ignore[attr-defined]
         logger.info("Deleted %d chunks for municipality: %s", deleted, municipality)
         return {
             "municipality": municipality,

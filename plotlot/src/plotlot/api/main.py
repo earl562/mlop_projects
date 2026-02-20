@@ -264,28 +264,6 @@ async def debug_llm():
                         "elapsed_s": elapsed,
                     }
 
-    # --- Step 4: Gemini connectivity (if key exists) ---
-    if _s.gemini_api_key:
-        try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
-            ) as client:
-                t0 = time.monotonic()
-                resp = await client.post(
-                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                    json={**test_payload, "model": "gemini-2.5-flash"},
-                    headers={
-                        "Authorization": f"Bearer {_s.gemini_api_key.strip()}",
-                        "Content-Type": "application/json",
-                    },
-                )
-                elapsed = round(time.monotonic() - t0, 2)
-                diag["gemini"] = {"status": resp.status_code, "latency_s": elapsed, "body": resp.text[:300]}
-        except Exception as e:
-            diag["gemini"] = {"error": f"{type(e).__name__}: {e}"}
-    else:
-        diag["gemini"] = {"error": "no_api_key"}
-
     return diag
 
 

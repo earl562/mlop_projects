@@ -42,14 +42,14 @@ async def save_analysis(request: SaveAnalysisRequest):
     _portfolio[analysis_id] = entry
     logger.info("Saved analysis %s: %s", analysis_id, report.address)
 
-    return SavedAnalysisResponse(**entry)
+    return SavedAnalysisResponse(**entry)  # type: ignore[arg-type]
 
 
 @router.get("", response_model=list[SavedAnalysisResponse])
 async def list_analyses():
     """List all saved analyses in the portfolio."""
     return [
-        SavedAnalysisResponse(**entry)
+        SavedAnalysisResponse(**entry)  # type: ignore[arg-type]
         for entry in sorted(
             _portfolio.values(),
             key=lambda x: x["saved_at"],

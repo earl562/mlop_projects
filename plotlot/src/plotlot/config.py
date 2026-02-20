@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     geocodio_api_key: str = ""
     hf_token: str = ""
     nvidia_api_key: str = ""
-    gemini_api_key: str = ""
 
     # Jina.ai search
     jina_api_key: str = ""
@@ -69,7 +68,7 @@ class Settings(BaseSettings):
     def _strip_api_keys(self) -> "Settings":
         """Strip whitespace/newlines from API keys — common paste error in dashboards."""
         for field in ("geocodio_api_key", "hf_token",
-                      "nvidia_api_key", "gemini_api_key", "jina_api_key"):
+                      "nvidia_api_key", "jina_api_key"):
             val = getattr(self, field)
             if val and val != val.strip():
                 setattr(self, field, val.strip())

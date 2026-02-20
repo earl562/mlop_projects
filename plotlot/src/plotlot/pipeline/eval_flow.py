@@ -28,7 +28,7 @@ DEFAULT_THRESHOLDS = {
 def load_golden_data(path: Path | None = None) -> list[dict]:
     """Load golden dataset from JSON file."""
     p = path or GOLDEN_DATA_PATH
-    data = json.loads(p.read_text())
+    data: list[dict] = json.loads(p.read_text())
     logger.info("Loaded %d golden samples from %s", len(data), p)
     return data
 

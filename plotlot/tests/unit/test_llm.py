@@ -1,4 +1,4 @@
-"""Tests for LLM client (NVIDIA primary, OpenRouter fallback)."""
+"""Tests for LLM client (NVIDIA NIM, Llama-only)."""
 
 import json
 
@@ -93,7 +93,6 @@ class TestAnalyzeZoning:
 
         with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
              patch("plotlot.retrieval.llm.settings") as mock_settings:
-            mock_settings.gemini_api_key = "test_gemini_key"
             mock_settings.nvidia_api_key = "test_nvidia_key"
 
             result = await analyze_zoning(
@@ -101,59 +100,13 @@ class TestAnalyzeZoning:
             )
 
         assert result["zoning_district"] == "RS-4"
-        # Should only call once (NVIDIA primary succeeds)
+        # Should only call once (first NVIDIA model succeeds)
         assert mock_client.post.call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_nvidia_fails_gemini_fallback(self):
-        import httpx
-
-        nvidia_error = httpx.HTTPStatusError(
-            "Server Error", request=MagicMock(), response=MagicMock(status_code=500),
-        )
-        nvidia_error.response.text = "Internal Server Error"
-
-        gemini_response = MagicMock()
-        gemini_response.json.return_value = {
-            "choices": [{"message": {"content": json.dumps({
-                "zoning_district": "B-2",
-                "confidence": "medium",
-            })}}]
-        }
-        gemini_response.raise_for_status = MagicMock()
-
-        call_count = {"n": 0}
-
-        async def mock_post(url, **kwargs):
-            call_count["n"] += 1
-            if "nvidia" in url:
-                raise nvidia_error
-            return gemini_response
-
-        mock_client = AsyncMock()
-        mock_client.post = mock_post
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
-             patch("plotlot.retrieval.llm.settings") as mock_settings, \
-             patch("plotlot.retrieval.llm.BASE_DELAY", 0.01):
-            mock_settings.gemini_api_key = "test_gemini_key"
-            mock_settings.nvidia_api_key = "test_nvidia_key"
-
-            result = await analyze_zoning(
-                "123 Main St", "Miramar", "Broward", [_make_result()],
-            )
-
-        assert result["zoning_district"] == "B-2"
-        # NVIDIA retries + Gemini (1 success)
-        assert call_count["n"] >= 2
 
     @pytest.mark.asyncio
     async def test_no_api_keys(self):
         with patch("plotlot.retrieval.llm.settings") as mock_settings:
             mock_settings.nvidia_api_key = ""
-            mock_settings.gemini_api_key = ""
 
             result = await analyze_zoning(
                 "123 Main St", "Miramar", "Broward", [_make_result()],

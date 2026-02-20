@@ -48,9 +48,10 @@ VALID_COUNTIES = {"miami-dade", "broward", "palm beach"}
 ACCEPTABLE_ACCURACY = {"rooftop", "range_interpolation", "nearest_rooftop_match", "point"}
 
 
-def report_to_dict(report: ZoningReport) -> dict:
+def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
     """Serialize a ZoningReport to a JSON-safe dict for artifact logging."""
-    result = {
+    from typing import Any
+    result: dict[str, Any] = {
         "address": report.address,
         "formatted_address": report.formatted_address,
         "municipality": report.municipality,
@@ -223,7 +224,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         # ── Phase 2: Agentic LLM analysis ──
 
-        report = await _agentic_analysis(
+        report: ZoningReport = await _agentic_analysis(
             address=address,
             geo=geo,
             prop_record=prop_record,

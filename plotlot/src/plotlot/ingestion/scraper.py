@@ -30,7 +30,7 @@ class MunicodeScraper:
             url = f"{BASE_URL}/{path}"
             resp = await client.get(url, params=params)
             resp.raise_for_status()
-            return resp.json()
+            return resp.json()  # type: ignore[no-any-return]
 
     async def get_toc_children(
         self,
@@ -84,7 +84,7 @@ class MunicodeScraper:
                     if doc.get("Id") == node_id:
                         title_html = doc.get("TitleHtml", "")
                         content = doc.get("Content", "")
-                        return title_html + content
+                        return str(title_html) + str(content)
 
                 parts = []
                 for doc in docs:
@@ -94,7 +94,7 @@ class MunicodeScraper:
                         parts.append(title_html + content)
                 return "\n".join(parts)
 
-            return data.get("Document", data.get("document", ""))
+            return str(data.get("Document", data.get("document", "")))
         return str(data)
 
     async def walk_toc(

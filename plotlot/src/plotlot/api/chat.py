@@ -653,13 +653,13 @@ CHAT_TOOLS = [
 
 # Tool groups for dynamic masking (Notion/CloudQuery pattern:
 # reduce context bloat by only showing relevant tools per turn)
-CORE_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+CORE_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
     "geocode_address", "lookup_property_info", "search_zoning_ordinance", "web_search", "search_properties",
 }]
-DATASET_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+DATASET_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
     "filter_dataset", "get_dataset_info", "export_dataset",
 }]
-CREATION_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {
+CREATION_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
     "create_spreadsheet", "create_document",
 }]
 

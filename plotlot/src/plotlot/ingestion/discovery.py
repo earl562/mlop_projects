@@ -284,7 +284,7 @@ async def _fetch_json(
     try:
         resp = await client.get(url, params=params, headers=LIBRARY_HEADERS)
         resp.raise_for_status()
-        return resp.json()
+        return resp.json()  # type: ignore[no-any-return]
     except (httpx.HTTPError, ValueError) as e:
         logger.warning("Library API error: %s %s — %s", path, params, e)
         return None
@@ -422,7 +422,7 @@ async def discover_all(
 
         configs: dict[str, MunicodeConfig] = {}
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning("Discovery task failed: %s", result)
                 continue
             key, config = result

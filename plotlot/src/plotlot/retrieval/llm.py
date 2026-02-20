@@ -1,12 +1,13 @@
-"""LLM client — NVIDIA NIM primary, Google Gemini fallback.
+"""LLM client — NVIDIA NIM (Llama-only).
 
 Supports three modes:
   1. Agentic tool-use: call_llm() returns tool_calls for the agent loop
   2. Direct analysis: analyze_zoning() for non-agentic one-shot analysis
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
-Both APIs are OpenAI-compatible chat completions endpoints.
-NVIDIA NIM (Kimi K2.5) is the default. Google Gemini 2.5 Flash is fallback.
+Uses NVIDIA NIM's OpenAI-compatible chat completions endpoint.
+Intra-model fallback chain: Llama 3.3 70B → Kimi K2.5.
+Per-model circuit breakers prevent wasting retries on failing models.
 """
 
 import asyncio
@@ -33,9 +34,6 @@ NVIDIA_MODELS = [
     "moonshotai/kimi-k2.5",              # Strong reasoning, sometimes slow
 ]
 NVIDIA_MODEL = NVIDIA_MODELS[0]  # Default primary
-
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-GEMINI_MODEL = "gemini-2.5-flash"
 
 MAX_RETRIES = 2
 BASE_DELAY = 1.0
@@ -95,7 +93,6 @@ class CircuitBreaker:
 _breakers: dict[str, CircuitBreaker] = {
     "NVIDIA/llama-3.3-70b-instruct": CircuitBreaker(),
     "NVIDIA/kimi-k2.5": CircuitBreaker(),
-    "Gemini": CircuitBreaker(),
 }
 
 
@@ -162,7 +159,7 @@ async def _call_provider_raw(
 
                 if breaker:
                     breaker.record_success()
-                return message
+                return message  # type: ignore[no-any-return]
 
             except httpx.HTTPStatusError as e:
                 retries_used += 1
@@ -216,7 +213,7 @@ async def _call_provider_raw(
             })
             if breaker:
                 breaker.record_success()
-            return message
+            return message  # type: ignore[no-any-return]
         except Exception as e:
             logger.error("%s failed after all retries: %s", provider_name, e)
             if breaker:
@@ -274,23 +271,7 @@ async def call_llm(
                     }
                 logger.warning("NVIDIA %s failed, trying next model", model)
 
-        # Fallback: Google Gemini
-        if settings.gemini_api_key:
-            gemini_headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            gemini_payload = {**payload, "model": GEMINI_MODEL}
-            message = await _call_provider_raw(
-                client, GEMINI_URL, gemini_headers, gemini_payload, "Gemini",
-            )
-            if message:
-                return {
-                    "content": message.get("content") or "",
-                    "tool_calls": message.get("tool_calls") or [],
-                }
-
-    logger.error("All LLM providers failed")
+    logger.error("All NVIDIA models failed")
     return None
 
 
@@ -298,7 +279,7 @@ async def call_llm_stream(messages: list[dict]):
     """Stream LLM response tokens for conversational chat.
 
     Yields string chunks as they arrive from the provider.
-    Uses the same Gemini primary / NVIDIA fallback pattern.
+    Tries each NVIDIA model in the fallback chain.
     """
     clean_messages = _clean_messages_for_api(messages)
     payload = {
@@ -326,23 +307,7 @@ async def call_llm_stream(messages: list[dict]):
                 except Exception as e:
                     logger.warning("NVIDIA %s streaming failed: %s, trying next", model, e)
 
-        # Fallback: Google Gemini
-        if settings.gemini_api_key:
-            headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            try:
-                async for chunk in _stream_provider(
-                    client, GEMINI_URL, headers,
-                    {**payload, "model": GEMINI_MODEL}, "Gemini",
-                ):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.error("Gemini streaming failed: %s", e)
-
-    logger.error("All LLM providers failed for streaming")
+    logger.error("All NVIDIA models failed for streaming")
 
 
 async def _stream_provider(
@@ -466,7 +431,7 @@ def _parse_llm_content(content: str) -> dict:
         content = content.split("\n", 1)[1] if "\n" in content else content[3:]
     if content.endswith("```"):
         content = content[:-3]
-    return json.loads(content.strip())
+    return json.loads(content.strip())  # type: ignore[no-any-return]
 
 
 async def analyze_zoning(
@@ -475,7 +440,7 @@ async def analyze_zoning(
     county: str,
     results: list[SearchResult],
 ) -> dict:
-    """One-shot zoning analysis (non-agentic). Gemini primary, NVIDIA fallback."""
+    """One-shot zoning analysis (non-agentic). NVIDIA NIM with intra-model fallback."""
     if not results:
         logger.warning("No search results to analyze")
         return {}
@@ -510,23 +475,7 @@ async def analyze_zoning(
                     except json.JSONDecodeError as e:
                         logger.error("Failed to parse NVIDIA %s response: %s", model, e)
 
-        # Fallback: Google Gemini
-        if settings.gemini_api_key:
-            gemini_headers = {
-                "Authorization": f"Bearer {settings.gemini_api_key}",
-                "Content-Type": "application/json",
-            }
-            message = await _call_provider_raw(
-                client, GEMINI_URL, gemini_headers,
-                {**payload_base, "model": GEMINI_MODEL}, "Gemini",
-            )
-            if message and message.get("content"):
-                try:
-                    return _parse_llm_content(message["content"])
-                except json.JSONDecodeError as e:
-                    logger.error("Failed to parse Gemini response: %s", e)
-
-    logger.error("All LLM providers failed")
+    logger.error("All NVIDIA models failed")
     return {}
 
 
