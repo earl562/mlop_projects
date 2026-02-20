@@ -12,8 +12,8 @@ Uses SSE streaming for real-time token delivery + tool status events.
 
 import json
 import logging
+import time
 import uuid
-from collections import defaultdict
 from datetime import datetime, timezone
 
 import httpx
@@ -41,19 +41,106 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 # ---------------------------------------------------------------------------
-# Conversation memory — in-memory store, keyed by session_id
+# Session management — bounded memory store with LRU eviction
 # ---------------------------------------------------------------------------
-
-_conversations: dict[str, list[dict]] = defaultdict(list)
-_datasets: dict[str, DatasetInfo | None] = {}
-_last_geocode: dict[str, dict] = {}  # session_id → last geocode result (full precision)
 
 MAX_MEMORY_MESSAGES = 50   # Keep last 50 messages per session
 MAX_AGENT_TURNS = 8        # Max tool-use loops per chat message
 MAX_TOKENS_PER_SESSION = 50_000  # Cost cap — prevent runaway token spend
+MAX_SESSIONS = 100         # Max concurrent sessions in memory (Render 512MB)
+SESSION_TTL_SECONDS = 3600  # Evict sessions idle for 1 hour
 
-# Per-session token usage tracking
-_session_tokens: dict[str, int] = defaultdict(int)
+
+class SessionStore:
+    """Bounded in-memory session store with LRU eviction and TTL.
+
+    Prevents unbounded memory growth on Render's 512MB free tier.
+    When max_sessions is reached, the least-recently-accessed session
+    is evicted. Sessions idle for >TTL are garbage-collected on access.
+    """
+
+    def __init__(self, max_sessions: int = MAX_SESSIONS, ttl: int = SESSION_TTL_SECONDS):
+        self._max = max_sessions
+        self._ttl = ttl
+        self._conversations: dict[str, list[dict]] = {}
+        self._datasets: dict[str, DatasetInfo | None] = {}
+        self._geocode: dict[str, dict] = {}
+        self._tokens: dict[str, int] = {}
+        self._last_access: dict[str, float] = {}
+
+    def touch(self, session_id: str) -> None:
+        """Update last-access time and evict stale sessions if at capacity."""
+        self._last_access[session_id] = time.monotonic()
+        self._gc()
+
+    def _gc(self) -> None:
+        """Evict expired sessions, then LRU if still over capacity."""
+        now = time.monotonic()
+        # TTL eviction
+        expired = [
+            sid for sid, ts in self._last_access.items()
+            if now - ts > self._ttl
+        ]
+        for sid in expired:
+            self._evict(sid)
+
+        # LRU eviction if still over capacity
+        while len(self._last_access) > self._max:
+            oldest = min(self._last_access, key=self._last_access.get)  # type: ignore[arg-type]
+            self._evict(oldest)
+
+    def _evict(self, session_id: str) -> None:
+        self._conversations.pop(session_id, None)
+        self._datasets.pop(session_id, None)
+        self._geocode.pop(session_id, None)
+        self._tokens.pop(session_id, None)
+        self._last_access.pop(session_id, None)
+
+    def get_messages(self, session_id: str) -> list[dict]:
+        self.touch(session_id)
+        return self._conversations.setdefault(session_id, [])
+
+    def get_dataset(self, session_id: str) -> DatasetInfo | None:
+        return self._datasets.get(session_id)
+
+    def set_dataset(self, session_id: str, data: DatasetInfo | None) -> None:
+        self._datasets[session_id] = data
+
+    def get_geocode(self, session_id: str) -> dict | None:
+        return self._geocode.get(session_id)
+
+    def set_geocode(self, session_id: str, data: dict) -> None:
+        self._geocode[session_id] = data
+
+    def get_tokens(self, session_id: str) -> int:
+        return self._tokens.get(session_id, 0)
+
+    def add_tokens(self, session_id: str, count: int) -> None:
+        self._tokens[session_id] = self._tokens.get(session_id, 0) + count
+
+    def has_dataset(self, session_id: str) -> bool:
+        return bool(self._datasets.get(session_id))
+
+    def delete_session(self, session_id: str) -> bool:
+        found = session_id in self._last_access
+        self._evict(session_id)
+        return found
+
+    def list_sessions(self) -> dict:
+        return {
+            sid: {
+                "message_count": len(self._conversations.get(sid, [])),
+                "last_message": (
+                    self._conversations[sid][-1]["content"][:80]
+                    if self._conversations.get(sid) else ""
+                ),
+                "tokens_used": self._tokens.get(sid, 0),
+            }
+            for sid in self._last_access
+        }
+
+
+_sessions = SessionStore()
 
 # ---------------------------------------------------------------------------
 # Agent personality
@@ -586,7 +673,7 @@ def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
     tools = list(CORE_TOOLS)
 
     # Show dataset tools only when there's an active dataset in session
-    if _datasets.get(session_id):
+    if _sessions.has_dataset(session_id):
         tools.extend(DATASET_TOOLS)
 
     # Show creation tools when the user mentions export/document keywords
@@ -610,7 +697,7 @@ async def _execute_geocode(address: str, session_id: str = "") -> str:
             # Store full-precision coords in session so lookup_property_info
             # can use them even if the LLM truncates the values
             if session_id:
-                _last_geocode[session_id] = result
+                _sessions.set_geocode(session_id, result)
             return json.dumps({
                 "status": "success",
                 "municipality": result["municipality"],
@@ -630,8 +717,8 @@ async def _execute_lookup_property(address: str, county: str, lat: float, lng: f
     from plotlot.retrieval.property import lookup_property
 
     # Use full-precision coords from session geocode if the LLM truncated them
-    if session_id and session_id in _last_geocode:
-        geo = _last_geocode[session_id]
+    geo = _sessions.get_geocode(session_id) if session_id else None
+    if geo:
         precise_lat = geo.get("lat")
         precise_lng = geo.get("lng")
         if precise_lat and precise_lng:
@@ -792,13 +879,13 @@ async def _execute_search_properties(session_id: str, args: dict) -> str:
         records = await bulk_property_search(params)
 
         # Store in session
-        _datasets[session_id] = DatasetInfo(
+        _sessions.set_dataset(session_id, DatasetInfo(
             records=records,
             search_params=args,
             query_description=describe_search(args),
             total_available=len(records),
             fetched_at=datetime.now(timezone.utc).isoformat(),
-        )
+        ))
 
         # Return summary + sample (not all records — avoids token blowout)
         sample = records[:10]
@@ -817,7 +904,7 @@ async def _execute_search_properties(session_id: str, args: dict) -> str:
 
 async def _execute_filter_dataset(session_id: str, args: dict) -> str:
     """Filter/sort the in-session dataset."""
-    dataset = _datasets.get(session_id)
+    dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
         return json.dumps({"status": "error", "message": "No dataset in session. Use search_properties first."})
 
@@ -849,13 +936,13 @@ async def _execute_filter_dataset(session_id: str, args: dict) -> str:
 
     # Update dataset with filtered results
     desc_suffix = f" (filtered: {expression})" if expression else " (sorted)"
-    _datasets[session_id] = DatasetInfo(
+    _sessions.set_dataset(session_id, DatasetInfo(
         records=records,
         search_params=dataset.search_params,
         query_description=dataset.query_description + desc_suffix,
         total_available=dataset.total_available,
         fetched_at=dataset.fetched_at,
-    )
+    ))
 
     sample = records[:10]
     return json.dumps({
@@ -868,7 +955,7 @@ async def _execute_filter_dataset(session_id: str, args: dict) -> str:
 
 async def _execute_get_dataset_info(session_id: str) -> str:
     """Get info about the current in-session dataset."""
-    dataset = _datasets.get(session_id)
+    dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
         return json.dumps({"status": "empty", "message": "No dataset in session. Use search_properties first."})
 
@@ -889,7 +976,7 @@ async def _execute_get_dataset_info(session_id: str) -> str:
 
 async def _execute_export_dataset(session_id: str, args: dict) -> str:
     """Export the in-session dataset to a Google Spreadsheet."""
-    dataset = _datasets.get(session_id)
+    dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
         return json.dumps({"status": "error", "message": "No dataset to export. Use search_properties first."})
 
@@ -989,8 +1076,8 @@ async def chat(request: ChatRequest):
 
             messages = [{"role": "system", "content": system_content}]
 
-            # Load conversation memory
-            memory = _conversations[session_id]
+            # Load conversation memory (bounded by SessionStore)
+            memory = _sessions.get_messages(session_id)
             if memory:
                 # Include last N messages from memory for context
                 messages.extend(memory[-20:])
@@ -1018,7 +1105,7 @@ async def chat(request: ChatRequest):
                 pass  # No-op span in test env
 
             # Token budget check — prevent runaway cost
-            if _session_tokens[session_id] >= MAX_TOKENS_PER_SESSION:
+            if _sessions.get_tokens(session_id) >= MAX_TOKENS_PER_SESSION:
                 yield _sse_event("token", {
                     "content": "I've reached the token limit for this session. "
                     "Please start a new conversation to continue."
@@ -1037,7 +1124,7 @@ async def chat(request: ChatRequest):
 
                 # Track token usage from response (estimated from content length)
                 content_len = len(response.get("content", ""))
-                _session_tokens[session_id] += content_len // 4 + len(request.message) // 4
+                _sessions.add_tokens(session_id, content_len // 4 + len(request.message) // 4)
 
                 content = response.get("content", "")
                 tool_calls = response.get("tool_calls", [])
@@ -1051,7 +1138,7 @@ async def chat(request: ChatRequest):
 
                     # Trim memory if too long
                     if len(memory) > MAX_MEMORY_MESSAGES:
-                        _conversations[session_id] = memory[-MAX_MEMORY_MESSAGES:]
+                        del memory[:-MAX_MEMORY_MESSAGES]
                     return
 
                 # Tool calls — execute them and loop
@@ -1119,7 +1206,7 @@ async def chat(request: ChatRequest):
             yield _sse_event("error", {"detail": str(e)})
         finally:
             try:
-                chat_span.set_outputs({"session_tokens": _session_tokens.get(session_id, 0)})
+                chat_span.set_outputs({"session_tokens": _sessions.get_tokens(session_id)})
             except (AttributeError, Exception):
                 pass
             try:
@@ -1141,25 +1228,12 @@ async def chat(request: ChatRequest):
 @router.get("/chat/sessions")
 async def list_sessions():
     """List active conversation sessions (for debugging/admin)."""
-    return {
-        session_id: {
-            "message_count": len(msgs),
-            "last_message": msgs[-1]["content"][:80] if msgs else "",
-        }
-        for session_id, msgs in _conversations.items()
-    }
+    return _sessions.list_sessions()
 
 
 @router.delete("/chat/sessions/{session_id}")
 async def clear_session(session_id: str):
     """Clear conversation memory and dataset for a session."""
-    found = False
-    if session_id in _conversations:
-        del _conversations[session_id]
-        found = True
-    if session_id in _datasets:
-        del _datasets[session_id]
-        found = True
-    if found:
+    if _sessions.delete_session(session_id):
         return {"status": "cleared", "session_id": session_id}
     return {"status": "not_found"}

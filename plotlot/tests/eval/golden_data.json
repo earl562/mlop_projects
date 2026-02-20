@@ -1,5 +1,6 @@
 [
   {
+    "_comment": "POSITIVE: Miami Gardens single-family R-1 (well-tested, high confidence)",
     "inputs": {"address": "171 NE 209th Ter, Miami, FL 33179"},
     "outputs": {
       "zoning_district": "R-1",
@@ -47,6 +48,7 @@
     }
   },
   {
+    "_comment": "POSITIVE: Miramar RS5 — Broward county, different ArcGIS API",
     "inputs": {"address": "7940 Plantation Blvd, Miramar, FL 33023"},
     "outputs": {
       "zoning_district": "RS5",
@@ -88,7 +90,52 @@
     }
   },
   {
-    "_comment": "BOUNDARY: Orlando address should be rejected (outside coverage area)",
+    "_comment": "POSITIVE: Unincorporated Miami-Dade — tests the MDC two-layer zoning lookup",
+    "inputs": {"address": "10000 SW 56th St, Miami, FL 33165"},
+    "outputs": {
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "POSITIVE: Boca Raton — Palm Beach county, third ArcGIS API integration",
+    "inputs": {"address": "200 E Palmetto Park Rd, Boca Raton, FL 33432"},
+    "outputs": {
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "POSITIVE: Miami Gardens multifamily R-3 — tests higher density extraction",
+    "inputs": {"address": "17501 NW 7th Ave, Miami Gardens, FL 33169"},
+    "outputs": {
+      "municipality": "Miami Gardens",
+      "county": "Miami-Dade",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Miami Gardens",
+      "county": "Miami-Dade",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Orlando address — outside coverage area (not MDC/Broward/Palm Beach)",
     "inputs": {"address": "100 S Orange Ave, Orlando, FL 32801"},
     "outputs": null,
     "expectations": {
@@ -98,7 +145,16 @@
     }
   },
   {
-    "_comment": "BOUNDARY: Fake/nonsense address should be rejected (geocode failure or low accuracy)",
+    "_comment": "BOUNDARY: Tampa address — outside coverage area",
+    "inputs": {"address": "400 N Tampa St, Tampa, FL 33602"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "outside_coverage"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Fake/nonsense address — geocode failure or low accuracy",
     "inputs": {"address": "99999 Nonexistent Blvd, Fakeville, FL 00000"},
     "outputs": null,
     "expectations": {
@@ -107,7 +163,16 @@
     }
   },
   {
-    "_comment": "DATA QUALITY: Fort Lauderdale has HR/personnel chunks — should still return zoning, not HR rules",
+    "_comment": "BOUNDARY: Partial address — should fail gracefully, not fabricate data",
+    "inputs": {"address": "Main St, Florida"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "geocoding_failed"
+    }
+  },
+  {
+    "_comment": "DATA QUALITY: Fort Lauderdale — has HR/personnel chunks, should still return zoning",
     "inputs": {"address": "100 N Andrews Ave, Fort Lauderdale, FL 33301"},
     "outputs": {
       "municipality": "Fort Lauderdale",

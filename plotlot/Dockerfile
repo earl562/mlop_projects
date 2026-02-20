@@ -5,7 +5,6 @@
 #   docker build -t plotlot .
 #   docker run plotlot                              # API (default)
 #   docker run plotlot plotlot-ingest --all          # Ingestion
-#   docker run plotlot prefect worker start ...      # Prefect worker
 
 # ── Stage 1: Install dependencies with uv ──
 FROM python:3.13-slim AS builder
@@ -16,11 +15,11 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra mlflow --extra prefect --no-install-project
+RUN uv sync --frozen --no-dev --extra mlflow --no-install-project
 
 # Copy source and install project
 COPY src/ src/
-RUN uv sync --frozen --no-dev --extra mlflow --extra prefect
+RUN uv sync --frozen --no-dev --extra mlflow
 
 
 # ── Stage 2: Runtime (API server by default) ──

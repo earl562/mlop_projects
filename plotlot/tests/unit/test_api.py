@@ -168,8 +168,9 @@ async def test_analyze_pipeline_error(client):
 async def test_chat_streams_response(client):
     """Chat endpoint streams tokens via SSE."""
     # Clear memory between tests
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     mock_response = {"content": "Hello there!", "tool_calls": []}
     with patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=mock_response):
@@ -191,8 +192,9 @@ async def test_chat_streams_response(client):
 @pytest.mark.asyncio
 async def test_chat_with_report_context(client):
     """Chat with report context doesn't error."""
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     report = _mock_report()
     report_dict = {
@@ -233,8 +235,9 @@ async def test_chat_with_report_context(client):
 @pytest.mark.asyncio
 async def test_chat_with_tool_use(client):
     """Chat agent uses tools and returns results."""
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     # First call: LLM wants to use a tool
     tool_response = {
@@ -268,8 +271,9 @@ async def test_chat_with_tool_use(client):
 @pytest.mark.asyncio
 async def test_chat_session_memory(client):
     """Chat preserves conversation memory across requests."""
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     mock_response = {"content": "I'll remember that!", "tool_calls": []}
     with patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=mock_response):
@@ -281,7 +285,7 @@ async def test_chat_session_memory(client):
     # Check that the session event was emitted
     assert "test-session" in resp.text
     # Memory should have the user message + assistant response
-    assert len(_conversations["test-session"]) == 2
+    assert len(_sessions._conversations.get("test-session", [])) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +371,9 @@ async def test_portfolio_not_found(client):
 @pytest.mark.asyncio
 async def test_chat_create_spreadsheet_tool(client):
     """Chat agent creates a spreadsheet via tool call."""
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
@@ -410,8 +415,9 @@ async def test_chat_create_spreadsheet_tool(client):
 @pytest.mark.asyncio
 async def test_chat_create_document_tool(client):
     """Chat agent creates a document via tool call."""
-    from plotlot.api.chat import _conversations
-    _conversations.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
@@ -456,9 +462,10 @@ async def test_chat_create_document_tool(client):
 @pytest.mark.asyncio
 async def test_chat_search_properties(client):
     """Agent calls search_properties and returns summary."""
-    from plotlot.api.chat import _conversations, _datasets
-    _conversations.clear()
-    _datasets.clear()
+    from plotlot.api.chat import _sessions
+    _sessions._conversations.clear()
+    _sessions._datasets.clear()
+    _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
@@ -501,13 +508,14 @@ async def test_chat_search_properties(client):
 @pytest.mark.asyncio
 async def test_chat_export_dataset(client):
     """Agent exports dataset to Google Sheets."""
-    from plotlot.api.chat import _conversations, _datasets
+    from plotlot.api.chat import _sessions
     from plotlot.retrieval.bulk_search import DatasetInfo
-    _conversations.clear()
-    _datasets.clear()
+    _sessions._conversations.clear()
+    _sessions._datasets.clear()
+    _sessions._last_access.clear()
 
     # Pre-populate a dataset for session "test-export"
-    _datasets["test-export"] = DatasetInfo(
+    _sessions.set_dataset("test-export", DatasetInfo(
         records=[
             {"folio": "123", "address": "100 MAIN ST", "city": "MIAMI",
              "county": "Miami-Dade", "owner": "OWNER", "land_use_code": "0000",
@@ -518,7 +526,8 @@ async def test_chat_export_dataset(client):
         query_description="Vacant Residential In Miami-Dade",
         total_available=1,
         fetched_at="2026-01-01T00:00:00",
-    )
+    ))
+    _sessions.touch("test-export")
 
     tool_response = {
         "content": "",

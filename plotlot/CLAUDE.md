@@ -54,7 +54,7 @@ Informed by 1,200+ production LLM deployments (ZenML LLMOps Database, 2025). The
 - **Pydantic** for all data models and config — structured, validated, serializable
 - **pytest** with async support, mocked external services, >80% coverage targets
 - **MLflow** for experiment tracking, tracing, model registry, and artifact management
-- **Prefect** for workflow orchestration (not Airflow — we want modern Python-native flows)
+- **Lightweight retry utility** for pipeline orchestration (Prefect removed — dead code on Render free tier, replaced with working exponential backoff)
 - **PostgreSQL + pgvector** for hybrid search (vector + full-text with RRF fusion)
 - **Docker** for local dev parity and deployment
 - **GitHub Actions** CI/CD — lint, test, type-check on every push
@@ -115,13 +115,17 @@ PlotLot v2 is the flagship project. The core product:
 - **BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with 4-constraint breakdown (density, min lot area, FAR, buildable envelope)
 - **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. NVIDIA NIM primary → Gemini fallback with per-model circuit breakers. Intra-NVIDIA model fallback chain (Llama 3.3 → Kimi K2.5).
 - **CHAT:** Agentic chat with 10 tools (geocode, lookup_property_info, zoning search, web search, property search, filter, dataset info, export, spreadsheet, document creation). 3-step workflow: geocode → lookup_property_info → search_zoning_ordinance. Session-level geocode cache for lat/lng precision.
-- **OBSERVABILITY:** MLflow tracing to Neon PostgreSQL (persistent), /debug/llm diagnostics, /debug/traces endpoint, per-model token tracking
+- **OBSERVABILITY:** MLflow tracing to Neon PostgreSQL (auto-derived from DATABASE_URL), /debug/llm diagnostics, /debug/traces endpoint, per-model token tracking
+- **HARDENING:** Bounded session memory (LRU eviction, 100 sessions max, 1hr TTL), retry with exponential backoff on network-bound pipeline steps (scrape, embed), token budget per chat session (50K cap), dynamic tool masking per turn
+- **CI/CD:** GitHub Actions — ruff lint + format check + mypy + pytest with pgvector service. Eval workflow with 10 golden test cases (5 positive, 3 boundary, 1 partial, 1 data quality). Runs on push to main and PRs.
 
 ### Current Issues (as of 2026-02-19)
-1. **Data coverage**: 5 municipalities ingested (Miami Gardens 3,561, MDC 2,666, Boca Raton 1,538, Miramar 241, Fort Lauderdale 136). 88 municipalities discoverable on Municode. West Palm Beach moved to enCodePlus (not on Municode).
-2. **Chat retrieval quality**: Chat agent finds correct zoning codes but sometimes pulls wrong ordinance sections for dimensional standards. Pipeline endpoint has better quality via structured submit_report tool.
-3. **Admin ingestion**: POST /admin/ingest endpoint enables remote data population. Background task pattern for Render's 30s proxy timeout.
+1. **Data coverage**: 5 municipalities ingested (Miami Gardens 3,561, MDC 2,666, Boca Raton 1,538, Miramar 241, Fort Lauderdale 136). 88 municipalities discoverable on Municode. West Palm Beach moved to enCodePlus (not on Municode). Batch ingestion endpoint ready (`POST /admin/ingest/batch`).
+2. **Chat retrieval quality**: FIXED — Chat agent now uses same hybrid search parameters as pipeline (limit=15, full chunk text, RRF fusion). Both endpoints have consistent retrieval quality.
+3. **Admin ingestion**: POST /admin/ingest, POST /admin/ingest/batch, GET /admin/ingest/batch/status. Background task pattern for Render's 30s proxy timeout.
 4. **Frontend UX:** Current dark chat bubble design needs refresh to clean, modern Gemini-like centered layout.
+5. **Render cold start**: Free tier service sometimes fails to cold start (x-render-routing: no-server). May need to keep warm or upgrade.
+6. **mypy**: 28 type errors — `|| true` in CI. Fix and make hard gate.
 
 ## Rules
 

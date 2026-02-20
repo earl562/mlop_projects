@@ -15,11 +15,9 @@ services:
         sync: false
       - key: NVIDIA_API_KEY
         sync: false
-      - key: OPENROUTER_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
       - key: JINA_API_KEY
         sync: false
       - key: CORS_ORIGINS
         value: '["https://mlopprojects.vercel.app","http://localhost:3000"]'
-      - key: MLFLOW_TRACKING_URI
-        value: sqlite:///tmp/mlflow.db

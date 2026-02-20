@@ -1,13 +1,10 @@
-"""Prefect-orchestrated evaluation flow — scheduled quality checks.
+"""Evaluation flow — scheduled quality checks against golden dataset.
 
 Runs the golden dataset through all scorers and checks that key metrics
 meet minimum thresholds. Designed to run nightly or on-demand.
 
-Usage (standalone):
+Usage:
     uv run python -m plotlot.pipeline.eval_flow
-
-Usage (Prefect):
-    Deployed via prefect.yaml as "eval-nightly" with cron schedule.
 """
 
 import json
@@ -16,27 +13,6 @@ import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Optional Prefect decorators — graceful no-op when prefect isn't installed.
-# ---------------------------------------------------------------------------
-try:
-    from prefect import flow, task
-except ImportError:
-
-    def flow(**kwargs):  # type: ignore[misc]
-        def wrapper(fn):
-            fn._is_flow = True
-            return fn
-
-        return wrapper
-
-    def task(**kwargs):  # type: ignore[misc]
-        def wrapper(fn):
-            fn._is_task = True
-            return fn
-
-        return wrapper
 
 
 GOLDEN_DATA_PATH = (
@@ -49,7 +25,6 @@ DEFAULT_THRESHOLDS = {
 }
 
 
-@task(name="load-golden-data")
 def load_golden_data(path: Path | None = None) -> list[dict]:
     """Load golden dataset from JSON file."""
     p = path or GOLDEN_DATA_PATH
@@ -58,7 +33,6 @@ def load_golden_data(path: Path | None = None) -> list[dict]:
     return data
 
 
-@task(name="run-scorers")
 def run_scorers(golden_data: list[dict]) -> dict:
     """Run all scorers via MLflow evaluate and return metrics."""
     import mlflow
@@ -79,7 +53,6 @@ def run_scorers(golden_data: list[dict]) -> dict:
     return metrics
 
 
-@task(name="check-thresholds")
 def check_thresholds(
     metrics: dict,
     thresholds: dict[str, float] | None = None,
@@ -116,7 +89,6 @@ def check_thresholds(
     return passed
 
 
-@flow(name="eval-quality-check", log_prints=True)
 def eval_quality_check(
     tag: str = "nightly",
     thresholds: dict[str, float] | None = None,

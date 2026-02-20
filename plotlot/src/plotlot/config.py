@@ -19,8 +19,27 @@ class Settings(BaseSettings):
         strips ALL query params (asyncpg doesn't accept libpq params like
         sslmode, channel_binding through the URL).  SSL is detected from
         sslmode=require and stored as database_require_ssl for the engine.
+
+        Also auto-derives MLflow tracking URI from DATABASE_URL when not
+        explicitly set — ensures MLflow persists to Neon PostgreSQL in
+        production instead of ephemeral sqlite on Render's /tmp.
         """
-        url = self.database_url
+        raw_url = self.database_url
+
+        # --- Derive MLflow URI from DATABASE_URL (before asyncpg rewrite) ---
+        # Only when mlflow_tracking_uri is still the default sqlite value
+        # (i.e., MLFLOW_TRACKING_URI was not explicitly set in env).
+        if self.mlflow_tracking_uri.startswith("sqlite:"):
+            mlflow_url = raw_url
+            if mlflow_url.startswith("postgres://"):
+                mlflow_url = mlflow_url.replace("postgres://", "postgresql://", 1)
+            elif "+asyncpg" in mlflow_url:
+                mlflow_url = mlflow_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+            # Keep query params intact (sslmode=require) — psycopg2 handles them
+            self.mlflow_tracking_uri = mlflow_url
+
+        # --- Rewrite for asyncpg ---
+        url = raw_url
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and "+asyncpg" not in url:
@@ -40,7 +59,6 @@ class Settings(BaseSettings):
     # API keys
     geocodio_api_key: str = ""
     hf_token: str = ""
-    openrouter_api_key: str = ""
     nvidia_api_key: str = ""
     gemini_api_key: str = ""
 
@@ -50,7 +68,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _strip_api_keys(self) -> "Settings":
         """Strip whitespace/newlines from API keys — common paste error in dashboards."""
-        for field in ("geocodio_api_key", "hf_token", "openrouter_api_key",
+        for field in ("geocodio_api_key", "hf_token",
                       "nvidia_api_key", "gemini_api_key", "jina_api_key"):
             val = getattr(self, field)
             if val and val != val.strip():

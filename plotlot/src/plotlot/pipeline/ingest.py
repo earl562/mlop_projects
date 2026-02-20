@@ -1,15 +1,12 @@
 """Ingestion pipeline: scrape → chunk → embed → validate → store.
 
 Orchestrates the full data pipeline for loading zoning ordinances
-into pgvector for hybrid search. Uses Prefect flows/tasks for
-retry logic, caching, and observability (Snorkel AI pattern).
-
-Uses auto-discovery to find all municipalities, with fallback to
-hardcoded configs when the Library API is unavailable.
+into pgvector for hybrid search. Network-bound steps (scrape, embed)
+use retry with exponential backoff for resilience.
 """
 
+import asyncio
 import logging
-from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,33 +19,33 @@ from plotlot.storage.models import OrdinanceChunk
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# Optional Prefect decorators — graceful no-op when prefect isn't installed.
+# Retry utility — replaces Prefect's task-level retry with working logic
 # ---------------------------------------------------------------------------
-_PREFECT_AVAILABLE = False
-try:
-    from prefect import flow, task
-    from prefect.tasks import task_input_hash
 
-    _PREFECT_AVAILABLE = True
-except ImportError:
+async def retry_async(fn, *args, retries: int = 3, delay: float = 5.0, label: str = ""):
+    """Retry an async function with exponential backoff.
 
-    def task_input_hash(*args, **kwargs):  # type: ignore[misc]
-        return None
-
-    def flow(**kwargs):  # type: ignore[misc]
-        def wrapper(fn):
-            fn._is_flow = True
-            return fn
-
-        return wrapper
-
-    def task(**kwargs):  # type: ignore[misc]
-        def wrapper(fn):
-            fn._is_task = True
-            return fn
-
-        return wrapper
+    Used on network-bound pipeline steps (scrape, embed) where transient
+    failures are expected. Simpler than Prefect for a single-service deploy.
+    """
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            return await fn(*args)
+        except Exception as e:
+            last_exc = e
+            if attempt < retries:
+                wait = delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "%s failed (attempt %d/%d): %s — retrying in %.0fs",
+                    label or fn.__name__, attempt, retries, e, wait,
+                )
+                await asyncio.sleep(wait)
+            else:
+                logger.error("%s failed after %d attempts: %s", label or fn.__name__, retries, e)
+    raise last_exc  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -137,8 +134,16 @@ def validate_chunks(chunks, embeddings):
 # ---------------------------------------------------------------------------
 
 
+async def _scrape(config) -> list:
+    """Scrape zoning sections — separated for retry wrapper."""
+    scraper = MunicodeScraper()
+    return await scraper.scrape_zoning_chapter(config)
+
+
 async def ingest_municipality(key: str) -> int:
     """Run the full ingestion pipeline for a single municipality.
+
+    Network-bound steps (scrape, embed) use retry with exponential backoff.
 
     Returns:
         Number of chunks stored.
@@ -147,29 +152,32 @@ async def ingest_municipality(key: str) -> int:
 
     logger.info("=== Ingesting %s ===", config.municipality)
 
-    # Step 1: Scrape
-    scraper = MunicodeScraper()
-    sections = await scraper.scrape_zoning_chapter(config)
+    # Step 1: Scrape (with retry — Municode API can be flaky)
+    sections = await retry_async(
+        _scrape, config, retries=2, delay=30.0, label=f"scrape:{config.municipality}",
+    )
     logger.info("Scraped %d sections", len(sections))
 
     if not sections:
         logger.warning("No sections found for %s — skipping", config.municipality)
         return 0
 
-    # Step 2: Chunk
+    # Step 2: Chunk (deterministic — no retry needed)
     chunks = chunk_sections(sections)
     logger.info("Created %d chunks from %d sections", len(chunks), len(sections))
 
     if not chunks:
         return 0
 
-    # Step 3: Embed
+    # Step 3: Embed (with retry — HF API can rate-limit)
     texts = [c.text for c in chunks]
     logger.info("Embedding %d chunks...", len(texts))
-    embeddings = await embed_texts(texts)
+    embeddings = await retry_async(
+        embed_texts, texts, retries=3, delay=10.0, label=f"embed:{config.municipality}",
+    )
     logger.info("Embedded %d chunks (%dd each)", len(embeddings), EMBEDDING_DIM)
 
-    # Step 3.5: Validate
+    # Step 3.5: Validate (deterministic)
     chunks, embeddings = validate_chunks(chunks, embeddings)
     if not chunks:
         logger.warning("No valid chunks after validation — skipping store")
@@ -221,126 +229,6 @@ async def ingest_all() -> dict[str, int]:
     for key in configs:
         try:
             count = await ingest_municipality(key)
-            results[key] = count
-        except Exception as e:
-            logger.error("Failed to ingest %s: %s", key, e)
-            results[key] = 0
-
-    total = sum(results.values())
-    logger.info("Ingestion complete: %d total chunks across %d municipalities", total, len(results))
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Prefect flows — for scheduled/observable execution
-# ---------------------------------------------------------------------------
-
-
-@task(name="scrape-municipality", retries=2, retry_delay_seconds=30)
-async def scrape_municipality_task(key: str):
-    """Prefect task: scrape zoning sections from Municode."""
-    config = await _resolve_config(key)
-    scraper = MunicodeScraper()
-    sections = await scraper.scrape_zoning_chapter(config)
-    logger.info("Scraped %d sections for %s", len(sections), config.municipality)
-    return sections
-
-
-@task(name="chunk-sections")
-async def chunk_sections_task(sections):
-    """Prefect task: parse HTML into text chunks."""
-    chunks = chunk_sections(sections)
-    logger.info("Created %d chunks", len(chunks))
-    return chunks
-
-
-@task(
-    name="embed-chunks",
-    retries=3,
-    retry_delay_seconds=10,
-    cache_key_fn=task_input_hash,
-    cache_expiration=timedelta(hours=24),
-)
-async def embed_chunks_task(chunks):
-    """Prefect task: generate embeddings via HF Inference API.
-
-    Caches results for 24h — re-running ingestion for an unchanged municipality
-    skips the embedding step entirely (Snorkel AI pattern: task-level caching
-    for expensive LLM/embedding operations).
-    """
-    texts = [c.text for c in chunks]
-    embeddings = await embed_texts(texts)
-    logger.info("Embedded %d chunks", len(embeddings))
-    return embeddings
-
-
-@task(name="validate-chunks")
-async def validate_chunks_task(chunks, embeddings):
-    """Prefect task: filter out bad embeddings and short chunks."""
-    valid_chunks, valid_embeddings = validate_chunks(chunks, embeddings)
-    logger.info("Validated: %d/%d chunks passed", len(valid_chunks), len(chunks))
-    return valid_chunks, valid_embeddings
-
-
-@task(name="store-chunks")
-async def store_chunks_task(chunks, embeddings):
-    """Prefect task: write chunks + embeddings to pgvector."""
-    await init_db()
-    session = await get_session()
-    try:
-        rows = []
-        for chunk, embedding in zip(chunks, embeddings):
-            rows.append(
-                OrdinanceChunk(
-                    municipality=chunk.metadata.municipality,
-                    county=chunk.metadata.county,
-                    chapter=chunk.metadata.chapter,
-                    section=chunk.metadata.section,
-                    section_title=chunk.metadata.section_title,
-                    zone_codes=chunk.metadata.zone_codes,
-                    chunk_text=chunk.text,
-                    chunk_index=chunk.metadata.chunk_index,
-                    embedding=embedding,
-                    municode_node_id=chunk.metadata.municode_node_id,
-                )
-            )
-        session.add_all(rows)
-        await session.commit()
-        logger.info("Stored %d chunks", len(rows))
-        return len(rows)
-    except Exception:
-        await session.rollback()
-        raise
-    finally:
-        await session.close()
-
-
-@flow(name="ingest-municipality", log_prints=True)
-async def ingest_municipality_flow(key: str) -> int:
-    """Prefect flow: full pipeline for a single municipality."""
-    sections = await scrape_municipality_task(key)
-    if not sections:
-        return 0
-    chunks = await chunk_sections_task(sections)
-    if not chunks:
-        return 0
-    embeddings = await embed_chunks_task(chunks)
-    chunks, embeddings = await validate_chunks_task(chunks, embeddings)
-    if not chunks:
-        return 0
-    count = await store_chunks_task(chunks, embeddings)
-    return count
-
-
-@flow(name="ingest-all", log_prints=True)
-async def ingest_all_flow() -> dict[str, int]:
-    """Prefect flow: ingest all discovered municipalities."""
-    configs = await _resolve_all_configs()
-
-    results = {}
-    for key in configs:
-        try:
-            count = await ingest_municipality_flow(key)
             results[key] = count
         except Exception as e:
             logger.error("Failed to ingest %s: %s", key, e)

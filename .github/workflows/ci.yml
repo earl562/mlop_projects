@@ -18,7 +18,7 @@ jobs:
       - run: uv sync --frozen --dev
       - run: uv run ruff check src/ tests/
       - run: uv run ruff format --check src/ tests/
-      - run: uv run mypy src/plotlot/ --no-error-summary || true
+      - run: uv run mypy src/plotlot/ --no-error-summary || true  # TODO: fix 28 errors then remove || true
 
   test:
     runs-on: ubuntu-latest

@@ -27,7 +27,6 @@ eval = [
     "jsonschema>=4.21",
     "pytest-cov>=5.0",
 ]
-prefect = ["prefect>=3.0"]
 
 [project.scripts]
 plotlot = "plotlot.cli:main"
