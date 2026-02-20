@@ -400,6 +400,167 @@ async def ingest_status(key: str | None = None):
     return {"ingestions": dict(_ingest_status)}
 
 
+# Batch ingestion status tracker
+_batch_status: dict = {}
+
+
+async def _run_batch_ingestion(skip_existing: bool) -> None:
+    """Background task: ingest all discoverable municipalities sequentially.
+
+    Processes one municipality at a time to stay within Render's 512MB RAM.
+    Skips municipalities that already have chunks in the DB when skip_existing=True.
+    """
+    from plotlot.pipeline.ingest import ingest_municipality, _resolve_all_configs
+    from sqlalchemy import func, select
+    from plotlot.storage.models import OrdinanceChunk
+
+    _batch_status["status"] = "discovering"
+    _batch_status["step"] = "running auto-discovery"
+
+    try:
+        configs = await _resolve_all_configs()
+        total = len(configs)
+        _batch_status["total"] = total
+        _batch_status["discovered_keys"] = list(configs.keys())
+        logger.info("Batch ingestion: discovered %d municipalities", total)
+
+        # Check which municipalities already have data
+        skipped_keys: list[str] = []
+        if skip_existing:
+            _batch_status["step"] = "checking existing data"
+            session = await get_session()
+            try:
+                result = await session.execute(
+                    select(
+                        OrdinanceChunk.municipality,
+                        func.count().label("chunks"),
+                    ).group_by(OrdinanceChunk.municipality)
+                )
+                existing = {row.municipality.lower(): row.chunks for row in result.fetchall()}
+            finally:
+                await session.close()
+            logger.info("Existing data: %d municipalities with chunks", len(existing))
+        else:
+            existing = {}
+
+        completed = 0
+        failed = 0
+        skipped = 0
+        results: dict[str, int | str] = {}
+
+        _batch_status["status"] = "running"
+
+        for i, (key, config) in enumerate(configs.items(), 1):
+            # Check if this municipality already has data
+            if skip_existing and config.municipality.lower() in existing:
+                chunk_count = existing[config.municipality.lower()]
+                logger.info(
+                    "Skipping %s (%d/%d) — already has %d chunks",
+                    config.municipality, i, total, chunk_count,
+                )
+                results[key] = f"skipped ({chunk_count} chunks exist)"
+                skipped += 1
+                _batch_status.update({
+                    "current": key,
+                    "current_name": config.municipality,
+                    "progress": f"{i}/{total}",
+                    "completed": completed,
+                    "failed": failed,
+                    "skipped": skipped,
+                })
+                continue
+
+            _batch_status.update({
+                "current": key,
+                "current_name": config.municipality,
+                "step": f"ingesting {config.municipality}",
+                "progress": f"{i}/{total}",
+                "completed": completed,
+                "failed": failed,
+                "skipped": skipped,
+            })
+            _ingest_status[key] = {"status": "running", "step": "scraping_and_embedding"}
+
+            try:
+                count = await ingest_municipality(key)
+                results[key] = count
+                completed += 1
+                _ingest_status[key] = {"status": "complete", "chunks_stored": count}
+                logger.info(
+                    "Batch: %s complete (%d chunks) — %d/%d done",
+                    config.municipality, count, i, total,
+                )
+            except Exception as e:
+                logger.error("Batch: %s failed: %s", config.municipality, e)
+                results[key] = f"failed: {str(e)[:100]}"
+                failed += 1
+                _ingest_status[key] = {"status": "failed", "error": str(e)[:200]}
+
+        total_chunks = sum(v for v in results.values() if isinstance(v, int))
+        _batch_status.update({
+            "status": "complete",
+            "step": "done",
+            "total_chunks": total_chunks,
+            "completed": completed,
+            "failed": failed,
+            "skipped": skipped,
+            "results": results,
+        })
+        logger.info(
+            "Batch ingestion complete: %d chunks, %d success, %d failed, %d skipped",
+            total_chunks, completed, failed, skipped,
+        )
+
+    except Exception as e:
+        logger.exception("Batch ingestion crashed")
+        _batch_status.update({
+            "status": "failed",
+            "error": str(e),
+        })
+
+
+@router.post("/admin/ingest/batch")
+async def ingest_batch(
+    background_tasks: BackgroundTasks,
+    skip_existing: bool = True,
+):
+    """Start batch ingestion of ALL discoverable municipalities.
+
+    Runs auto-discovery, then ingests each municipality sequentially
+    (one at a time to manage memory on Render's 512MB free tier).
+
+    Args:
+        skip_existing: Skip municipalities that already have chunks in DB (default: True).
+
+    Returns immediately. Poll GET /admin/ingest/status to check progress.
+    """
+    if _batch_status.get("status") == "running":
+        return {
+            "status": "already_running",
+            "progress": _batch_status.get("progress"),
+            "current": _batch_status.get("current_name"),
+        }
+
+    from plotlot.storage.db import init_db
+    await init_db()
+
+    background_tasks.add_task(_run_batch_ingestion, skip_existing)
+    _batch_status.clear()
+    _batch_status["status"] = "queued"
+
+    return {
+        "status": "started",
+        "message": "Batch ingestion started. Poll /admin/ingest/status to check progress.",
+        "skip_existing": skip_existing,
+    }
+
+
+@router.get("/admin/ingest/batch/status")
+async def batch_status():
+    """Check batch ingestion progress."""
+    return dict(_batch_status)
+
+
 @router.delete("/admin/chunks")
 async def delete_chunks(municipality: str, confirm: bool = False):
     """Delete ordinance chunks for a municipality (e.g., bad data cleanup).

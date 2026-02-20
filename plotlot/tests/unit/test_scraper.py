@@ -172,7 +172,7 @@ class TestConstants:
         assert BASE_URL == "https://api.municode.com"
 
     def test_fallback_configs_count(self):
-        assert len(_FALLBACK_CONFIGS) == 2
+        assert len(_FALLBACK_CONFIGS) == 5
 
     def test_municode_configs_count(self):
-        assert len(MUNICODE_CONFIGS) == 2
+        assert len(MUNICODE_CONFIGS) == 5

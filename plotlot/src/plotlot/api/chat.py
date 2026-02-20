@@ -671,10 +671,14 @@ async def _execute_lookup_property(address: str, county: str, lat: float, lng: f
 
 
 async def _execute_zoning_search(municipality: str, query: str) -> str:
-    """Search the local zoning ordinance database."""
+    """Search the local zoning ordinance database via hybrid RAG.
+
+    Uses the same hybrid_search (vector + full-text + RRF fusion) and
+    retrieval depth as the pipeline endpoint for consistent quality.
+    """
     session = await get_session()
     try:
-        results = await hybrid_search(session, municipality, query, limit=5)
+        results = await hybrid_search(session, municipality, query, limit=15)
     finally:
         await session.close()
 
@@ -687,7 +691,7 @@ async def _execute_zoning_search(municipality: str, query: str) -> str:
             "section": r.section,
             "title": r.section_title,
             "zone_codes": r.zone_codes,
-            "text": r.chunk_text[:600],
+            "text": r.chunk_text,
         })
     return json.dumps({"status": "success", "results": chunks})
 
