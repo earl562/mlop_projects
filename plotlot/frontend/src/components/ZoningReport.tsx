@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
 import PropertyCard from "./PropertyCard";
+import SatelliteMap from "./SatelliteMap";
 
 interface ZoningReportProps {
   report: ZoningReportData;
@@ -93,6 +94,11 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           <ConfidenceBadge level={report.confidence} />
         </div>
       </div>
+
+      {/* Satellite map */}
+      {report.lat != null && report.lng != null && (
+        <SatelliteMap lat={report.lat} lng={report.lng} address={report.formatted_address} />
+      )}
 
       {/* Zoning district — prominent standalone line */}
       <div className="flex items-baseline gap-3">
