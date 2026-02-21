@@ -75,8 +75,21 @@ def start_span(name: str = "span", **kwargs):
 
 @contextmanager
 def start_run(**kwargs):
-    """Context manager: MLflow run if available, otherwise no-op."""
+    """Context manager: MLflow run if available, otherwise no-op.
+
+    Defensively ends any orphaned active run before starting a new one.
+    This prevents the 'Run with UUID ... is already active' error that
+    blocks all subsequent requests when a previous run leaked (e.g., the
+    streaming endpoint crashed mid-analysis).
+    """
     if _HAS_MLFLOW:
+        active = _mlflow.active_run()
+        if active:
+            logger.warning(
+                "Ending orphaned MLflow run %s before starting new run",
+                active.info.run_id,
+            )
+            _mlflow.end_run()
         with _mlflow.start_run(**kwargs) as run:
             yield run
     else:

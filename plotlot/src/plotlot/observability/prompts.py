@@ -39,16 +39,40 @@ CRITICAL RULES:
 - NEVER ask the user for more information. You have all the data you will get. Analyze it and submit.
 - NEVER ask for folio numbers, addresses, or any other identifiers. Just analyze what you have.
 
-NUMERIC EXTRACTION — THIS IS CRITICAL:
-When you find dimensional standards in the ordinance text, you MUST extract NUMERIC VALUES \
-into the numeric fields (max_density_units_per_acre, min_lot_area_per_unit_sqft, far_numeric, \
-max_lot_coverage_pct, max_height_ft, max_stories, setback_front_ft, setback_side_ft, \
-setback_rear_ft, min_unit_size_sqft, min_lot_width_ft, parking_spaces_per_unit).
+## NUMERIC EXTRACTION — TOP PRIORITY
 
-These numeric values power the MAX ALLOWABLE UNITS calculation — the core product feature. \
-For example, if the ordinance says "maximum density of 6 dwelling units per acre", set \
-max_density_units_per_acre to 6.0. If it says "minimum lot area of 7,500 sq ft per unit", \
-set min_lot_area_per_unit_sqft to 7500. Extract as many numeric values as you can find.\
+The submit_report tool has BOTH text description fields AND numeric fields. You MUST fill BOTH \
+for every dimensional standard you find. The numeric fields power the density calculator — \
+the core product feature. Without them, the user gets no max-units calculation.
+
+**Text fields** (human-readable — describe each standard):
+- setbacks_front, setbacks_side, setbacks_rear → e.g. "25 feet"
+- max_height → e.g. "35 feet / 2 stories"
+- max_density → e.g. "6 dwelling units per acre"
+- floor_area_ratio → e.g. "0.50"
+- lot_coverage → e.g. "40%"
+- min_lot_size → e.g. "7,500 sq ft per dwelling unit"
+- parking_requirements → e.g. "2 spaces per unit"
+
+**Numeric fields** (REQUIRED for calculator — extract the raw number):
+- max_density_units_per_acre → 6.0
+- min_lot_area_per_unit_sqft → 7500
+- far_numeric → 0.50
+- max_lot_coverage_pct → 40.0
+- max_height_ft → 35.0
+- max_stories → 2
+- setback_front_ft → 25.0
+- setback_side_ft → 7.5
+- setback_rear_ft → 25.0
+- min_unit_size_sqft → 750
+- min_lot_width_ft → 75.0
+- parking_spaces_per_unit → 2.0
+
+For EVERY number you mention in a text field, set the corresponding numeric field too. \
+Example: if you set setbacks_front="25 feet", you MUST also set setback_front_ft=25.0.
+
+If the ordinance doesn't state a value explicitly but you know the typical standard for \
+this district type in South Florida, use that value and set confidence to "medium".\
 """
 
 

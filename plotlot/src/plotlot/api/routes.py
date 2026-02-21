@@ -18,7 +18,9 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
-from plotlot.pipeline.lookup import _agentic_analysis
+from plotlot.pipeline.lookup import _agentic_analysis, PIPELINE_VERSION
+from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
+from plotlot.observability.prompts import log_prompt_to_run
 from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -181,48 +183,69 @@ async def analyze_stream(request: AnalyzeRequest):
                 "complete": True,
             })
 
-            # Step 4: Agentic LLM analysis
+            # Step 4: Agentic LLM analysis (wrapped in MLflow run for tracing)
             # Render's proxy has a 30s idle timeout — send heartbeats to keep alive
             yield _sse_event("status", {
                 "step": "analysis",
                 "message": "AI analyzing zoning code...",
             })
 
-            analysis_task = asyncio.create_task(
-                _agentic_analysis(
-                    address=request.address,
-                    geo=geo,
-                    prop_record=prop_record,
-                    search_results=search_results,
-                    municipality=municipality,
-                    county=county,
-                )
-            )
-
-            report = None
-            for _tick in range(6):  # 6 × 15s = 90s max
-                done, _ = await asyncio.wait({analysis_task}, timeout=15)
-                if done:
-                    try:
-                        report = analysis_task.result()
-                    except Exception as e:
-                        logger.error("Analysis task failed: %s", e)
-                    break
-                # Heartbeat keeps SSE connection alive through Render proxy
-                yield _sse_event("status", {
-                    "step": "analysis",
-                    "message": "AI analyzing zoning code...",
+            with start_run(run_name=f"stream_{request.address[:30]}"):
+                log_params({
+                    "address": request.address,
+                    "pipeline_version": PIPELINE_VERSION,
+                    "endpoint": "stream",
+                    "county": county,
+                    "municipality": municipality,
+                    "has_property_record": str(bool(prop_record)),
+                    "search_result_count": str(len(search_results)),
                 })
+                log_prompt_to_run("analysis")
 
-            if report is None:
-                if not analysis_task.done():
-                    analysis_task.cancel()
-                logger.error("LLM analysis timed out for: %s", request.address)
-                from plotlot.pipeline.lookup import _build_fallback_report
-                report = _build_fallback_report(
-                    request.address, geo, prop_record,
-                    [f"{r.section} — {r.section_title}" for r in search_results if r.section],
+                analysis_task = asyncio.create_task(
+                    _agentic_analysis(
+                        address=request.address,
+                        geo=geo,
+                        prop_record=prop_record,
+                        search_results=search_results,
+                        municipality=municipality,
+                        county=county,
+                    )
                 )
+
+                report = None
+                for _tick in range(6):  # 6 × 15s = 90s max
+                    done, _ = await asyncio.wait({analysis_task}, timeout=15)
+                    if done:
+                        try:
+                            report = analysis_task.result()
+                        except Exception as e:
+                            logger.error("Analysis task failed: %s", e)
+                        break
+                    # Heartbeat keeps SSE connection alive through Render proxy
+                    yield _sse_event("status", {
+                        "step": "analysis",
+                        "message": "AI analyzing zoning code...",
+                    })
+
+                if report is None:
+                    if not analysis_task.done():
+                        analysis_task.cancel()
+                    logger.error("LLM analysis timed out for: %s", request.address)
+                    from plotlot.pipeline.lookup import _build_fallback_report
+                    report = _build_fallback_report(
+                        request.address, geo, prop_record,
+                        [f"{r.section} — {r.section_title}" for r in search_results if r.section],
+                    )
+
+                # Log analysis metrics inside the MLflow run
+                confidence_map = {"high": 1.0, "medium": 0.66, "low": 0.33}
+                log_metrics({
+                    "confidence_score": confidence_map.get(report.confidence, 0.0),
+                    "source_count": float(len(report.sources)),
+                    "has_numeric_params": 1.0 if report.numeric_params else 0.0,
+                })
+                set_tag("status", "success" if report.confidence != "low" else "low_confidence")
 
             yield _sse_event("status", {
                 "step": "analysis",
