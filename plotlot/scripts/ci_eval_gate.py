@@ -22,9 +22,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 GOLDEN_DATA_PATH = PROJECT_ROOT / "tests" / "eval" / "golden_data.json"
 
-# Quality thresholds — tune these as the golden dataset grows
+# Quality thresholds — kept in sync with eval_flow.py DEFAULT_THRESHOLDS
 THRESHOLDS = {
-    "report_completeness/mean": 0.6,
+    "report_completeness/mean": 0.7,
+    "numeric_extraction_accuracy/mean": 0.7,
+    "municipality_match/mean": 0.8,
+    "confidence_acceptable/mean": 0.7,
 }
 
 

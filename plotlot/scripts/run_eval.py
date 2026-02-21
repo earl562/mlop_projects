@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from plotlot.config import settings  # noqa: E402
-from plotlot.observability.prompts import get_prompt_version, log_prompt_to_run  # noqa: E402
+from plotlot.observability.prompts import list_prompts, log_prompt_to_run  # noqa: E402
 
 GOLDEN_DATA_PATH = PROJECT_ROOT / "tests" / "eval" / "golden_data.json"
 
@@ -86,17 +86,19 @@ def main():
     timestamp = datetime.now(timezone.utc).isoformat()
 
     with mlflow.start_run(run_name=f"eval_{args.tag}"):
-        mlflow.set_tags(
-            {
-                "eval_tag": args.tag,
-                "eval_type": "live" if args.live else "offline",
-                "git_sha": git_sha,
-                "timestamp": timestamp,
-                "prompt_analysis_version": get_prompt_version("analysis"),
-                "golden_sample_count": str(len(golden_data)),
-            }
-        )
-        log_prompt_to_run("analysis")
+        tags = {
+            "eval_tag": args.tag,
+            "eval_type": "live" if args.live else "offline",
+            "git_sha": git_sha,
+            "timestamp": timestamp,
+            "golden_sample_count": str(len(golden_data)),
+        }
+        for p in list_prompts():
+            tags[f"prompt_{p['name']}_version"] = p["version"]
+        mlflow.set_tags(tags)
+
+        for p in list_prompts():
+            log_prompt_to_run(p["name"])
 
         if args.live:
             print("Live eval not yet implemented — run the live pytest instead:")
