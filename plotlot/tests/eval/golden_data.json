@@ -90,48 +90,114 @@
     }
   },
   {
-    "_comment": "POSITIVE: Unincorporated Miami-Dade — tests the MDC two-layer zoning lookup",
+    "_comment": "POSITIVE: Unincorporated Miami-Dade RU-1 — tests MDC two-layer zoning lookup. Verified from MDC Ch.33 Sec. 33-49/33-50.",
     "inputs": {"address": "10000 SW 56th St, Miami, FL 33165"},
     "outputs": {
+      "zoning_district": "RU-1",
       "municipality": "Unincorporated Miami-Dade",
       "county": "Miami-Dade",
+      "confidence": "medium",
+      "numeric_params": {
+        "min_lot_area_per_unit_sqft": 7500,
+        "max_lot_coverage_pct": 40,
+        "max_height_ft": 35,
+        "max_stories": 2,
+        "setback_front_ft": 25,
+        "setback_side_ft": 7.5,
+        "setback_rear_ft": 25
+      },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
+      "zoning_district": "RU-1",
       "municipality": "Unincorporated Miami-Dade",
       "county": "Miami-Dade",
-      "confidence_min": "low"
+      "confidence_min": "low",
+      "numeric_params": {
+        "min_lot_area_per_unit_sqft": 7500,
+        "max_lot_coverage_pct": 40,
+        "max_height_ft": 35,
+        "max_stories": 2,
+        "setback_front_ft": 25,
+        "setback_side_ft": 7.5,
+        "setback_rear_ft": 25
+      },
+      "numeric_tolerance": 0.25
     }
   },
   {
-    "_comment": "POSITIVE: Boca Raton — Palm Beach county, third ArcGIS API integration",
+    "_comment": "POSITIVE: Boca Raton R-1-D — Palm Beach county, third ArcGIS API integration. Verified from Boca Raton Sec. 28-336.",
     "inputs": {"address": "200 E Palmetto Park Rd, Boca Raton, FL 33432"},
     "outputs": {
+      "zoning_district": "R-1-D",
       "municipality": "Boca Raton",
       "county": "Palm Beach",
+      "confidence": "medium",
+      "numeric_params": {
+        "min_lot_area_per_unit_sqft": 8250,
+        "max_height_ft": 35,
+        "setback_front_ft": 25,
+        "setback_side_ft": 12.5,
+        "setback_rear_ft": 20,
+        "parking_spaces_per_unit": 2.0
+      },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
+      "zoning_district": "R-1-D",
       "municipality": "Boca Raton",
       "county": "Palm Beach",
-      "confidence_min": "low"
+      "confidence_min": "low",
+      "numeric_params": {
+        "min_lot_area_per_unit_sqft": 8250,
+        "max_height_ft": 35,
+        "setback_front_ft": 25,
+        "setback_side_ft": 12.5,
+        "setback_rear_ft": 20,
+        "parking_spaces_per_unit": 2.0
+      },
+      "numeric_tolerance": 0.25
     }
   },
   {
-    "_comment": "POSITIVE: Miami Gardens multifamily R-3 — tests higher density extraction",
+    "_comment": "POSITIVE: Miami Gardens R-15 multifamily — tests higher density extraction. Miami Gardens has no R-3; R-15 is closest multifamily. Verified from Miami Gardens Sec. 34-342.",
     "inputs": {"address": "17501 NW 7th Ave, Miami Gardens, FL 33169"},
     "outputs": {
+      "zoning_district": "R-15",
       "municipality": "Miami Gardens",
       "county": "Miami-Dade",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_density_units_per_acre": 15.0,
+        "max_height_ft": 40,
+        "max_stories": 3,
+        "max_lot_coverage_pct": 60,
+        "setback_front_ft": 25,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 25,
+        "parking_spaces_per_unit": 2.0
+      },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
+      "zoning_district": "R-15",
       "municipality": "Miami Gardens",
       "county": "Miami-Dade",
-      "confidence_min": "low"
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_density_units_per_acre": 15.0,
+        "max_height_ft": 40,
+        "max_stories": 3,
+        "max_lot_coverage_pct": 60,
+        "setback_front_ft": 25,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 25,
+        "parking_spaces_per_unit": 2.0
+      },
+      "numeric_tolerance": 0.25
     }
   },
   {
@@ -172,11 +238,12 @@
     }
   },
   {
-    "_comment": "DATA QUALITY: Fort Lauderdale — has HR/personnel chunks, should still return zoning",
+    "_comment": "DATA QUALITY: Fort Lauderdale — has HR/personnel chunks, should still return zoning. Downtown location, likely commercial overlay.",
     "inputs": {"address": "100 N Andrews Ave, Fort Lauderdale, FL 33301"},
     "outputs": {
       "municipality": "Fort Lauderdale",
       "county": "Broward",
+      "confidence": "low",
       "has_summary": true
     },
     "expectations": {
@@ -184,6 +251,196 @@
       "county": "Broward",
       "confidence_min": "low",
       "summary_must_not_contain": ["personnel", "human resources", "employee benefits", "HR"]
+    }
+  },
+  {
+    "_comment": "POSITIVE: Miramar RM1 multifamily — tests Broward multifamily extraction. Verified from Miramar LDC Table 402-3 (RM1 Apartments).",
+    "inputs": {"address": "3600 SW 64th Ave, Miramar, FL 33023"},
+    "outputs": {
+      "zoning_district": "RM1",
+      "municipality": "Miramar",
+      "county": "Broward",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_height_ft": 45,
+        "max_lot_coverage_pct": 40,
+        "setback_front_ft": 20,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 15
+      },
+      "has_summary": true,
+      "has_allowed_uses": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "zoning_district": "RM1",
+      "municipality": "Miramar",
+      "county": "Broward",
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_height_ft": 45,
+        "max_lot_coverage_pct": 40,
+        "setback_front_ft": 20,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 15
+      },
+      "numeric_tolerance": 0.25
+    }
+  },
+  {
+    "_comment": "POSITIVE: Unincorporated MDC RU-4L multifamily — tests MDC higher-density multifamily extraction. Verified from MDC RU-4L standards.",
+    "inputs": {"address": "8600 SW 67th Ave, Miami, FL 33143"},
+    "outputs": {
+      "zoning_district": "RU-4L",
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_density_units_per_acre": 23,
+        "max_height_ft": 75,
+        "max_stories": 6,
+        "max_lot_coverage_pct": 30,
+        "setback_front_ft": 25,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 25
+      },
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "zoning_district": "RU-4L",
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_density_units_per_acre": 23,
+        "max_height_ft": 75,
+        "max_stories": 6,
+        "max_lot_coverage_pct": 30,
+        "setback_front_ft": 25,
+        "setback_side_ft": 15,
+        "setback_rear_ft": 25
+      },
+      "numeric_tolerance": 0.25
+    }
+  },
+  {
+    "_comment": "POSITIVE: Boca Raton R-1-A residential — tests low-density single-family in Palm Beach. Verified from Boca Raton Sec. 28-336.",
+    "inputs": {"address": "1099 SW 12th Ave, Boca Raton, FL 33486"},
+    "outputs": {
+      "zoning_district": "R-1-A",
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_height_ft": 35,
+        "setback_front_ft": 30,
+        "setback_side_ft": 25,
+        "setback_rear_ft": 25,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 140
+      },
+      "has_summary": true,
+      "has_allowed_uses": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "zoning_district": "R-1-A",
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_height_ft": 35,
+        "setback_front_ft": 30,
+        "setback_side_ft": 25,
+        "setback_rear_ft": 25,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 140
+      },
+      "numeric_tolerance": 0.20
+    }
+  },
+  {
+    "_comment": "POSITIVE: Fort Lauderdale RS-8 residential — tests Broward single-family with FAR constraint. Verified from ULDR Sec. 47-5.31.",
+    "inputs": {"address": "1517 NE 5th Ct, Fort Lauderdale, FL 33301"},
+    "outputs": {
+      "zoning_district": "RS-8",
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_density_units_per_acre": 8.0,
+        "max_height_ft": 35,
+        "setback_front_ft": 25,
+        "setback_side_ft": 5,
+        "setback_rear_ft": 15,
+        "max_lot_coverage_pct": 50,
+        "far_numeric": 0.75,
+        "min_unit_size_sqft": 1000,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 50
+      },
+      "has_summary": true,
+      "has_allowed_uses": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "zoning_district": "RS-8",
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_density_units_per_acre": 8.0,
+        "max_height_ft": 35,
+        "setback_front_ft": 25,
+        "setback_side_ft": 5,
+        "setback_rear_ft": 15,
+        "max_lot_coverage_pct": 50,
+        "far_numeric": 0.75,
+        "min_unit_size_sqft": 1000,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 50
+      },
+      "numeric_tolerance": 0.20
+    }
+  },
+  {
+    "_comment": "POSITIVE: Fort Lauderdale RMM-25 multifamily — tests Broward medium-density multifamily. Verified from ULDR Sec. 47-5.36.",
+    "inputs": {"address": "2881 NE 33rd Ct, Fort Lauderdale, FL 33308"},
+    "outputs": {
+      "zoning_district": "RMM-25",
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "confidence": "medium",
+      "numeric_params": {
+        "max_density_units_per_acre": 25,
+        "max_height_ft": 55,
+        "setback_front_ft": 25,
+        "setback_side_ft": 10,
+        "setback_rear_ft": 20,
+        "min_unit_size_sqft": 400,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 50
+      },
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "zoning_district": "RMM-25",
+      "municipality": "Fort Lauderdale",
+      "county": "Broward",
+      "confidence_min": "low",
+      "numeric_params": {
+        "max_density_units_per_acre": 25,
+        "max_height_ft": 55,
+        "setback_front_ft": 25,
+        "setback_side_ft": 10,
+        "setback_rear_ft": 20,
+        "min_unit_size_sqft": 400,
+        "parking_spaces_per_unit": 2.0,
+        "min_lot_width_ft": 50
+      },
+      "numeric_tolerance": 0.25
     }
   }
 ]

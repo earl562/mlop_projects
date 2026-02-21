@@ -34,3 +34,4 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen --dev --extra eval
       - run: uv run python -m pytest tests/eval/test_eval_scorers.py -v --tb=short
+      - run: uv run python -m pytest tests/eval/test_eval_offline.py -v --tb=short

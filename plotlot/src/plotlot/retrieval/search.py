@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from plotlot.core.types import SearchResult
 from plotlot.ingestion.embedder import embed_texts
-from plotlot.observability.tracing import trace
+from plotlot.observability.tracing import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 RRF_K = 60
 
 
-@trace(name="hybrid_search", span_type="RETRIEVER")
 async def hybrid_search(
     session: AsyncSession,
     municipality: str,
@@ -29,20 +28,45 @@ async def hybrid_search(
     If an embedding is provided it is used directly; otherwise the zone_code
     is embedded at query time with input_type="query".
     """
-    # Embed the search query for vector similarity
-    if embedding is None:
-        try:
-            vectors = await embed_texts([zone_code], input_type="query")
-            embedding = vectors[0] if vectors else None
-        except Exception:
-            logger.warning("Query embedding failed, falling back to keyword-only search")
-            embedding = None
+    with start_span(name="hybrid_search", span_type="RETRIEVER") as span:
+        span.set_inputs({
+            "municipality": municipality,
+            "query": zone_code,
+            "limit": limit,
+        })
 
-    if embedding is not None:
-        return await _hybrid_rrf(session, municipality, zone_code, embedding, limit)
+        # Embed the search query for vector similarity
+        if embedding is None:
+            try:
+                vectors = await embed_texts([zone_code], input_type="query")
+                embedding = vectors[0] if vectors else None
+            except Exception:
+                logger.warning("Query embedding failed, falling back to keyword-only search")
+                embedding = None
 
-    # Fallback: keyword-only when embedding unavailable
-    return await _keyword_only(session, municipality, zone_code, limit)
+        if embedding is not None:
+            results = await _hybrid_rrf(session, municipality, zone_code, embedding, limit)
+        else:
+            # Fallback: keyword-only when embedding unavailable
+            results = await _keyword_only(session, municipality, zone_code, limit)
+
+        # Log retrieval outputs for replay — top 5 with sections, zone_codes, scores
+        top_chunks = [
+            {
+                "section": r.section,
+                "section_title": r.section_title,
+                "zone_codes": r.zone_codes,
+                "score": round(r.score, 4),
+            }
+            for r in results[:5]
+        ]
+        span.set_outputs({
+            "result_count": len(results),
+            "search_mode": "hybrid_rrf" if embedding is not None else "keyword_only",
+            "top_chunks": top_chunks,
+        })
+
+        return results
 
 
 async def _hybrid_rrf(

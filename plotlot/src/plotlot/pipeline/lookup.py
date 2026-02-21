@@ -410,9 +410,15 @@ async def _agentic_analysis(
                 break
             tool_calls = response.get("tool_calls", [])
             content = response.get("content", "")
+            tool_names = [
+                tc.get("function", {}).get("name", "")
+                for tc in tool_calls
+            ]
             span.set_outputs({
                 "tool_calls": len(tool_calls),
+                "tool_names": tool_names,
                 "has_content": bool(content),
+                "content_preview": content[:200] if content else "",
             })
 
         if not tool_calls:

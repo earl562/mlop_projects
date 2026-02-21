@@ -14,6 +14,7 @@ from tests.eval.scorers import (
     max_units_match,
     numeric_extraction_accuracy,
     report_completeness,
+    setback_accuracy,
     zoning_district_match,
 )
 
@@ -107,6 +108,55 @@ class TestZoningDistrictMatch:
             outputs={"zoning_district": " R-1 "},
             expectations={"zoning_district": "R-1"},
         ) is True
+
+
+class TestSetbackAccuracy:
+    def test_all_setbacks_match(self):
+        """All setbacks within tolerance → perfect score."""
+        result = setback_accuracy(
+            outputs={"numeric_params": {
+                "setback_front_ft": 25.0,
+                "setback_side_ft": 7.5,
+                "setback_rear_ft": 25.0,
+            }},
+            expectations={
+                "numeric_params": {
+                    "setback_front_ft": 25.0,
+                    "setback_side_ft": 7.5,
+                    "setback_rear_ft": 25.0,
+                },
+                "numeric_tolerance": 0.1,
+            },
+        )
+        assert result.value == 1.0
+
+    def test_partial_setback_match(self):
+        """One setback missing → partial score."""
+        result = setback_accuracy(
+            outputs={"numeric_params": {
+                "setback_front_ft": 25.0,
+                "setback_side_ft": 7.5,
+            }},
+            expectations={
+                "numeric_params": {
+                    "setback_front_ft": 25.0,
+                    "setback_side_ft": 7.5,
+                    "setback_rear_ft": 25.0,
+                },
+                "numeric_tolerance": 0.1,
+            },
+        )
+        assert 0.0 < result.value < 1.0
+        assert "MISSING" in result.rationale
+
+    def test_no_expected_setbacks(self):
+        """No expected setbacks → perfect score (nothing to check)."""
+        result = setback_accuracy(
+            outputs={"numeric_params": {"max_height_ft": 35.0}},
+            expectations={"numeric_params": {"max_height_ft": 35.0}},
+        )
+        assert result.value == 1.0
+        assert "No expected setbacks" in result.rationale
 
 
 class TestMaxUnitsMatch:

@@ -34,9 +34,11 @@ class TestPromptRegistry:
     def test_list_prompts(self):
         """All registered prompts are listed."""
         prompts = list_prompts()
-        assert len(prompts) >= 1
+        assert len(prompts) == 3
         names = [p["name"] for p in prompts]
         assert "analysis" in names
+        assert "chat_agent" in names
+        assert "direct_analysis" in names
 
     def test_unknown_prompt_raises(self):
         """Unknown prompt name raises KeyError."""

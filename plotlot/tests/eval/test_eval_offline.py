@@ -61,8 +61,8 @@ class TestOfflineEval:
             assert len(eval_table) == len(golden_data)
 
     def test_miami_gardens_strict(self, golden_data, all_scorers):
-        """Miami Gardens sample has 10% tolerance — all 10 params should match."""
-        mg_data = [s for s in golden_data if "Miami" in s["inputs"]["address"]]
+        """Miami Gardens R-1 sample has 10% tolerance — all 10 params should match."""
+        mg_data = [s for s in golden_data if s["inputs"]["address"] == "171 NE 209th Ter, Miami, FL 33179"]
         assert len(mg_data) == 1
 
         result = mlflow.genai.evaluate(data=mg_data, scorers=all_scorers)
@@ -73,8 +73,8 @@ class TestOfflineEval:
         )
 
     def test_miramar_tolerant(self, golden_data, all_scorers):
-        """Miramar sample has 50% tolerance — should still pass."""
-        mir_data = [s for s in golden_data if "Miramar" in s["inputs"]["address"]]
+        """Miramar RS5 sample has 50% tolerance — should still pass."""
+        mir_data = [s for s in golden_data if s["inputs"]["address"] == "7940 Plantation Blvd, Miramar, FL 33023"]
         assert len(mir_data) == 1
 
         result = mlflow.genai.evaluate(data=mir_data, scorers=all_scorers)
@@ -82,4 +82,32 @@ class TestOfflineEval:
         accuracy_key = "numeric_extraction_accuracy/mean"
         assert result.metrics[accuracy_key] >= 0.8, (
             f"Miramar numeric accuracy {result.metrics[accuracy_key]:.2f} < 0.8"
+        )
+
+    def test_all_municipalities_have_numeric_params(self, golden_data, all_scorers):
+        """Every positive golden case with outputs should have numeric_params.
+
+        Exception: data quality cases (testing chunk filtering) may omit
+        numeric_params since their purpose is verifying retrieval quality.
+        """
+        positive = [s for s in golden_data if s.get("outputs") is not None]
+        for sample in positive:
+            comment = sample.get("_comment", "")
+            if "DATA QUALITY" in comment:
+                continue  # Data quality cases test retrieval, not extraction
+            municipality = sample["outputs"].get("municipality", "unknown")
+            assert sample["outputs"].get("numeric_params") or sample["expectations"].get("numeric_params"), (
+                f"Golden case for {municipality} is missing numeric_params — "
+                "every positive case should have verified dimensional standards"
+            )
+
+    def test_fort_lauderdale_present(self, golden_data, all_scorers):
+        """Fort Lauderdale should have at least 2 proper golden cases with numeric params."""
+        ftl_cases = [
+            s for s in golden_data
+            if s.get("outputs") and s["outputs"].get("municipality") == "Fort Lauderdale"
+            and s["outputs"].get("numeric_params")
+        ]
+        assert len(ftl_cases) >= 2, (
+            f"Expected at least 2 Fort Lauderdale cases with numeric params, got {len(ftl_cases)}"
         )

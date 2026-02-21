@@ -21,7 +21,10 @@ GOLDEN_DATA_PATH = (
 
 # Minimum acceptable metric values — below these, the eval fails
 DEFAULT_THRESHOLDS = {
-    "report_completeness/mean": 0.6,
+    "report_completeness/mean": 0.7,
+    "numeric_extraction_accuracy/mean": 0.7,
+    "municipality_match/mean": 0.8,
+    "confidence_acceptable/mean": 0.7,
 }
 
 
@@ -105,7 +108,7 @@ def eval_quality_check(
     import mlflow
 
     from plotlot.config import settings
-    from plotlot.observability.prompts import get_prompt_version, log_prompt_to_run
+    from plotlot.observability.prompts import get_prompt_version, list_prompts, log_prompt_to_run
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(settings.mlflow_experiment_name)
@@ -116,15 +119,19 @@ def eval_quality_check(
 
     # Log results to MLflow
     with mlflow.start_run(run_name=f"eval_{tag}"):
-        mlflow.set_tags(
-            {
-                "eval_tag": tag,
-                "eval_type": "offline",
-                "prompt_analysis_version": get_prompt_version("analysis"),
-                "quality_gate": "passed" if passed else "failed",
-            }
-        )
-        log_prompt_to_run("analysis")
+        # Tag all registered prompt versions for reproducibility
+        prompt_tags = {
+            "eval_tag": tag,
+            "eval_type": "offline",
+            "quality_gate": "passed" if passed else "failed",
+        }
+        for p in list_prompts():
+            prompt_tags[f"prompt_{p['name']}_version"] = p["version"]
+        mlflow.set_tags(prompt_tags)
+
+        # Log every registered prompt as an artifact
+        for p in list_prompts():
+            log_prompt_to_run(p["name"])
 
         for key, val in metrics.items():
             if isinstance(val, (int, float)):
