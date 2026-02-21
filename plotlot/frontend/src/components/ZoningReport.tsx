@@ -32,7 +32,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function DataRow({ label, value }: { label: string; value: string }) {
-  if (!value) return null;
+  if (!value || value === "null" || value === "undefined" || value === "Not specified") return null;
   return (
     <div className="flex justify-between border-b border-stone-200 py-1.5">
       <span className="text-sm text-stone-500">{label}</span>
@@ -41,8 +41,22 @@ function DataRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function UsesList({ title, uses, color }: { title: string; uses: string[]; color: string }) {
-  if (!uses.length) return null;
+function UsesList({ title, uses, color }: { title: string; uses: string[] | string | null | undefined; color: string }) {
+  let list: string[];
+  if (Array.isArray(uses)) {
+    list = uses;
+  } else if (typeof uses === "string") {
+    // Handle JSON-stringified arrays from backend (e.g. "[\"single-family\"]")
+    try {
+      const parsed = JSON.parse(uses);
+      list = Array.isArray(parsed) ? parsed : [uses];
+    } catch {
+      list = uses ? [uses] : [];
+    }
+  } else {
+    list = [];
+  }
+  if (!list.length) return null;
   const colors: Record<string, string> = {
     green: "bg-emerald-50 text-emerald-700",
     yellow: "bg-amber-50 text-amber-700",
@@ -52,7 +66,7 @@ function UsesList({ title, uses, color }: { title: string; uses: string[]; color
     <div>
       <h4 className="mb-1.5 text-xs font-medium text-stone-500">{title}</h4>
       <div className="flex flex-wrap gap-1.5">
-        {uses.map((use, i) => (
+        {list.map((use, i) => (
           <span key={i} className={`rounded-md px-2 py-0.5 text-xs ${colors[color]}`}>
             {use}
           </span>
@@ -111,19 +125,22 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       </Section>
 
       {/* Setbacks */}
-      {report.setbacks && (report.setbacks.front || report.setbacks.side || report.setbacks.rear) && (
+      {report.setbacks && [report.setbacks.front, report.setbacks.side, report.setbacks.rear].some((v) => v && v !== "null") && (
         <Section title="Setbacks">
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: "Front", value: report.setbacks.front },
               { label: "Side", value: report.setbacks.side },
               { label: "Rear", value: report.setbacks.rear },
-            ].map((s) => (
+            ].map((s) => {
+              const display = s.value && s.value !== "null" ? s.value : "N/A";
+              return (
               <div key={s.label} className="rounded-lg bg-stone-50 p-3 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
                 <div className="text-xs text-stone-500">{s.label}</div>
-                <div className="mt-1 text-lg font-semibold text-stone-800">{s.value || "N/A"}</div>
+                <div className="mt-1 text-lg font-semibold text-stone-800">{display}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Section>
       )}

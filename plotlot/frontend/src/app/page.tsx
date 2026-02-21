@@ -41,10 +41,15 @@ interface DisplayMessage {
 // ---------------------------------------------------------------------------
 
 const FL_PATTERNS = /\b(miami|fort lauderdale|hollywood|hialeah|pembroke|miramar|coral|doral|homestead|aventura|boca|delray|boynton|west palm|palm beach|broward|dade|FL|florida)\b/i;
-const ADDRESS_PATTERN = /\d+\s+\w+\s+(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ter|terrace|ct|court|ln|lane|way|pl|place|cir|circle)\b/i;
+const ADDRESS_PATTERN = /\d+\s+(?:\w+\s+)+(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ter|terrace|ct|court|ln|lane|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|real|path)\b/i;
+// Broader fallback: "123 Something, City, FL 33xxx" pattern (number + comma + FL indicator + zip)
+const ADDRESS_WITH_ZIP = /\d+\s+[\w\s]+,\s*[\w\s]+,\s*FL\s+\d{5}/i;
 
 function extractAddress(text: string): string | null {
   if (ADDRESS_PATTERN.test(text) && FL_PATTERNS.test(text)) {
+    return text.trim();
+  }
+  if (ADDRESS_WITH_ZIP.test(text)) {
     return text.trim();
   }
   if (/\b(analyze|look up|lookup|check|search|zoning (?:for|rules|regulations|code)|what can .* build)\b/i.test(text) && FL_PATTERNS.test(text)) {
