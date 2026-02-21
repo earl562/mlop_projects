@@ -51,6 +51,7 @@ ACCEPTABLE_ACCURACY = {"rooftop", "range_interpolation", "nearest_rooftop_match"
 def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
     """Serialize a ZoningReport to a JSON-safe dict for artifact logging."""
     from typing import Any
+
     result: dict[str, Any] = {
         "address": report.address,
         "formatted_address": report.formatted_address,
@@ -157,7 +158,9 @@ async def lookup_address(address: str) -> ZoningReport | None:
         lat = geo.get("lat")
         lng = geo.get("lng")
 
-        logger.info("Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng)
+        logger.info(
+            "Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng
+        )
 
         # Boundary enforcement — reject addresses outside our coverage area
         county_lower = county.lower() if county else ""
@@ -187,9 +190,12 @@ async def lookup_address(address: str) -> ZoningReport | None:
         if prop_record:
             logger.info(
                 "Property: folio=%s, zoning=%s, lot=%s sqft, %dbd/%gbth, built %d",
-                prop_record.folio, prop_record.zoning_code or "N/A",
-                prop_record.lot_size_sqft, prop_record.bedrooms,
-                prop_record.bathrooms, prop_record.year_built,
+                prop_record.folio,
+                prop_record.zoning_code or "N/A",
+                prop_record.lot_size_sqft,
+                prop_record.bedrooms,
+                prop_record.bathrooms,
+                prop_record.year_built,
             )
             # Prefer property record's municipality — more accurate than Geocodio
             # (e.g., Geocodio returns "Miami" for addresses in Miami Gardens)
@@ -197,30 +203,45 @@ async def lookup_address(address: str) -> ZoningReport | None:
             if prop_record.municipality:
                 pa_muni = prop_record.municipality.strip().title()
                 if pa_muni and len(pa_muni) > 3 and pa_muni.lower() != municipality.lower():
-                    logger.info("Municipality override: %s → %s (from property record)", municipality, pa_muni)
+                    logger.info(
+                        "Municipality override: %s → %s (from property record)",
+                        municipality,
+                        pa_muni,
+                    )
                     municipality = pa_muni
                     geo["municipality"] = municipality
         else:
             logger.warning("No property record found for %s in %s County", address, county)
 
         # Step 3: Hybrid search — use actual zoning code if we have it, else municipality
-        search_query = prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+        search_query = (
+            prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+        )
         session = await get_session()
         try:
             search_results = await hybrid_search(session, municipality, search_query, limit=15)
         finally:
             await session.close()
 
-        logger.info("Search: %d chunks for query '%s' in %s", len(search_results), search_query, municipality)
+        logger.info(
+            "Search: %d chunks for query '%s' in %s",
+            len(search_results),
+            search_query,
+            municipality,
+        )
 
         # Log Phase 1 results as params
-        log_params({
-            "county": county,
-            "municipality": municipality,
-            "has_property_record": str(bool(prop_record)),
-            "zoning_code": prop_record.zoning_code if prop_record and prop_record.zoning_code else "N/A",
-            "search_result_count": str(len(search_results)),
-        })
+        log_params(
+            {
+                "county": county,
+                "municipality": municipality,
+                "has_property_record": str(bool(prop_record)),
+                "zoning_code": prop_record.zoning_code
+                if prop_record and prop_record.zoning_code
+                else "N/A",
+                "search_result_count": str(len(search_results)),
+            }
+        )
 
         # ── Phase 2: Agentic LLM analysis ──
 
@@ -235,7 +256,11 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         # ── Phase 3: Deterministic max-units calculation ──
 
-        if report.numeric_params and report.property_record and report.property_record.lot_size_sqft > 0:
+        if (
+            report.numeric_params
+            and report.property_record
+            and report.property_record.lot_size_sqft > 0
+        ):
             lot_width, lot_depth = parse_lot_dimensions(
                 report.property_record.lot_dimensions or "",
             )
@@ -254,15 +279,19 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         # Log analysis metrics
         confidence_map = {"high": 1.0, "medium": 0.66, "low": 0.33}
-        log_metrics({
-            "confidence_score": confidence_map.get(report.confidence, 0.0),
-            "source_count": float(len(report.sources)),
-            "has_numeric_params": 1.0 if report.numeric_params else 0.0,
-        })
+        log_metrics(
+            {
+                "confidence_score": confidence_map.get(report.confidence, 0.0),
+                "source_count": float(len(report.sources)),
+                "has_numeric_params": 1.0 if report.numeric_params else 0.0,
+            }
+        )
         if report.density_analysis:
-            log_metrics({
-                "max_units": float(report.density_analysis.max_units),
-            })
+            log_metrics(
+                {
+                    "max_units": float(report.density_analysis.max_units),
+                }
+            )
 
         # Log full report as artifact
         log_dict(report_to_dict(report), "report.json")
@@ -304,7 +333,10 @@ async def _agentic_analysis(
                     "type": "object",
                     "properties": {
                         "municipality": {"type": "string"},
-                        "query": {"type": "string", "description": "Zoning code or topic to search for"},
+                        "query": {
+                            "type": "string",
+                            "description": "Zoning code or topic to search for",
+                        },
                     },
                     "required": ["municipality", "query"],
                 },
@@ -394,9 +426,7 @@ async def _agentic_analysis(
         {"role": "user", "content": context_msg},
     ]
 
-    all_sources = [
-        f"{r.section} — {r.section_title}" for r in search_results if r.section
-    ]
+    all_sources = [f"{r.section} — {r.section_title}" for r in search_results if r.section]
 
     for turn in range(MAX_ANALYSIS_TURNS):
         logger.info("Analysis turn %d/%d", turn + 1, MAX_ANALYSIS_TURNS)
@@ -410,16 +440,15 @@ async def _agentic_analysis(
                 break
             tool_calls = response.get("tool_calls", [])
             content = response.get("content", "")
-            tool_names = [
-                tc.get("function", {}).get("name", "")
-                for tc in tool_calls
-            ]
-            span.set_outputs({
-                "tool_calls": len(tool_calls),
-                "tool_names": tool_names,
-                "has_content": bool(content),
-                "content_preview": content[:200] if content else "",
-            })
+            tool_names = [tc.get("function", {}).get("name", "") for tc in tool_calls]
+            span.set_outputs(
+                {
+                    "tool_calls": len(tool_calls),
+                    "tool_names": tool_names,
+                    "has_content": bool(content),
+                    "content_preview": content[:200] if content else "",
+                }
+            )
 
         if not tool_calls:
             # Try to parse content as JSON report (some models return JSON directly)
@@ -431,22 +460,26 @@ async def _agentic_analysis(
 
             # Re-prompt to use submit_report tool
             messages.append({"role": "assistant", "content": content})
-            messages.append({
-                "role": "user",
-                "content": (
-                    "STOP searching. Call the submit_report tool NOW with your analysis. "
-                    "Fill in all fields using the data you have. If some data is missing, "
-                    "use your expert knowledge and set confidence accordingly. "
-                    "You MUST call submit_report immediately."
-                ),
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "STOP searching. Call the submit_report tool NOW with your analysis. "
+                        "Fill in all fields using the data you have. If some data is missing, "
+                        "use your expert knowledge and set confidence accordingly. "
+                        "You MUST call submit_report immediately."
+                    ),
+                }
+            )
             continue
 
-        messages.append({
-            "role": "assistant",
-            "content": content,
-            "tool_calls": tool_calls,
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "content": content,
+                "tool_calls": tool_calls,
+            }
+        )
 
         for tc in tool_calls:
             fn_name = tc.get("function", {}).get("name", "")
@@ -473,17 +506,20 @@ async def _agentic_analysis(
                     finally:
                         await session.close()
 
-                    all_sources.extend([
-                        f"{r.section} — {r.section_title}" for r in extra_results if r.section
-                    ])
+                    all_sources.extend(
+                        [f"{r.section} — {r.section_title}" for r in extra_results if r.section]
+                    )
 
                     if extra_results:
-                        chunks = [{
-                            "section": r.section,
-                            "title": r.section_title,
-                            "zone_codes": r.zone_codes,
-                            "text": r.chunk_text[:800],
-                        } for r in extra_results]
+                        chunks = [
+                            {
+                                "section": r.section,
+                                "title": r.section_title,
+                                "zone_codes": r.zone_codes,
+                                "text": r.chunk_text[:800],
+                            }
+                            for r in extra_results
+                        ]
                         tool_result = json.dumps({"status": "success", "chunks": chunks})
                     else:
                         tool_result = json.dumps({"status": "no_results"})
@@ -498,11 +534,13 @@ async def _agentic_analysis(
                 return _build_report(fn_args, address, geo, prop_record, all_sources)
 
             else:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": json.dumps({"error": f"Unknown tool: {fn_name}"}),
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps({"error": f"Unknown tool: {fn_name}"}),
+                    }
+                )
 
     # Fallback
     logger.warning("Agent did not submit report, building fallback")
@@ -551,7 +589,9 @@ def _build_context_message(address: str, geo: dict, prop_record, search_results:
         if prop_record.assessed_value:
             parts.append(f"- Assessed Value: ${prop_record.assessed_value:,.0f}")
         if prop_record.last_sale_price:
-            parts.append(f"- Last Sale: ${prop_record.last_sale_price:,.0f} ({prop_record.last_sale_date})")
+            parts.append(
+                f"- Last Sale: ${prop_record.last_sale_price:,.0f} ({prop_record.last_sale_date})"
+            )
         parts.append("")
     else:
         parts.append("## Property Record: Not found in county records\n")
@@ -579,7 +619,9 @@ def _analysis_system_prompt() -> str:
     return get_active_prompt("analysis")
 
 
-def _build_report(args: dict, address: str, geo: dict, prop_record, sources: list[str]) -> ZoningReport:
+def _build_report(
+    args: dict, address: str, geo: dict, prop_record, sources: list[str]
+) -> ZoningReport:
     """Build ZoningReport from agent submit_report args."""
     # Build numeric params from LLM-extracted values
     numeric_params = _extract_numeric_params(args)
@@ -617,6 +659,7 @@ def _build_report(args: dict, address: str, geo: dict, prop_record, sources: lis
 
 def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
     """Extract NumericZoningParams from submit_report args. Returns None if all empty."""
+
     def _num(key: str) -> float | None:
         val = args.get(key)
         if val is None:
@@ -653,15 +696,15 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
     )
 
     # Return None if no values were extracted
-    has_any = any(
-        getattr(params, f.name) is not None
-        for f in params.__dataclass_fields__.values()
-    )
+    has_any = any(getattr(params, f.name) is not None for f in params.__dataclass_fields__.values())
     return params if has_any else None
 
 
 def _build_fallback_report(
-    address: str, geo: dict, prop_record, sources: list[str],
+    address: str,
+    geo: dict,
+    prop_record,
+    sources: list[str],
 ) -> ZoningReport:
     """Build report from collected data when LLM doesn't submit."""
     return ZoningReport(
@@ -675,7 +718,7 @@ def _build_fallback_report(
         zoning_description=prop_record.zoning_description if prop_record else "",
         property_record=prop_record,
         summary="Automated analysis incomplete. Property data and ordinance sections were retrieved — "
-                "see sources below for relevant zoning regulations.",
+        "see sources below for relevant zoning regulations.",
         sources=sources,
         confidence="low",
     )

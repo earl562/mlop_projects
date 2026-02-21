@@ -62,7 +62,9 @@ class TestOfflineEval:
 
     def test_miami_gardens_strict(self, golden_data, all_scorers):
         """Miami Gardens R-1 sample has 10% tolerance — all 10 params should match."""
-        mg_data = [s for s in golden_data if s["inputs"]["address"] == "171 NE 209th Ter, Miami, FL 33179"]
+        mg_data = [
+            s for s in golden_data if s["inputs"]["address"] == "171 NE 209th Ter, Miami, FL 33179"
+        ]
         assert len(mg_data) == 1
 
         result = mlflow.genai.evaluate(data=mg_data, scorers=all_scorers)
@@ -74,7 +76,11 @@ class TestOfflineEval:
 
     def test_miramar_tolerant(self, golden_data, all_scorers):
         """Miramar RS5 sample has 50% tolerance — should still pass."""
-        mir_data = [s for s in golden_data if s["inputs"]["address"] == "7940 Plantation Blvd, Miramar, FL 33023"]
+        mir_data = [
+            s
+            for s in golden_data
+            if s["inputs"]["address"] == "7940 Plantation Blvd, Miramar, FL 33023"
+        ]
         assert len(mir_data) == 1
 
         result = mlflow.genai.evaluate(data=mir_data, scorers=all_scorers)
@@ -96,7 +102,9 @@ class TestOfflineEval:
             if "DATA QUALITY" in comment:
                 continue  # Data quality cases test retrieval, not extraction
             municipality = sample["outputs"].get("municipality", "unknown")
-            assert sample["outputs"].get("numeric_params") or sample["expectations"].get("numeric_params"), (
+            assert sample["outputs"].get("numeric_params") or sample["expectations"].get(
+                "numeric_params"
+            ), (
                 f"Golden case for {municipality} is missing numeric_params — "
                 "every positive case should have verified dimensional standards"
             )
@@ -104,8 +112,10 @@ class TestOfflineEval:
     def test_fort_lauderdale_present(self, golden_data, all_scorers):
         """Fort Lauderdale should have at least 2 proper golden cases with numeric params."""
         ftl_cases = [
-            s for s in golden_data
-            if s.get("outputs") and s["outputs"].get("municipality") == "Fort Lauderdale"
+            s
+            for s in golden_data
+            if s.get("outputs")
+            and s["outputs"].get("municipality") == "Fort Lauderdale"
             and s["outputs"].get("numeric_params")
         ]
         assert len(ftl_cases) >= 2, (

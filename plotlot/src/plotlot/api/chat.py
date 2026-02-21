@@ -45,10 +45,10 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 # Session management — bounded memory store with LRU eviction
 # ---------------------------------------------------------------------------
 
-MAX_MEMORY_MESSAGES = 50   # Keep last 50 messages per session
-MAX_AGENT_TURNS = 8        # Max tool-use loops per chat message
+MAX_MEMORY_MESSAGES = 50  # Keep last 50 messages per session
+MAX_AGENT_TURNS = 8  # Max tool-use loops per chat message
 MAX_TOKENS_PER_SESSION = 50_000  # Cost cap — prevent runaway token spend
-MAX_SESSIONS = 100         # Max concurrent sessions in memory (Render 512MB)
+MAX_SESSIONS = 100  # Max concurrent sessions in memory (Render 512MB)
 SESSION_TTL_SECONDS = 3600  # Evict sessions idle for 1 hour
 
 
@@ -78,10 +78,7 @@ class SessionStore:
         """Evict expired sessions, then LRU if still over capacity."""
         now = time.monotonic()
         # TTL eviction
-        expired = [
-            sid for sid, ts in self._last_access.items()
-            if now - ts > self._ttl
-        ]
+        expired = [sid for sid, ts in self._last_access.items() if now - ts > self._ttl]
         for sid in expired:
             self._evict(sid)
 
@@ -133,7 +130,8 @@ class SessionStore:
                 "message_count": len(self._conversations.get(sid, [])),
                 "last_message": (
                     self._conversations[sid][-1]["content"][:80]
-                    if self._conversations.get(sid) else ""
+                    if self._conversations.get(sid)
+                    else ""
                 ),
                 "tokens_used": self._tokens.get(sid, 0),
             }
@@ -163,7 +161,9 @@ def _build_report_context(report) -> str:
     ]
 
     if report.setbacks:
-        parts.append(f"- Setbacks: Front={report.setbacks.front}, Side={report.setbacks.side}, Rear={report.setbacks.rear}")
+        parts.append(
+            f"- Setbacks: Front={report.setbacks.front}, Side={report.setbacks.side}, Rear={report.setbacks.rear}"
+        )
     if report.max_height:
         parts.append(f"- Max Height: {report.max_height}")
     if report.max_density:
@@ -177,7 +177,9 @@ def _build_report_context(report) -> str:
 
     if report.density_analysis:
         da = report.density_analysis
-        parts.append(f"- Max Units: {da.max_units} (governing: {da.governing_constraint}, confidence: {da.confidence})")
+        parts.append(
+            f"- Max Units: {da.max_units} (governing: {da.governing_constraint}, confidence: {da.confidence})"
+        )
         for c in da.constraints:
             gov = " [GOVERNING]" if c.is_governing else ""
             parts.append(f"  - {c.name}: {c.max_units} units — {c.formula}{gov}")
@@ -408,9 +410,13 @@ CHAT_TOOLS = [
                     "land_use_type": {
                         "type": "string",
                         "enum": [
-                            "vacant_residential", "vacant_commercial",
-                            "single_family", "multifamily", "commercial",
-                            "industrial", "agricultural",
+                            "vacant_residential",
+                            "vacant_commercial",
+                            "single_family",
+                            "multifamily",
+                            "commercial",
+                            "industrial",
+                            "agricultural",
                         ],
                         "description": "Type of land use to filter by",
                     },
@@ -422,15 +428,39 @@ CHAT_TOOLS = [
                         "type": "number",
                         "description": "Minimum years of current ownership (e.g., 20 means last sold before 2006)",
                     },
-                    "min_lot_size_sqft": {"type": "number", "description": "Minimum lot size in square feet"},
-                    "max_lot_size_sqft": {"type": "number", "description": "Maximum lot size in square feet"},
-                    "min_sale_price": {"type": "number", "description": "Minimum last deed transfer price (what current owner paid)"},
-                    "max_sale_price": {"type": "number", "description": "Maximum last deed transfer price (what current owner paid)"},
-                    "min_assessed_value": {"type": "number", "description": "Minimum county tax assessed value in dollars"},
-                    "max_assessed_value": {"type": "number", "description": "Maximum county tax assessed value in dollars"},
-                    "year_built_before": {"type": "integer", "description": "Year built before (0 for vacant land)"},
+                    "min_lot_size_sqft": {
+                        "type": "number",
+                        "description": "Minimum lot size in square feet",
+                    },
+                    "max_lot_size_sqft": {
+                        "type": "number",
+                        "description": "Maximum lot size in square feet",
+                    },
+                    "min_sale_price": {
+                        "type": "number",
+                        "description": "Minimum last deed transfer price (what current owner paid)",
+                    },
+                    "max_sale_price": {
+                        "type": "number",
+                        "description": "Maximum last deed transfer price (what current owner paid)",
+                    },
+                    "min_assessed_value": {
+                        "type": "number",
+                        "description": "Minimum county tax assessed value in dollars",
+                    },
+                    "max_assessed_value": {
+                        "type": "number",
+                        "description": "Maximum county tax assessed value in dollars",
+                    },
+                    "year_built_before": {
+                        "type": "integer",
+                        "description": "Year built before (0 for vacant land)",
+                    },
                     "year_built_after": {"type": "integer", "description": "Year built after"},
-                    "owner_name_contains": {"type": "string", "description": "Owner name contains this text"},
+                    "owner_name_contains": {
+                        "type": "string",
+                        "description": "Owner name contains this text",
+                    },
                     "max_results": {
                         "type": "integer",
                         "description": "Maximum number of results to return (default 500, max 2000)",
@@ -530,15 +560,37 @@ CHAT_TOOLS = [
 
 # Tool groups for dynamic masking (Notion/CloudQuery pattern:
 # reduce context bloat by only showing relevant tools per turn)
-CORE_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
-    "geocode_address", "lookup_property_info", "search_zoning_ordinance", "web_search", "search_properties",
-}]
-DATASET_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
-    "filter_dataset", "get_dataset_info", "export_dataset",
-}]
-CREATION_TOOLS = [t for t in CHAT_TOOLS if t["function"]["name"] in {  # type: ignore[index]
-    "create_spreadsheet", "create_document",
-}]
+CORE_TOOLS = [
+    t
+    for t in CHAT_TOOLS
+    if t["function"]["name"]
+    in {  # type: ignore[index]
+        "geocode_address",
+        "lookup_property_info",
+        "search_zoning_ordinance",
+        "web_search",
+        "search_properties",
+    }
+]
+DATASET_TOOLS = [
+    t
+    for t in CHAT_TOOLS
+    if t["function"]["name"]
+    in {  # type: ignore[index]
+        "filter_dataset",
+        "get_dataset_info",
+        "export_dataset",
+    }
+]
+CREATION_TOOLS = [
+    t
+    for t in CHAT_TOOLS
+    if t["function"]["name"]
+    in {  # type: ignore[index]
+        "create_spreadsheet",
+        "create_document",
+    }
+]
 
 
 def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
@@ -565,9 +617,11 @@ def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
 # Tool execution
 # ---------------------------------------------------------------------------
 
+
 async def _execute_geocode(address: str, session_id: str = "") -> str:
     """Geocode an address to get municipality, county, and coordinates."""
     from plotlot.retrieval.geocode import geocode_address
+
     try:
         result = await geocode_address(address)
         if result:
@@ -575,21 +629,25 @@ async def _execute_geocode(address: str, session_id: str = "") -> str:
             # can use them even if the LLM truncates the values
             if session_id:
                 _sessions.set_geocode(session_id, result)
-            return json.dumps({
-                "status": "success",
-                "municipality": result["municipality"],
-                "county": result["county"],
-                "formatted_address": result["formatted_address"],
-                "lat": result.get("lat"),
-                "lng": result.get("lng"),
-                "next_step": "Now call lookup_property_info with this address, county, lat, lng to get the zoning code",
-            })
+            return json.dumps(
+                {
+                    "status": "success",
+                    "municipality": result["municipality"],
+                    "county": result["county"],
+                    "formatted_address": result["formatted_address"],
+                    "lat": result.get("lat"),
+                    "lng": result.get("lng"),
+                    "next_step": "Now call lookup_property_info with this address, county, lat, lng to get the zoning code",
+                }
+            )
         return json.dumps({"status": "not_found", "message": f"Could not geocode: {address}"})
     except Exception as e:
         return json.dumps({"status": "error", "message": f"Geocoding failed: {str(e)}"})
 
 
-async def _execute_lookup_property(address: str, county: str, lat: float, lng: float, session_id: str = "") -> str:
+async def _execute_lookup_property(
+    address: str, county: str, lat: float, lng: float, session_id: str = ""
+) -> str:
     """Look up property info from county Property Appraiser ArcGIS APIs."""
     from plotlot.retrieval.property import lookup_property
 
@@ -629,7 +687,12 @@ async def _execute_lookup_property(address: str, county: str, lat: float, lng: f
                     f"specific regulations for this zoning district"
                 )
             return json.dumps(result)
-        return json.dumps({"status": "not_found", "message": f"No property record found for {address} in {county}"})
+        return json.dumps(
+            {
+                "status": "not_found",
+                "message": f"No property record found for {address} in {county}",
+            }
+        )
     except Exception as e:
         return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
 
@@ -651,29 +714,40 @@ async def _execute_zoning_search(municipality: str, query: str) -> str:
 
         if not results:
             span.set_outputs({"result_count": 0, "status": "no_results"})
-            return json.dumps({"status": "no_results", "message": f"No ordinance sections found for '{query}' in {municipality}"})
+            return json.dumps(
+                {
+                    "status": "no_results",
+                    "message": f"No ordinance sections found for '{query}' in {municipality}",
+                }
+            )
 
         chunks = []
         for r in results:
-            chunks.append({
-                "section": r.section,
-                "title": r.section_title,
-                "zone_codes": r.zone_codes,
-                "text": r.chunk_text,
-            })
+            chunks.append(
+                {
+                    "section": r.section,
+                    "title": r.section_title,
+                    "zone_codes": r.zone_codes,
+                    "text": r.chunk_text,
+                }
+            )
 
-        span.set_outputs({
-            "result_count": len(results),
-            "status": "success",
-            "top_sections": [c["section"] for c in chunks[:5]],
-        })
+        span.set_outputs(
+            {
+                "result_count": len(results),
+                "status": "success",
+                "top_sections": [c["section"] for c in chunks[:5]],
+            }
+        )
         return json.dumps({"status": "success", "results": chunks})
 
 
 async def _execute_web_search(query: str) -> str:
     """Search the web via Jina.ai Search API."""
     if not settings.jina_api_key:
-        return json.dumps({"status": "error", "message": "Web search not configured (JINA_API_KEY not set)"})
+        return json.dumps(
+            {"status": "error", "message": "Web search not configured (JINA_API_KEY not set)"}
+        )
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -691,12 +765,14 @@ async def _execute_web_search(query: str) -> str:
             # Extract relevant results
             results = []
             for item in data.get("data", [])[:5]:
-                results.append({
-                    "title": item.get("title", ""),
-                    "url": item.get("url", ""),
-                    "description": item.get("description", "")[:300],
-                    "content": item.get("content", "")[:500],
-                })
+                results.append(
+                    {
+                        "title": item.get("title", ""),
+                        "url": item.get("url", ""),
+                        "description": item.get("description", "")[:300],
+                        "content": item.get("content", "")[:500],
+                    }
+                )
 
             return json.dumps({"status": "success", "results": results})
 
@@ -709,13 +785,15 @@ async def _execute_create_spreadsheet(title: str, headers: list[str], rows: list
     """Create a Google Sheets spreadsheet with data."""
     try:
         result = await create_spreadsheet(title, headers, rows)
-        return json.dumps({
-            "status": "success",
-            "spreadsheet_url": result.spreadsheet_url,
-            "title": result.title,
-            "row_count": len(rows),
-            "message": f"Created spreadsheet '{result.title}' with {len(rows)} rows",
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "spreadsheet_url": result.spreadsheet_url,
+                "title": result.title,
+                "row_count": len(rows),
+                "message": f"Created spreadsheet '{result.title}' with {len(rows)} rows",
+            }
+        )
     except Exception as e:
         logger.warning("Spreadsheet creation failed: %s", e)
         return json.dumps({"status": "error", "message": f"Failed to create spreadsheet: {str(e)}"})
@@ -725,12 +803,14 @@ async def _execute_create_document(title: str, content: str) -> str:
     """Create a Google Docs document with content."""
     try:
         result = await create_document(title, content)
-        return json.dumps({
-            "status": "success",
-            "document_url": result.document_url,
-            "title": result.title,
-            "message": f"Created document '{result.title}'",
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "document_url": result.document_url,
+                "title": result.title,
+                "message": f"Created document '{result.title}'",
+            }
+        )
     except Exception as e:
         logger.warning("Document creation failed: %s", e)
         return json.dumps({"status": "error", "message": f"Failed to create document: {str(e)}"})
@@ -766,24 +846,29 @@ async def _execute_search_properties(session_id: str, args: dict) -> str:
         records = await bulk_property_search(params)
 
         # Store in session
-        _sessions.set_dataset(session_id, DatasetInfo(
-            records=records,
-            search_params=args,
-            query_description=describe_search(args),
-            total_available=len(records),
-            fetched_at=datetime.now(timezone.utc).isoformat(),
-        ))
+        _sessions.set_dataset(
+            session_id,
+            DatasetInfo(
+                records=records,
+                search_params=args,
+                query_description=describe_search(args),
+                total_available=len(records),
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+            ),
+        )
 
         # Return summary + sample (not all records — avoids token blowout)
         sample = records[:10]
         stats = compute_dataset_stats(records)
-        return json.dumps({
-            "status": "success",
-            "total_results": len(records),
-            "sample": sample,
-            "stats": stats,
-            "message": f"Found {len(records)} properties. Use filter_dataset to narrow down or export_dataset to create a spreadsheet.",
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "total_results": len(records),
+                "sample": sample,
+                "stats": stats,
+                "message": f"Found {len(records)} properties. Use filter_dataset to narrow down or export_dataset to create a spreadsheet.",
+            }
+        )
     except Exception as e:
         logger.warning("Property search failed: %s", e)
         return json.dumps({"status": "error", "message": f"Property search failed: {str(e)}"})
@@ -793,7 +878,9 @@ async def _execute_filter_dataset(session_id: str, args: dict) -> str:
     """Filter/sort the in-session dataset."""
     dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
-        return json.dumps({"status": "error", "message": "No dataset in session. Use search_properties first."})
+        return json.dumps(
+            {"status": "error", "message": "No dataset in session. Use search_properties first."}
+        )
 
     records = dataset.records
 
@@ -811,80 +898,92 @@ async def _execute_filter_dataset(session_id: str, args: dict) -> str:
     # Apply limit (cast to int — LLM may pass as string)
     limit = args.get("limit")
     if limit:
-        records = records[:int(limit)]
+        records = records[: int(limit)]
 
     # Summary only mode
     if args.get("summary_only"):
-        return json.dumps({
-            "status": "success",
-            "count": len(records),
-            "stats": compute_dataset_stats(records),
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "count": len(records),
+                "stats": compute_dataset_stats(records),
+            }
+        )
 
     # Update dataset with filtered results
     desc_suffix = f" (filtered: {expression})" if expression else " (sorted)"
-    _sessions.set_dataset(session_id, DatasetInfo(
-        records=records,
-        search_params=dataset.search_params,
-        query_description=dataset.query_description + desc_suffix,
-        total_available=dataset.total_available,
-        fetched_at=dataset.fetched_at,
-    ))
+    _sessions.set_dataset(
+        session_id,
+        DatasetInfo(
+            records=records,
+            search_params=dataset.search_params,
+            query_description=dataset.query_description + desc_suffix,
+            total_available=dataset.total_available,
+            fetched_at=dataset.fetched_at,
+        ),
+    )
 
     sample = records[:10]
-    return json.dumps({
-        "status": "success",
-        "total_after_filter": len(records),
-        "sample": sample,
-        "message": f"Filtered to {len(records)} properties.",
-    })
+    return json.dumps(
+        {
+            "status": "success",
+            "total_after_filter": len(records),
+            "sample": sample,
+            "message": f"Filtered to {len(records)} properties.",
+        }
+    )
 
 
 async def _execute_get_dataset_info(session_id: str) -> str:
     """Get info about the current in-session dataset."""
     dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
-        return json.dumps({"status": "empty", "message": "No dataset in session. Use search_properties first."})
+        return json.dumps(
+            {"status": "empty", "message": "No dataset in session. Use search_properties first."}
+        )
 
     stats = compute_dataset_stats(dataset.records)
     sample = dataset.records[:5]
     fields = list(dataset.records[0].keys()) if dataset.records else []
 
-    return json.dumps({
-        "status": "success",
-        "count": len(dataset.records),
-        "fields": fields,
-        "search_description": dataset.query_description,
-        "fetched_at": dataset.fetched_at,
-        "stats": stats,
-        "sample": sample,
-    })
+    return json.dumps(
+        {
+            "status": "success",
+            "count": len(dataset.records),
+            "fields": fields,
+            "search_description": dataset.query_description,
+            "fetched_at": dataset.fetched_at,
+            "stats": stats,
+            "sample": sample,
+        }
+    )
 
 
 async def _execute_export_dataset(session_id: str, args: dict) -> str:
     """Export the in-session dataset to a Google Spreadsheet."""
     dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
-        return json.dumps({"status": "error", "message": "No dataset to export. Use search_properties first."})
+        return json.dumps(
+            {"status": "error", "message": "No dataset to export. Use search_properties first."}
+        )
 
     title = args.get("title") or f"PlotLot — {dataset.query_description}"
     include_fields = args.get("include_fields") or list(dataset.records[0].keys())
 
     headers = [f.replace("_", " ").title() for f in include_fields]
-    rows = [
-        [str(record.get(f, "")) for f in include_fields]
-        for record in dataset.records
-    ]
+    rows = [[str(record.get(f, "")) for f in include_fields] for record in dataset.records]
 
     try:
         result = await create_spreadsheet(title, headers, rows)
-        return json.dumps({
-            "status": "success",
-            "spreadsheet_url": result.spreadsheet_url,
-            "title": result.title,
-            "row_count": len(rows),
-            "message": f"Exported {len(rows)} properties to '{result.title}'",
-        })
+        return json.dumps(
+            {
+                "status": "success",
+                "spreadsheet_url": result.spreadsheet_url,
+                "title": result.title,
+                "row_count": len(rows),
+                "message": f"Exported {len(rows)} properties to '{result.title}'",
+            }
+        )
     except Exception as e:
         logger.warning("Dataset export failed: %s", e)
         return json.dumps({"status": "error", "message": f"Failed to export dataset: {str(e)}"})
@@ -936,6 +1035,7 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
 # SSE helpers
 # ---------------------------------------------------------------------------
 
+
 def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
@@ -943,6 +1043,7 @@ def _sse_event(event: str, data: dict) -> str:
 # ---------------------------------------------------------------------------
 # Chat endpoint
 # ---------------------------------------------------------------------------
+
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
@@ -983,20 +1084,25 @@ async def chat(request: ChatRequest):
             _span_ctx = start_span(name="chat_request", span_type="CHAIN")
             chat_span = _span_ctx.__enter__()
             try:
-                chat_span.set_inputs({
-                    "session_id": session_id,
-                    "message": request.message[:200],
-                    "has_report_context": bool(request.report_context),
-                })
+                chat_span.set_inputs(
+                    {
+                        "session_id": session_id,
+                        "message": request.message[:200],
+                        "has_report_context": bool(request.report_context),
+                    }
+                )
             except AttributeError:
                 pass  # No-op span in test env
 
             # Token budget check — prevent runaway cost
             if _sessions.get_tokens(session_id) >= MAX_TOKENS_PER_SESSION:
-                yield _sse_event("token", {
-                    "content": "I've reached the token limit for this session. "
-                    "Please start a new conversation to continue."
-                })
+                yield _sse_event(
+                    "token",
+                    {
+                        "content": "I've reached the token limit for this session. "
+                        "Please start a new conversation to continue."
+                    },
+                )
                 yield _sse_event("done", {})
                 return
 
@@ -1029,11 +1135,13 @@ async def chat(request: ChatRequest):
                     return
 
                 # Tool calls — execute them and loop
-                messages.append({
-                    "role": "assistant",
-                    "content": content,
-                    "tool_calls": tool_calls,
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": content,
+                        "tool_calls": tool_calls,
+                    }
+                )
 
                 for tc in tool_calls:
                     fn_name = tc.get("function", {}).get("name", "")
@@ -1058,32 +1166,43 @@ async def chat(request: ChatRequest):
                         "get_dataset_info": "Checking dataset...",
                         "export_dataset": "Exporting to Google Sheets...",
                     }
-                    yield _sse_event("tool_use", {
-                        "tool": fn_name,
-                        "args": fn_args,
-                        "message": tool_messages.get(fn_name, f"Using {fn_name}..."),
-                    })
+                    yield _sse_event(
+                        "tool_use",
+                        {
+                            "tool": fn_name,
+                            "args": fn_args,
+                            "message": tool_messages.get(fn_name, f"Using {fn_name}..."),
+                        },
+                    )
 
                     # Execute tool
                     result = await _execute_tool(fn_name, fn_args, session_id=session_id)
 
-                    yield _sse_event("tool_result", {
-                        "tool": fn_name,
-                        "status": "complete",
-                    })
+                    yield _sse_event(
+                        "tool_result",
+                        {
+                            "tool": fn_name,
+                            "status": "complete",
+                        },
+                    )
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": result,
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": result,
+                        }
+                    )
 
             # Exhausted tool-use turns — force a final text response (no tools)
             logger.info("Agent exhausted %d tool turns, forcing final response", MAX_AGENT_TURNS)
             final = await call_llm(messages)  # No tools → must respond with text
             final_content = final.get("content", "") if final else ""
             if not final_content:
-                final_content = content or "I gathered some information but couldn't fully answer. Could you rephrase your question?"
+                final_content = (
+                    content
+                    or "I gathered some information but couldn't fully answer. Could you rephrase your question?"
+                )
             yield _sse_event("token", {"content": final_content})
             memory.append({"role": "assistant", "content": final_content})
             yield _sse_event("done", {"full_content": final_content})

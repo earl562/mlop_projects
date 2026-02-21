@@ -62,7 +62,9 @@ def numeric_extraction_accuracy(outputs: dict, expectations: dict) -> Feedback:
     tolerance = expectations.get("numeric_tolerance", 0.1)
 
     if not expected_params:
-        return Feedback(name="numeric_extraction_accuracy", value=1.0, rationale="No params to check")
+        return Feedback(
+            name="numeric_extraction_accuracy", value=1.0, rationale="No params to check"
+        )
 
     matched = 0
     total = len(expected_params)
@@ -93,14 +95,17 @@ def numeric_extraction_accuracy(outputs: dict, expectations: dict) -> Feedback:
                 matched += 1
                 details.append(f"{key}: OK (error={relative_error:.1%})")
             else:
-                details.append(f"{key}: MISMATCH (actual={actual_f}, expected={expected_f}, "
-                               f"error={relative_error:.1%} > {tolerance:.0%})")
+                details.append(
+                    f"{key}: MISMATCH (actual={actual_f}, expected={expected_f}, "
+                    f"error={relative_error:.1%} > {tolerance:.0%})"
+                )
 
     score = matched / total if total > 0 else 0.0
     return Feedback(
         name="numeric_extraction_accuracy",
         value=score,
-        rationale=f"{matched}/{total} params within {tolerance:.0%} tolerance. " + "; ".join(details),
+        rationale=f"{matched}/{total} params within {tolerance:.0%} tolerance. "
+        + "; ".join(details),
     )
 
 
@@ -201,7 +206,8 @@ def setback_accuracy(outputs: dict, expectations: dict) -> Feedback:
     return Feedback(
         name="setback_accuracy",
         value=score,
-        rationale=f"{matched}/{total} setbacks within {tolerance:.0%} tolerance. " + "; ".join(details),
+        rationale=f"{matched}/{total} setbacks within {tolerance:.0%} tolerance. "
+        + "; ".join(details),
     )
 
 

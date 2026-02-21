@@ -108,7 +108,7 @@ def eval_quality_check(
     import mlflow
 
     from plotlot.config import settings
-    from plotlot.observability.prompts import get_prompt_version, list_prompts, log_prompt_to_run
+    from plotlot.observability.prompts import list_prompts, log_prompt_to_run
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(settings.mlflow_experiment_name)

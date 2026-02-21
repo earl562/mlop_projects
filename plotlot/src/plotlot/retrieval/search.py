@@ -29,11 +29,13 @@ async def hybrid_search(
     is embedded at query time with input_type="query".
     """
     with start_span(name="hybrid_search", span_type="RETRIEVER") as span:
-        span.set_inputs({
-            "municipality": municipality,
-            "query": zone_code,
-            "limit": limit,
-        })
+        span.set_inputs(
+            {
+                "municipality": municipality,
+                "query": zone_code,
+                "limit": limit,
+            }
+        )
 
         # Embed the search query for vector similarity
         if embedding is None:
@@ -60,11 +62,13 @@ async def hybrid_search(
             }
             for r in results[:5]
         ]
-        span.set_outputs({
-            "result_count": len(results),
-            "search_mode": "hybrid_rrf" if embedding is not None else "keyword_only",
-            "top_chunks": top_chunks,
-        })
+        span.set_outputs(
+            {
+                "result_count": len(results),
+                "search_mode": "hybrid_rrf" if embedding is not None else "keyword_only",
+                "top_chunks": top_chunks,
+            }
+        )
 
         return results
 

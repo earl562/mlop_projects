@@ -7,8 +7,6 @@ Run:
     uv run pytest tests/eval/test_eval_scorers.py -v
 """
 
-import pytest
-
 from tests.eval.scorers import (
     confidence_acceptable,
     max_units_match,
@@ -78,47 +76,64 @@ class TestReportCompletenessEdgeCases:
 
 class TestConfidenceOrdering:
     def test_high_meets_medium(self):
-        assert confidence_acceptable(
-            outputs={"confidence": "high"},
-            expectations={"confidence_min": "medium"},
-        ) is True
+        assert (
+            confidence_acceptable(
+                outputs={"confidence": "high"},
+                expectations={"confidence_min": "medium"},
+            )
+            is True
+        )
 
     def test_low_fails_medium(self):
-        assert confidence_acceptable(
-            outputs={"confidence": "low"},
-            expectations={"confidence_min": "medium"},
-        ) is False
+        assert (
+            confidence_acceptable(
+                outputs={"confidence": "low"},
+                expectations={"confidence_min": "medium"},
+            )
+            is False
+        )
 
     def test_medium_meets_medium(self):
-        assert confidence_acceptable(
-            outputs={"confidence": "medium"},
-            expectations={"confidence_min": "medium"},
-        ) is True
+        assert (
+            confidence_acceptable(
+                outputs={"confidence": "medium"},
+                expectations={"confidence_min": "medium"},
+            )
+            is True
+        )
 
 
 class TestZoningDistrictMatch:
     def test_case_insensitive(self):
-        assert zoning_district_match(
-            outputs={"zoning_district": "rs-4"},
-            expectations={"zoning_district": "RS-4"},
-        ) is True
+        assert (
+            zoning_district_match(
+                outputs={"zoning_district": "rs-4"},
+                expectations={"zoning_district": "RS-4"},
+            )
+            is True
+        )
 
     def test_whitespace_stripped(self):
-        assert zoning_district_match(
-            outputs={"zoning_district": " R-1 "},
-            expectations={"zoning_district": "R-1"},
-        ) is True
+        assert (
+            zoning_district_match(
+                outputs={"zoning_district": " R-1 "},
+                expectations={"zoning_district": "R-1"},
+            )
+            is True
+        )
 
 
 class TestSetbackAccuracy:
     def test_all_setbacks_match(self):
         """All setbacks within tolerance → perfect score."""
         result = setback_accuracy(
-            outputs={"numeric_params": {
-                "setback_front_ft": 25.0,
-                "setback_side_ft": 7.5,
-                "setback_rear_ft": 25.0,
-            }},
+            outputs={
+                "numeric_params": {
+                    "setback_front_ft": 25.0,
+                    "setback_side_ft": 7.5,
+                    "setback_rear_ft": 25.0,
+                }
+            },
             expectations={
                 "numeric_params": {
                     "setback_front_ft": 25.0,
@@ -133,10 +148,12 @@ class TestSetbackAccuracy:
     def test_partial_setback_match(self):
         """One setback missing → partial score."""
         result = setback_accuracy(
-            outputs={"numeric_params": {
-                "setback_front_ft": 25.0,
-                "setback_side_ft": 7.5,
-            }},
+            outputs={
+                "numeric_params": {
+                    "setback_front_ft": 25.0,
+                    "setback_side_ft": 7.5,
+                }
+            },
             expectations={
                 "numeric_params": {
                     "setback_front_ft": 25.0,
@@ -161,13 +178,19 @@ class TestSetbackAccuracy:
 
 class TestMaxUnitsMatch:
     def test_none_values(self):
-        assert max_units_match(
-            outputs={"max_units": None},
-            expectations={"max_units": 1},
-        ) is False
+        assert (
+            max_units_match(
+                outputs={"max_units": None},
+                expectations={"max_units": 1},
+            )
+            is False
+        )
 
     def test_both_none(self):
-        assert max_units_match(
-            outputs={"max_units": None},
-            expectations={"max_units": None},
-        ) is False
+        assert (
+            max_units_match(
+                outputs={"max_units": None},
+                expectations={"max_units": None},
+            )
+            is False
+        )
