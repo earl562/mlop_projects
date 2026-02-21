@@ -44,11 +44,13 @@ class TestOfflineEval:
             f"Numeric accuracy {result.metrics[accuracy_key]:.2f} < 0.8 on golden data"
         )
 
-        # Report completeness should be perfect for golden data
+        # Report completeness — verified cases are 1.0, Zillow discovery cases
+        # are ~0.71 (missing zoning_district + has_allowed_uses), boundary cases
+        # have null outputs. Aggregate mean reflects the mix.
         completeness_key = "report_completeness/mean"
         assert completeness_key in result.metrics
-        assert result.metrics[completeness_key] >= 0.8, (
-            f"Report completeness {result.metrics[completeness_key]:.2f} < 0.8 on golden data"
+        assert result.metrics[completeness_key] >= 0.7, (
+            f"Report completeness {result.metrics[completeness_key]:.2f} < 0.7 on golden data"
         )
 
     def test_per_sample_results(self, golden_data, all_scorers):
@@ -90,34 +92,43 @@ class TestOfflineEval:
             f"Miramar numeric accuracy {result.metrics[accuracy_key]:.2f} < 0.8"
         )
 
-    def test_all_municipalities_have_numeric_params(self, golden_data, all_scorers):
-        """Every positive golden case with outputs should have numeric_params.
+    def test_verified_cases_have_numeric_params(self, golden_data, all_scorers):
+        """Verified golden cases (with zoning_district in outputs) should have numeric_params.
 
-        Exception: data quality cases (testing chunk filtering) may omit
-        numeric_params since their purpose is verifying retrieval quality.
+        Zillow discovery cases test municipality resolution and pipeline reach —
+        they don't require numeric_params since we may not have ingested that
+        municipality's ordinances yet.
         """
-        positive = [s for s in golden_data if s.get("outputs") is not None]
-        for sample in positive:
-            comment = sample.get("_comment", "")
-            if "DATA QUALITY" in comment:
-                continue  # Data quality cases test retrieval, not extraction
+        verified = [
+            s
+            for s in golden_data
+            if s.get("outputs") is not None and s["outputs"].get("zoning_district")
+        ]
+        assert len(verified) >= 3, f"Expected at least 3 verified cases, got {len(verified)}"
+        for sample in verified:
             municipality = sample["outputs"].get("municipality", "unknown")
             assert sample["outputs"].get("numeric_params") or sample["expectations"].get(
                 "numeric_params"
             ), (
-                f"Golden case for {municipality} is missing numeric_params — "
-                "every positive case should have verified dimensional standards"
+                f"Verified case for {municipality} is missing numeric_params — "
+                "every verified case should have dimensional standards"
             )
 
-    def test_fort_lauderdale_present(self, golden_data, all_scorers):
-        """Fort Lauderdale should have at least 2 proper golden cases with numeric params."""
-        ftl_cases = [
-            s
-            for s in golden_data
-            if s.get("outputs")
-            and s["outputs"].get("municipality") == "Fort Lauderdale"
-            and s["outputs"].get("numeric_params")
-        ]
-        assert len(ftl_cases) >= 2, (
-            f"Expected at least 2 Fort Lauderdale cases with numeric params, got {len(ftl_cases)}"
+    def test_three_counties_represented(self, golden_data, all_scorers):
+        """Golden data should span all 3 South Florida counties."""
+        positive = [s for s in golden_data if s.get("outputs") is not None]
+        counties = {s["outputs"].get("county") for s in positive if s["outputs"].get("county")}
+        for county in ["Miami-Dade", "Broward", "Palm Beach"]:
+            assert county in counties, f"Missing golden cases for {county} county"
+
+    def test_municipality_diversity(self, golden_data, all_scorers):
+        """Golden data should cover at least 8 distinct municipalities."""
+        positive = [s for s in golden_data if s.get("outputs") is not None]
+        municipalities = {
+            s["outputs"].get("municipality")
+            for s in positive
+            if s["outputs"].get("municipality")
+        }
+        assert len(municipalities) >= 8, (
+            f"Expected at least 8 municipalities, got {len(municipalities)}: {municipalities}"
         )

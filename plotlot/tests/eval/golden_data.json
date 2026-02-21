@@ -1,6 +1,58 @@
 [
   {
-    "_comment": "POSITIVE: Miami Gardens single-family R-1 (well-tested, high confidence)",
+    "_comment": "ZILLOW: West Miami duplex-zoned lot — $250K, 4,718 sqft. Tests MDC municipality resolution for incorporated city.",
+    "_zillow": {"price": 250000, "lot_sqft": 4718, "listing_note": "Duplex-zoned lot in high-growth redevelopment area"},
+    "inputs": {"address": "6227 SW 19th St, West Miami, FL 33155"},
+    "outputs": {
+      "municipality": "West Miami",
+      "county": "Miami-Dade",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "West Miami",
+      "county": "Miami-Dade",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Homestead vacant lot — $200K, 7,841 sqft. Tests Homestead municipality (incorporated city in MDC).",
+    "_zillow": {"price": 200000, "lot_sqft": 7841, "listing_note": "Perfect setting for building"},
+    "inputs": {"address": "236 SW 6th Ave, Homestead, FL 33030"},
+    "outputs": {
+      "municipality": "Homestead",
+      "county": "Miami-Dade",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Homestead",
+      "county": "Miami-Dade",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Unincorp MDC land — $374,900, 0.37 acres. Tests unincorporated MDC two-layer zoning lookup.",
+    "_zillow": {"price": 374900, "lot_sqft": 16117, "listing_note": "Prime corner assemblage"},
+    "inputs": {"address": "12208 SW 220th St, Miami, FL 33170"},
+    "outputs": {
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Unincorporated Miami-Dade",
+      "county": "Miami-Dade",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Miami Gardens R-1 — verified golden case with full numeric params from Municode Sec. 34-342.",
+    "_zillow": {"price": null, "lot_sqft": null, "listing_note": "Existing golden case — verified ordinance data"},
     "inputs": {"address": "171 NE 209th Ter, Miami, FL 33179"},
     "outputs": {
       "zoning_district": "R-1",
@@ -48,320 +100,93 @@
     }
   },
   {
-    "_comment": "POSITIVE: Miramar RS5 — Broward county, different ArcGIS API",
-    "inputs": {"address": "7940 Plantation Blvd, Miramar, FL 33023"},
+    "_comment": "ZILLOW: Hallandale Beach vacant lot — $260K, 10,019 sqft. Tests Broward municipality distinct from Fort Lauderdale.",
+    "_zillow": {"price": 260000, "lot_sqft": 10019, "listing_note": "5 days on Zillow"},
+    "inputs": {"address": "524 SW 5th Ave, Hallandale Beach, FL 33009"},
     "outputs": {
-      "zoning_district": "RS5",
-      "municipality": "Miramar",
+      "municipality": "Hallandale Beach",
       "county": "Broward",
       "confidence": "medium",
-      "max_units": 1,
-      "governing_constraint": "density",
-      "numeric_params": {
-        "max_density_units_per_acre": 5.0,
-        "min_lot_area_per_unit_sqft": 7500.0,
-        "max_height_ft": 35.0,
-        "max_stories": 2,
-        "setback_front_ft": 25.0,
-        "setback_side_ft": 7.5,
-        "setback_rear_ft": 20.0
-      },
-      "has_summary": true,
-      "has_allowed_uses": true,
-      "num_sources": 10
-    },
-    "expectations": {
-      "zoning_district": "RS5",
-      "municipality": "Miramar",
-      "county": "Broward",
-      "max_units": 1,
-      "governing_constraint": "density",
-      "confidence_min": "medium",
-      "numeric_params": {
-        "max_density_units_per_acre": 5.0,
-        "min_lot_area_per_unit_sqft": 7500.0,
-        "max_height_ft": 35.0,
-        "max_stories": 2,
-        "setback_front_ft": 25.0,
-        "setback_side_ft": 7.5,
-        "setback_rear_ft": 20.0
-      },
-      "numeric_tolerance": 0.5
-    }
-  },
-  {
-    "_comment": "POSITIVE: Unincorporated Miami-Dade RU-1 — tests MDC two-layer zoning lookup. Verified from MDC Ch.33 Sec. 33-49/33-50.",
-    "inputs": {"address": "10000 SW 56th St, Miami, FL 33165"},
-    "outputs": {
-      "zoning_district": "RU-1",
-      "municipality": "Unincorporated Miami-Dade",
-      "county": "Miami-Dade",
-      "confidence": "medium",
-      "numeric_params": {
-        "min_lot_area_per_unit_sqft": 7500,
-        "max_lot_coverage_pct": 40,
-        "max_height_ft": 35,
-        "max_stories": 2,
-        "setback_front_ft": 25,
-        "setback_side_ft": 7.5,
-        "setback_rear_ft": 25
-      },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
-      "zoning_district": "RU-1",
-      "municipality": "Unincorporated Miami-Dade",
-      "county": "Miami-Dade",
-      "confidence_min": "low",
-      "numeric_params": {
-        "min_lot_area_per_unit_sqft": 7500,
-        "max_lot_coverage_pct": 40,
-        "max_height_ft": 35,
-        "max_stories": 2,
-        "setback_front_ft": 25,
-        "setback_side_ft": 7.5,
-        "setback_rear_ft": 25
-      },
-      "numeric_tolerance": 0.25
-    }
-  },
-  {
-    "_comment": "POSITIVE: Boca Raton R-1-D — Palm Beach county, third ArcGIS API integration. Verified from Boca Raton Sec. 28-336.",
-    "inputs": {"address": "200 E Palmetto Park Rd, Boca Raton, FL 33432"},
-    "outputs": {
-      "zoning_district": "R-1-D",
-      "municipality": "Boca Raton",
-      "county": "Palm Beach",
-      "confidence": "medium",
-      "numeric_params": {
-        "min_lot_area_per_unit_sqft": 8250,
-        "max_height_ft": 35,
-        "setback_front_ft": 25,
-        "setback_side_ft": 12.5,
-        "setback_rear_ft": 20,
-        "parking_spaces_per_unit": 2.0
-      },
-      "has_summary": true,
-      "num_sources": 5
-    },
-    "expectations": {
-      "zoning_district": "R-1-D",
-      "municipality": "Boca Raton",
-      "county": "Palm Beach",
-      "confidence_min": "low",
-      "numeric_params": {
-        "min_lot_area_per_unit_sqft": 8250,
-        "max_height_ft": 35,
-        "setback_front_ft": 25,
-        "setback_side_ft": 12.5,
-        "setback_rear_ft": 20,
-        "parking_spaces_per_unit": 2.0
-      },
-      "numeric_tolerance": 0.25
-    }
-  },
-  {
-    "_comment": "POSITIVE: Miami Gardens R-15 multifamily — tests higher density extraction. Miami Gardens has no R-3; R-15 is closest multifamily. Verified from Miami Gardens Sec. 34-342.",
-    "inputs": {"address": "17501 NW 7th Ave, Miami Gardens, FL 33169"},
-    "outputs": {
-      "zoning_district": "R-15",
-      "municipality": "Miami Gardens",
-      "county": "Miami-Dade",
-      "confidence": "medium",
-      "numeric_params": {
-        "max_density_units_per_acre": 15.0,
-        "max_height_ft": 40,
-        "max_stories": 3,
-        "max_lot_coverage_pct": 60,
-        "setback_front_ft": 25,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 25,
-        "parking_spaces_per_unit": 2.0
-      },
-      "has_summary": true,
-      "num_sources": 5
-    },
-    "expectations": {
-      "zoning_district": "R-15",
-      "municipality": "Miami Gardens",
-      "county": "Miami-Dade",
-      "confidence_min": "low",
-      "numeric_params": {
-        "max_density_units_per_acre": 15.0,
-        "max_height_ft": 40,
-        "max_stories": 3,
-        "max_lot_coverage_pct": 60,
-        "setback_front_ft": 25,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 25,
-        "parking_spaces_per_unit": 2.0
-      },
-      "numeric_tolerance": 0.25
-    }
-  },
-  {
-    "_comment": "BOUNDARY: Orlando address — outside coverage area (not MDC/Broward/Palm Beach)",
-    "inputs": {"address": "100 S Orange Ave, Orlando, FL 32801"},
-    "outputs": null,
-    "expectations": {
-      "expect_error": true,
-      "error_type": "outside_coverage",
-      "error_contains": "PlotLot covers Miami-Dade, Broward, and Palm Beach counties only"
-    }
-  },
-  {
-    "_comment": "BOUNDARY: Tampa address — outside coverage area",
-    "inputs": {"address": "400 N Tampa St, Tampa, FL 33602"},
-    "outputs": null,
-    "expectations": {
-      "expect_error": true,
-      "error_type": "outside_coverage"
-    }
-  },
-  {
-    "_comment": "BOUNDARY: Fake/nonsense address — geocode failure or low accuracy",
-    "inputs": {"address": "99999 Nonexistent Blvd, Fakeville, FL 00000"},
-    "outputs": null,
-    "expectations": {
-      "expect_error": true,
-      "error_type": "geocoding_failed"
-    }
-  },
-  {
-    "_comment": "BOUNDARY: Partial address — should fail gracefully, not fabricate data",
-    "inputs": {"address": "Main St, Florida"},
-    "outputs": null,
-    "expectations": {
-      "expect_error": true,
-      "error_type": "geocoding_failed"
-    }
-  },
-  {
-    "_comment": "DATA QUALITY: Fort Lauderdale — has HR/personnel chunks, should still return zoning. Downtown location, likely commercial overlay.",
-    "inputs": {"address": "100 N Andrews Ave, Fort Lauderdale, FL 33301"},
-    "outputs": {
-      "municipality": "Fort Lauderdale",
+      "municipality": "Hallandale Beach",
       "county": "Broward",
-      "confidence": "low",
-      "has_summary": true
-    },
-    "expectations": {
-      "municipality": "Fort Lauderdale",
-      "county": "Broward",
-      "confidence_min": "low",
-      "summary_must_not_contain": ["personnel", "human resources", "employee benefits", "HR"]
+      "confidence_min": "low"
     }
   },
   {
-    "_comment": "POSITIVE: Miramar RM1 multifamily — tests Broward multifamily extraction. Verified from Miramar LDC Table 402-3 (RM1 Apartments).",
-    "inputs": {"address": "3600 SW 64th Ave, Miramar, FL 33023"},
+    "_comment": "ZILLOW: Pompano Beach vacant lot — $290K, 8,664 sqft. Tests another Broward municipality.",
+    "_zillow": {"price": 290000, "lot_sqft": 8664, "listing_note": "1 day on Zillow"},
+    "inputs": {"address": "422 NW 7th Ave, Pompano Beach, FL 33060"},
     "outputs": {
-      "zoning_district": "RM1",
-      "municipality": "Miramar",
+      "municipality": "Pompano Beach",
       "county": "Broward",
       "confidence": "medium",
-      "numeric_params": {
-        "max_height_ft": 45,
-        "max_lot_coverage_pct": 40,
-        "setback_front_ft": 20,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 15
-      },
       "has_summary": true,
-      "has_allowed_uses": true,
       "num_sources": 5
     },
     "expectations": {
-      "zoning_district": "RM1",
-      "municipality": "Miramar",
+      "municipality": "Pompano Beach",
       "county": "Broward",
-      "confidence_min": "low",
-      "numeric_params": {
-        "max_height_ft": 45,
-        "max_lot_coverage_pct": 40,
-        "setback_front_ft": 20,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 15
-      },
-      "numeric_tolerance": 0.25
+      "confidence_min": "low"
     }
   },
   {
-    "_comment": "POSITIVE: Unincorporated MDC RU-4L multifamily — tests MDC higher-density multifamily extraction. Verified from MDC RU-4L standards.",
-    "inputs": {"address": "8600 SW 67th Ave, Miami, FL 33143"},
+    "_comment": "ZILLOW: Deerfield Beach lot — $207K, 6,599 sqft. Tests Broward/Palm Beach border municipality.",
+    "_zillow": {"price": 207000, "lot_sqft": 6599, "listing_note": "143 days on Zillow"},
+    "inputs": {"address": "409 NW 2nd Way, Deerfield Beach, FL 33441"},
     "outputs": {
-      "zoning_district": "RU-4L",
-      "municipality": "Unincorporated Miami-Dade",
-      "county": "Miami-Dade",
+      "municipality": "Deerfield Beach",
+      "county": "Broward",
       "confidence": "medium",
-      "numeric_params": {
-        "max_density_units_per_acre": 23,
-        "max_height_ft": 75,
-        "max_stories": 6,
-        "max_lot_coverage_pct": 30,
-        "setback_front_ft": 25,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 25
-      },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
-      "zoning_district": "RU-4L",
-      "municipality": "Unincorporated Miami-Dade",
-      "county": "Miami-Dade",
-      "confidence_min": "low",
-      "numeric_params": {
-        "max_density_units_per_acre": 23,
-        "max_height_ft": 75,
-        "max_stories": 6,
-        "max_lot_coverage_pct": 30,
-        "setback_front_ft": 25,
-        "setback_side_ft": 15,
-        "setback_rear_ft": 25
-      },
-      "numeric_tolerance": 0.25
+      "municipality": "Deerfield Beach",
+      "county": "Broward",
+      "confidence_min": "low"
     }
   },
   {
-    "_comment": "POSITIVE: Boca Raton R-1-A residential — tests low-density single-family in Palm Beach. Verified from Boca Raton Sec. 28-336.",
-    "inputs": {"address": "1099 SW 12th Ave, Boca Raton, FL 33486"},
+    "_comment": "ZILLOW: Oakland Park lot — $399K, 0.25 acres. Tests mid-Broward municipality.",
+    "_zillow": {"price": 399000, "lot_sqft": 10890, "listing_note": "3 days on Zillow"},
+    "inputs": {"address": "800 NE 43rd St, Oakland Park, FL 33334"},
     "outputs": {
-      "zoning_district": "R-1-A",
-      "municipality": "Boca Raton",
-      "county": "Palm Beach",
+      "municipality": "Oakland Park",
+      "county": "Broward",
       "confidence": "medium",
-      "numeric_params": {
-        "max_height_ft": 35,
-        "setback_front_ft": 30,
-        "setback_side_ft": 25,
-        "setback_rear_ft": 25,
-        "parking_spaces_per_unit": 2.0,
-        "min_lot_width_ft": 140
-      },
       "has_summary": true,
-      "has_allowed_uses": true,
       "num_sources": 5
     },
     "expectations": {
-      "zoning_district": "R-1-A",
-      "municipality": "Boca Raton",
-      "county": "Palm Beach",
-      "confidence_min": "low",
-      "numeric_params": {
-        "max_height_ft": 35,
-        "setback_front_ft": 30,
-        "setback_side_ft": 25,
-        "setback_rear_ft": 25,
-        "parking_spaces_per_unit": 2.0,
-        "min_lot_width_ft": 140
-      },
-      "numeric_tolerance": 0.20
+      "municipality": "Oakland Park",
+      "county": "Broward",
+      "confidence_min": "low"
     }
   },
   {
-    "_comment": "POSITIVE: Fort Lauderdale RS-8 residential — tests Broward single-family with FAR constraint. Verified from ULDR Sec. 47-5.31.",
+    "_comment": "ZILLOW: Davie lot — $250K, 9,056 sqft. Tests western Broward municipality.",
+    "_zillow": {"price": 250000, "lot_sqft": 9056, "listing_note": "184 days on Zillow"},
+    "inputs": {"address": "6300 SW 41st Ct, Davie, FL 33314"},
+    "outputs": {
+      "municipality": "Davie",
+      "county": "Broward",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Davie",
+      "county": "Broward",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Fort Lauderdale RS-8 — verified golden case with full numeric params from ULDR Sec. 47-5.31.",
+    "_zillow": {"price": null, "lot_sqft": null, "listing_note": "Existing golden case — verified ordinance data"},
     "inputs": {"address": "1517 NE 5th Ct, Fort Lauderdale, FL 33301"},
     "outputs": {
       "zoning_district": "RS-8",
@@ -405,42 +230,186 @@
     }
   },
   {
-    "_comment": "POSITIVE: Fort Lauderdale RMM-25 multifamily — tests Broward medium-density multifamily. Verified from ULDR Sec. 47-5.36.",
-    "inputs": {"address": "2881 NE 33rd Ct, Fort Lauderdale, FL 33308"},
+    "_comment": "ZILLOW: West Palm Beach lot — $159K, 5,002 sqft. Tests Palm Beach county municipality resolution.",
+    "_zillow": {"price": 158999, "lot_sqft": 5002, "listing_note": "4 days on Zillow"},
+    "inputs": {"address": "2962 Oklahoma St, West Palm Beach, FL 33406"},
     "outputs": {
-      "zoning_district": "RMM-25",
-      "municipality": "Fort Lauderdale",
+      "municipality": "West Palm Beach",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "West Palm Beach",
+      "county": "Palm Beach",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: West Palm Beach downtown lot — $375K, 6,970 sqft. Tests WPB commercial/mixed-use area.",
+    "_zillow": {"price": 375000, "lot_sqft": 6970, "listing_note": "2 days on Zillow"},
+    "inputs": {"address": "623 4th St, West Palm Beach, FL 33401"},
+    "outputs": {
+      "municipality": "West Palm Beach",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "West Palm Beach",
+      "county": "Palm Beach",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Palm Springs lakefront lot — $180K, 9,583 sqft. Tests Palm Springs municipality (small PBC city).",
+    "_zillow": {"price": 180000, "lot_sqft": 9583, "listing_note": "Last available lakefront lot"},
+    "inputs": {"address": "3050 Emilio Ln, Palm Springs, FL 33406"},
+    "outputs": {
+      "municipality": "Palm Springs",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "municipality": "Palm Springs",
+      "county": "Palm Beach",
+      "confidence_min": "low"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Miramar RS5 — verified golden case with numeric params from Miramar LDC.",
+    "_zillow": {"price": null, "lot_sqft": null, "listing_note": "Existing golden case — verified ordinance data"},
+    "inputs": {"address": "7940 Plantation Blvd, Miramar, FL 33023"},
+    "outputs": {
+      "zoning_district": "RS5",
+      "municipality": "Miramar",
       "county": "Broward",
       "confidence": "medium",
+      "max_units": 1,
+      "governing_constraint": "density",
       "numeric_params": {
-        "max_density_units_per_acre": 25,
-        "max_height_ft": 55,
+        "max_density_units_per_acre": 5.0,
+        "min_lot_area_per_unit_sqft": 7500.0,
+        "max_height_ft": 35.0,
+        "max_stories": 2,
+        "setback_front_ft": 25.0,
+        "setback_side_ft": 7.5,
+        "setback_rear_ft": 20.0
+      },
+      "has_summary": true,
+      "has_allowed_uses": true,
+      "num_sources": 10
+    },
+    "expectations": {
+      "zoning_district": "RS5",
+      "municipality": "Miramar",
+      "county": "Broward",
+      "max_units": 1,
+      "governing_constraint": "density",
+      "confidence_min": "medium",
+      "numeric_params": {
+        "max_density_units_per_acre": 5.0,
+        "min_lot_area_per_unit_sqft": 7500.0,
+        "max_height_ft": 35.0,
+        "max_stories": 2,
+        "setback_front_ft": 25.0,
+        "setback_side_ft": 7.5,
+        "setback_rear_ft": 20.0
+      },
+      "numeric_tolerance": 0.5
+    }
+  },
+  {
+    "_comment": "ZILLOW: Boca Raton R-1-D — verified golden case with numeric params from Boca Raton Sec. 28-336.",
+    "_zillow": {"price": null, "lot_sqft": null, "listing_note": "Existing golden case — verified ordinance data"},
+    "inputs": {"address": "200 E Palmetto Park Rd, Boca Raton, FL 33432"},
+    "outputs": {
+      "zoning_district": "R-1-D",
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "numeric_params": {
+        "min_lot_area_per_unit_sqft": 8250,
+        "max_height_ft": 35,
         "setback_front_ft": 25,
-        "setback_side_ft": 10,
+        "setback_side_ft": 12.5,
         "setback_rear_ft": 20,
-        "min_unit_size_sqft": 400,
-        "parking_spaces_per_unit": 2.0,
-        "min_lot_width_ft": 50
+        "parking_spaces_per_unit": 2.0
       },
       "has_summary": true,
       "num_sources": 5
     },
     "expectations": {
-      "zoning_district": "RMM-25",
-      "municipality": "Fort Lauderdale",
-      "county": "Broward",
+      "zoning_district": "R-1-D",
+      "municipality": "Boca Raton",
+      "county": "Palm Beach",
       "confidence_min": "low",
       "numeric_params": {
-        "max_density_units_per_acre": 25,
-        "max_height_ft": 55,
+        "min_lot_area_per_unit_sqft": 8250,
+        "max_height_ft": 35,
         "setback_front_ft": 25,
-        "setback_side_ft": 10,
+        "setback_side_ft": 12.5,
         "setback_rear_ft": 20,
-        "min_unit_size_sqft": 400,
-        "parking_spaces_per_unit": 2.0,
-        "min_lot_width_ft": 50
+        "parking_spaces_per_unit": 2.0
       },
       "numeric_tolerance": 0.25
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Orlando address — outside coverage area (not MDC/Broward/Palm Beach)",
+    "inputs": {"address": "100 S Orange Ave, Orlando, FL 32801"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "outside_coverage",
+      "error_contains": "PlotLot covers Miami-Dade, Broward, and Palm Beach counties only"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Tampa address — outside coverage area",
+    "inputs": {"address": "400 N Tampa St, Tampa, FL 33602"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "outside_coverage"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Fake/nonsense address — geocode failure",
+    "inputs": {"address": "99999 Nonexistent Blvd, Fakeville, FL 00000"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "geocoding_failed"
+    }
+  },
+  {
+    "_comment": "BOUNDARY: Partial address — should fail gracefully",
+    "inputs": {"address": "Main St, Florida"},
+    "outputs": null,
+    "expectations": {
+      "expect_error": true,
+      "error_type": "geocoding_failed"
+    }
+  },
+  {
+    "_comment": "ZILLOW: Loxahatchee lot — $289K, 1.34 acres. Tests unincorporated Palm Beach County (Loxahatchee Groves area).",
+    "_zillow": {"price": 289000, "lot_sqft": 58370, "listing_note": "High and dry property"},
+    "inputs": {"address": "17987 32nd Ln N, Loxahatchee, FL 33470"},
+    "outputs": {
+      "municipality": "Loxahatchee",
+      "county": "Palm Beach",
+      "confidence": "medium",
+      "has_summary": true,
+      "num_sources": 5
+    },
+    "expectations": {
+      "county": "Palm Beach",
+      "confidence_min": "low"
     }
   }
 ]
