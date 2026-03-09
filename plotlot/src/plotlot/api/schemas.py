@@ -273,3 +273,57 @@ class FloorPlanResponse(BaseModel):
     parking_spaces: int = 0
     notes: list[str] = []
     svg: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Pro Forma (Phase F3)
+# ---------------------------------------------------------------------------
+
+
+class ProFormaRequest(BaseModel):
+    """Request for pro forma generation."""
+
+    address: str = ""
+    municipality: str = ""
+    county: str = ""
+    zoning_district: str = ""
+    lot_size_sqft: float = Field(default=0.0, ge=0)
+    max_units: int = Field(default=1, ge=1)
+    unit_size_sqft: float = Field(default=1000.0, gt=0)
+    stories: int = Field(default=1, ge=1)
+    parking_spaces: int = Field(default=2, ge=0)
+    land_cost: float = Field(default=0.0, ge=0)
+    construction_cost_psf: float = Field(default=150.0, gt=0)
+    soft_cost_pct: float = Field(default=15.0, ge=0)
+    contingency_pct: float = Field(default=10.0, ge=0)
+    ltv_pct: float = Field(default=75.0, ge=0, le=100)
+    interest_rate_pct: float = Field(default=7.0, ge=0)
+    loan_term_years: int = Field(default=30, ge=1)
+    monthly_rent_per_unit: float = Field(default=0.0, ge=0)
+    sale_price_per_unit: float = Field(default=0.0, ge=0)
+    vacancy_pct: float = Field(default=5.0, ge=0, le=100)
+    operating_expense_pct: float = Field(default=35.0, ge=0, le=100)
+    narrative: str = ""
+
+
+class ProFormaResponse(BaseModel):
+    """Computed pro forma results."""
+
+    total_buildable_sqft: float
+    hard_costs: float
+    soft_costs: float
+    contingency: float
+    total_development_cost: float
+    loan_amount: float
+    equity_required: float
+    annual_debt_service: float
+    gross_annual_income: float
+    effective_gross_income: float
+    operating_expenses: float
+    net_operating_income: float
+    cap_rate_pct: float
+    cash_on_cash_pct: float
+    total_sale_revenue: float
+    total_profit: float
+    roi_pct: float
+    notes: list[str] = []

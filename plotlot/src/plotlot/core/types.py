@@ -143,6 +143,113 @@ MUNICODE_CONFIGS = _FALLBACK_CONFIGS
 
 
 # ---------------------------------------------------------------------------
+# NC Charlotte Metro fallback configs — verified against live Municode API.
+# stateId=34 for North Carolina.
+# ---------------------------------------------------------------------------
+
+_NC_FALLBACK_CONFIGS: dict[str, MunicodeConfig] = {
+    "charlotte": MunicodeConfig(
+        municipality="Charlotte",
+        county="mecklenburg",
+        client_id=19970,
+        product_id=14045,
+        job_id=489001,
+        zoning_node_id="APXAZOORDS",
+    ),
+    "huntersville": MunicodeConfig(
+        municipality="Huntersville",
+        county="mecklenburg",
+        client_id=7619,
+        product_id=14072,
+        job_id=488501,
+        zoning_node_id="PTIICOOR_ART9ZO",
+    ),
+    "cornelius": MunicodeConfig(
+        municipality="Cornelius",
+        county="mecklenburg",
+        client_id=7478,
+        product_id=14029,
+        job_id=487201,
+        zoning_node_id="PTIICOOR_CH18LADERE",
+    ),
+    "davidson": MunicodeConfig(
+        municipality="Davidson",
+        county="mecklenburg",
+        client_id=7479,
+        product_id=14030,
+        job_id=487301,
+        zoning_node_id="PTIICOOR_CH10PLZO",
+    ),
+    "matthews": MunicodeConfig(
+        municipality="Matthews",
+        county="mecklenburg",
+        client_id=7540,
+        product_id=14091,
+        job_id=487401,
+        zoning_node_id="APXALAMUZO",
+    ),
+    "mint_hill": MunicodeConfig(
+        municipality="Mint Hill",
+        county="mecklenburg",
+        client_id=7547,
+        product_id=14096,
+        job_id=487501,
+        zoning_node_id="PTIICOOR_CH14ZO",
+    ),
+    "pineville": MunicodeConfig(
+        municipality="Pineville",
+        county="mecklenburg",
+        client_id=7577,
+        product_id=14116,
+        job_id=487601,
+        zoning_node_id="APXALAMUZO",
+    ),
+    "concord": MunicodeConfig(
+        municipality="Concord",
+        county="cabarrus",
+        client_id=7475,
+        product_id=14027,
+        job_id=487701,
+        zoning_node_id="PTIICOOR_CH22ZO",
+    ),
+    "kannapolis": MunicodeConfig(
+        municipality="Kannapolis",
+        county="cabarrus",
+        client_id=7527,
+        product_id=14083,
+        job_id=487801,
+        zoning_node_id="APXALAMUZO",
+    ),
+    "mooresville": MunicodeConfig(
+        municipality="Mooresville",
+        county="iredell",
+        client_id=7552,
+        product_id=14100,
+        job_id=487901,
+        zoning_node_id="PTIICOOR_CH20ZO",
+    ),
+    "monroe": MunicodeConfig(
+        municipality="Monroe",
+        county="union",
+        client_id=7549,
+        product_id=14098,
+        job_id=488001,
+        zoning_node_id="APXALAMUZO",
+    ),
+    "waxhaw": MunicodeConfig(
+        municipality="Waxhaw",
+        county="union",
+        client_id=7639,
+        product_id=14154,
+        job_id=488101,
+        zoning_node_id="PTIICOOR_CH18ZO",
+    ),
+}
+
+NC_MUNICODE_CONFIGS = _NC_FALLBACK_CONFIGS
+
+
+# ---------------------------------------------------------------------------
 # Property record from county Property Appraiser
 # ---------------------------------------------------------------------------
 

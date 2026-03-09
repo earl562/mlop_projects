@@ -1,15 +1,16 @@
 """Municode auto-discovery — dynamically find municipalities with zoning data.
 
 Queries the Municode Library API at runtime to discover all South Florida
-municipalities that have zoning ordinances hosted on Municode. Results are
-cached per-process so discovery only runs once.
+and NC Charlotte metro municipalities that have zoning ordinances hosted
+on Municode.  Results are cached per-process so discovery only runs once.
 
 Production pattern: self-discovering data pipeline with graceful fallback.
-If the Library API is down, consumers fall back to hardcoded _FALLBACK_CONFIGS.
+If the Library API is down, consumers fall back to hardcoded _FALLBACK_CONFIGS
+(FL) and _NC_FALLBACK_CONFIGS (NC).
 
 Library API base: https://library.municode.com/api  (requires X-CSRF: 1 header)
 Discovery flow per municipality:
-  1. Clients/stateAbbr?stateAbbr=FL  →  all FL clients
+  1. Clients/stateAbbr?stateAbbr=FL (or NC)  →  all clients for that state
   2. Match municipality name to client_id
   3. Products/clientId/{id}  →  find CODES product
   4. Jobs/latest/{productId}  →  fresh job_id
@@ -84,6 +85,25 @@ SOUTH_FLORIDA_MUNICIPALITIES: dict[str, list[str]] = {
     ],
 }
 
+# NC Charlotte metro municipalities by county.
+# Covers Mecklenburg + surrounding counties (Cabarrus, Iredell, Union).
+NC_CHARLOTTE_METRO: dict[str, list[str]] = {
+    "mecklenburg": [
+        "Charlotte", "Huntersville", "Cornelius", "Davidson", "Matthews",
+        "Mint Hill", "Pineville",
+    ],
+    "union": [
+        "Indian Trail", "Stallings", "Weddington", "Waxhaw", "Monroe",
+    ],
+    "cabarrus": [
+        "Concord", "Kannapolis", "Harrisburg", "Midland", "Locust",
+    ],
+    "iredell": [
+        "Mooresville",
+    ],
+}
+
+
 # Known name mismatches between our target list and Municode client names.
 _NAME_MAP: dict[str, str] = {
     "Indian Creek Village": "Indian Creek",
@@ -96,6 +116,9 @@ _NAME_MAP: dict[str, str] = {
     "Bal Harbour": "Bal Harbour Village",
     "West Park": "West Park",
     "Pembroke Park": "Pembroke Park",
+    # NC Charlotte metro aliases
+    "Indian Trail": "Indian Trail",
+    "Mint Hill": "Mint Hill",
 }
 
 # Module-level cache
@@ -176,6 +199,15 @@ def _make_key(name: str) -> str:
     key = re.sub(r"[^a-z0-9\s]", " ", key)
     key = re.sub(r"\s+", "_", key.strip())
     return key
+
+
+# Convenience flat set of all NC target municipality names (lowercased, underscored).
+# Defined after _make_key so the helper is available.
+NC_CHARLOTTE_METRO_KEYS: set[str] = {
+    _make_key(name)
+    for names in NC_CHARLOTTE_METRO.values()
+    for name in names
+}
 
 
 def _normalize(name: str) -> str:
@@ -433,13 +465,70 @@ async def discover_all(
         return configs
 
 
-async def get_municode_configs(
+async def discover_nc(
+    max_concurrent: int = 5,
+) -> dict[str, MunicodeConfig]:
+    """Discover NC Charlotte metro municipalities with zoning data on Municode.
+
+    Uses stateAbbr=NC (stateId=34) to fetch all NC clients, then filters
+    to the Charlotte metro target list.
+
+    Returns:
+        Dict of {key: MunicodeConfig} for discovered NC municipalities.
+    """
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        nc_clients = await _fetch_json(client, "Clients/stateAbbr", stateAbbr="NC")
+        if not nc_clients or not isinstance(nc_clients, list):
+            logger.error("Failed to fetch NC clients from Municode Library API")
+            return {}
+
+        logger.info("Fetched %d NC clients from Municode", len(nc_clients))
+
+        tasks = []
+        for county, names in NC_CHARLOTTE_METRO.items():
+            for name in names:
+                tasks.append(
+                    _discover_municipality(client, semaphore, county, name, nc_clients)
+                )
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        configs: dict[str, MunicodeConfig] = {}
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("NC discovery task failed: %s", result)
+                continue
+            key, config = result
+            if config is not None:
+                configs[key] = config
+
+        logger.info("Discovered %d NC municipalities with zoning data", len(configs))
+        return configs
+
+
+def get_nc_municode_configs() -> dict[str, MunicodeConfig]:
+    """Return static NC Charlotte metro Municode configs (fallback).
+
+    Unlike the FL discovery which runs async against the API, this provides
+    a synchronous fallback using the verified _NC_FALLBACK_CONFIGS.
+    For live discovery, use :func:`discover_nc` instead.
+
+    Returns:
+        Dict of {key: MunicodeConfig} for known NC Charlotte metro municipalities.
+    """
+    from plotlot.core.types import _NC_FALLBACK_CONFIGS
+    return dict(_NC_FALLBACK_CONFIGS)
+
+
+async def get_all_municode_configs(
     force_refresh: bool = False,
 ) -> dict[str, MunicodeConfig]:
-    """Get all known Municode configs, using cached discovery results.
+    """Get FL + NC Municode configs combined, using cached discovery results.
 
-    On first call, runs full discovery against the Library API.
-    Subsequent calls return the cached result.
+    Runs FL and NC discovery in parallel, merges results, and applies
+    fallback configs for both states.
     """
     global _cached_configs
 
@@ -455,27 +544,48 @@ async def get_municode_configs(
                 _cached_configs = disk_configs
                 return _cached_configs
 
-        logger.info("Running Municode auto-discovery...")
+        logger.info("Running combined FL + NC Municode auto-discovery...")
+        configs: dict[str, MunicodeConfig] = {}
         try:
-            configs = await discover_all()
+            fl_configs, nc_configs = await asyncio.gather(
+                discover_all(),
+                discover_nc(),
+                return_exceptions=False,
+            )
+            configs.update(fl_configs)
+            configs.update(nc_configs)
         except Exception as e:
-            logger.error("Discovery failed, returning fallback configs: %s", e)
-            from plotlot.core.types import _FALLBACK_CONFIGS
-            _cached_configs = dict(_FALLBACK_CONFIGS)
+            logger.error("Combined discovery failed, returning fallback configs: %s", e)
+            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
             return _cached_configs
 
         if not configs:
             logger.warning("Discovery returned 0 results, using fallback configs")
-            from plotlot.core.types import _FALLBACK_CONFIGS
-            _cached_configs = dict(_FALLBACK_CONFIGS)
+            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
             return _cached_configs
 
-        from plotlot.core.types import _FALLBACK_CONFIGS
-        for key, fallback in _FALLBACK_CONFIGS.items():
+        # Merge in fallback configs for any municipalities not discovered
+        from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+        for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
             if key not in configs:
                 configs[key] = fallback
 
         _cached_configs = configs
         _write_disk_cache(configs)
-        logger.info("Cached %d municipality configs", len(_cached_configs))
+        logger.info("Cached %d FL + NC municipality configs", len(_cached_configs))
         return _cached_configs
+
+
+async def get_municode_configs(
+    force_refresh: bool = False,
+) -> dict[str, MunicodeConfig]:
+    """Get all known Municode configs, using cached discovery results.
+
+    On first call, runs full discovery against the Library API.
+    Subsequent calls return the cached result.
+
+    Now includes both FL and NC municipalities.
+    """
+    return await get_all_municode_configs(force_refresh=force_refresh)
