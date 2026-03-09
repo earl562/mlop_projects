@@ -472,10 +472,10 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — delegates to the PropertyProvider registry
 # ---------------------------------------------------------------------------
 
-# County name → lookup function
+# Legacy handler map kept for direct callers — prefer the registry in new code.
 _COUNTY_HANDLERS = {
     "miami-dade": _lookup_miami_dade,
     "miami dade": _lookup_miami_dade,
@@ -493,6 +493,10 @@ async def lookup_property(
 ) -> PropertyRecord | None:
     """Look up property data from the county Property Appraiser.
 
+    Delegates to the :mod:`plotlot.property` registry so that new counties
+    only need a :class:`~plotlot.property.base.PropertyProvider` subclass
+    plus a ``register_provider`` call.
+
     Args:
         address: Full property address.
         county: County name (e.g., 'Miami-Dade', 'Broward', 'Palm Beach').
@@ -502,6 +506,23 @@ async def lookup_property(
     Returns:
         PropertyRecord with all available data, or None if not found.
     """
+    from plotlot.property.registry import get_provider
+
+    provider = get_provider(county)
+    if provider is not None:
+        try:
+            record = await provider.lookup(address, county, lat=lat, lng=lng)
+            if record:
+                logger.info(
+                    "Property found: folio=%s, zoning=%s, lot=%s sqft",
+                    record.folio, record.zoning_code or "N/A", record.lot_size_sqft,
+                )
+            return record
+        except Exception as e:
+            logger.error("Property lookup failed for %s (%s): %s", address, county, e)
+            return None
+
+    # Fallback to legacy handler map (should not happen once registry is populated)
     county_key = county.lower().strip()
     handler = _COUNTY_HANDLERS.get(county_key)
 

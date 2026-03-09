@@ -8,6 +8,7 @@ use retry with exponential backoff for resilience.
 import asyncio
 import logging
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plotlot.core.types import MUNICODE_CONFIGS
@@ -197,26 +198,40 @@ async def ingest_municipality(key: str) -> int:
         for batch_start in range(0, len(chunks), COMMIT_BATCH_SIZE):
             batch_chunks = chunks[batch_start:batch_start + COMMIT_BATCH_SIZE]
             batch_embeddings = embeddings[batch_start:batch_start + COMMIT_BATCH_SIZE]
-            rows = []
-            for chunk, embedding in zip(batch_chunks, batch_embeddings):
-                row = OrdinanceChunk(
-                    municipality=chunk.metadata.municipality,
-                    county=chunk.metadata.county,
-                    chapter=chunk.metadata.chapter,
-                    section=chunk.metadata.section,
-                    section_title=chunk.metadata.section_title,
-                    zone_codes=chunk.metadata.zone_codes,
-                    chunk_text=chunk.text,
-                    chunk_index=chunk.metadata.chunk_index,
-                    embedding=embedding,
-                    municode_node_id=chunk.metadata.municode_node_id,
+            row_dicts = []
+            for chunk, emb in zip(batch_chunks, batch_embeddings):
+                row_dicts.append(
+                    {
+                        "municipality": chunk.metadata.municipality,
+                        "county": chunk.metadata.county,
+                        "chapter": chunk.metadata.chapter,
+                        "section": chunk.metadata.section,
+                        "section_title": chunk.metadata.section_title,
+                        "zone_codes": chunk.metadata.zone_codes,
+                        "chunk_text": chunk.text,
+                        "chunk_index": chunk.metadata.chunk_index,
+                        "embedding": emb,
+                        "municode_node_id": chunk.metadata.municode_node_id,
+                    }
                 )
-                rows.append(row)
-            session.add_all(rows)
+            stmt = pg_insert(OrdinanceChunk).values(row_dicts)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["municipality", "municode_node_id", "chunk_index"],
+                set_={
+                    "chunk_text": stmt.excluded.chunk_text,
+                    "embedding": stmt.excluded.embedding,
+                    "section": stmt.excluded.section,
+                    "section_title": stmt.excluded.section_title,
+                    "zone_codes": stmt.excluded.zone_codes,
+                    "chapter": stmt.excluded.chapter,
+                    "county": stmt.excluded.county,
+                },
+            )
+            await session.execute(stmt)
             await session.commit()
-            stored += len(rows)
+            stored += len(row_dicts)
             await asyncio.sleep(0)  # yield between DB batches
-        logger.info("Stored %d chunks for %s", stored, config.municipality)
+        logger.info("Stored %d chunks for %s (upsert)", stored, config.municipality)
         return stored
 
     except Exception:

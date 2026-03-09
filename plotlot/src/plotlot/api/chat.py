@@ -15,6 +15,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 from fastapi import APIRouter
@@ -224,7 +225,7 @@ def _build_report_context(report) -> str:
 # Tool definitions for the LLM
 # ---------------------------------------------------------------------------
 
-CHAT_TOOLS = [
+CHAT_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -564,7 +565,7 @@ CORE_TOOLS = [
     t
     for t in CHAT_TOOLS
     if t["function"]["name"]
-    in {  # type: ignore[index]
+    in {
         "geocode_address",
         "lookup_property_info",
         "search_zoning_ordinance",
@@ -576,7 +577,7 @@ DATASET_TOOLS = [
     t
     for t in CHAT_TOOLS
     if t["function"]["name"]
-    in {  # type: ignore[index]
+    in {
         "filter_dataset",
         "get_dataset_info",
         "export_dataset",
@@ -586,7 +587,7 @@ CREATION_TOOLS = [
     t
     for t in CHAT_TOOLS
     if t["function"]["name"]
-    in {  # type: ignore[index]
+    in {
         "create_spreadsheet",
         "create_document",
     }

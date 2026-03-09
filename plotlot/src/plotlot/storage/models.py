@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for pgvector storage."""
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase
 
@@ -14,6 +14,14 @@ class OrdinanceChunk(Base):
     """A chunk of zoning ordinance text with its embedding vector."""
 
     __tablename__ = "ordinance_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "municipality",
+            "municode_node_id",
+            "chunk_index",
+            name="uq_chunk_natural_key",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     municipality = Column(String(200), nullable=False, index=True)
@@ -28,3 +36,8 @@ class OrdinanceChunk(Base):
     municode_node_id = Column(String(200))
     search_vector = Column(TSVECTOR)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )

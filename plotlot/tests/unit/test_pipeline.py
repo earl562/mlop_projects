@@ -140,7 +140,7 @@ class TestIngestMunicipality:
             count = await ingest_municipality("miami_dade")
 
         assert count == 1
-        mock_session.add_all.assert_called_once()
+        mock_session.execute.assert_called_once()  # pg_insert upsert
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
 

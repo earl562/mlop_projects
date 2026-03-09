@@ -1548,6 +1548,7 @@ name = "plotlot"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "alembic" },
     { name = "asyncpg" },
     { name = "beautifulsoup4" },
     { name = "fastapi" },
@@ -1577,6 +1578,7 @@ mlflow = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", specifier = ">=1.18.4" },
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "fastapi", specifier = ">=0.115" },
