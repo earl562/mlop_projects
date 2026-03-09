@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
+import EnvelopeViewerWrapper from "./EnvelopeViewerWrapper";
+import FloorPlanViewer from "./FloorPlanViewer";
 import PropertyCard from "./PropertyCard";
 import SatelliteMap from "./SatelliteMap";
 
@@ -75,6 +77,13 @@ function UsesList({ title, uses, color }: { title: string; uses: string[] | stri
       </div>
     </div>
   );
+}
+
+/** Parse a numeric feet value from a string like "25 ft" or "25" → 25 */
+function parseNumericFt(value: string | undefined | null): number {
+  if (!value) return 0;
+  const match = value.match(/[\d.]+/);
+  return match ? parseFloat(match[0]) : 0;
 }
 
 export default function ZoningReport({ report }: ZoningReportProps) {
@@ -150,6 +159,67 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           </div>
         </Section>
       )}
+
+      {/* 3D Buildable Envelope Viewer */}
+      {(() => {
+        const lotWidth = report.density_analysis?.lot_width_ft
+          || report.numeric_params?.min_lot_width_ft
+          || 0;
+        const lotDepth = report.density_analysis?.lot_depth_ft || 0;
+
+        // Prefer numeric params, fall back to parsing string setbacks
+        const setbackFront = report.numeric_params?.setback_front_ft
+          || parseNumericFt(report.setbacks?.front);
+        const setbackSide = report.numeric_params?.setback_side_ft
+          || parseNumericFt(report.setbacks?.side);
+        const setbackRear = report.numeric_params?.setback_rear_ft
+          || parseNumericFt(report.setbacks?.rear);
+        const maxHeight = report.numeric_params?.max_height_ft || 35;
+
+        if (lotWidth > 0 && lotDepth > 0) {
+          return (
+            <Section title="3D Buildable Envelope">
+              <EnvelopeViewerWrapper
+                lotWidthFt={lotWidth}
+                lotDepthFt={lotDepth}
+                setbackFrontFt={setbackFront}
+                setbackSideFt={setbackSide}
+                setbackRearFt={setbackRear}
+                maxHeightFt={maxHeight}
+                buildableAreaSqft={report.density_analysis?.buildable_area_sqft ?? undefined}
+              />
+            </Section>
+          );
+        }
+        return null;
+      })()}
+
+      {/* Floor Plan */}
+      {(() => {
+        const da = report.density_analysis;
+        const np = report.numeric_params;
+        if (!da?.buildable_area_sqft || !da?.lot_width_ft || !da?.lot_depth_ft) return null;
+
+        const setbackFront = np?.setback_front_ft || parseNumericFt(report.setbacks?.front);
+        const setbackSide = np?.setback_side_ft || parseNumericFt(report.setbacks?.side);
+        const setbackRear = np?.setback_rear_ft || parseNumericFt(report.setbacks?.rear);
+        const buildW = Math.max(0, (da.lot_width_ft || 0) - 2 * setbackSide);
+        const buildD = Math.max(0, (da.lot_depth_ft || 0) - setbackFront - setbackRear);
+        const maxHeight = np?.max_height_ft || 35;
+
+        if (buildW <= 0 || buildD <= 0) return null;
+
+        return (
+          <Section title="Floor Plan">
+            <FloorPlanViewer
+              buildableWidthFt={buildW}
+              buildableDepthFt={buildD}
+              maxHeightFt={maxHeight}
+              maxUnits={da.max_units || 1}
+            />
+          </Section>
+        );
+      })()}
 
       {/* Uses */}
       <Section title="Permitted Uses">

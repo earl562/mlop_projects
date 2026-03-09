@@ -111,6 +111,16 @@ export interface ZoningReportData {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/** Extract a human-readable error message from a FastAPI error response. */
+function extractErrorMessage(err: { detail?: unknown }, status: number): string {
+  const detail = err.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
+  }
+  if (typeof detail === "string") return detail;
+  return `HTTP ${status}`;
+}
+
 /**
  * Stream zoning analysis with real-time pipeline progress.
  * Uses Server-Sent Events for step-by-step updates.
@@ -129,7 +139,7 @@ export async function streamAnalysis(
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Request failed" }));
-    onError(err.detail || `HTTP ${response.status}`);
+    onError(extractErrorMessage(err, response.status));
     return;
   }
 
@@ -189,7 +199,7 @@ export async function analyzeAddress(address: string): Promise<ZoningReportData>
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || `HTTP ${response.status}`);
+    throw new Error(extractErrorMessage(err, response.status));
   }
 
   return response.json();
@@ -239,7 +249,7 @@ export async function streamChat(
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Request failed" }));
-    onError(err.detail || `HTTP ${response.status}`);
+    onError(extractErrorMessage(err, response.status));
     return;
   }
 
@@ -318,7 +328,7 @@ export async function saveAnalysis(report: ZoningReportData): Promise<SavedAnaly
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Save failed" }));
-    throw new Error(err.detail || `HTTP ${response.status}`);
+    throw new Error(extractErrorMessage(err, response.status));
   }
 
   return response.json();

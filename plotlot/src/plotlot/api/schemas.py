@@ -175,3 +175,101 @@ class SavedAnalysisResponse(BaseModel):
     confidence: str = ""
     saved_at: str
     report: ZoningReportResponse
+
+
+# ---------------------------------------------------------------------------
+# Geometry / Buildable Envelope (Sprint 3)
+# ---------------------------------------------------------------------------
+
+
+class EnvelopeRequest(BaseModel):
+    """Request for buildable envelope geometry computation."""
+
+    lot_width_ft: float = Field(..., gt=0, description="Lot width in feet")
+    lot_depth_ft: float = Field(..., gt=0, description="Lot depth in feet")
+    setback_front_ft: float = Field(default=0, ge=0)
+    setback_side_ft: float = Field(default=0, ge=0)
+    setback_rear_ft: float = Field(default=0, ge=0)
+    max_height_ft: float = Field(default=35.0, gt=0)
+    max_stories: int | None = None
+    floor_area_ratio: float | None = Field(default=None, gt=0)
+    lot_coverage_pct: float | None = Field(default=None, gt=0, le=100)
+
+
+class EnvelopeVertex(BaseModel):
+    """A 3D point."""
+
+    x: float
+    y: float
+    z: float
+
+
+class EnvelopeGeometry(BaseModel):
+    """Computed buildable envelope geometry for 3D visualization."""
+
+    # Lot outline (ground plane, z=0)
+    lot_polygon: list[EnvelopeVertex]
+    lot_area_sqft: float
+
+    # Setback lines (ground plane)
+    setback_polygon: list[EnvelopeVertex]
+
+    # Buildable envelope (3D box)
+    buildable_footprint_sqft: float
+    buildable_volume_cuft: float
+    buildable_width_ft: float
+    buildable_depth_ft: float
+    max_height_ft: float
+
+    # Constraints applied
+    effective_height_ft: float
+    effective_coverage_pct: float
+    far_limited: bool = False
+    coverage_limited: bool = False
+
+    # Metadata
+    notes: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Floor Plan (Sprint 3)
+# ---------------------------------------------------------------------------
+
+
+class FloorPlanUnitResponse(BaseModel):
+    """A single unit in the floor plan."""
+
+    unit_id: str
+    area_sqft: float
+    width_ft: float
+    depth_ft: float
+    floor: int
+    label: str
+
+
+class FloorPlanRequest(BaseModel):
+    """Request for parametric floor plan generation."""
+
+    buildable_width_ft: float = Field(..., gt=0)
+    buildable_depth_ft: float = Field(..., gt=0)
+    max_height_ft: float = Field(default=35.0, gt=0)
+    max_units: int = Field(default=1, ge=1)
+    min_unit_size_sqft: float = Field(default=400.0, gt=0)
+    parking_per_unit: float = Field(default=1.5, ge=0)
+    story_height_ft: float = Field(default=10.0, gt=0)
+    template: str = Field(default="auto")
+
+
+class FloorPlanResponse(BaseModel):
+    """Generated floor plan result."""
+
+    template: str
+    units: list[FloorPlanUnitResponse]
+    total_units: int
+    buildable_width_ft: float
+    buildable_depth_ft: float
+    max_height_ft: float
+    stories: int
+    parking_spaces: int = 0
+    notes: list[str] = []
+    svg: str = ""
