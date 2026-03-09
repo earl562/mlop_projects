@@ -27,9 +27,12 @@ class Settings(BaseSettings):
         raw_url = self.database_url
 
         # --- Derive MLflow URI from DATABASE_URL (before asyncpg rewrite) ---
-        # Only when mlflow_tracking_uri is still the default sqlite value
-        # (i.e., MLFLOW_TRACKING_URI was not explicitly set in env).
-        if self.mlflow_tracking_uri.startswith("sqlite:"):
+        # Only auto-derive when MLFLOW_TRACKING_URI was NOT explicitly set.
+        # Check the environment directly; the default is sqlite:///mlruns/mlflow.db.
+        import os
+
+        _mlflow_explicitly_set = "MLFLOW_TRACKING_URI" in os.environ
+        if not _mlflow_explicitly_set and self.mlflow_tracking_uri == "sqlite:///mlruns/mlflow.db":
             mlflow_url = raw_url
             if mlflow_url.startswith("postgres://"):
                 mlflow_url = mlflow_url.replace("postgres://", "postgresql://", 1)
@@ -49,12 +52,27 @@ class Settings(BaseSettings):
         parsed = urlparse(url)
         if parsed.query:
             params = parse_qs(parsed.query)
-            if "sslmode" in params and params["sslmode"][0] in ("require", "verify-ca", "verify-full"):
+            if "sslmode" in params and params["sslmode"][0] in (
+                "require",
+                "verify-ca",
+                "verify-full",
+            ):
                 self.database_require_ssl = True
             url = urlunparse(parsed._replace(query=""))
 
         self.database_url = url
         return self
+
+    # Supabase Auth (opt-in — app works without auth configured)
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_key: str = ""
+    supabase_jwt_secret: str = ""
+    auth_enabled: bool = False
+
+    # Rate limiting
+    rate_limit_max_requests: int = 30
+    rate_limit_window_seconds: int = 60
 
     # API keys
     geocodio_api_key: str = ""
@@ -67,8 +85,15 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _strip_api_keys(self) -> "Settings":
         """Strip whitespace/newlines from API keys — common paste error in dashboards."""
-        for field in ("geocodio_api_key", "hf_token",
-                      "nvidia_api_key", "jina_api_key"):
+        for field in (
+            "geocodio_api_key",
+            "hf_token",
+            "nvidia_api_key",
+            "jina_api_key",
+            "supabase_anon_key",
+            "supabase_service_key",
+            "supabase_jwt_secret",
+        ):
             val = getattr(self, field)
             if val and val != val.strip():
                 setattr(self, field, val.strip())

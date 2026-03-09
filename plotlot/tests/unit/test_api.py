@@ -317,13 +317,20 @@ def _mock_report_dict() -> dict:
     }
 
 
+@pytest.fixture(autouse=True)
+def _reset_db_engine():
+    """Reset the DB engine between tests to avoid event-loop-closed errors."""
+    import plotlot.storage.db as db_mod
+    db_mod._engine = None
+    db_mod._session_factory = None
+    yield
+    db_mod._engine = None
+    db_mod._session_factory = None
+
+
 @pytest.mark.asyncio
 async def test_portfolio_save_and_list(client):
     """Save an analysis and retrieve it from portfolio."""
-    # Clear any existing portfolio state
-    from plotlot.api.portfolio import _portfolio
-    _portfolio.clear()
-
     report_dict = _mock_report_dict()
     resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
     assert resp.status_code == 200
@@ -343,9 +350,6 @@ async def test_portfolio_save_and_list(client):
 @pytest.mark.asyncio
 async def test_portfolio_delete(client):
     """Delete an analysis from portfolio."""
-    from plotlot.api.portfolio import _portfolio
-    _portfolio.clear()
-
     report_dict = _mock_report_dict()
     resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
     analysis_id = resp.json()["id"]
@@ -353,14 +357,15 @@ async def test_portfolio_delete(client):
     resp = await client.delete(f"/api/v1/portfolio/{analysis_id}")
     assert resp.status_code == 200
 
-    resp = await client.get("/api/v1/portfolio")
-    assert resp.json() == []
+    # Verify the specific entry is gone (404)
+    resp = await client.get(f"/api/v1/portfolio/{analysis_id}")
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_portfolio_not_found(client):
     """Get non-existent analysis → 404."""
-    resp = await client.get("/api/v1/portfolio/nonexistent")
+    resp = await client.get("/api/v1/portfolio/99999")
     assert resp.status_code == 404
 
 

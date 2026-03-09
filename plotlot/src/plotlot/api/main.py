@@ -16,7 +16,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from plotlot.api.auth import get_current_user
 from plotlot.api.chat import router as chat_router
+from plotlot.api.middleware import rate_limiter
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.routes import router
 from plotlot.config import settings
@@ -33,8 +35,12 @@ async def lifespan(app: FastAPI):
 
     # Initialize MLflow tracing
     from plotlot.observability.tracing import (
-        set_tracking_uri, set_experiment, enable_async_logging, mlflow as _mlflow_mod,
+        set_tracking_uri,
+        set_experiment,
+        enable_async_logging,
+        mlflow as _mlflow_mod,
     )
+
     if _mlflow_mod is not None:
         set_tracking_uri(settings.mlflow_tracking_uri)
         set_experiment(settings.mlflow_experiment_name)
@@ -45,6 +51,7 @@ async def lifespan(app: FastAPI):
 
     # Log the database URL (redacted) for debugging deployment issues
     from urllib.parse import urlparse
+
     parsed = urlparse(settings.database_url)
     redacted_host = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
     logger.info("Connecting to database at %s/%s", redacted_host, parsed.path.lstrip("/"))
@@ -52,9 +59,22 @@ async def lifespan(app: FastAPI):
         await asyncio.wait_for(init_db(), timeout=15)
         logger.info("Database initialized successfully")
     except asyncio.TimeoutError:
-        logger.error("Database initialization timed out after 15s — API will start in degraded mode")
+        logger.error(
+            "Database initialization timed out after 15s — API will start in degraded mode"
+        )
     except Exception as e:
         logger.error("Database initialization failed: %s — API will start in degraded mode", e)
+    # Log auth and rate-limiting status
+    if settings.auth_enabled:
+        logger.info("Supabase auth ENABLED (JWT verification active)")
+    else:
+        logger.info("Auth DISABLED — anonymous access allowed (set AUTH_ENABLED=true to enable)")
+    logger.info(
+        "Rate limiting: %d requests per %ds window on /api/v1/analyze and /api/v1/chat",
+        settings.rate_limit_max_requests,
+        settings.rate_limit_window_seconds,
+    )
+
     logger.info("PlotLot API ready")
     yield
     logger.info("Shutting down")
@@ -74,6 +94,34 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
             correlation_id.reset(token)
 
 
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Resolve the current user (if any) and attach to request.state.
+
+    Runs on every request so downstream dependencies and the rate limiter
+    can distinguish authenticated from anonymous users.  When auth is
+    disabled this is essentially a no-op (sets user=None).
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        request.state.user = await get_current_user(request)
+        return await call_next(request)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Apply rate limiting to expensive API endpoints.
+
+    Only enforced on /api/v1/analyze and /api/v1/chat — the two paths
+    that trigger LLM calls and could drive up costs if abused.
+    """
+
+    _rate_limited_prefixes = ("/api/v1/analyze", "/api/v1/chat")
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path.startswith(self._rate_limited_prefixes):
+            await rate_limiter.check(request)
+        return await call_next(request)
+
+
 app = FastAPI(
     title="PlotLot",
     description="AI-powered zoning analysis for South Florida real estate. "
@@ -82,6 +130,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware stack (outermost → innermost):
+# 1. CORS — must be outermost to handle preflight requests
+# 2. Correlation ID — tag every request for tracing
+# 3. Auth — resolve user from JWT (attaches to request.state.user)
+# 4. Rate limit — enforce per-IP/per-user limits on expensive endpoints
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -125,6 +180,7 @@ async def health():
 
     # MLflow connectivity
     from plotlot.observability.tracing import mlflow as _mlflow
+
     if _mlflow is not None:
         try:
             _mlflow.search_experiments(max_results=1)
@@ -142,6 +198,7 @@ async def health():
 async def debug_traces(limit: int = 10):
     """View recent MLflow traces — pipeline runs, LLM calls, tool use."""
     from plotlot.observability.tracing import mlflow as _mlflow
+
     if _mlflow is None:
         return {"error": "MLflow not installed"}
 
@@ -157,16 +214,20 @@ async def debug_traces(limit: int = 10):
                 order_by=["start_time DESC"],
             )
             for run in runs:
-                traces_out.append({
-                    "run_id": run.info.run_id,
-                    "run_name": run.info.run_name,
-                    "status": run.info.status,
-                    "start_time": run.info.start_time,
-                    "end_time": run.info.end_time,
-                    "params": dict(run.data.params),
-                    "metrics": dict(run.data.metrics),
-                    "tags": {k: v for k, v in run.data.tags.items() if not k.startswith("mlflow.")},
-                })
+                traces_out.append(
+                    {
+                        "run_id": run.info.run_id,
+                        "run_name": run.info.run_name,
+                        "status": run.info.status,
+                        "start_time": run.info.start_time,
+                        "end_time": run.info.end_time,
+                        "params": dict(run.data.params),
+                        "metrics": dict(run.data.metrics),
+                        "tags": {
+                            k: v for k, v in run.data.tags.items() if not k.startswith("mlflow.")
+                        },
+                    }
+                )
 
         return {"experiment_count": len(experiments), "traces": traces_out[:limit]}
     except Exception as e:
@@ -249,7 +310,9 @@ async def debug_llm():
                 try:
                     t0 = time.monotonic()
                     resp = await client.post(
-                        url, json={**test_payload, "model": model}, headers=headers,
+                        url,
+                        json={**test_payload, "model": model},
+                        headers=headers,
                     )
                     elapsed = round(time.monotonic() - t0, 2)
                     diag["nvidia_models"][model] = {
