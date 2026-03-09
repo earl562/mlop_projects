@@ -34,7 +34,7 @@ export default function SatelliteMap({ lat, lng, address }: SatelliteMapProps) {
         <img
           src={staticUrl}
           alt={`Satellite view of ${address}`}
-          className="h-[180px] w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          className="h-[140px] w-full object-cover transition-transform duration-300 group-hover:scale-105 sm:h-[180px]"
           onError={() => setImgError(true)}
         />
       </a>
@@ -47,7 +47,7 @@ export default function SatelliteMap({ lat, lng, address }: SatelliteMapProps) {
       href={googleMapsUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 transition-all hover:border-amber-300 hover:bg-amber-50/50"
+      className="group flex min-h-[44px] items-center gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 transition-all hover:border-amber-300 hover:bg-amber-50/50 sm:p-4"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200">
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

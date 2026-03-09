@@ -12,6 +12,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 
+from plotlot.api.cache import cache_report, get_cached_report
 from plotlot.api.schemas import AnalyzeRequest, ErrorResponse, ZoningReportResponse
 from plotlot.pipeline.lookup import lookup_address
 from plotlot.retrieval.geocode import geocode_address
@@ -145,6 +146,20 @@ async def analyze_stream(request: AnalyzeRequest):
                 "message": f"Found: {municipality}, {county} County",
                 "complete": True,
             })
+
+            # Cache check — skip full pipeline for repeated addresses
+            try:
+                cached = await get_cached_report(request.address)
+                if cached:
+                    logger.info("Cache HIT for %s", request.address)
+                    yield _sse_event("status", {
+                        "step": "cache_hit",
+                        "message": "Using cached analysis",
+                    })
+                    yield _sse_event("result", cached)
+                    return
+            except Exception as exc:
+                logger.warning("Cache lookup failed (proceeding without): %s", exc)
 
             # Step 2: Property lookup (with timeout + heartbeat)
             yield _sse_event("status", {
@@ -295,7 +310,15 @@ async def analyze_stream(request: AnalyzeRequest):
                 })
 
             # Final result
-            yield _sse_event("result", asdict(report))
+            report_dict = asdict(report)
+            yield _sse_event("result", report_dict)
+
+            # Cache the result for future lookups
+            try:
+                await cache_report(request.address, report_dict)
+                logger.info("Cached report for %s", request.address)
+            except Exception as exc:
+                logger.warning("Cache write failed: %s", exc)
 
         except Exception as e:
             logger.exception("Stream pipeline error for: %s", request.address)
@@ -604,6 +627,123 @@ async def ingest_batch(
 async def batch_status():
     """Check batch ingestion progress."""
     return dict(_batch_status)
+
+
+@router.get("/admin/data-quality")
+async def data_quality():
+    """Data quality dashboard -- coverage, freshness, chunk counts per municipality."""
+    from sqlalchemy import text
+
+    session = await get_session()
+    try:
+        result = await session.execute(
+            text("""
+                SELECT
+                    municipality,
+                    county,
+                    COUNT(*) as chunk_count,
+                    COUNT(DISTINCT section) as section_count,
+                    MIN(created_at) as first_ingested,
+                    MAX(created_at) as last_ingested,
+                    AVG(LENGTH(chunk_text))::int as avg_chunk_length,
+                    MIN(LENGTH(chunk_text)) as min_chunk_length,
+                    MAX(LENGTH(chunk_text)) as max_chunk_length
+                FROM ordinance_chunks
+                GROUP BY municipality, county
+                ORDER BY municipality
+            """)
+        )
+        rows = result.fetchall()
+
+        municipalities = []
+        total_chunks = 0
+        for row in rows:
+            muni = {
+                "municipality": row[0],
+                "county": row[1],
+                "chunk_count": row[2],
+                "section_count": row[3],
+                "first_ingested": row[4].isoformat() if row[4] else None,
+                "last_ingested": row[5].isoformat() if row[5] else None,
+                "avg_chunk_length": row[6] or 0,
+                "min_chunk_length": row[7] or 0,
+                "max_chunk_length": row[8] or 0,
+            }
+            municipalities.append(muni)
+            total_chunks += row[2]
+
+        return {
+            "total_municipalities": len(municipalities),
+            "total_chunks": total_chunks,
+            "municipalities": municipalities,
+        }
+    except Exception as e:
+        logger.exception("Data quality query failed")
+        return {"error": str(e), "municipalities": []}
+    finally:
+        await session.close()
+
+
+@router.get("/admin/analytics")
+async def analytics():
+    """API usage analytics -- request counts, latencies, error rates."""
+    from plotlot.api.analytics import get_analytics
+
+    return get_analytics()
+
+
+@router.get("/admin/costs")
+async def cost_dashboard():
+    """LLM cost dashboard -- token usage and estimated costs from MLflow.
+
+    Aggregates per-run token counts and estimated USD costs across recent
+    MLflow experiments. Production relevance: without cost visibility,
+    GetOnStack's costs went from $127/week to $47K/month.
+    """
+    from plotlot.observability.tracing import mlflow as _mlflow
+
+    if _mlflow is None:
+        return {"error": "MLflow not installed", "costs": []}
+
+    try:
+        client = _mlflow.MlflowClient()
+        experiments = client.search_experiments(max_results=5)
+
+        cost_data: list[dict] = []
+        total_cost = 0.0
+        total_tokens = 0
+
+        for exp in experiments:
+            runs = client.search_runs(
+                experiment_ids=[exp.experiment_id],
+                max_results=50,
+                order_by=["start_time DESC"],
+            )
+            for run in runs:
+                metrics = run.data.metrics
+                cost = metrics.get("estimated_cost_usd", 0)
+                tokens = int(metrics.get("total_tokens", 0))
+                if cost > 0 or tokens > 0:
+                    cost_data.append({
+                        "run_id": run.info.run_id,
+                        "start_time": run.info.start_time,
+                        "model": run.data.params.get("model", "unknown"),
+                        "input_tokens": int(metrics.get("input_tokens", 0)),
+                        "output_tokens": int(metrics.get("output_tokens", 0)),
+                        "total_tokens": tokens,
+                        "estimated_cost_usd": round(cost, 6),
+                    })
+                    total_cost += cost
+                    total_tokens += tokens
+
+        return {
+            "total_estimated_cost_usd": round(total_cost, 4),
+            "total_tokens": total_tokens,
+            "query_count": len(cost_data),
+            "recent_queries": cost_data[:20],
+        }
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "costs": []}
 
 
 @router.delete("/admin/chunks")

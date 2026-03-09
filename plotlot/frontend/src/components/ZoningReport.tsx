@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
 import EnvelopeViewerWrapper from "./EnvelopeViewerWrapper";
@@ -37,9 +37,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function DataRow({ label, value }: { label: string; value: string }) {
   if (!value || value === "null" || value === "undefined" || value === "Not specified") return null;
   return (
-    <div className="flex justify-between border-b border-stone-200 py-1.5">
-      <span className="text-sm text-stone-500">{label}</span>
-      <span className="text-sm font-medium text-stone-800">{value}</span>
+    <div className="flex justify-between gap-2 border-b border-stone-200 py-1.5">
+      <span className="shrink-0 text-xs text-stone-500 sm:text-sm">{label}</span>
+      <span className="text-right text-xs font-medium text-stone-800 sm:text-sm">{value}</span>
     </div>
   );
 }
@@ -88,19 +88,63 @@ function parseNumericFt(value: string | undefined | null): number {
 
 export default function ZoningReport({ report }: ZoningReportProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const resp = await fetch(`${API_URL}/api/v1/geometry/report/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      if (!resp.ok) throw new Error("PDF generation failed");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PlotLot_${(report.formatted_address || "report").replace(/[^a-zA-Z0-9]/g, "_").slice(0, 50)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF download failed:", err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [report, pdfLoading]);
 
   return (
-    <div className="w-full space-y-6 rounded-xl border-l-4 border-l-amber-400 border border-stone-200 bg-white p-6 shadow-sm">
+    <div className="w-full space-y-4 rounded-xl border-l-4 border-l-amber-400 border border-stone-200 bg-white p-4 shadow-sm sm:space-y-6 sm:p-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-stone-800">{report.formatted_address}</h2>
-          <p className="mt-1 text-sm text-stone-500">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-bold text-stone-800 sm:text-xl">{report.formatted_address}</h2>
+          <p className="mt-1 text-xs text-stone-500 sm:text-sm">
             {report.municipality}, {report.county} County
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           <ConfidenceBadge level={report.confidence} />
+          <button
+            onClick={handleDownloadPDF}
+            disabled={pdfLoading}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:bg-stone-50 hover:text-stone-800 disabled:opacity-50 sm:min-h-0 sm:min-w-0"
+            title="Download PDF report"
+          >
+            {pdfLoading ? (
+              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+            )}
+            PDF
+          </button>
         </div>
       </div>
 
@@ -110,9 +154,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       )}
 
       {/* Zoning district — prominent standalone line */}
-      <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-black text-amber-700">{report.zoning_district}</span>
-        <span className="text-sm text-stone-500">{report.zoning_description}</span>
+      <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+        <span className="text-2xl font-black text-amber-700 sm:text-3xl">{report.zoning_district}</span>
+        <span className="text-xs text-stone-500 sm:text-sm">{report.zoning_description}</span>
       </div>
 
       {/* Summary */}
@@ -150,9 +194,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
             ].map((s) => {
               const display = s.value && s.value !== "null" ? s.value : "N/A";
               return (
-              <div key={s.label} className="rounded-lg bg-stone-50 p-3 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
-                <div className="text-xs text-stone-500">{s.label}</div>
-                <div className="mt-1 text-lg font-semibold text-stone-800">{display}</div>
+              <div key={s.label} className="rounded-lg bg-stone-50 p-2 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)] sm:p-3">
+                <div className="text-[10px] text-stone-500 sm:text-xs">{s.label}</div>
+                <div className="mt-0.5 text-base font-semibold text-stone-800 sm:mt-1 sm:text-lg">{display}</div>
               </div>
               );
             })}
@@ -240,7 +284,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <div className="space-y-2">
           <button
             onClick={() => setSourcesOpen(!sourcesOpen)}
-            className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-stone-500 transition-colors hover:text-stone-700"
+            className="flex min-h-[44px] items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-stone-500 transition-colors hover:text-stone-700"
           >
             <svg
               className={`h-3.5 w-3.5 transition-transform ${sourcesOpen ? "rotate-90" : ""}`}
