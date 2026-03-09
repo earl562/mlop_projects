@@ -1,12 +1,15 @@
-"""Geometry endpoints — buildable envelope computation.
+"""Geometry endpoints — buildable envelope computation, PDF export, pro forma.
 
 Computes 3D geometry for the buildable envelope viewer given lot dimensions,
-setbacks, and zoning constraints (height, FAR, coverage).
+setbacks, and zoning constraints (height, FAR, coverage).  Also provides
+PDF export for zoning reports and pro forma financing documents.
 """
 
+import io
 import logging
 
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from plotlot.api.schemas import (
     EnvelopeGeometry,
@@ -15,6 +18,15 @@ from plotlot.api.schemas import (
     FloorPlanRequest as FloorPlanRequestSchema,
     FloorPlanResponse,
     FloorPlanUnitResponse,
+    ProFormaRequest,
+    ProFormaResponse,
+    ZoningReportResponse,
+)
+from plotlot.documents.pdf_export import generate_zoning_pdf
+from plotlot.documents.proforma import (
+    ProFormaInput,
+    compute_pro_forma,
+    generate_pro_forma_pdf,
 )
 from plotlot.rendering.floorplan import (
     FloorPlanRequest as InternalFloorPlanRequest,
@@ -162,4 +174,101 @@ async def compute_floorplan(request: FloorPlanRequestSchema) -> FloorPlanRespons
         parking_spaces=plan.parking_spaces,
         notes=plan.notes,
         svg=svg,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDF Report Export (F1)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/report/pdf")
+async def export_report_pdf(report: ZoningReportResponse):
+    """Export a zoning report as a branded PDF."""
+    pdf_bytes = generate_zoning_pdf(report.model_dump())
+    address_slug = (
+        (report.formatted_address or report.address or "report")
+        .replace(" ", "_")
+        .replace(",", "")[:50]
+    )
+    filename = f"PlotLot_{address_slug}.pdf"
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pro Forma (F3)
+# ---------------------------------------------------------------------------
+
+
+def _request_to_input(request: ProFormaRequest) -> ProFormaInput:
+    """Convert API request schema to internal ProFormaInput dataclass."""
+    return ProFormaInput(
+        address=request.address,
+        municipality=request.municipality,
+        county=request.county,
+        zoning_district=request.zoning_district,
+        lot_size_sqft=request.lot_size_sqft,
+        max_units=request.max_units,
+        unit_size_sqft=request.unit_size_sqft,
+        stories=request.stories,
+        parking_spaces=request.parking_spaces,
+        land_cost=request.land_cost,
+        construction_cost_psf=request.construction_cost_psf,
+        soft_cost_pct=request.soft_cost_pct,
+        contingency_pct=request.contingency_pct,
+        ltv_pct=request.ltv_pct,
+        interest_rate_pct=request.interest_rate_pct,
+        loan_term_years=request.loan_term_years,
+        monthly_rent_per_unit=request.monthly_rent_per_unit,
+        sale_price_per_unit=request.sale_price_per_unit,
+        vacancy_pct=request.vacancy_pct,
+        operating_expense_pct=request.operating_expense_pct,
+        narrative=request.narrative,
+    )
+
+
+@router.post("/proforma", response_model=ProFormaResponse)
+async def compute_proforma(request: ProFormaRequest):
+    """Compute pro forma development analysis."""
+    inp = _request_to_input(request)
+    result = compute_pro_forma(inp)
+    return ProFormaResponse(
+        total_buildable_sqft=result.total_buildable_sqft,
+        hard_costs=result.hard_costs,
+        soft_costs=result.soft_costs,
+        contingency=result.contingency,
+        total_development_cost=result.total_development_cost,
+        loan_amount=result.loan_amount,
+        equity_required=result.equity_required,
+        annual_debt_service=result.annual_debt_service,
+        gross_annual_income=result.gross_annual_income,
+        effective_gross_income=result.effective_gross_income,
+        operating_expenses=result.operating_expenses,
+        net_operating_income=result.net_operating_income,
+        cap_rate_pct=result.cap_rate_pct,
+        cash_on_cash_pct=result.cash_on_cash_pct,
+        total_sale_revenue=result.total_sale_revenue,
+        total_profit=result.total_profit,
+        roi_pct=result.roi_pct,
+        notes=result.notes,
+    )
+
+
+@router.post("/proforma/pdf")
+async def export_proforma_pdf(request: ProFormaRequest):
+    """Export pro forma as PDF."""
+    inp = _request_to_input(request)
+    pdf_bytes = generate_pro_forma_pdf(inp)
+    slug = (request.address or "proforma").replace(" ", "_").replace(",", "")[:50]
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="PlotLot_ProForma_{slug}.pdf"'
+        },
     )

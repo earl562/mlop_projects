@@ -16,12 +16,14 @@ from plotlot.core.types import PropertyRecord
 from plotlot.property.base import PropertyProvider
 from plotlot.property.registry import get_provider, register_provider, registered_counties
 
-# Register built-in FL providers ------------------------------------------------
+# Register built-in providers ---------------------------------------------------
 
 from plotlot.property.broward import BrowardProvider
+from plotlot.property.mecklenburg import MecklenburgProvider
 from plotlot.property.miami_dade import MiamiDadeProvider
 from plotlot.property.palm_beach import PalmBeachProvider
 
+# FL providers
 _broward = BrowardProvider()
 _miami_dade = MiamiDadeProvider()
 _palm_beach = PalmBeachProvider()
@@ -30,6 +32,11 @@ register_provider("miami-dade", _miami_dade)
 register_provider("miami dade", _miami_dade)  # alias — Geocodio sometimes omits hyphen
 register_provider("broward", _broward)
 register_provider("palm beach", _palm_beach)
+
+# NC providers
+_mecklenburg = MecklenburgProvider()
+
+register_provider("mecklenburg", _mecklenburg)
 
 
 # Convenience top-level lookup ---------------------------------------------------
