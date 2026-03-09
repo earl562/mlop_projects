@@ -88,6 +88,7 @@ async def _resolve_all_configs() -> dict:
 # ---------------------------------------------------------------------------
 
 MIN_CHUNK_TEXT_LENGTH = 50
+COMMIT_BATCH_SIZE = 100
 
 
 def validate_chunks(chunks, embeddings):
@@ -157,14 +158,16 @@ async def ingest_municipality(key: str) -> int:
         _scrape, config, retries=2, delay=30.0, label=f"scrape:{config.municipality}",
     )
     logger.info("Scraped %d sections", len(sections))
+    await asyncio.sleep(0)  # yield to event loop between stages
 
     if not sections:
         logger.warning("No sections found for %s — skipping", config.municipality)
         return 0
 
-    # Step 2: Chunk (deterministic — no retry needed)
-    chunks = chunk_sections(sections)
+    # Step 2: Chunk (CPU-bound BeautifulSoup — run in thread pool to free event loop)
+    chunks = await asyncio.to_thread(chunk_sections, sections)
     logger.info("Created %d chunks from %d sections", len(chunks), len(sections))
+    await asyncio.sleep(0)  # yield to event loop between stages
 
     if not chunks:
         return 0
@@ -176,9 +179,11 @@ async def ingest_municipality(key: str) -> int:
         embed_texts, texts, retries=3, delay=10.0, label=f"embed:{config.municipality}",
     )
     logger.info("Embedded %d chunks (%dd each)", len(embeddings), EMBEDDING_DIM)
+    await asyncio.sleep(0)  # yield to event loop between stages
 
     # Step 3.5: Validate (deterministic)
     chunks, embeddings = validate_chunks(chunks, embeddings)
+    await asyncio.sleep(0)  # yield to event loop between stages
     if not chunks:
         logger.warning("No valid chunks after validation — skipping store")
         return 0
@@ -188,26 +193,31 @@ async def ingest_municipality(key: str) -> int:
     session: AsyncSession = await get_session()
 
     try:
-        rows = []
-        for chunk, embedding in zip(chunks, embeddings):
-            row = OrdinanceChunk(
-                municipality=chunk.metadata.municipality,
-                county=chunk.metadata.county,
-                chapter=chunk.metadata.chapter,
-                section=chunk.metadata.section,
-                section_title=chunk.metadata.section_title,
-                zone_codes=chunk.metadata.zone_codes,
-                chunk_text=chunk.text,
-                chunk_index=chunk.metadata.chunk_index,
-                embedding=embedding,
-                municode_node_id=chunk.metadata.municode_node_id,
-            )
-            rows.append(row)
-
-        session.add_all(rows)
-        await session.commit()
-        logger.info("Stored %d chunks for %s", len(rows), config.municipality)
-        return len(rows)
+        stored = 0
+        for batch_start in range(0, len(chunks), COMMIT_BATCH_SIZE):
+            batch_chunks = chunks[batch_start:batch_start + COMMIT_BATCH_SIZE]
+            batch_embeddings = embeddings[batch_start:batch_start + COMMIT_BATCH_SIZE]
+            rows = []
+            for chunk, embedding in zip(batch_chunks, batch_embeddings):
+                row = OrdinanceChunk(
+                    municipality=chunk.metadata.municipality,
+                    county=chunk.metadata.county,
+                    chapter=chunk.metadata.chapter,
+                    section=chunk.metadata.section,
+                    section_title=chunk.metadata.section_title,
+                    zone_codes=chunk.metadata.zone_codes,
+                    chunk_text=chunk.text,
+                    chunk_index=chunk.metadata.chunk_index,
+                    embedding=embedding,
+                    municode_node_id=chunk.metadata.municode_node_id,
+                )
+                rows.append(row)
+            session.add_all(rows)
+            await session.commit()
+            stored += len(rows)
+            await asyncio.sleep(0)  # yield between DB batches
+        logger.info("Stored %d chunks for %s", stored, config.municipality)
+        return stored
 
     except Exception:
         await session.rollback()

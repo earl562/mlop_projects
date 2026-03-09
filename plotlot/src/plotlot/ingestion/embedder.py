@@ -19,6 +19,7 @@ MODEL_ID = "nvidia/nv-embedqa-e5-v5"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/embeddings"
 EMBEDDING_DIM = 1024
 BATCH_SIZE = 32
+CONCURRENT_BATCHES = 2
 MAX_RETRIES = 3
 BASE_DELAY = 2.0  # seconds
 
@@ -104,20 +105,36 @@ async def embed_texts(
     }
     all_embeddings: list[list[float]] = []
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        for batch_idx, i in enumerate(range(0, len(texts), BATCH_SIZE)):
-            batch = texts[i : i + BATCH_SIZE]
-            batch = [t[:2000] for t in batch]
+    semaphore = asyncio.Semaphore(CONCURRENT_BATCHES)
 
+    async def _run_batch(
+        batch_idx: int, i: int,
+    ) -> tuple[int, list[list[float]]]:
+        batch = texts[i : i + BATCH_SIZE]
+        batch = [t[:2000] for t in batch]
+
+        async with semaphore:
             with start_span(
                 name=f"embed_batch_{batch_idx}", span_type="EMBEDDING",
             ) as span:
                 span.set_inputs({"batch_size": len(batch), "input_type": input_type})
                 batch_embeddings = await _embed_batch(client, batch, headers, input_type)
-                all_embeddings.extend(batch_embeddings)
                 span.set_outputs({"embedding_dim": len(batch_embeddings[0]) if batch_embeddings else 0})
             logger.debug(
                 "Embedded batch %d-%d (%dd)", i, i + len(batch), EMBEDDING_DIM,
             )
+        return batch_idx, batch_embeddings
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        tasks = [
+            _run_batch(batch_idx, i)
+            for batch_idx, i in enumerate(range(0, len(texts), BATCH_SIZE))
+        ]
+        results = await asyncio.gather(*tasks)
+
+    # Sort by batch_idx to preserve original text ordering
+    results.sort(key=lambda r: r[0])
+    for _, batch_embeddings in results:
+        all_embeddings.extend(batch_embeddings)
 
     return all_embeddings
