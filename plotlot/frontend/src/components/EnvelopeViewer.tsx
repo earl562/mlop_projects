@@ -513,7 +513,7 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
 
   if (!isValid) {
     return (
-      <div className="flex h-[400px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50">
+      <div className="flex h-[300px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50 sm:h-[400px]">
         <p className="text-sm text-stone-500">
           Lot dimensions required to render the 3D buildable envelope.
         </p>
@@ -524,7 +524,7 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
   return (
     <div className="space-y-2">
       {/* 3D Canvas */}
-      <div className="relative h-[400px] w-full overflow-hidden rounded-lg border border-stone-200 bg-gradient-to-b from-stone-100 to-stone-50">
+      <div className="relative h-[300px] w-full overflow-hidden rounded-lg border border-stone-200 bg-gradient-to-b from-stone-100 to-stone-50 sm:h-[400px]">
         <Canvas
           camera={{
             position: [camDist * 0.7, camDist * 0.6, camDist * 0.7],
@@ -544,7 +544,7 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-stone-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[10px] text-stone-500 sm:gap-x-4 sm:text-xs">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.lotFill }} />
           Lot boundary
@@ -566,7 +566,7 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
           Buildable envelope
         </span>
         {displayArea > 0 && (
-          <span className="ml-auto font-medium text-stone-700">
+          <span className="w-full font-medium text-stone-700 sm:ml-auto sm:w-auto">
             {displayArea.toLocaleString()} sqft buildable
           </span>
         )}

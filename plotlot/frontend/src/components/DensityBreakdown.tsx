@@ -10,24 +10,24 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
   const maxRaw = Math.max(...analysis.constraints.map((c) => c.raw_value), 1);
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-700">
+    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-700 sm:text-sm">
             Max Allowable Units
           </h3>
-          <p className="mt-0.5 text-xs text-stone-500">
+          <p className="mt-0.5 truncate text-[10px] text-stone-500 sm:text-xs">
             Governing constraint: {analysis.governing_constraint}
           </p>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           <div
-            className="text-4xl font-black text-amber-700"
+            className="text-3xl font-black text-amber-700 sm:text-4xl"
             style={{ textShadow: "0 1px 2px rgba(180, 83, 9, 0.15)" }}
           >
             {analysis.max_units}
           </div>
-          <div className="text-xs text-stone-500">
+          <div className="text-[10px] text-stone-500 sm:text-xs">
             {analysis.lot_size_sqft.toLocaleString()} sqft lot
           </div>
         </div>
@@ -62,7 +62,7 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-stone-500 font-mono">{c.formula}</p>
+              <p className="mt-0.5 truncate text-[10px] text-stone-500 font-mono">{c.formula}</p>
             </div>
           );
         })}

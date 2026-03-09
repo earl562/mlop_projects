@@ -88,13 +88,15 @@ export default function FloorPlanViewer({
   return (
     <div className="space-y-3">
       {/* SVG Floor Plan */}
-      <div
-        className="rounded-lg border border-stone-200 bg-white p-4 overflow-x-auto"
-        dangerouslySetInnerHTML={{ __html: data.svg }}
-      />
+      <div className="-mx-1 overflow-x-auto sm:mx-0">
+        <div
+          className="min-w-[320px] rounded-lg border border-stone-200 bg-white p-2 sm:p-4"
+          dangerouslySetInnerHTML={{ __html: data.svg }}
+        />
+      </div>
 
       {/* Summary bar */}
-      <div className="flex flex-wrap gap-4 text-sm text-stone-600">
+      <div className="flex flex-wrap gap-2 text-xs text-stone-600 sm:gap-4 sm:text-sm">
         <span className="font-medium text-stone-800">{templateLabel}</span>
         <span>{data.total_units} unit{data.total_units !== 1 ? "s" : ""}</span>
         <span>{data.stories} stor{data.stories !== 1 ? "ies" : "y"}</span>
