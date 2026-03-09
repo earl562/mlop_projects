@@ -146,12 +146,32 @@ async def analyze_stream(request: AnalyzeRequest):
                 "complete": True,
             })
 
-            # Step 2: Property lookup
+            # Step 2: Property lookup (with timeout + heartbeat)
             yield _sse_event("status", {
                 "step": "property",
                 "message": "Fetching property record...",
             })
-            prop_record = await lookup_property(request.address, county, lat=lat, lng=lng)
+            prop_task = asyncio.create_task(
+                lookup_property(request.address, county, lat=lat, lng=lng)
+            )
+            prop_record = None
+            for _tick in range(4):  # 4 × 10s = 40s max
+                done, _ = await asyncio.wait({prop_task}, timeout=10)
+                if done:
+                    try:
+                        prop_record = prop_task.result()
+                    except Exception as e:
+                        logger.warning("Property lookup failed: %s", e)
+                    break
+                # Heartbeat keeps SSE connection alive through Render proxy
+                yield _sse_event("status", {
+                    "step": "property",
+                    "message": "Fetching property record...",
+                })
+            else:
+                # Timed out — cancel and proceed without property record
+                prop_task.cancel()
+                logger.warning("Property lookup timed out for: %s", request.address)
 
             if prop_record and prop_record.municipality:
                 pa_muni = prop_record.municipality.strip().title()
@@ -518,6 +538,8 @@ async def _run_batch_ingestion(skip_existing: bool) -> None:
                 results[key] = f"failed: {str(e)[:100]}"
                 failed += 1
                 _ingest_status[key] = {"status": "failed", "error": str(e)[:200]}
+
+            await asyncio.sleep(0)  # yield between municipalities for user requests
 
         total_chunks = sum(v for v in results.values() if isinstance(v, int))
         _batch_status.update({

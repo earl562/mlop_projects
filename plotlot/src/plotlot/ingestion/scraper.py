@@ -113,11 +113,14 @@ class MunicodeScraper:
             children = await self.get_toc_children(
                 client, config, node_id=node_id, depth=depth, parent_heading=parent_heading
             )
+            branches = []
             for child in children:
                 if child.has_children:
-                    await _recurse(child.node_id, depth + 1, child.heading)
+                    branches.append(_recurse(child.node_id, depth + 1, child.heading))
                 else:
                     all_leaves.append(child)
+            if branches:
+                await asyncio.gather(*branches)
 
         await _recurse(root_node_id, depth=1, parent_heading=None)
         return all_leaves
@@ -139,20 +142,19 @@ class MunicodeScraper:
             leaves = await self.walk_toc(client, config, config.zoning_node_id, max_depth)
             logger.info("Found %d leaf sections for %s", len(leaves), config.municipality)
 
-            for leaf in leaves:
+            # Fetch all leaf sections in parallel (governed by self._semaphore)
+            async def _fetch_leaf(leaf: TocNode) -> RawSection | None:
                 try:
                     html = await self.get_section_content(client, config, leaf.node_id)
                     if html:
-                        sections.append(
-                            RawSection(
-                                municipality=config.municipality,
-                                county=config.county,
-                                node_id=leaf.node_id,
-                                heading=leaf.heading,
-                                parent_heading=leaf.parent_heading,
-                                html_content=html,
-                                depth=leaf.depth,
-                            )
+                        return RawSection(
+                            municipality=config.municipality,
+                            county=config.county,
+                            node_id=leaf.node_id,
+                            heading=leaf.heading,
+                            parent_heading=leaf.parent_heading,
+                            html_content=html,
+                            depth=leaf.depth,
                         )
                 except Exception as e:
                     logger.warning(
@@ -161,6 +163,10 @@ class MunicodeScraper:
                         leaf.heading,
                         e,
                     )
+                return None
+
+            results = await asyncio.gather(*[_fetch_leaf(leaf) for leaf in leaves])
+            sections = [r for r in results if r is not None]
 
         logger.info("Scraped %d sections for %s", len(sections), config.municipality)
         return sections
