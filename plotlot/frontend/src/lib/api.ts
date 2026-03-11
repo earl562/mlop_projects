@@ -50,6 +50,7 @@ export interface NumericParamsData {
   min_unit_size_sqft: number | null;
   min_lot_width_ft: number | null;
   parking_spaces_per_unit: number | null;
+  property_type: string | null;
 }
 
 export interface PropertyRecordData {
