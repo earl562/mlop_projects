@@ -1,0 +1,28 @@
+# Python backend (not needed for Vercel frontend deploy)
+plotlot/.venv/
+plotlot/src/
+plotlot/tests/
+plotlot/alembic/
+plotlot/docker/
+plotlot/scripts/
+plotlot/mlruns.db
+plotlot/uv.lock
+plotlot/pyproject.toml
+plotlot/Dockerfile
+
+# Screenshots and test artifacts
+*.png
+*.jpg
+*.docx
+plotlot/frontend/tests/screenshots/
+plotlot/frontend/playwright-report/
+plotlot/frontend/test-results/
+plotlot/test-results/
+
+# Logs
+*.log
+.playwright-mcp/
+
+# IDE and system
+.claude/
+.github/
