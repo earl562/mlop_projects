@@ -12,11 +12,13 @@ from threading import Lock
 logger = logging.getLogger(__name__)
 
 _lock = Lock()
-_endpoint_stats: dict[str, dict] = defaultdict(lambda: {
-    "count": 0,
-    "errors": 0,
-    "latencies": [],  # last 1000
-})
+_endpoint_stats: dict[str, dict] = defaultdict(
+    lambda: {
+        "count": 0,
+        "errors": 0,
+        "latencies": [],  # last 1000
+    }
+)
 _start_time: float = time.time()
 
 MAX_LATENCIES = 1000

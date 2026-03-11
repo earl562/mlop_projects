@@ -9,6 +9,9 @@ export interface PipelineStatus {
   step: string;
   message: string;
   complete?: boolean;
+  resolved_address?: string;
+  folio?: string;
+  lot_sqft?: number;
 }
 
 export interface SetbacksData {
@@ -33,6 +36,7 @@ export interface DensityAnalysisData {
   buildable_area_sqft: number | null;
   lot_width_ft: number | null;
   lot_depth_ft: number | null;
+  max_gla_sqft: number | null;
   confidence: string;
   notes: string[];
 }
@@ -51,6 +55,10 @@ export interface NumericParamsData {
   min_lot_width_ft: number | null;
   parking_spaces_per_unit: number | null;
   property_type: string | null;
+  parking_per_1000_gla_sqft: number | null;
+  max_gla_sqft: number | null;
+  min_tenant_size_sqft: number | null;
+  loading_spaces: number | null;
 }
 
 export interface PropertyRecordData {
@@ -79,6 +87,7 @@ export interface PropertyRecordData {
   last_sale_date: string;
   lat: number | null;
   lng: number | null;
+  parcel_geometry?: number[][] | null;
 }
 
 export interface ZoningReportData {

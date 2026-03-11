@@ -41,6 +41,7 @@ register_provider("mecklenburg", _mecklenburg)
 
 # Convenience top-level lookup ---------------------------------------------------
 
+
 async def lookup_property(
     address: str,
     county: str,
@@ -61,7 +62,8 @@ async def lookup_property(
         import logging
 
         logging.getLogger(__name__).warning(
-            "No PropertyProvider registered for county: %s", county,
+            "No PropertyProvider registered for county: %s",
+            county,
         )
         return None
 
@@ -71,7 +73,9 @@ async def lookup_property(
         import logging
 
         logging.getLogger(__name__).exception(
-            "PropertyProvider.lookup failed for %s (%s)", address, county,
+            "PropertyProvider.lookup failed for %s (%s)",
+            address,
+            county,
         )
         return None
 

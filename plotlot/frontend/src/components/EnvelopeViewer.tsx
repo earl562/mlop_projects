@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text, Line, Grid } from "@react-three/drei";
 import * as THREE from "three";
+import BuildingModel from "./BuildingModel";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -17,6 +18,14 @@ export interface EnvelopeViewerProps {
   setbackRearFt: number;
   maxHeightFt: number;
   buildableAreaSqft?: number;
+  // Building model props
+  maxStories?: number;
+  maxLotCoveragePct?: number;
+  far?: number;
+  lotSizeSqft?: number;
+  propertyType?: string;
+  maxUnits?: number;
+  parkingPerUnit?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,9 +389,22 @@ function LotOutline({ width, depth }: { width: number; depth: number }) {
 // Scene (all 3D content)
 // ---------------------------------------------------------------------------
 
-function EnvelopeScene(props: EnvelopeViewerProps) {
-  const { lotWidthFt, lotDepthFt, setbackFrontFt, setbackSideFt, setbackRearFt, maxHeightFt } =
-    props;
+function EnvelopeScene(props: EnvelopeViewerProps & { viewMode: "building" | "envelope" }) {
+  const {
+    lotWidthFt, lotDepthFt, setbackFrontFt, setbackSideFt, setbackRearFt, maxHeightFt,
+    maxStories, maxLotCoveragePct, far, lotSizeSqft, propertyType, maxUnits, parkingPerUnit,
+    viewMode,
+  } = props;
+
+  // Buildable dimensions
+  const bw = lotWidthFt - 2 * setbackSideFt;
+  const bd = lotDepthFt - setbackFrontFt - setbackRearFt;
+
+  // Center of buildable area
+  const halfW = lotWidthFt / 2;
+  const halfD = lotDepthFt / 2;
+  const cx = 0;
+  const cz = (-halfD + setbackRearFt + (halfD - setbackFrontFt)) / 2;
 
   // Camera distance based on lot size
   const maxDim = Math.max(lotWidthFt, lotDepthFt, maxHeightFt);
@@ -395,7 +417,22 @@ function EnvelopeScene(props: EnvelopeViewerProps) {
     <>
       {/* Lighting */}
       <ambientLight intensity={0.6} />
-      <directionalLight position={[camDist, camDist, camDist]} intensity={0.8} />
+      <directionalLight
+        position={[camDist * 0.5, camDist * 0.8, camDist * 0.5]}
+        intensity={viewMode === "building" ? 1.2 : 0.8}
+        castShadow={viewMode === "building"}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-near={1}
+        shadow-camera-far={camDist * 3}
+        shadow-camera-left={-maxDim}
+        shadow-camera-right={maxDim}
+        shadow-camera-top={maxDim}
+        shadow-camera-bottom={-maxDim}
+      />
+      {viewMode === "building" && (
+        <hemisphereLight args={["#87CEEB", "#4A7C59", 0.3]} />
+      )}
 
       {/* Camera controls */}
       <OrbitControls
@@ -435,30 +472,49 @@ function EnvelopeScene(props: EnvelopeViewerProps) {
         rear={setbackRearFt}
       />
 
-      {/* Buildable envelope */}
-      <BuildableEnvelope
-        lotWidth={lotWidthFt}
-        lotDepth={lotDepthFt}
-        front={setbackFrontFt}
-        side={setbackSideFt}
-        rear={setbackRearFt}
-        height={maxHeightFt}
-      />
-      <EnvelopeEdges
-        lotWidth={lotWidthFt}
-        lotDepth={lotDepthFt}
-        front={setbackFrontFt}
-        side={setbackSideFt}
-        rear={setbackRearFt}
-        height={maxHeightFt}
-      />
-
-      {/* Height ceiling plane */}
-      <HeightPlane
-        lotWidth={lotWidthFt}
-        lotDepth={lotDepthFt}
-        height={maxHeightFt}
-      />
+      {/* Buildable envelope OR Building model */}
+      {viewMode === "building" ? (
+        bw > 0 && bd > 0 && (
+          <BuildingModel
+            footprintWidth={bw}
+            footprintDepth={bd}
+            maxStories={maxStories || Math.floor(maxHeightFt / 10)}
+            maxHeightFt={maxHeightFt}
+            maxLotCoveragePct={maxLotCoveragePct || 100}
+            far={far || 0}
+            lotSizeSqft={lotSizeSqft || lotWidthFt * lotDepthFt}
+            propertyType={propertyType || "single_family"}
+            maxUnits={maxUnits || 1}
+            parkingPerUnit={parkingPerUnit || 2}
+            positionX={cx}
+            positionZ={cz}
+          />
+        )
+      ) : (
+        <>
+          <BuildableEnvelope
+            lotWidth={lotWidthFt}
+            lotDepth={lotDepthFt}
+            front={setbackFrontFt}
+            side={setbackSideFt}
+            rear={setbackRearFt}
+            height={maxHeightFt}
+          />
+          <EnvelopeEdges
+            lotWidth={lotWidthFt}
+            lotDepth={lotDepthFt}
+            front={setbackFrontFt}
+            side={setbackSideFt}
+            rear={setbackRearFt}
+            height={maxHeightFt}
+          />
+          <HeightPlane
+            lotWidth={lotWidthFt}
+            lotDepth={lotDepthFt}
+            height={maxHeightFt}
+          />
+        </>
+      )}
 
       {/* Height indicator line */}
       <HeightIndicator
@@ -493,7 +549,16 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
     setbackRearFt,
     maxHeightFt,
     buildableAreaSqft,
+    maxStories,
+    maxLotCoveragePct,
+    far,
+    lotSizeSqft,
+    propertyType,
+    maxUnits,
+    parkingPerUnit,
   } = props;
+
+  const [viewMode, setViewMode] = useState<"building" | "envelope">("building");
 
   // Validate: need positive lot dimensions to render anything useful
   const isValid = lotWidthFt > 0 && lotDepthFt > 0;
@@ -513,7 +578,7 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
 
   if (!isValid) {
     return (
-      <div className="flex h-[300px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50 sm:h-[400px]">
+      <div className="flex h-[300px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)] sm:h-[400px]">
         <p className="text-sm text-stone-500">
           Lot dimensions required to render the 3D buildable envelope.
         </p>
@@ -524,8 +589,25 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
   return (
     <div className="space-y-2">
       {/* 3D Canvas */}
-      <div className="relative h-[300px] w-full overflow-hidden rounded-lg border border-stone-200 bg-gradient-to-b from-stone-100 to-stone-50 sm:h-[400px]">
+      <div className="relative h-[300px] w-full overflow-hidden rounded-lg border border-[var(--border)] bg-gradient-to-b from-stone-100 to-stone-50 dark:from-stone-800 dark:to-stone-900 sm:h-[400px]">
+        {/* View mode toggle */}
+        <div className="absolute top-2 left-2 z-10 flex gap-1 rounded-lg bg-[var(--bg-surface)]/90 p-1 shadow-sm backdrop-blur-sm">
+          <button
+            onClick={() => setViewMode("building")}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${viewMode === "building" ? "bg-amber-700 text-white" : "text-stone-500 hover:text-[var(--text-secondary)]"}`}
+          >
+            3D Building
+          </button>
+          <button
+            onClick={() => setViewMode("envelope")}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${viewMode === "envelope" ? "bg-amber-700 text-white" : "text-stone-500 hover:text-[var(--text-secondary)]"}`}
+          >
+            Envelope
+          </button>
+        </div>
+
         <Canvas
+          shadows={viewMode === "building"}
           camera={{
             position: [camDist * 0.7, camDist * 0.6, camDist * 0.7],
             fov: 45,
@@ -534,22 +616,22 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
           }}
           gl={{ antialias: true }}
         >
-          <EnvelopeScene {...props} />
+          <EnvelopeScene {...props} viewMode={viewMode} />
         </Canvas>
 
         {/* Overlay hint */}
-        <div className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-white/80 px-2 py-1 text-[10px] text-stone-400 backdrop-blur-sm">
+        <div className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-[var(--bg-surface)]/80 px-2 py-1 text-xs text-stone-500 backdrop-blur-sm">
           Drag to orbit / Scroll to zoom
         </div>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[10px] text-stone-500 sm:gap-x-4 sm:text-xs">
-        <span className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-xs text-stone-500 sm:gap-x-4 sm:text-xs">
+        <span className="flex items-center gap-2">
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.lotFill }} />
           Lot boundary
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <span
             className="inline-block h-0.5 w-4"
             style={{
@@ -558,15 +640,18 @@ export default function EnvelopeViewer(props: EnvelopeViewerProps) {
           />
           Setback lines
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <span
             className="inline-block h-2.5 w-2.5 rounded-sm border"
-            style={{ backgroundColor: `${COLORS.envelopeWall}33`, borderColor: COLORS.envelopeWall }}
+            style={{
+              backgroundColor: viewMode === "building" ? "#78716c33" : `${COLORS.envelopeWall}33`,
+              borderColor: viewMode === "building" ? "#78716c" : COLORS.envelopeWall,
+            }}
           />
-          Buildable envelope
+          {viewMode === "building" ? "3D Building" : "Buildable envelope"}
         </span>
         {displayArea > 0 && (
-          <span className="w-full font-medium text-stone-700 sm:ml-auto sm:w-auto">
+          <span className="w-full font-medium text-[var(--text-secondary)] sm:ml-auto sm:w-auto">
             {displayArea.toLocaleString()} sqft buildable
           </span>
         )}

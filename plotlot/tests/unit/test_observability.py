@@ -29,7 +29,7 @@ class TestPromptRegistry:
     def test_get_prompt_version(self):
         """Prompt version should be a non-empty string."""
         version = get_prompt_version("analysis")
-        assert version == "v1"
+        assert version == "v2"
 
     def test_list_prompts(self):
         """All registered prompts are listed."""

@@ -126,9 +126,11 @@ def compute_pro_forma(inp: ProFormaInput) -> ProFormaResult:
     monthly_rate = inp.interest_rate_pct / 100 / 12
     n_payments = inp.loan_term_years * 12
     if monthly_rate > 0 and n_payments > 0:
-        monthly_payment = r.loan_amount * (
-            monthly_rate * (1 + monthly_rate) ** n_payments
-        ) / ((1 + monthly_rate) ** n_payments - 1)
+        monthly_payment = (
+            r.loan_amount
+            * (monthly_rate * (1 + monthly_rate) ** n_payments)
+            / ((1 + monthly_rate) ** n_payments - 1)
+        )
         r.annual_debt_service = monthly_payment * 12
 
     # Revenue — rental scenario
@@ -153,6 +155,68 @@ def compute_pro_forma(inp: ProFormaInput) -> ProFormaResult:
             r.roi_pct = (r.total_profit / r.total_development_cost) * 100
 
     return r
+
+
+def compute_property_type_summary(
+    property_type: str,
+    max_units: int,
+    lot_size_sqft: float,
+    land_cost: float = 0.0,
+    avg_unit_size_sqft: float = 1000.0,
+) -> dict:
+    """Compute property-type-specific financial summary for the report card.
+
+    Returns a dict with property_type, label, metrics, and notes.
+    """
+    result: dict = {"property_type": property_type, "metrics": {}, "notes": []}
+
+    if property_type == "land":
+        result["label"] = "Land / Development Site"
+        density_premium = max(1.0, max_units * 0.15 + 1.0)
+        est_entitled_value = land_cost * density_premium if land_cost > 0 else 0
+        total_buildable = max_units * avg_unit_size_sqft
+        est_dev_cost = total_buildable * 175  # rough avg construction cost
+        result["metrics"] = {
+            "max_units": max_units,
+            "total_buildable_sqft": total_buildable,
+            "density_premium_factor": round(density_premium, 2),
+            "est_entitled_value": round(est_entitled_value),
+            "est_development_cost": round(est_dev_cost),
+        }
+        result["notes"].append("Land valuation uses development potential approach")
+
+    elif property_type == "single_family":
+        result["label"] = "Single-Family Residential"
+        result["metrics"] = {
+            "max_units": max_units,
+            "lot_size_sqft": lot_size_sqft,
+        }
+        result["notes"].append("Single-family valuation uses comparable sales approach")
+        result["notes"].append("Provide purchase price and ARV for full analysis")
+
+    elif property_type == "multifamily":
+        result["label"] = "Multifamily (2-4 Units)"
+        result["metrics"] = {
+            "max_units": max_units,
+            "lot_size_sqft": lot_size_sqft,
+        }
+        result["notes"].append("Small multifamily uses hybrid valuation (comps + income)")
+        result["notes"].append("Provide rent per unit for NOI and cap rate analysis")
+
+    elif property_type == "commercial_mf":
+        result["label"] = "Commercial Multifamily (5+ Units)"
+        result["metrics"] = {
+            "max_units": max_units,
+            "lot_size_sqft": lot_size_sqft,
+        }
+        result["notes"].append("Commercial MF valued via income approach (NOI / Cap Rate)")
+        result["notes"].append("Lenders require DSCR of 1.15-1.25 minimum")
+
+    else:
+        result["label"] = "General"
+        result["metrics"] = {"max_units": max_units}
+
+    return result
 
 
 def generate_pro_forma_pdf(inp: ProFormaInput) -> bytes:

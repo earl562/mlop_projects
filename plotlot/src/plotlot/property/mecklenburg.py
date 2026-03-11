@@ -17,8 +17,7 @@ from plotlot.property.base import PropertyProvider
 logger = logging.getLogger(__name__)
 
 MECKLENBURG_PARCEL_URL = (
-    "https://gis.charlottenc.gov/arcgis/rest/services/"
-    "Common/DynamicMecklenburg/MapServer/61/query"
+    "https://gis.charlottenc.gov/arcgis/rest/services/Common/DynamicMecklenburg/MapServer/61/query"
 )
 
 
@@ -120,7 +119,9 @@ class MecklenburgProvider(PropertyProvider):
             land_use_code=str(attrs.get("LAND_USE_CD", "") or attrs.get("LU_CODE", "")),
             land_use_description=str(attrs.get("LAND_USE", "") or attrs.get("LU_DESC", "")),
             lot_size_sqft=lot_size,
-            assessed_value=float(attrs.get("TOTAL_VALUE", 0) or attrs.get("ASSESSED_VALUE", 0) or 0),
+            assessed_value=float(
+                attrs.get("TOTAL_VALUE", 0) or attrs.get("ASSESSED_VALUE", 0) or 0
+            ),
             market_value=float(attrs.get("MARKET_VALUE", 0) or attrs.get("TOTAL_VALUE", 0) or 0),
             year_built=int(attrs.get("YEAR_BUILT", 0) or 0),
             building_area_sqft=float(attrs.get("BLDG_SQFT", 0) or attrs.get("HEATED_AREA", 0) or 0),

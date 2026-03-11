@@ -19,10 +19,12 @@ class TestExperimentTrackedEval:
     def test_experiment_run_logged(self, golden_data, all_scorers):
         """Eval run logs all scorer metrics to MLflow experiment."""
         with mlflow.start_run(run_name="test_experiment_eval") as run:
-            mlflow.set_tags({
-                "eval_type": "offline",
-                "test": "true",
-            })
+            mlflow.set_tags(
+                {
+                    "eval_type": "offline",
+                    "test": "true",
+                }
+            )
 
             result = mlflow.genai.evaluate(data=golden_data, scorers=all_scorers)
 
@@ -50,7 +52,9 @@ class TestExperimentTrackedEval:
                 result = mlflow.genai.evaluate(data=samples, scorers=all_scorers)
                 for key, val in (result.metrics or {}).items():
                     if isinstance(val, (int, float)):
-                        safe_key = f"{county.replace(' ', '_').replace('-', '_')}_{key.replace('/', '_')}"
+                        safe_key = (
+                            f"{county.replace(' ', '_').replace('-', '_')}_{key.replace('/', '_')}"
+                        )
                         mlflow.log_metric(safe_key, val)
 
             mlflow.set_tag("status", "completed")
@@ -63,10 +67,13 @@ class TestExperimentTrackedEval:
         result = mlflow.genai.evaluate(data=golden_data, scorers=all_scorers)
 
         with mlflow.start_run(run_name="test_scorer_artifact"):
-            # Log full eval table if available
-            eval_table = result.tables.get("eval_results")
-            if eval_table is not None:
-                mlflow.log_table(eval_table, artifact_file="eval_results.json")
+            # MLflow 3.x: prefer result_df, fall back to tables
+            if hasattr(result, "result_df") and result.result_df is not None:
+                mlflow.log_table(result.result_df, artifact_file="eval_results.json")
+            elif hasattr(result, "tables") and result.tables:
+                eval_table = result.tables.get("eval_results")
+                if eval_table is not None:
+                    mlflow.log_table(eval_table, artifact_file="eval_results.json")
 
             # Log metrics summary
             mlflow.log_dict(

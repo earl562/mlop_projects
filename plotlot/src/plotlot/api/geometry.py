@@ -20,12 +20,14 @@ from plotlot.api.schemas import (
     FloorPlanUnitResponse,
     ProFormaRequest,
     ProFormaResponse,
+    PropertyTypeProFormaResponse,
     ZoningReportResponse,
 )
 from plotlot.documents.pdf_export import generate_zoning_pdf
 from plotlot.documents.proforma import (
     ProFormaInput,
     compute_pro_forma,
+    compute_property_type_summary,
     generate_pro_forma_pdf,
 )
 from plotlot.rendering.floorplan import (
@@ -259,6 +261,25 @@ async def compute_proforma(request: ProFormaRequest):
     )
 
 
+@router.post("/proforma/summary", response_model=PropertyTypeProFormaResponse)
+async def proforma_summary(
+    property_type: str = "land",
+    max_units: int = 1,
+    lot_size_sqft: float = 0.0,
+    land_cost: float = 0.0,
+    avg_unit_size_sqft: float = 1000.0,
+):
+    """Get property-type-specific pro forma summary."""
+    result = compute_property_type_summary(
+        property_type=property_type,
+        max_units=max_units,
+        lot_size_sqft=lot_size_sqft,
+        land_cost=land_cost,
+        avg_unit_size_sqft=avg_unit_size_sqft,
+    )
+    return PropertyTypeProFormaResponse(**result)
+
+
 @router.post("/proforma/pdf")
 async def export_proforma_pdf(request: ProFormaRequest):
     """Export pro forma as PDF."""
@@ -268,7 +289,5 @@ async def export_proforma_pdf(request: ProFormaRequest):
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="PlotLot_ProForma_{slug}.pdf"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="PlotLot_ProForma_{slug}.pdf"'},
     )

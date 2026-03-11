@@ -3,9 +3,7 @@
 import pytest
 
 from plotlot.rendering.floorplan import (
-    FloorPlan,
     FloorPlanRequest,
-    UnitLayout,
     floor_plan_to_svg,
     generate_floor_plan,
 )

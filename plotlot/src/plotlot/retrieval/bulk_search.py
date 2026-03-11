@@ -244,7 +244,9 @@ def _get_field_map(county: str) -> CountyFieldMap:
     key = county.lower().strip()
     fm = _COUNTY_MAP.get(key)
     if not fm:
-        raise ValueError(f"Unsupported county: {county}. Supported: Miami-Dade, Broward, Palm Beach")
+        raise ValueError(
+            f"Unsupported county: {county}. Supported: Miami-Dade, Broward, Palm Beach"
+        )
     return fm
 
 
@@ -380,9 +382,15 @@ def _normalize_record(attrs: dict, geometry: dict | None, fm: CountyFieldMap) ->
     if fm.sale_date:
         raw_date = attrs.get(fm.sale_date)
         if raw_date:
-            if fm.sale_date_format == "epoch_ms" and isinstance(raw_date, (int, float)) and raw_date > 0:
+            if (
+                fm.sale_date_format == "epoch_ms"
+                and isinstance(raw_date, (int, float))
+                and raw_date > 0
+            ):
                 try:
-                    sale_date = datetime.fromtimestamp(raw_date / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+                    sale_date = datetime.fromtimestamp(raw_date / 1000, tz=timezone.utc).strftime(
+                        "%Y-%m-%d"
+                    )
                 except (ValueError, OSError):
                     sale_date = str(raw_date)
             else:
@@ -408,7 +416,11 @@ def _normalize_record(attrs: dict, geometry: dict | None, fm: CountyFieldMap) ->
     return {
         "folio": str(attrs.get(fm.folio) or ""),
         "address": address,
-        "city": _BROWARD_CODE_TO_CITY.get(str(attrs.get(fm.city) or ""), str(attrs.get(fm.city) or "")) if fm.county_name == "Broward" else str(attrs.get(fm.city) or ""),
+        "city": _BROWARD_CODE_TO_CITY.get(
+            str(attrs.get(fm.city) or ""), str(attrs.get(fm.city) or "")
+        )
+        if fm.county_name == "Broward"
+        else str(attrs.get(fm.city) or ""),
         "county": fm.county_name,
         "owner": str(attrs.get(fm.owner_name) or ""),
         "land_use_code": str(attrs.get(fm.land_use_code) or ""),
@@ -483,7 +495,9 @@ async def bulk_property_search(params: PropertySearchParams) -> list[dict]:
 
     logger.info(
         "Bulk search: county=%s, where=%s, results=%d",
-        fm.county_name, where[:100], len(all_records),
+        fm.county_name,
+        where[:100],
+        len(all_records),
     )
     return all_records
 

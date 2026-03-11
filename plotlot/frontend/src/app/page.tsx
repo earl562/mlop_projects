@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ZoningReport from "@/components/ZoningReport";
 import AnalysisStream from "@/components/AnalysisStream";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 import {
   PipelineStatus,
   ZoningReportData,
@@ -341,40 +342,42 @@ export default function Home() {
   // ─── Welcome State ────────────────────────────────────────────────────
   if (isWelcome) {
     return (
-      <div className="flex h-[calc(100vh-3rem)] flex-col items-center justify-center px-3 sm:px-4">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 sm:px-6">
         {/* Greeting */}
-        <div className="mb-6 text-center animate-fade-up sm:mb-8">
-          <div className="mb-3 flex items-center justify-center gap-2 animate-fade-up delay-1">
-            <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+        <div className="mb-10 text-center animate-fade-up sm:mb-14">
+          <div className="mb-4 flex items-center justify-center gap-2 animate-fade-up delay-1">
+            <svg className="h-4 w-4 text-amber-500/70" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 2L12.5 7.5L18 10L12.5 12.5L10 18L7.5 12.5L2 10L7.5 7.5L10 2Z" clipRule="evenodd" />
             </svg>
-            <span className="text-base font-medium text-stone-500 sm:text-lg">Hi there</span>
+            <span className="text-sm tracking-wide text-[var(--text-muted)]">Hi there</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-800 animate-fade-up delay-2 sm:text-4xl">
-            Analyze any property in South Florida
+          <h1 className="font-display text-4xl leading-tight text-[var(--text-primary)] animate-fade-up delay-2 sm:text-6xl sm:leading-[1.1]">
+            Analyze any property<br className="hidden sm:block" /> in South Florida
           </h1>
-          <p className="mt-2 text-xs text-stone-400 animate-fade-up delay-3 sm:text-sm">
+          <p className="mt-4 text-sm text-[var(--text-muted)] animate-fade-up delay-3 sm:text-base">
             Zoning codes, density limits, and development potential — in seconds
           </p>
         </div>
 
         {/* Input bar */}
-        <form onSubmit={handleSubmit} className="mb-4 w-full max-w-2xl animate-fade-up delay-3 sm:mb-6">
-          <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 shadow-lg transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 sm:px-4 sm:py-3">
-            <input
-              ref={inputRef}
-              type="text"
+        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-xl animate-fade-up delay-3 sm:mb-8">
+          <div
+            className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-3.5"
+            style={{ boxShadow: "var(--shadow-elevated)" }}
+          >
+            <AddressAutocomplete
+              inputRef={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={setInput}
+              onSelect={(address) => sendMessage(address)}
               placeholder="Enter an address or ask a question..."
               disabled={isProcessing}
-              className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
             />
             <button
               type="submit"
               disabled={!input.trim() || isProcessing}
               aria-label="Send message"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30 sm:h-9 sm:w-9"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] transition-all hover:opacity-80 disabled:opacity-20 sm:h-9 sm:w-9"
             >
               {isProcessing ? (
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -391,22 +394,22 @@ export default function Home() {
         </form>
 
         {/* Suggestion chips */}
-        <div className="grid w-full max-w-2xl grid-cols-2 gap-2 animate-fade-up delay-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-2.5">
+        <div className="grid w-full max-w-xl grid-cols-2 gap-2 animate-fade-up delay-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-2.5">
           {WELCOME_SUGGESTIONS.map((s) => (
             <button
               key={s.label}
               onClick={() => sendMessage(s.label)}
               disabled={isProcessing}
-              className="min-h-[44px] rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50/50 hover:shadow-md hover:-translate-y-0.5 disabled:opacity-40 sm:px-4 sm:py-2.5 sm:text-sm"
+              className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:py-2.5 sm:text-sm"
             >
-              <span className="mr-1">{s.icon}</span>
+              <span className="mr-1.5">{s.icon}</span>
               {s.label}
             </button>
           ))}
         </div>
 
         {/* Footer */}
-        <p className="mt-10 text-center text-xs text-stone-400 animate-fade-in delay-4">
+        <p className="mt-16 text-center text-xs text-[var(--text-muted)] animate-fade-in delay-4">
           PlotLot covers 104 municipalities across Miami-Dade, Broward &amp; Palm Beach counties
         </p>
       </div>
@@ -415,20 +418,19 @@ export default function Home() {
 
   // ─── Conversation State ───────────────────────────────────────────────
   return (
-    <div className="relative flex h-[calc(100vh-3rem)] flex-col">
-      {/* New Analysis button — overlays nav area */}
-      <div className="sticky top-0 z-50 flex justify-end px-4 pointer-events-none" style={{ marginTop: "-3rem", height: "3rem" }}>
-        <div className="flex items-center pointer-events-auto">
-          <button
-            onClick={handleNewAnalysis}
-            className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-            </svg>
-            New analysis
-          </button>
-        </div>
+    <div className="relative flex h-[calc(100vh-4rem)] flex-col">
+      {/* New Analysis button — fixed top-right */}
+      <div className="fixed right-4 top-5 z-40 sm:right-6">
+        <button
+          onClick={handleNewAnalysis}
+          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+          style={{ boxShadow: "var(--shadow-nav)" }}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+          </svg>
+          New analysis
+        </button>
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto pb-52">
@@ -438,10 +440,10 @@ export default function Home() {
               {/* Pipeline progress — inline stepper */}
               {msg.pipelineSteps && msg.pipelineSteps.length > 0 && !msg.report && (
                 <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
+                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
                     P
                   </div>
-                  <AnalysisStream steps={msg.pipelineSteps} error={null} />
+                  <AnalysisStream steps={msg.pipelineSteps} error={null} onWrongProperty={handleNewAnalysis} />
                 </div>
               )}
 
@@ -451,14 +453,14 @@ export default function Home() {
                   <ZoningReport report={msg.report} />
                   {msg.report.confidence_warning && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <div className="flex items-start gap-2.5">
+                      <div className="flex items-start gap-3">
                         <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                         </svg>
                         <div>
                           <p className="text-sm font-medium text-amber-800">{msg.report.confidence_warning}</p>
                           {msg.report.suggested_next_steps && msg.report.suggested_next_steps.length > 0 && (
-                            <ul className="mt-1.5 space-y-0.5">
+                            <ul className="mt-1.5 space-y-1">
                               {msg.report.suggested_next_steps.map((step, i) => (
                                 <li key={i} className="text-xs text-amber-700">&#8226; {step}</li>
                               ))}
@@ -477,7 +479,7 @@ export default function Home() {
                           ? "bg-lime-100 text-lime-700"
                           : msg.saveStatus === "error"
                             ? "bg-red-100 text-red-600"
-                            : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                            : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]"
                       }`}
                     >
                       {msg.saveStatus === "saving"
@@ -494,7 +496,7 @@ export default function Home() {
               {msg.toolActivity && msg.toolActivity.length > 0 && (
                 <div className="mb-2 flex justify-start">
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
                       P
                     </div>
                     <div className="space-y-1">
@@ -503,11 +505,11 @@ export default function Home() {
                           {t.status === "running" ? (
                             <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                           ) : (
-                            <svg className="h-3.5 w-3.5 text-stone-400" viewBox="0 0 20 20" fill="currentColor">
+                            <svg className="h-3.5 w-3.5 text-stone-500" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
-                          <span className={t.status === "complete" ? "text-stone-400" : "text-stone-600"}>{t.message}</span>
+                          <span className={t.status === "complete" ? "text-stone-500" : "text-stone-600"}>{t.message}</span>
                         </div>
                       ))}
                     </div>
@@ -526,33 +528,33 @@ export default function Home() {
                   ) : (
                     /* Assistant message — left-aligned with avatar */
                     <div className="flex items-start gap-2 max-w-[95%] sm:gap-3 sm:max-w-[85%]">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-[10px] font-black text-white">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
                         P
                       </div>
-                      <div className="text-sm leading-relaxed text-stone-700 min-w-0">
+                      <div className="text-sm leading-relaxed text-[var(--text-secondary)] min-w-0">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
                             p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                            strong: ({ children }) => <strong className="font-semibold text-stone-800">{children}</strong>,
+                            strong: ({ children }) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
                             ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>,
                             ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>,
                             li: ({ children }) => <li>{children}</li>,
-                            h1: ({ children }) => <h1 className="mb-2 text-lg font-bold text-stone-800">{children}</h1>,
-                            h2: ({ children }) => <h2 className="mb-2 text-base font-bold text-stone-800">{children}</h2>,
-                            h3: ({ children }) => <h3 className="mb-1 text-sm font-bold text-stone-800">{children}</h3>,
+                            h1: ({ children }) => <h1 className="mb-2 text-lg font-bold text-[var(--text-primary)]">{children}</h1>,
+                            h2: ({ children }) => <h2 className="mb-2 text-base font-bold text-[var(--text-primary)]">{children}</h2>,
+                            h3: ({ children }) => <h3 className="mb-1 text-sm font-bold text-[var(--text-primary)]">{children}</h3>,
                             a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-amber-700 underline hover:text-amber-600">{children}</a>,
-                            code: ({ children }) => <code className="rounded bg-stone-100 px-1.5 py-0.5 text-xs font-mono text-stone-700">{children}</code>,
-                            pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded-lg bg-stone-100 p-3 text-xs">{children}</pre>,
+                            code: ({ children }) => <code className="rounded bg-[var(--bg-surface-raised)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-secondary)]">{children}</code>,
+                            pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded-lg bg-[var(--bg-surface-raised)] p-3 text-xs">{children}</pre>,
                             table: ({ children }) => (
-                              <div className="my-2 overflow-x-auto rounded-lg border border-stone-200">
+                              <div className="my-2 overflow-x-auto rounded-lg border border-[var(--border)]">
                                 <table className="min-w-full text-xs">{children}</table>
                               </div>
                             ),
-                            thead: ({ children }) => <thead className="bg-stone-100">{children}</thead>,
+                            thead: ({ children }) => <thead className="bg-[var(--bg-surface-raised)]">{children}</thead>,
                             tbody: ({ children }) => <tbody className="[&>tr:nth-child(even)]:bg-stone-50">{children}</tbody>,
-                            th: ({ children }) => <th className="border-b border-stone-200 px-3 py-1.5 text-left font-semibold text-stone-700">{children}</th>,
-                            td: ({ children }) => <td className="border-b border-stone-100 px-3 py-1.5 text-stone-600">{children}</td>,
+                            th: ({ children }) => <th className="border-b border-[var(--border)] px-3 py-1.5 text-left font-semibold text-[var(--text-secondary)]">{children}</th>,
+                            td: ({ children }) => <td className="border-b border-[var(--border)] px-3 py-1.5 text-stone-600">{children}</td>,
                           }}
                         >
                           {msg.content}
@@ -562,7 +564,7 @@ export default function Home() {
                           <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                         )}
                         {msg.isStreaming && !msg.content && (
-                          <span className="inline-flex items-center gap-1 text-stone-400">
+                          <span className="inline-flex items-center gap-1 text-stone-500">
                             <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                             <span className="text-xs">Thinking...</span>
                           </span>
@@ -588,7 +590,7 @@ export default function Home() {
                                   setInput("");
                                   inputRef.current?.focus();
                                 }}
-                                className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50"
+                                className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface-raised)]"
                               >
                                 Try another address
                               </button>
@@ -611,16 +613,16 @@ export default function Home() {
         {/* Gradient fade */}
         <div className="input-fade-bg h-8 pointer-events-none" />
 
-        <div className="bg-[#f7f5f2] px-3 pb-3 sm:px-4 sm:pb-4">
+        <div className="bg-[var(--bg-primary)] px-3 pb-3 sm:px-4 sm:pb-4">
           {/* Follow-up suggestions */}
           {!isProcessing && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
-            <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-1.5 px-3 sm:gap-2 sm:px-0">
+            <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2 px-3 sm:gap-2 sm:px-0">
               {FOLLOWUP_SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   onClick={() => sendMessage(s)}
                   disabled={isProcessing}
-                  className="min-h-[44px] rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-500 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50/50 hover:-translate-y-0.5 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
+                  className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:min-h-0 sm:py-1.5"
                 >
                   {s}
                 </button>
@@ -630,21 +632,23 @@ export default function Home() {
 
           {/* Floating input bar */}
           <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-            <div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 shadow-lg transition-all focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 sm:px-4 sm:py-3">
-              <input
-                ref={inputRef}
-                type="text"
+            <div
+              className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-3"
+              style={{ boxShadow: "var(--shadow-elevated)" }}
+            >
+              <AddressAutocomplete
+                inputRef={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={setInput}
+                onSelect={(address) => sendMessage(address)}
                 placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
                 disabled={isProcessing}
-                className="flex-1 bg-transparent text-sm text-stone-800 placeholder-stone-400 outline-none"
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isProcessing}
                 aria-label="Send message"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-700 text-white transition-colors hover:bg-amber-600 disabled:opacity-30 sm:h-9 sm:w-9"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] transition-all hover:opacity-80 disabled:opacity-20 sm:h-9 sm:w-9"
               >
                 {isProcessing ? (
                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">

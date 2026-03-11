@@ -78,9 +78,14 @@ class Settings(BaseSettings):
     geocodio_api_key: str = ""
     hf_token: str = ""
     nvidia_api_key: str = ""
+    anthropic_api_key: str = ""
+    google_api_key: str = ""
 
     # Jina.ai search
     jina_api_key: str = ""
+
+    # Sentry
+    sentry_dsn: str = ""
 
     @model_validator(mode="after")
     def _strip_api_keys(self) -> "Settings":
@@ -89,6 +94,8 @@ class Settings(BaseSettings):
             "geocodio_api_key",
             "hf_token",
             "nvidia_api_key",
+            "anthropic_api_key",
+            "google_api_key",
             "jina_api_key",
             "supabase_anon_key",
             "supabase_service_key",
@@ -114,7 +121,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # CORS
-    cors_origins: list[str] = ["https://mlopprojects.vercel.app", "http://localhost:3000"]
+    cors_origins: list[str] = [
+        "https://mlopprojects.vercel.app",
+        "http://localhost:3000",
+        "https://plotlot-api-production.up.railway.app",
+    ]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

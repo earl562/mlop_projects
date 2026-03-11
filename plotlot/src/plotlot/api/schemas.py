@@ -33,7 +33,7 @@ class ConstraintResponse(BaseModel):
     is_governing: bool = False
 
 
-class DensityAnalysisResponse(BaseModel):
+class MaxAllowableUnitsResponse(BaseModel):
     max_units: int
     governing_constraint: str
     constraints: list[ConstraintResponse]
@@ -41,6 +41,7 @@ class DensityAnalysisResponse(BaseModel):
     buildable_area_sqft: float | None = None
     lot_width_ft: float | None = None
     lot_depth_ft: float | None = None
+    max_gla_sqft: float | None = None
     confidence: str = "low"
     notes: list[str] = []
 
@@ -58,6 +59,11 @@ class NumericParamsResponse(BaseModel):
     min_unit_size_sqft: float | None = None
     min_lot_width_ft: float | None = None
     parking_spaces_per_unit: float | None = None
+    parking_per_1000_gla_sqft: float | None = None
+    max_gla_sqft: float | None = None
+    min_tenant_size_sqft: float | None = None
+    loading_spaces: int | None = None
+    property_type: str | None = None
 
 
 class PropertyRecordResponse(BaseModel):
@@ -86,6 +92,7 @@ class PropertyRecordResponse(BaseModel):
     last_sale_date: str = ""
     lat: float | None = None
     lng: float | None = None
+    parcel_geometry: list[list[float]] | None = None
 
 
 class ZoningReportResponse(BaseModel):
@@ -115,7 +122,7 @@ class ZoningReportResponse(BaseModel):
 
     property_record: PropertyRecordResponse | None = None
     numeric_params: NumericParamsResponse | None = None
-    density_analysis: DensityAnalysisResponse | None = None
+    density_analysis: MaxAllowableUnitsResponse | None = None
 
     summary: str = ""
     sources: list[str] = []
@@ -137,6 +144,7 @@ class ErrorResponse(BaseModel):
 # Chat (Phase 5c)
 # ---------------------------------------------------------------------------
 
+
 class ChatMessage(BaseModel):
     """A single message in a conversation."""
 
@@ -156,6 +164,7 @@ class ChatRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Portfolio (Phase 5b)
 # ---------------------------------------------------------------------------
+
 
 class SaveAnalysisRequest(BaseModel):
     """Request to save an analysis to portfolio."""
@@ -278,6 +287,15 @@ class FloorPlanResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Pro Forma (Phase F3)
 # ---------------------------------------------------------------------------
+
+
+class PropertyTypeProFormaResponse(BaseModel):
+    """Property-type-specific pro forma summary embedded in zoning report."""
+
+    property_type: str  # "land" | "single_family" | "multifamily" | "commercial_mf"
+    label: str  # Human-readable label
+    metrics: dict = {}  # Key financial metrics for this property type
+    notes: list[str] = []
 
 
 class ProFormaRequest(BaseModel):

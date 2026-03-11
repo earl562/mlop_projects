@@ -27,7 +27,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   }
   return (
     <div className="rounded-lg bg-stone-50 p-2.5 transition-all hover:scale-[1.02] hover:shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-stone-500">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-stone-500">{label}</div>
       <div className="mt-0.5 text-sm font-semibold text-stone-800">{display}</div>
     </div>
   );

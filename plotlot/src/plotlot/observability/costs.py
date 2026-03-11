@@ -65,12 +65,14 @@ def log_query_cost(
     """
     cost = estimate_cost(model, prompt_tokens, completion_tokens)
     try:
-        _log_metrics({
-            "prompt_tokens": float(prompt_tokens),
-            "completion_tokens": float(completion_tokens),
-            "total_tokens": float(prompt_tokens + completion_tokens),
-            "estimated_cost_usd": cost,
-        })
+        _log_metrics(
+            {
+                "prompt_tokens": float(prompt_tokens),
+                "completion_tokens": float(completion_tokens),
+                "total_tokens": float(prompt_tokens + completion_tokens),
+                "estimated_cost_usd": cost,
+            }
+        )
     except Exception:
         logger.debug("Failed to log cost metrics to MLflow", exc_info=True)
     return cost

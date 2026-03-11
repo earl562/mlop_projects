@@ -47,6 +47,7 @@ def report_to_outputs(report: ZoningReport) -> dict:
 
 @pytest.mark.eval
 @pytest.mark.e2e
+@pytest.mark.integration
 class TestLiveEval:
     """Run the full pipeline for each golden address and score results."""
 
@@ -75,11 +76,13 @@ class TestLiveEval:
             else:
                 outputs = report_to_outputs(report)
 
-            live_data.append({
-                "inputs": sample["inputs"],
-                "outputs": outputs,
-                "expectations": sample["expectations"],
-            })
+            live_data.append(
+                {
+                    "inputs": sample["inputs"],
+                    "outputs": outputs,
+                    "expectations": sample["expectations"],
+                }
+            )
 
         result = mlflow.genai.evaluate(data=live_data, scorers=all_scorers)
 

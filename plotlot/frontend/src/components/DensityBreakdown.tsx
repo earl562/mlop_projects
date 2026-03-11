@@ -7,52 +7,54 @@ interface DensityBreakdownProps {
 }
 
 export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
+  const isCommercial = analysis.max_gla_sqft != null;
   const maxRaw = Math.max(...analysis.constraints.map((c) => c.raw_value), 1);
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-6" style={{ boxShadow: "var(--shadow-card)" }}>
+      <div className="mb-4 flex items-center justify-between gap-4 sm:mb-6">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-700 sm:text-sm">
-            Max Allowable Units
-          </h3>
-          <p className="mt-0.5 truncate text-[10px] text-stone-500 sm:text-xs">
-            Governing constraint: {analysis.governing_constraint}
+          <span className="section-pill">
+            {isCommercial ? "Max Gross Leasable Area" : "Max Allowable Units"}
+          </span>
+          <p className="mt-2 truncate text-xs text-[var(--text-muted)]">
+            Governing: {analysis.governing_constraint}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <div
-            className="text-3xl font-black text-amber-700 sm:text-4xl"
-            style={{ textShadow: "0 1px 2px rgba(180, 83, 9, 0.15)" }}
-          >
-            {analysis.max_units}
+          <div className="font-display text-4xl text-[var(--text-primary)] sm:text-5xl">
+            {isCommercial
+              ? `${analysis.max_gla_sqft!.toLocaleString()}`
+              : analysis.max_units}
           </div>
-          <div className="text-[10px] text-stone-500 sm:text-xs">
-            {analysis.lot_size_sqft.toLocaleString()} sqft lot
+          <div className="mt-1 text-xs text-[var(--text-muted)]">
+            {isCommercial ? "sqft GLA" : `${analysis.lot_size_sqft.toLocaleString()} sqft lot`}
           </div>
         </div>
       </div>
 
       {/* Constraint bars */}
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         {analysis.constraints.map((c) => {
           const pct = Math.min((c.raw_value / maxRaw) * 100, 100);
           return (
             <div key={c.name}>
               <div className="mb-1 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-stone-700">{c.name}</span>
+                  <span className="text-xs font-medium text-[var(--text-secondary)]">{c.name}</span>
                   {c.is_governing && (
-                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-800">
                       GOVERNING
                     </span>
                   )}
                 </div>
                 <span className="text-xs font-mono text-stone-500">
-                  {c.max_units} unit{c.max_units !== 1 ? "s" : ""}
+                  {isCommercial
+                    ? `${c.max_units.toLocaleString()} sqft`
+                    : `${c.max_units} unit${c.max_units !== 1 ? "s" : ""}`}
                 </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-stone-200">
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-surface-raised)]">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     c.is_governing
@@ -62,7 +64,7 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <p className="mt-0.5 truncate text-[10px] text-stone-500 font-mono">{c.formula}</p>
+              <p className="mt-0.5 truncate text-xs text-stone-500 font-mono">{c.formula}</p>
             </div>
           );
         })}

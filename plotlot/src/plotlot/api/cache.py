@@ -60,13 +60,42 @@ async def get_cached_report(address: str) -> dict | None:
         await session.close()
 
 
+def _should_cache(report: dict) -> bool:
+    """Quality gate — don't cache bad results.
+
+    Skip caching when the report has low confidence, missing zoning district,
+    or missing numeric params. Prevents polluting the cache with unreliable data.
+    """
+    if report.get("confidence") == "low":
+        return False
+    if not report.get("zoning_district"):
+        return False
+    if report.get("numeric_params") is None:
+        return False
+    return True
+
+
 async def cache_report(address: str, report: dict) -> None:
     """Store a report in cache with TTL.
 
     Uses upsert semantics: if the address already exists in cache, the
     report is replaced and the TTL is reset. This handles re-ingestion
     or manual cache invalidation gracefully.
+
+    Quality gate: skips caching low-confidence or incomplete reports.
     """
+    if not _should_cache(report):
+        import logging
+
+        logging.getLogger(__name__).info(
+            "Skipping cache for %s (quality gate: confidence=%s, district=%s, params=%s)",
+            address[:40],
+            report.get("confidence"),
+            bool(report.get("zoning_district")),
+            report.get("numeric_params") is not None,
+        )
+        return
+
     normalized = normalize_address(address)
     session = await get_session()
     try:

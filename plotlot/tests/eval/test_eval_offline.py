@@ -57,10 +57,13 @@ class TestOfflineEval:
         """Each golden sample should pass all boolean scorers individually."""
         result = mlflow.genai.evaluate(data=golden_data, scorers=all_scorers)
 
-        # The eval table should have one row per sample
-        eval_table = result.tables.get("eval_results")
-        if eval_table is not None:
-            assert len(eval_table) == len(golden_data)
+        # MLflow 3.x: use result_df for per-sample results (tables attr may be None)
+        if hasattr(result, "result_df") and result.result_df is not None:
+            assert len(result.result_df) == len(golden_data)
+        elif hasattr(result, "tables") and result.tables:
+            eval_table = result.tables.get("eval_results")
+            if eval_table is not None:
+                assert len(eval_table) == len(golden_data)
 
     def test_miami_gardens_strict(self, golden_data, all_scorers):
         """Miami Gardens R-1 sample has 10% tolerance — all 10 params should match."""
@@ -125,9 +128,7 @@ class TestOfflineEval:
         """Golden data should cover at least 8 distinct municipalities."""
         positive = [s for s in golden_data if s.get("outputs") is not None]
         municipalities = {
-            s["outputs"].get("municipality")
-            for s in positive
-            if s["outputs"].get("municipality")
+            s["outputs"].get("municipality") for s in positive if s["outputs"].get("municipality")
         }
         assert len(municipalities) >= 8, (
             f"Expected at least 8 municipalities, got {len(municipalities)}: {municipalities}"

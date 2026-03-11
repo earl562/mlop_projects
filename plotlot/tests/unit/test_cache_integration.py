@@ -113,6 +113,7 @@ async def client(transport):
 def _reset_db_engine():
     """Reset the DB engine between tests to avoid event-loop-closed errors."""
     import plotlot.storage.db as db_mod
+
     db_mod._engine = None
     db_mod._session_factory = None
     yield
@@ -418,8 +419,10 @@ async def test_cost_dashboard_returns_expected_structure(client):
     mock_mlflow.MlflowClient.return_value = mock_client
 
     with patch("plotlot.api.routes.set_tag"):  # prevent MLflow side effects
-        with patch("plotlot.observability.tracing._mlflow", mock_mlflow), \
-             patch("plotlot.observability.tracing.mlflow", mock_mlflow):
+        with (
+            patch("plotlot.observability.tracing._mlflow", mock_mlflow),
+            patch("plotlot.observability.tracing.mlflow", mock_mlflow),
+        ):
             # Patch at the import site in routes
             with patch("plotlot.api.routes.get_session", new_callable=AsyncMock):
                 resp = await client.get("/api/v1/admin/costs")
@@ -444,8 +447,10 @@ async def test_cost_dashboard_returns_expected_structure(client):
 @pytest.mark.asyncio
 async def test_cost_dashboard_no_mlflow(client):
     """GET /admin/costs returns graceful error when MLflow not installed."""
-    with patch("plotlot.observability.tracing.mlflow", None), \
-         patch("plotlot.observability.tracing._mlflow", None):
+    with (
+        patch("plotlot.observability.tracing.mlflow", None),
+        patch("plotlot.observability.tracing._mlflow", None),
+    ):
         resp = await client.get("/api/v1/admin/costs")
 
     assert resp.status_code == 200
@@ -460,8 +465,10 @@ async def test_cost_dashboard_mlflow_error(client):
     mock_mlflow = MagicMock()
     mock_mlflow.MlflowClient.side_effect = RuntimeError("connection refused")
 
-    with patch("plotlot.observability.tracing.mlflow", mock_mlflow), \
-         patch("plotlot.observability.tracing._mlflow", mock_mlflow):
+    with (
+        patch("plotlot.observability.tracing.mlflow", mock_mlflow),
+        patch("plotlot.observability.tracing._mlflow", mock_mlflow),
+    ):
         resp = await client.get("/api/v1/admin/costs")
 
     assert resp.status_code == 200

@@ -1,23 +1,121 @@
 @import "tailwindcss";
 
+/* ─── Design System Tokens ──────────────────────────────────────────── */
+/* Personality: Sophistication & Trust + Data & Analysis                  */
+/* Palette: Warm stone + amber brand, WCAG AA compliant                  */
+/* Spacing: 8-point grid (4, 8, 12, 16, 24, 32, 48, 64)                */
+/* Typography: 6-level scale (Display, H1, H2, Body, Label, Caption)    */
+
 :root {
   --font-geist-sans: "Geist", system-ui, -apple-system, sans-serif;
   --font-geist-mono: "Geist Mono", "SF Mono", "Fira Code", monospace;
+
+  /* Surface colors */
+  --bg-primary: #f5f3f0;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #fafaf9;
+  --bg-inset: #f5f5f4;
+
+  /* Text colors */
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+
+  /* Brand */
+  --brand: #b45309;
+  --brand-hover: #92400e;
+  --brand-subtle: #fffbeb;
+  --brand-muted: #fef3c7;
+
+  /* Status */
+  --success: #047857;
+  --success-subtle: #ecfdf5;
+  --danger: #dc2626;
+  --danger-subtle: #fef2f2;
+  --warning: #d97706;
+  --warning-subtle: #fffbeb;
+
+  /* Borders & shadows */
+  --border: #e7e5e4;
+  --border-hover: #d6d3d1;
+  --shadow-card: 0 2px 20px rgb(0 0 0 / 0.04);
+  --shadow-elevated: 0 8px 30px rgb(0 0 0 / 0.08);
+  --shadow-nav: 0 2px 24px rgb(0 0 0 / 0.06);
+
+  /* Nav */
+  --nav-bg: rgba(255, 255, 255, 0.7);
+  --nav-border: rgba(231, 229, 228, 0.6);
+
+  /* Input fade */
+  --input-fade-from: #f5f3f0;
+}
+
+.dark {
+  --bg-primary: #171412;
+  --bg-surface: #231f1d;
+  --bg-surface-raised: #2e2a27;
+  --bg-inset: #171412;
+
+  --text-primary: #f5f3f0;
+  --text-secondary: #a8a29e;
+  --text-muted: #6b6560;
+
+  --brand: #f59e0b;
+  --brand-hover: #fbbf24;
+  --brand-subtle: #451a03;
+  --brand-muted: #78350f;
+
+  --success: #34d399;
+  --success-subtle: #064e3b;
+  --danger: #f87171;
+  --danger-subtle: #7f1d1d;
+  --warning: #fbbf24;
+  --warning-subtle: #78350f;
+
+  --border: #3d3835;
+  --border-hover: #57534e;
+  --shadow-card: 0 2px 20px rgb(0 0 0 / 0.15);
+  --shadow-elevated: 0 8px 30px rgb(0 0 0 / 0.25);
+  --shadow-nav: 0 2px 24px rgb(0 0 0 / 0.2);
+
+  --nav-bg: rgba(23, 20, 18, 0.75);
+  --nav-border: rgba(61, 56, 53, 0.5);
+
+  --input-fade-from: #171412;
 }
 
 @theme inline {
-  --color-background: #f7f5f2;
-  --color-foreground: #292524;
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif);
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
-/* Custom scrollbar — warm tones */
+/* Subtle dot grid background texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+  opacity: 0.35;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+:root.dark body::before {
+  opacity: 0.12;
+}
+
+/* Custom scrollbar — uses design tokens */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -27,12 +125,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
+  background: var(--border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
+  background: var(--text-muted);
 }
 
 /* ─── Animations ─────────────────────────────────────────────────────── */
@@ -95,5 +193,25 @@ body {
 
 /* Input bar bottom fade */
 .input-fade-bg {
-  background: linear-gradient(to top, #f7f5f2 0%, transparent 100%);
+  background: linear-gradient(to top, var(--input-fade-from) 0%, transparent 100%);
+}
+
+/* Display serif font utility */
+.font-display {
+  font-family: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+}
+
+/* Section pill label */
+.section-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 9999px;
+  background: var(--bg-surface-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }

@@ -1,7 +1,5 @@
 """Tests for the max-allowable-units calculator."""
 
-import pytest
-
 from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.calculator import (
     calculate_max_units,
@@ -12,6 +10,7 @@ from plotlot.pipeline.calculator import (
 # ---------------------------------------------------------------------------
 # parse_lot_dimensions
 # ---------------------------------------------------------------------------
+
 
 class TestParseLotDimensions:
     def test_standard(self):
@@ -39,6 +38,7 @@ class TestParseLotDimensions:
 # ---------------------------------------------------------------------------
 # Density constraint
 # ---------------------------------------------------------------------------
+
 
 class TestDensityConstraint:
     def test_single_family_7500sqft_6_per_acre(self):
@@ -87,6 +87,7 @@ class TestDensityConstraint:
 # Min lot area constraint
 # ---------------------------------------------------------------------------
 
+
 class TestMinLotAreaConstraint:
     def test_exact_match(self):
         """7500 sqft lot / 7500 sqft per unit = 1."""
@@ -114,6 +115,7 @@ class TestMinLotAreaConstraint:
 # ---------------------------------------------------------------------------
 # FAR constraint
 # ---------------------------------------------------------------------------
+
 
 class TestFARConstraint:
     def test_far_with_unit_size(self):
@@ -143,6 +145,7 @@ class TestFARConstraint:
 # ---------------------------------------------------------------------------
 # Buildable envelope constraint
 # ---------------------------------------------------------------------------
+
 
 class TestBuildableEnvelopeConstraint:
     def test_with_setbacks_and_stories(self):
@@ -208,6 +211,7 @@ class TestBuildableEnvelopeConstraint:
 # Multiple constraints → governing = minimum
 # ---------------------------------------------------------------------------
 
+
 class TestGoverningConstraint:
     def test_density_governs_over_lot_area(self):
         """Density says 1, min_lot_area says 2 → density governs (1)."""
@@ -240,9 +244,9 @@ class TestGoverningConstraint:
     def test_all_four_constraints(self):
         """All four constraints evaluated — governing is the minimum."""
         params = NumericZoningParams(
-            max_density_units_per_acre=6.0,       # → 1
-            min_lot_area_per_unit_sqft=7500.0,    # → 1
-            far=0.5,                               # → 5
+            max_density_units_per_acre=6.0,  # → 1
+            min_lot_area_per_unit_sqft=7500.0,  # → 1
+            far=0.5,  # → 5
             min_unit_size_sqft=750.0,
             setback_front_ft=25.0,
             setback_rear_ft=25.0,
@@ -250,7 +254,10 @@ class TestGoverningConstraint:
             max_stories=2,
         )
         result = calculate_max_units(
-            7500, params, lot_width_ft=75.0, lot_depth_ft=100.0,
+            7500,
+            params,
+            lot_width_ft=75.0,
+            lot_depth_ft=100.0,
         )
 
         assert result.max_units == 1
@@ -261,6 +268,7 @@ class TestGoverningConstraint:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_zero_lot_size(self):
@@ -310,6 +318,7 @@ class TestEdgeCases:
 # Real-world: Miami Gardens R-1 scenario
 # ---------------------------------------------------------------------------
 
+
 class TestRealWorldScenarios:
     def test_miami_gardens_r1(self):
         """171 NE 209th Ter — R-1 zone, 7500 sqft, 75x100."""
@@ -326,7 +335,10 @@ class TestRealWorldScenarios:
             parking_spaces_per_unit=2.0,
         )
         result = calculate_max_units(
-            7500, params, lot_width_ft=75.0, lot_depth_ft=100.0,
+            7500,
+            params,
+            lot_width_ft=75.0,
+            lot_depth_ft=100.0,
         )
 
         assert result.max_units == 1
@@ -347,7 +359,10 @@ class TestRealWorldScenarios:
         )
         # Half acre = 21780 sqft, 100x217.8
         result = calculate_max_units(
-            21780, params, lot_width_ft=100.0, lot_depth_ft=217.8,
+            21780,
+            params,
+            lot_width_ft=100.0,
+            lot_depth_ft=217.8,
         )
 
         # density: 25 * 0.5 = 12.5 → 12

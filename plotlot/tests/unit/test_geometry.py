@@ -216,12 +216,15 @@ class TestEnvelopeEndpoint:
 class TestFloorPlanEndpoint:
     @pytest.mark.asyncio
     async def test_single_family_plan(self, client):
-        resp = await client.post("/api/v1/geometry/floorplan", json={
-            "buildable_width_ft": 40,
-            "buildable_depth_ft": 80,
-            "max_height_ft": 35,
-            "max_units": 1,
-        })
+        resp = await client.post(
+            "/api/v1/geometry/floorplan",
+            json={
+                "buildable_width_ft": 40,
+                "buildable_depth_ft": 80,
+                "max_height_ft": 35,
+                "max_units": 1,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["template"] == "single_family"
@@ -230,11 +233,14 @@ class TestFloorPlanEndpoint:
 
     @pytest.mark.asyncio
     async def test_duplex_plan(self, client):
-        resp = await client.post("/api/v1/geometry/floorplan", json={
-            "buildable_width_ft": 40,
-            "buildable_depth_ft": 80,
-            "max_units": 2,
-        })
+        resp = await client.post(
+            "/api/v1/geometry/floorplan",
+            json={
+                "buildable_width_ft": 40,
+                "buildable_depth_ft": 80,
+                "max_units": 2,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["template"] == "duplex"
@@ -242,12 +248,15 @@ class TestFloorPlanEndpoint:
 
     @pytest.mark.asyncio
     async def test_multifamily_plan(self, client):
-        resp = await client.post("/api/v1/geometry/floorplan", json={
-            "buildable_width_ft": 60,
-            "buildable_depth_ft": 100,
-            "max_height_ft": 35,
-            "max_units": 6,
-        })
+        resp = await client.post(
+            "/api/v1/geometry/floorplan",
+            json={
+                "buildable_width_ft": 60,
+                "buildable_depth_ft": 100,
+                "max_height_ft": 35,
+                "max_units": 6,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["template"] == "small_multifamily"
@@ -256,11 +265,14 @@ class TestFloorPlanEndpoint:
 
     @pytest.mark.asyncio
     async def test_floorplan_svg_output(self, client):
-        resp = await client.post("/api/v1/geometry/floorplan", json={
-            "buildable_width_ft": 40,
-            "buildable_depth_ft": 80,
-            "max_units": 1,
-        })
+        resp = await client.post(
+            "/api/v1/geometry/floorplan",
+            json={
+                "buildable_width_ft": 40,
+                "buildable_depth_ft": 80,
+                "max_units": 1,
+            },
+        )
         data = resp.json()
         assert data["svg"].startswith("<svg")
         assert "</svg>" in data["svg"]

@@ -99,7 +99,11 @@ class TestCreateSpreadsheet:
         share_resp = MagicMock()
         share_resp.raise_for_status = MagicMock()
 
-        with patch("plotlot.retrieval.google_workspace._get_access_token", new_callable=AsyncMock, return_value="test-token"):
+        with patch(
+            "plotlot.retrieval.google_workspace._get_access_token",
+            new_callable=AsyncMock,
+            return_value="test-token",
+        ):
             with patch("plotlot.retrieval.google_workspace.httpx.AsyncClient") as MockClient:
                 mock_client = AsyncMock()
                 mock_client.post = AsyncMock(side_effect=[create_resp, share_resp])
@@ -137,7 +141,11 @@ class TestCreateDocument:
         share_resp = MagicMock()
         share_resp.raise_for_status = MagicMock()
 
-        with patch("plotlot.retrieval.google_workspace._get_access_token", new_callable=AsyncMock, return_value="test-token"):
+        with patch(
+            "plotlot.retrieval.google_workspace._get_access_token",
+            new_callable=AsyncMock,
+            return_value="test-token",
+        ):
             with patch("plotlot.retrieval.google_workspace.httpx.AsyncClient") as MockClient:
                 mock_client = AsyncMock()
                 mock_client.post = AsyncMock(side_effect=[create_resp, batch_resp, share_resp])

@@ -34,8 +34,7 @@ class RateLimitError(RetriableError):
         self.service = service
         self.retry_after = retry_after
         super().__init__(
-            f"{service} rate limited"
-            + (f" (retry after {retry_after}s)" if retry_after else "")
+            f"{service} rate limited" + (f" (retry after {retry_after}s)" if retry_after else "")
         )
 
 

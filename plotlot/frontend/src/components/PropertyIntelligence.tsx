@@ -139,13 +139,13 @@ export default function PropertyIntelligence({ report }: PropertyIntelligencePro
       {showUtilization && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Utilization Analysis</h4>
-          <div className="rounded-lg bg-stone-50 p-3 space-y-2">
+          <div className="rounded-lg bg-stone-50 dark:bg-stone-800/50 p-3 space-y-2">
             <div className="flex justify-between text-xs">
               <span className="text-stone-600">Current: {buildingArea.toLocaleString()} sqft built</span>
               <span className="font-medium text-stone-700">{Math.round(currentPct)}% utilized</span>
             </div>
             {/* Progress bar */}
-            <div className="h-2 w-full rounded-full bg-stone-200">
+            <div className="h-2 w-full rounded-full bg-stone-200 dark:bg-stone-700">
               <div
                 className="h-2 rounded-full bg-amber-500 transition-all"
                 style={{ width: `${Math.min(currentPct, 100)}%` }}
@@ -155,7 +155,7 @@ export default function PropertyIntelligence({ report }: PropertyIntelligencePro
               <span>Maximum: {Math.round(maxBuildable).toLocaleString()} sqft ({utilizationLabel})</span>
             </div>
             {upside > 0 && (
-              <div className="text-xs font-medium text-emerald-700">
+              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 +{Math.round(upside).toLocaleString()} sqft additional development capacity
               </div>
             )}
@@ -167,14 +167,14 @@ export default function PropertyIntelligence({ report }: PropertyIntelligencePro
       {showLotAnalysis && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Lot Analysis</h4>
-          <div className="rounded-lg bg-stone-50 p-3 space-y-1.5 text-xs text-stone-600">
+          <div className="rounded-lg bg-stone-50 dark:bg-stone-800/50 p-3 space-y-1.5 text-xs text-stone-600 dark:text-stone-400">
             {excessPct > 0 ? (
               <p>Lot exceeds minimum by {Math.round(excessPct)}% ({lotSize.toLocaleString()} vs {minLotSize.toLocaleString()} sqft required)</p>
             ) : (
               <p>Lot meets minimum size requirement ({lotSize.toLocaleString()} sqft, {minLotSize.toLocaleString()} sqft required)</p>
             )}
             {subdivisible ? (
-              <p className="font-medium text-amber-700">
+              <p className="font-medium text-amber-700 dark:text-amber-400">
                 Potential subdivision into {subdivisibleLots} conforming lots (would need {(subdivisibleLots * minLotSize).toLocaleString()} sqft)
               </p>
             ) : minLotSize > 0 ? (
@@ -196,7 +196,7 @@ export default function PropertyIntelligence({ report }: PropertyIntelligencePro
           <h4 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Risk Flags</h4>
           <div className="space-y-1.5">
             {flags.map((flag, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs text-stone-600">
+              <div key={i} className="flex items-start gap-2 text-xs text-stone-600 dark:text-stone-400">
                 <SeverityDot severity={flag.severity} />
                 <span>{flag.text}</span>
               </div>
@@ -211,8 +211,8 @@ export default function PropertyIntelligence({ report }: PropertyIntelligencePro
           <h4 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Next Steps</h4>
           <div className="space-y-1.5">
             {nextSteps.map((step, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs text-stone-600">
-                <div className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border border-stone-300" />
+              <div key={i} className="flex items-start gap-2 text-xs text-stone-600 dark:text-stone-400">
+                <div className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border border-stone-300 dark:border-stone-600" />
                 <span>{step.text}</span>
               </div>
             ))}

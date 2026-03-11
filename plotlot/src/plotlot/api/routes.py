@@ -106,10 +106,13 @@ async def analyze_stream(request: AnalyzeRequest):
             yield _sse_event("status", {"step": "geocoding", "message": "Resolving address..."})
             geo = await geocode_address(request.address)
             if not geo:
-                yield _sse_event("error", {
-                    "detail": f"Could not geocode address: {request.address}",
-                    "error_type": "geocoding_failed",
-                })
+                yield _sse_event(
+                    "error",
+                    {
+                        "detail": f"Could not geocode address: {request.address}",
+                        "error_type": "geocoding_failed",
+                    },
+                )
                 return
 
             municipality = geo["municipality"]
@@ -120,52 +123,68 @@ async def analyze_stream(request: AnalyzeRequest):
             # Boundary enforcement — reject addresses outside South Florida
             county_lower = county.lower() if county else ""
             from plotlot.pipeline.lookup import VALID_COUNTIES
+
             if county_lower not in VALID_COUNTIES:
-                yield _sse_event("error", {
-                    "detail": (
-                        f"Address is in {county} County. "
-                        f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
-                    ),
-                    "error_type": "outside_coverage",
-                })
+                yield _sse_event(
+                    "error",
+                    {
+                        "detail": (
+                            f"Address is in {county} County. "
+                            f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
+                        ),
+                        "error_type": "outside_coverage",
+                    },
+                )
                 return
 
             accuracy_score = geo.get("accuracy")
             if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
-                yield _sse_event("error", {
-                    "detail": (
-                        f"Could not confidently locate this address "
-                        f"(geocoding accuracy: {accuracy_score}). Please check the address."
-                    ),
-                    "error_type": "low_accuracy",
-                })
+                yield _sse_event(
+                    "error",
+                    {
+                        "detail": (
+                            f"Could not confidently locate this address "
+                            f"(geocoding accuracy: {accuracy_score}). Please check the address."
+                        ),
+                        "error_type": "low_accuracy",
+                    },
+                )
                 return
 
-            yield _sse_event("status", {
-                "step": "geocoding",
-                "message": f"Found: {municipality}, {county} County",
-                "complete": True,
-            })
+            yield _sse_event(
+                "status",
+                {
+                    "step": "geocoding",
+                    "message": f"Found: {municipality}, {county} County",
+                    "complete": True,
+                },
+            )
 
             # Cache check — skip full pipeline for repeated addresses
             try:
                 cached = await get_cached_report(request.address)
                 if cached:
                     logger.info("Cache HIT for %s", request.address)
-                    yield _sse_event("status", {
-                        "step": "cache_hit",
-                        "message": "Using cached analysis",
-                    })
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "cache_hit",
+                            "message": "Using cached analysis",
+                        },
+                    )
                     yield _sse_event("result", cached)
                     return
             except Exception as exc:
                 logger.warning("Cache lookup failed (proceeding without): %s", exc)
 
             # Step 2: Property lookup (with timeout + heartbeat)
-            yield _sse_event("status", {
-                "step": "property",
-                "message": "Fetching property record...",
-            })
+            yield _sse_event(
+                "status",
+                {
+                    "step": "property",
+                    "message": "Fetching property record...",
+                },
+            )
             prop_task = asyncio.create_task(
                 lookup_property(request.address, county, lat=lat, lng=lng)
             )
@@ -179,10 +198,13 @@ async def analyze_stream(request: AnalyzeRequest):
                         logger.warning("Property lookup failed: %s", e)
                     break
                 # Heartbeat keeps SSE connection alive through Render proxy
-                yield _sse_event("status", {
-                    "step": "property",
-                    "message": "Fetching property record...",
-                })
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "property",
+                        "message": "Fetching property record...",
+                    },
+                )
             else:
                 # Timed out — cancel and proceed without property record
                 prop_task.cancel()
@@ -194,47 +216,73 @@ async def analyze_stream(request: AnalyzeRequest):
                     municipality = pa_muni
                     geo["municipality"] = municipality
 
-            yield _sse_event("status", {
+            property_status: dict = {
                 "step": "property",
-                "message": f"Lot: {prop_record.lot_size_sqft:,.0f} sqft" if prop_record else "No record found",
+                "message": f"Lot: {prop_record.lot_size_sqft:,.0f} sqft"
+                if prop_record
+                else "No record found",
                 "complete": True,
-            })
+            }
+            if prop_record:
+                property_status["resolved_address"] = (
+                    f"{prop_record.address}, {prop_record.municipality}"
+                    if prop_record.address
+                    else geo.get("formatted_address", request.address)
+                )
+                property_status["folio"] = prop_record.folio
+                property_status["lot_sqft"] = prop_record.lot_size_sqft
+            else:
+                property_status["resolved_address"] = geo.get("formatted_address", request.address)
+            yield _sse_event("status", property_status)
 
             # Step 3: Hybrid search
-            yield _sse_event("status", {
-                "step": "search",
-                "message": "Searching zoning ordinances...",
-            })
-            search_query = prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+            yield _sse_event(
+                "status",
+                {
+                    "step": "search",
+                    "message": "Searching zoning ordinances...",
+                },
+            )
+            search_query = (
+                prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+            )
             session = await get_session()
             try:
                 search_results = await hybrid_search(session, municipality, search_query, limit=15)
             finally:
                 await session.close()
 
-            yield _sse_event("status", {
-                "step": "search",
-                "message": f"Found {len(search_results)} relevant sections",
-                "complete": True,
-            })
+            yield _sse_event(
+                "status",
+                {
+                    "step": "search",
+                    "message": f"Found {len(search_results)} relevant sections",
+                    "complete": True,
+                },
+            )
 
             # Step 4: Agentic LLM analysis (wrapped in MLflow run for tracing)
             # Render's proxy has a 30s idle timeout — send heartbeats to keep alive
-            yield _sse_event("status", {
-                "step": "analysis",
-                "message": "AI analyzing zoning code...",
-            })
+            yield _sse_event(
+                "status",
+                {
+                    "step": "analysis",
+                    "message": "AI analyzing zoning code...",
+                },
+            )
 
             with start_run(run_name=f"stream_{request.address[:30]}"):
-                log_params({
-                    "address": request.address,
-                    "pipeline_version": PIPELINE_VERSION,
-                    "endpoint": "stream",
-                    "county": county,
-                    "municipality": municipality,
-                    "has_property_record": str(bool(prop_record)),
-                    "search_result_count": str(len(search_results)),
-                })
+                log_params(
+                    {
+                        "address": request.address,
+                        "pipeline_version": PIPELINE_VERSION,
+                        "endpoint": "stream",
+                        "county": county,
+                        "municipality": municipality,
+                        "has_property_record": str(bool(prop_record)),
+                        "search_result_count": str(len(search_results)),
+                    }
+                )
                 log_prompt_to_run("analysis")
 
                 analysis_task = asyncio.create_task(
@@ -258,42 +306,60 @@ async def analyze_stream(request: AnalyzeRequest):
                             logger.error("Analysis task failed: %s", e)
                         break
                     # Heartbeat keeps SSE connection alive through Render proxy
-                    yield _sse_event("status", {
-                        "step": "analysis",
-                        "message": "AI analyzing zoning code...",
-                    })
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "analysis",
+                            "message": "AI analyzing zoning code...",
+                        },
+                    )
 
                 if report is None:
                     if not analysis_task.done():
                         analysis_task.cancel()
                     logger.error("LLM analysis timed out for: %s", request.address)
                     from plotlot.pipeline.lookup import _build_fallback_report
+
                     report = _build_fallback_report(
-                        request.address, geo, prop_record,
+                        request.address,
+                        geo,
+                        prop_record,
                         [f"{r.section} — {r.section_title}" for r in search_results if r.section],
                     )
 
                 # Log analysis metrics inside the MLflow run
                 confidence_map = {"high": 1.0, "medium": 0.66, "low": 0.33}
-                log_metrics({
-                    "confidence_score": confidence_map.get(report.confidence, 0.0),
-                    "source_count": float(len(report.sources)),
-                    "has_numeric_params": 1.0 if report.numeric_params else 0.0,
-                })
+                log_metrics(
+                    {
+                        "confidence_score": confidence_map.get(report.confidence, 0.0),
+                        "source_count": float(len(report.sources)),
+                        "has_numeric_params": 1.0 if report.numeric_params else 0.0,
+                    }
+                )
                 set_tag("status", "success" if report.confidence != "low" else "low_confidence")
 
-            yield _sse_event("status", {
-                "step": "analysis",
-                "message": f"Zoning: {report.zoning_district} — {report.zoning_description}",
-                "complete": True,
-            })
+            yield _sse_event(
+                "status",
+                {
+                    "step": "analysis",
+                    "message": f"Zoning: {report.zoning_district} — {report.zoning_description}",
+                    "complete": True,
+                },
+            )
 
             # Step 5: Density calculation
-            if report.numeric_params and report.property_record and report.property_record.lot_size_sqft > 0:
-                yield _sse_event("status", {
-                    "step": "calculation",
-                    "message": "Computing max density...",
-                })
+            if (
+                report.numeric_params
+                and report.property_record
+                and report.property_record.lot_size_sqft > 0
+            ):
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "calculation",
+                        "message": "Computing max density...",
+                    },
+                )
                 lot_width, lot_depth = parse_lot_dimensions(
                     report.property_record.lot_dimensions or "",
                 )
@@ -303,11 +369,14 @@ async def analyze_stream(request: AnalyzeRequest):
                     lot_width_ft=lot_width,
                     lot_depth_ft=lot_depth,
                 )
-                yield _sse_event("status", {
-                    "step": "calculation",
-                    "message": f"Max units: {report.density_analysis.max_units} ({report.density_analysis.governing_constraint})",
-                    "complete": True,
-                })
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "calculation",
+                        "message": f"Max units: {report.density_analysis.max_units} ({report.density_analysis.governing_constraint})",
+                        "complete": True,
+                    },
+                )
 
             # Final result
             report_dict = asdict(report)
@@ -322,10 +391,13 @@ async def analyze_stream(request: AnalyzeRequest):
 
         except Exception as e:
             logger.exception("Stream pipeline error for: %s", request.address)
-            yield _sse_event("error", {
-                "detail": str(e),
-                "error_type": "pipeline_error",
-            })
+            yield _sse_event(
+                "error",
+                {
+                    "detail": str(e),
+                    "error_type": "pipeline_error",
+                },
+            )
 
     return StreamingResponse(
         event_generator(),
@@ -341,6 +413,7 @@ async def analyze_stream(request: AnalyzeRequest):
 # ---------------------------------------------------------------------------
 # Admin endpoints — data management
 # ---------------------------------------------------------------------------
+
 
 @router.get("/admin/chunks/stats")
 async def chunk_stats():
@@ -383,7 +456,6 @@ async def _run_ingestion(municipality_key: str, delete_existing: bool) -> None:
 
     _ingest_status[municipality_key] = {"status": "running", "step": "initializing"}
     try:
-
         if delete_existing:
             from sqlalchemy import delete as sql_delete
             from plotlot.storage.models import OrdinanceChunk
@@ -445,6 +517,7 @@ async def ingest_municipality_endpoint(
 
     # Ensure DB is initialized before starting the background task
     from plotlot.storage.db import init_db
+
     await init_db()
 
     background_tasks.add_task(_run_ingestion, municipality_key, delete_existing)
@@ -521,29 +594,36 @@ async def _run_batch_ingestion(skip_existing: bool) -> None:
                 chunk_count = existing[config.municipality.lower()]
                 logger.info(
                     "Skipping %s (%d/%d) — already has %d chunks",
-                    config.municipality, i, total, chunk_count,
+                    config.municipality,
+                    i,
+                    total,
+                    chunk_count,
                 )
                 results[key] = f"skipped ({chunk_count} chunks exist)"
                 skipped += 1
-                _batch_status.update({
+                _batch_status.update(
+                    {
+                        "current": key,
+                        "current_name": config.municipality,
+                        "progress": f"{i}/{total}",
+                        "completed": completed,
+                        "failed": failed,
+                        "skipped": skipped,
+                    }
+                )
+                continue
+
+            _batch_status.update(
+                {
                     "current": key,
                     "current_name": config.municipality,
+                    "step": f"ingesting {config.municipality}",
                     "progress": f"{i}/{total}",
                     "completed": completed,
                     "failed": failed,
                     "skipped": skipped,
-                })
-                continue
-
-            _batch_status.update({
-                "current": key,
-                "current_name": config.municipality,
-                "step": f"ingesting {config.municipality}",
-                "progress": f"{i}/{total}",
-                "completed": completed,
-                "failed": failed,
-                "skipped": skipped,
-            })
+                }
+            )
             _ingest_status[key] = {"status": "running", "step": "scraping_and_embedding"}
 
             try:
@@ -553,7 +633,10 @@ async def _run_batch_ingestion(skip_existing: bool) -> None:
                 _ingest_status[key] = {"status": "complete", "chunks_stored": count}
                 logger.info(
                     "Batch: %s complete (%d chunks) — %d/%d done",
-                    config.municipality, count, i, total,
+                    config.municipality,
+                    count,
+                    i,
+                    total,
                 )
             except Exception as e:
                 logger.error("Batch: %s failed: %s", config.municipality, e)
@@ -564,26 +647,33 @@ async def _run_batch_ingestion(skip_existing: bool) -> None:
             await asyncio.sleep(0)  # yield between municipalities for user requests
 
         total_chunks = sum(v for v in results.values() if isinstance(v, int))
-        _batch_status.update({
-            "status": "complete",
-            "step": "done",
-            "total_chunks": total_chunks,
-            "completed": completed,
-            "failed": failed,
-            "skipped": skipped,
-            "results": results,
-        })
+        _batch_status.update(
+            {
+                "status": "complete",
+                "step": "done",
+                "total_chunks": total_chunks,
+                "completed": completed,
+                "failed": failed,
+                "skipped": skipped,
+                "results": results,
+            }
+        )
         logger.info(
             "Batch ingestion complete: %d chunks, %d success, %d failed, %d skipped",
-            total_chunks, completed, failed, skipped,
+            total_chunks,
+            completed,
+            failed,
+            skipped,
         )
 
     except Exception as e:
         logger.exception("Batch ingestion crashed")
-        _batch_status.update({
-            "status": "failed",
-            "error": str(e),
-        })
+        _batch_status.update(
+            {
+                "status": "failed",
+                "error": str(e),
+            }
+        )
 
 
 @router.post("/admin/ingest/batch")
@@ -609,6 +699,7 @@ async def ingest_batch(
         }
 
     from plotlot.storage.db import init_db
+
     await init_db()
 
     background_tasks.add_task(_run_batch_ingestion, skip_existing)
@@ -723,15 +814,17 @@ async def cost_dashboard():
                 cost = metrics.get("estimated_cost_usd", 0)
                 tokens = int(metrics.get("total_tokens", 0))
                 if cost > 0 or tokens > 0:
-                    cost_data.append({
-                        "run_id": run.info.run_id,
-                        "start_time": run.info.start_time,
-                        "model": run.data.params.get("model", "unknown"),
-                        "input_tokens": int(metrics.get("input_tokens", 0)),
-                        "output_tokens": int(metrics.get("output_tokens", 0)),
-                        "total_tokens": tokens,
-                        "estimated_cost_usd": round(cost, 6),
-                    })
+                    cost_data.append(
+                        {
+                            "run_id": run.info.run_id,
+                            "start_time": run.info.start_time,
+                            "model": run.data.params.get("model", "unknown"),
+                            "input_tokens": int(metrics.get("input_tokens", 0)),
+                            "output_tokens": int(metrics.get("output_tokens", 0)),
+                            "total_tokens": tokens,
+                            "estimated_cost_usd": round(cost, 6),
+                        }
+                    )
                     total_cost += cost
                     total_tokens += tokens
 
@@ -745,6 +838,57 @@ async def cost_dashboard():
         return {"error": f"{type(e).__name__}: {e}", "costs": []}
 
 
+@router.delete("/admin/cache/{address}")
+async def delete_cache_entry(address: str):
+    """Delete a single cached report by address."""
+    from plotlot.api.cache import normalize_address
+    from plotlot.storage.models import ReportCache
+    from sqlalchemy import delete as sql_delete
+
+    normalized = normalize_address(address)
+    session = await get_session()
+    try:
+        result = await session.execute(
+            sql_delete(ReportCache).where(ReportCache.address_normalized == normalized)
+        )
+        await session.commit()
+        deleted = result.rowcount  # type: ignore[attr-defined]
+        return {"address": address, "deleted": deleted}
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+
+@router.delete("/admin/cache")
+async def clear_all_cache(confirm: bool = False):
+    """Clear all cached reports. Requires confirm=true."""
+    from plotlot.storage.models import ReportCache
+    from sqlalchemy import delete as sql_delete, func, select
+
+    session = await get_session()
+    try:
+        if not confirm:
+            result = await session.execute(select(func.count()).select_from(ReportCache))
+            count = result.scalar() or 0
+            return {
+                "cached_reports": count,
+                "confirmed": False,
+                "message": f"Would delete {count} cached reports. Add confirm=true to proceed.",
+            }
+
+        result = await session.execute(sql_delete(ReportCache))
+        await session.commit()
+        deleted = result.rowcount  # type: ignore[attr-defined]
+        return {"deleted": deleted, "confirmed": True}
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+
 @router.delete("/admin/chunks")
 async def delete_chunks(municipality: str, confirm: bool = False):
     """Delete ordinance chunks for a municipality (e.g., bad data cleanup).
@@ -755,12 +899,11 @@ async def delete_chunks(municipality: str, confirm: bool = False):
         # Dry run — show what would be deleted
         from sqlalchemy import func, select
         from plotlot.storage.models import OrdinanceChunk
+
         session = await get_session()
         try:
             result = await session.execute(
-                select(func.count()).where(
-                    OrdinanceChunk.municipality.ilike(municipality)
-                )
+                select(func.count()).where(OrdinanceChunk.municipality.ilike(municipality))
             )
             count = result.scalar() or 0
             return {
@@ -775,12 +918,11 @@ async def delete_chunks(municipality: str, confirm: bool = False):
     # Actual delete
     from sqlalchemy import delete as sql_delete
     from plotlot.storage.models import OrdinanceChunk
+
     session = await get_session()
     try:
         result = await session.execute(
-            sql_delete(OrdinanceChunk).where(
-                OrdinanceChunk.municipality.ilike(municipality)
-            )
+            sql_delete(OrdinanceChunk).where(OrdinanceChunk.municipality.ilike(municipality))
         )
         await session.commit()
         deleted = result.rowcount  # type: ignore[attr-defined]
