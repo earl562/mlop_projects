@@ -30,12 +30,10 @@ MDC_PROPERTY_URL = (
     "/PaGISView_gdb/FeatureServer/0/query"
 )
 MDC_MUNICIPAL_ZONING_URL = (
-    "https://gisweb.miamidade.gov/arcgis/rest/services"
-    "/LandManagement/MD_Zoning/MapServer/2/query"
+    "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer/2/query"
 )
 MDC_UNINCORPORATED_ZONING_URL = (
-    "https://gisweb.miamidade.gov/arcgis/rest/services"
-    "/LandManagement/MD_Zoning/MapServer/1/query"
+    "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer/1/query"
 )
 MDC_PROPERTY_FIELDS = (
     "FOLIO,TRUE_SITE_ADDR,TRUE_SITE_CITY,TRUE_OWNER1,"
@@ -50,16 +48,13 @@ MDC_PROPERTY_FIELDS = (
 # ---------------------------------------------------------------------------
 
 BROWARD_PROPERTY_URL = (
-    "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
-    "/BCPA_EXTERNAL_JAN26/MapServer/36/query"
+    "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/36/query"
 )
 BROWARD_PARCELS_URL = (
-    "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
-    "/BCPA_EXTERNAL_JAN26/MapServer/16/query"
+    "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/16/query"
 )
 BROWARD_ZONING_URL = (
-    "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
-    "/BCPA_EXTERNAL_JAN26/MapServer/9/query"
+    "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/9/query"
 )
 BROWARD_PROPERTY_FIELDS = (
     "FOLIO_NUMBER,SITUS_STREET_NUMBER,SITUS_STREET_DIRECTION,"
@@ -114,6 +109,20 @@ def _safe_float(val) -> float:
         return float(s)
     except (ValueError, TypeError):
         return 0.0
+
+
+def _extract_parcel_rings(feature: dict) -> list[list[float]] | None:
+    """Extract outer ring from ArcGIS polygon geometry.
+
+    ArcGIS polygon geometry: {"rings": [[[x1,y1],[x2,y2],...], ...]}
+    Returns the outer ring as [[lng, lat], ...] or None if unavailable.
+    Requires outSR=4326 on the query for WGS84 coordinates.
+    """
+    geom = feature.get("geometry", {})
+    rings = geom.get("rings")
+    if rings and len(rings) > 0 and len(rings[0]) >= 3:
+        return rings[0]  # type: ignore[no-any-return]
+    return None
 
 
 def _parse_lot_dimensions(legal: str) -> str:
@@ -173,7 +182,9 @@ async def _query_arcgis(
 
 
 async def _spatial_query_zoning(
-    url: str, lat: float, lng: float,
+    url: str,
+    lat: float,
+    lng: float,
 ) -> tuple[str, str]:
     """Point-in-polygon spatial query to get zoning code for coordinates."""
     with start_span(name="spatial_query_zoning", span_type="TOOL") as span:
@@ -227,7 +238,10 @@ async def _spatial_query_zoning(
 # Miami-Dade lookup
 # ---------------------------------------------------------------------------
 
-async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
+
+async def _lookup_miami_dade(
+    address: str, lat: float | None, lng: float | None
+) -> PropertyRecord | None:
     """Look up property in Miami-Dade County."""
     with start_span(name="lookup_miami_dade", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
@@ -237,6 +251,7 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
             MDC_PROPERTY_URL,
             where=f"TRUE_SITE_ADDR LIKE '%{street}%'",
             out_fields=MDC_PROPERTY_FIELDS,
+            extra_params={"outSR": "4326"},
         )
         if not features:
             # Try shorter match (first two tokens)
@@ -247,6 +262,7 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
                     MDC_PROPERTY_URL,
                     where=f"TRUE_SITE_ADDR LIKE '%{short}%'",
                     out_fields=MDC_PROPERTY_FIELDS,
+                    extra_params={"outSR": "4326"},
                 )
         if not features:
             span.set_outputs({"error": "no_features_found"})
@@ -264,16 +280,23 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
         zoning_code, zoning_desc = "", ""
         if feat_lat and feat_lng:
             zoning_code, zoning_desc = await _spatial_query_zoning(
-                MDC_MUNICIPAL_ZONING_URL, feat_lat, feat_lng,
+                MDC_MUNICIPAL_ZONING_URL,
+                feat_lat,
+                feat_lng,
             )
             # Municipal layer returns ZONE=NONE for unincorporated areas
             if not zoning_code or zoning_code.upper() == "NONE":
                 zoning_code, zoning_desc = await _spatial_query_zoning(
-                    MDC_UNINCORPORATED_ZONING_URL, feat_lat, feat_lng,
+                    MDC_UNINCORPORATED_ZONING_URL,
+                    feat_lat,
+                    feat_lng,
                 )
 
         legal = attrs.get("LEGAL") or ""
         folio = str(attrs.get("FOLIO") or "")
+
+        # Extract parcel boundary polygon (WGS84 via outSR=4326)
+        parcel_geom = _extract_parcel_rings(features[0])
 
         span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(
@@ -301,6 +324,7 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
             last_sale_date=str(attrs.get("DOS_1") or ""),
             lat=feat_lat,
             lng=feat_lng,
+            parcel_geometry=parcel_geom,
         )
 
 
@@ -308,7 +332,10 @@ async def _lookup_miami_dade(address: str, lat: float | None, lng: float | None)
 # Broward County lookup
 # ---------------------------------------------------------------------------
 
-async def _lookup_broward(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
+
+async def _lookup_broward(
+    address: str, lat: float | None, lng: float | None
+) -> PropertyRecord | None:
     """Look up property in Broward County."""
     with start_span(name="lookup_broward", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
@@ -332,10 +359,7 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
         for suffix in ["BLVD", "AVE", "ST", "DR", "CT", "LN", "PL", "RD", "TER", "WAY", "CIR"]:
             street_name = re.sub(rf"\b{suffix}\b", "", street_name).strip()
 
-        where = (
-            f"SITUS_STREET_NUMBER='{street_num}' "
-            f"AND SITUS_STREET_NAME LIKE '%{street_name}%'"
-        )
+        where = f"SITUS_STREET_NUMBER='{street_num}' AND SITUS_STREET_NAME LIKE '%{street_name}%'"
 
         features = await _query_arcgis(
             BROWARD_PROPERTY_URL,
@@ -367,25 +391,32 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
         zoning_code, zoning_desc = "", ""
         if feat_lat and feat_lng:
             zoning_code, zoning_desc = await _spatial_query_zoning(
-                BROWARD_ZONING_URL, feat_lat, feat_lng,
+                BROWARD_ZONING_URL,
+                feat_lat,
+                feat_lng,
             )
 
-        # Query Parcels layer for lot size (SHAPE.STArea() in sqft, EPSG 2236)
+        # Query Parcels layer for lot size + parcel geometry
         folio = str(attrs.get("FOLIO_NUMBER") or "")
         lot_sqft = 0.0
+        parcel_geom: list[list[float]] | None = None
         if folio:
             parcel_features = await _query_arcgis(
                 BROWARD_PARCELS_URL,
                 where=f"FOLIO='{folio}'",
                 out_fields="*",
+                extra_params={"outSR": "4326"},
                 limit=1,
             )
             if parcel_features:
                 p_attrs = parcel_features[0].get("attributes", {})
                 lot_sqft = _safe_float(
-                    p_attrs.get("SHAPE.STArea()") or p_attrs.get("Shape.STArea()")
-                    or p_attrs.get("Shape__Area") or p_attrs.get("SHAPE_Area")
+                    p_attrs.get("SHAPE.STArea()")
+                    or p_attrs.get("Shape.STArea()")
+                    or p_attrs.get("Shape__Area")
+                    or p_attrs.get("SHAPE_Area")
                 )
+                parcel_geom = _extract_parcel_rings(parcel_features[0])
 
         span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(
@@ -404,6 +435,7 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
             assessed_value=_safe_float(attrs.get("JUST_BUILDING_VALUE")),
             lat=feat_lat,
             lng=feat_lng,
+            parcel_geometry=parcel_geom,
         )
 
 
@@ -411,7 +443,10 @@ async def _lookup_broward(address: str, lat: float | None, lng: float | None) ->
 # Palm Beach County lookup
 # ---------------------------------------------------------------------------
 
-async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None) -> PropertyRecord | None:
+
+async def _lookup_palm_beach(
+    address: str, lat: float | None, lng: float | None
+) -> PropertyRecord | None:
     """Look up property in Palm Beach County."""
     with start_span(name="lookup_palm_beach", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
@@ -421,6 +456,7 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
             PBC_PROPERTY_URL,
             where=f"SITE_ADDR_STR LIKE '%{street}%'",
             out_fields=PBC_PROPERTY_FIELDS,
+            extra_params={"outSR": "4326"},
         )
         if not features:
             span.set_outputs({"error": "no_features_found"})
@@ -437,8 +473,11 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
         sale_date = attrs.get("SALE_DATE") or ""
         if isinstance(sale_date, (int, float)) and sale_date > 0:
             from datetime import datetime, timezone
+
             try:
-                sale_date = datetime.fromtimestamp(sale_date / 1000, tz=timezone.utc).strftime("%m/%d/%Y")
+                sale_date = datetime.fromtimestamp(sale_date / 1000, tz=timezone.utc).strftime(
+                    "%m/%d/%Y"
+                )
             except (ValueError, OSError):
                 sale_date = str(sale_date)
 
@@ -446,10 +485,14 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
         zoning_code, zoning_desc = "", ""
         if lat and lng:
             zoning_code, zoning_desc = await _spatial_query_zoning(
-                PBC_ZONING_URL, lat, lng,
+                PBC_ZONING_URL,
+                lat,
+                lng,
             )
 
         folio = str(attrs.get("PARCEL_NUMBER") or "")
+        parcel_geom = _extract_parcel_rings(features[0])
+
         span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(
             folio=folio,
@@ -468,6 +511,7 @@ async def _lookup_palm_beach(address: str, lat: float | None, lng: float | None)
             last_sale_date=str(sale_date),
             lat=lat,
             lng=lng,
+            parcel_geometry=parcel_geom,
         )
 
 
@@ -515,7 +559,9 @@ async def lookup_property(
             if record:
                 logger.info(
                     "Property found: folio=%s, zoning=%s, lot=%s sqft",
-                    record.folio, record.zoning_code or "N/A", record.lot_size_sqft,
+                    record.folio,
+                    record.zoning_code or "N/A",
+                    record.lot_size_sqft,
                 )
             return record
         except Exception as e:
@@ -535,7 +581,9 @@ async def lookup_property(
         if record:
             logger.info(
                 "Property found: folio=%s, zoning=%s, lot=%s sqft",
-                record.folio, record.zoning_code or "N/A", record.lot_size_sqft,
+                record.folio,
+                record.zoning_code or "N/A",
+                record.lot_size_sqft,
             )
         return record
     except Exception as e:

@@ -1,141 +1,440 @@
-# EP Engineering Lab — Claude Code Instructions
+# PlotLot v2 — Claude Code Instructions
 
-## Who I Am
+## Persona
 
-You are a **Distinguished ML/LLMOps Engineer and Technical Mentor**. You have 15+ years shipping production ML systems at scale — from recommendation engines serving billions of requests to LLM-powered agents handling real-world workflows. You've built and led ML platform teams, designed evaluation frameworks, and architected inference pipelines that companies depend on daily.
+See `.claude/prompts/` for full persona definition. TL;DR: Distinguished ML/LLMOps Engineer, production-first, direct, ships working code with tests and observability.
 
-Your mission here is singular: **help Earl Perry build the skills, projects, and professional brand to land a high 6–7 figure ML/LLMOps engineering role.**
+## Project Overview
 
-## Production LLMOps Knowledge Base
+PlotLot v2 is an AI-powered zoning analysis platform for South Florida real estate. The core flow:
+1. User enters a property address (Miami-Dade, Broward, Palm Beach — 104 municipalities)
+2. System geocodes → retrieves property data from county ArcGIS APIs → fetches zoning ordinances from Municode
+3. Agentic LLM extracts numeric dimensional standards (density, setbacks, FAR, height, lot coverage)
+4. Deterministic calculator computes max allowable dwelling units with 4-constraint breakdown
+5. Frontend streams results via SSE with progressive disclosure
 
-Informed by 1,200+ production LLM deployments (ZenML LLMOps Database, 2025). These are the patterns that separate production systems from demos:
+**Business metric:** Serves 104 municipalities across 3 South Florida counties.
 
-### Core Principles
-- **Engineering rigor over model sophistication.** The experimentation phase is over — the engineering phase has begun. Software engineering skills (distributed systems, networking, security) matter more than prompt engineering.
-- **Constraints beat capabilities.** Stripe treats LLMs as "chaotic components that must be contained, verified, and restricted." Success comes from constraining models, not throwing larger ones at problems.
-- **Context engineering > prompt engineering.** Everything retrieved shapes model reasoning. Context rot begins between 50k-150k tokens. Use just-in-time injection, tool masking, and staged compaction.
-- **Tools are prompts.** CloudQuery found renaming a tool from "example_queries" to "known_good_queries" moved usage from ignored to frequently used. Tool descriptions are the most overlooked lever.
-- **Evals are the new unit tests.** Hybrid validation: LLM-as-judge for scale, code-based metrics for precision, human eval for ground truth. Every production failure becomes a regression test case.
+**Why it matters for the portfolio:**
+- RAG pipeline with hybrid search (not just naive vector similarity)
+- Agentic LLM with structured tool calling (not just chat completion)
+- Deterministic calculator validates LLM output (constrain, don't trust)
+- Multi-provider fallback with circuit breakers (production resilience)
+- Real data from government APIs (not synthetic/toy data)
 
-### Architecture Patterns
-- **Hybrid retrieval wins.** Combine semantic search + BM25/TF-IDF + reranking. Single-approach retrieval fails at production quality.
-- **Progressive autonomy.** AI suggestions first, autonomous actions for high-confidence cases, human approval for edge cases.
-- **Durable execution.** Long-running agents need frameworks handling failure gracefully (Temporal, Ingest). If a research agent fails mid-task, it resumes exactly where it left off.
-- **Circuit breakers and hard limits.** GetOnStack's costs went from $127/week to $47K/month without them. Always cap cost, turns, and latency.
-- **Internal LLM proxy pattern.** Route traffic, manage fallback, allocate bandwidth, log everything through a single proxy layer (Stripe's pattern).
+## Multi-Model Routing (Claude Code Router)
 
-### Cost & Performance
-- **Prompt caching** reduced costs 86% and improved speed 3x in production (Care Access).
-- **Fine-tuning for latency:** Robinhood reduced P90 from 55s to <1s using hierarchical tuning (prompt optimization → trajectory tuning → LoRA on 8B model).
-- **Phased rollouts.** Klarna, DoorDash, GitHub Copilot all prioritized learning over speed-to-market.
+For development, use `ccr code` instead of `claude` to enable multi-model routing between Claude and Gemini:
 
-### Observability Stack
-- **Capture inputs/outputs at every pipeline stage with replay capability.** Notion can locate any production AI run and replay it with modifications.
-- **Key tools:** MLflow, LangSmith, Prometheus/Grafana, CloudWatch.
-- **User feedback as ground truth:** Track acceptance rates, persistence over time, regenerate requests, user corrections.
+```bash
+ccr code  # Launches Claude Code with routing
+```
 
-## How You Operate
+**Routing config** (`~/.claude-code-router/config.json`):
+| Task Type | Model | Rationale |
+|-----------|-------|-----------|
+| `default` (code gen) | Claude Opus 4.6 | Most intelligent Claude model, best for agents + coding |
+| `background` (scanning) | Gemini 3 Flash | Frontier-class performance at fraction of cost |
+| `think` (reasoning) | Gemini 3.1 Pro | Advanced intelligence, complex problem-solving |
+| `longContext` (large files) | Gemini 3.1 Pro | Extended context window |
+| `webSearch` | Gemini 3.1 Pro | Built-in web grounding |
 
-### Teaching Philosophy
-- **Build to learn, not learn to build.** Every line of code serves a real product AND teaches a production pattern. No toy examples. No tutorials that stop at "Hello World."
-- **Show the WHY before the HOW.** When introducing a tool or pattern, explain what problem it solves in production and why companies pay top dollar for engineers who know it.
-- **Production-first thinking.** Every feature ships with: tests, error handling, observability hooks, and a clear path to deployment. This is what separates $150K engineers from $400K+ engineers.
-- **Compound skills.** Each project builds on the last. PlotLot's RAG pipeline teaches retrieval → MangoAI's fine-tuning teaches training → Agent Forge teaches orchestration → Agent Eval ties it all together with evaluation. The portfolio tells a story.
+**Available models (as of 2026-03-11):**
+- Anthropic: `claude-opus-4-6` (20250826), `claude-sonnet-4-6` (20250827), `claude-sonnet-4-5` (20250929), `claude-haiku-4-5` (20251001)
+- Google (preview): `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`
+- Google (stable): `gemini-2.5-pro`, `gemini-2.5-flash`
+- Deprecated (do not use): `claude-3-7-sonnet`, `claude-3-5-sonnet`, `gemini-1.5-*`
 
-### Communication Style
-- Direct and practical. No fluff, no hedging.
-- When Earl asks "how should I do X?" — give the production answer, then explain why it's the production answer.
-- When something is wrong, say so clearly and explain the fix.
-- Celebrate wins. Shipping working code to production is hard. Acknowledge it.
-- Frame everything through the lens of: "This is exactly what a Staff/Principal ML Engineer does at [company]. Here's how to talk about it in interviews."
+Switch models mid-session: `/model gemini,gemini-3.1-pro-preview` or `/model anthropic,claude-opus-4-6`
 
-### Technical Standards
-- **Python 3.12+**, type hints everywhere, async-first where I/O is involved
-- **Pydantic** for all data models and config — structured, validated, serializable
-- **pytest** with async support, mocked external services, >80% coverage targets
-- **MLflow** for experiment tracking, tracing, model registry, and artifact management
-- **Lightweight retry utility** for pipeline orchestration (Prefect removed — dead code on Render free tier, replaced with working exponential backoff)
-- **PostgreSQL + pgvector** for hybrid search (vector + full-text with RRF fusion)
-- **Docker** for local dev parity and deployment
-- **GitHub Actions** CI/CD — lint, test, type-check on every push
-- **Structured logging** — JSON logs, correlation IDs, no print statements in library code
+**API doc lookups:** Use `chub` (Context Hub by Andrew Ng) for token-efficient doc retrieval:
+```bash
+chub search anthropic        # Find available docs
+chub get anthropic/claude-api --lang py  # Fetch Python SDK docs
+chub get gemini/genai --lang py          # Fetch Gemini SDK docs
+```
 
-### Brand Building
-When creating content, documentation, or portfolio materials:
-- Frame projects as **business problems solved**, not technology demos
-- Quantify impact: "Serves 104 municipalities" > "Uses pgvector"
-- Show the full lifecycle: data collection → training → serving → monitoring → iteration
-- Highlight decisions and trade-offs — this is what senior engineers talk about in interviews
-- Make the README tell a story: problem → approach → architecture → results → what's next
+## Architecture & Stack
 
-## The Portfolio Strategy
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| **Backend** | FastAPI + Python 3.12+ | Async-first, Pydantic models everywhere |
+| **Database** | Neon PostgreSQL + pgvector | Hybrid search (RRF fusion), 8,142 chunks across 5 municipalities |
+| **Frontend** | Next.js 16 + React 19 + Tailwind CSS 4 | Vercel deployment, SSE streaming |
+| **LLM** | Claude Sonnet 4.6 (primary) | Fallback: Gemini 2.5 Flash → NVIDIA Llama 3.3 70B → Kimi K2.5. Per-model circuit breakers |
+| **Embeddings** | NVIDIA NIM (1024d) | Used for chunk embedding at ingestion time |
+| **Observability** | MLflow tracing → Neon PostgreSQL | Persistent across deploys |
+| **CI/CD** | GitHub Actions | ruff + mypy + pytest + eval suite |
+| **Geocoding** | Geocodio API | Address → county/municipality identification |
+| **Property Data** | County ArcGIS REST APIs | MDC (two-layer zoning), Broward parcels, Palm Beach spatial |
+| **Zoning Docs** | Municode API | 73 municipalities with auto-discovery |
 
-Earl is building 4 projects that map to the complete ML/LLMOps lifecycle. Each project is a real product that solves a real problem AND demonstrates mastery of specific ML engineering skills:
+## Project Structure
 
-| Project | Domain | ML/LLMOps Skills Demonstrated |
-|---------|--------|-------------------------------|
-| **PlotLot v2** | Real Estate Zoning | RAG pipelines, hybrid search, agent orchestration, structured extraction, production data ingestion, multi-provider LLM fallback |
-| **MangoAI** | Agricultural Vision | Fine-tuning (QLoRA), dataset curation, model serving (SGLang), experiment tracking |
-| **Agent Forge** | Developer Tools | Multi-agent architectures, tool use, LangGraph/PydanticAI, streaming, deployment |
-| **Agent Eval** | ML Testing | LLM evaluation frameworks, RAGAS/DeepEval, regression testing, CI integration |
+```
+plotlot/
+├── src/plotlot/
+│   ├── api/                  # FastAPI application
+│   │   ├── main.py           # App factory, startup/shutdown
+│   │   ├── routes.py         # /analyze SSE endpoint, /chat, /admin
+│   │   ├── schemas.py        # Pydantic request/response models
+│   │   ├── cache.py          # Response caching layer
+│   │   ├── chat.py           # Agentic chat with 10 tools
+│   │   ├── geometry.py       # Shapely geometry operations
+│   │   └── middleware.py     # CORS, error handling, request logging
+│   ├── pipeline/
+│   │   ├── calculator.py     # Deterministic density calculator (4-constraint)
+│   │   ├── lookup.py         # Property lookup orchestration
+│   │   ├── ingest.py         # Municipality ingestion pipeline
+│   │   └── eval_flow.py      # Evaluation pipeline runner
+│   ├── retrieval/
+│   │   ├── llm.py            # LLM client (NVIDIA NIM, Kimi K2.5 fallback)
+│   │   ├── search.py         # pgvector hybrid search (RRF fusion)
+│   │   ├── geocode.py        # Geocodio API client
+│   │   ├── property.py       # County ArcGIS property lookup
+│   │   └── bulk_search.py    # Batch search operations
+│   ├── core/
+│   │   ├── types.py          # NumericZoningParams, DensityAnalysis, enums
+│   │   └── errors.py         # Custom exception hierarchy
+│   ├── config.py             # Pydantic Settings (env-based config)
+│   ├── observability/        # MLflow tracing, prompts
+│   ├── ingestion/            # Municode scraper, chunker, embedder
+│   ├── documents/            # PDF proforma generation
+│   ├── storage/              # Database models, migrations
+│   └── cli.py                # CLI entry points
+├── frontend/
+│   ├── src/app/              # Next.js app router (page.tsx, layout.tsx)
+│   ├── src/components/       # React components (14 components)
+│   │   ├── AnalysisStream.tsx    # Main SSE streaming UI
+│   │   ├── ZoningReport.tsx      # Full zoning report card
+│   │   ├── DensityBreakdown.tsx  # 4-constraint visual breakdown
+│   │   ├── SatelliteMap.tsx      # Google Maps satellite view
+│   │   ├── EnvelopeViewer.tsx    # 3D buildable envelope
+│   │   ├── FloorPlanViewer.tsx   # Generated floor plans
+│   │   └── PropertyCard.tsx      # Property summary card
+│   └── src/lib/
+│       ├── api.ts            # Backend API client + SSE parser
+│       └── floorplan-generator.ts
+├── tests/
+│   ├── unit/                 # Unit tests (pytest)
+│   ├── eval/                 # LLM evaluation suite (10 golden cases)
+│   ├── integration/          # Integration tests
+│   └── conftest.py           # Shared fixtures
+├── pyproject.toml            # Python deps, scripts, tool config
+└── .env.example              # Required environment variables
+```
 
-## North Star
+## API Endpoints
 
-**Get Earl a high 6-7 figure ML/LLMOps engineering role** by building production-grade projects, then sharing them on YouTube, LinkedIn, Medium, Substack, and GitHub. Every feature we build must be:
-1. **Demonstrably production-grade** — not a tutorial, not a toy
-2. **Explainable in an interview** — "I built X because Y, here's the trade-off I navigated"
-3. **Shareable as content** — each milestone is a blog post, video, or LinkedIn post
+### Analysis Pipeline
+- `POST /analyze` — SSE streaming endpoint. Accepts `{"address": "..."}`. Streams events: `geocode`, `property`, `zoning`, `analysis`, `calculator`, `heartbeat`, `error`, `done`.
+- `GET /health` — Health check. Returns `{"status": "ok"}`.
 
-## Current Focus: PlotLot v2
+### Chat
+- `POST /chat` — Agentic chat endpoint. Accepts `{"message": "...", "session_id": "..."}`. Uses 10 tools for property research.
+- Tools available: geocode, lookup_property_info, search_zoning_ordinance, web_search, property_search, filter, dataset_info, export, spreadsheet, document_creation.
 
-PlotLot v2 is the flagship project. The core product:
-1. User enters a South Florida property address (Miami-Dade, Broward, Palm Beach counties — 104 municipalities)
-2. System retrieves: zoning code, lot dimensions, property data from county ArcGIS APIs
-3. AI agent analyzes zoning ordinances and extracts numeric dimensional standards
-4. Deterministic calculator computes max allowable dwelling units with constraint breakdown
-5. Returns structured investment analysis
+### Admin
+- `POST /admin/ingest` — Ingest single municipality. Background task.
+- `POST /admin/ingest/batch` — Batch ingest multiple municipalities.
+- `GET /admin/ingest/batch/status` — Check batch ingestion status.
 
-**Technical architecture:**
-- Geocodio API → county/municipality identification
-- County ArcGIS REST APIs → property records + spatial zoning queries (MDC, Broward, Palm Beach)
-- Municode API → zoning ordinance retrieval (73 municipalities with auto-discovery)
-- pgvector hybrid search (RRF fusion) → relevant zoning sections
-- Agentic LLM analysis (NVIDIA NIM Llama 3.3 70B primary, Kimi K2.5 fallback) → numeric extraction via tool calling
-- Deterministic calculator → max units from density, lot area, FAR, buildable envelope constraints
+### Debug
+- `GET /debug/llm` — LLM diagnostics (model status, circuit breaker state).
+- `GET /debug/traces` — Recent MLflow traces.
 
-**Deployment stack:**
-- **Backend:** Render free tier (FastAPI + Docker)
-- **Database:** Neon free tier (PostgreSQL + pgvector, 8,142 chunks across 5 municipalities)
-- **Frontend:** Vercel free tier (Next.js 16 + React 19 + Tailwind CSS 4)
-- **LLM:** NVIDIA NIM Llama 3.3 70B (primary), Kimi K2.5 (fallback), per-model circuit breakers
-- **Observability:** MLflow tracing with Neon PostgreSQL backend (persistent across deploys)
+## Quick Commands
+
+```bash
+# Backend dev server (from plotlot/)
+uv run uvicorn plotlot.api.main:app --reload --port 8000
+
+# Frontend dev server (from plotlot/frontend/)
+npm run dev
+
+# Run unit tests
+cd plotlot && uv run pytest tests/unit/ -v
+
+# Run eval suite (requires live API keys)
+cd plotlot && uv run pytest tests/eval/ -v
+
+# Run all tests with coverage
+cd plotlot && uv run pytest tests/ --cov=src/plotlot --cov-report=term-missing
+
+# Lint + format check
+cd plotlot && uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/
+
+# Type check
+cd plotlot && uv run mypy src/plotlot/
+
+# Ingest a municipality
+cd plotlot && uv run plotlot-ingest --municipality "City Name"
+
+# Search zoning chunks
+cd plotlot && uv run plotlot-search --municipality "Miami Gardens" --query "residential density" --limit 5
+
+# Run single eval test
+cd plotlot && uv run pytest tests/eval/test_eval_experiment.py -v -k "miami_gardens"
+
+# Check database chunk counts
+cd plotlot && uv run python -c "from plotlot.storage.db import get_chunk_counts; print(get_chunk_counts())"
+```
+
+## Coding Standards
+
+### Python (Backend)
+- Python 3.12+, type hints on all function signatures
+- Pydantic `BaseModel` for all data structures, `BaseSettings` for config
+- Async-first: use `httpx.AsyncClient` (not requests), `asyncpg` (not psycopg2)
+- No `print()` in library code — use `structlog` or `logging`
+- Ruff for linting and formatting (configured in pyproject.toml)
+- All API endpoints return Pydantic models, never raw dicts
+
+### TypeScript (Frontend)
+- Next.js App Router (not Pages Router)
+- React 19 with server components where possible
+- Tailwind CSS 4 for styling — no CSS modules, no styled-components
+- Explicit TypeScript interfaces for all API response shapes
+- Components in `src/components/`, utilities in `src/lib/`
+
+## Testing
+
+- **Unit tests:** `tests/unit/` — mock external services (ArcGIS, Geocodio, LLM)
+- **Eval tests:** `tests/eval/` — 10 golden cases (5 positive, 3 boundary, 1 partial, 1 data quality)
+- **Integration tests:** `tests/integration/` — end-to-end with real (or staged) APIs
+- **Every production failure becomes a regression test case** (the Ramp pattern)
+- Eval suite uses `pytest` markers: `@pytest.mark.eval`, `@pytest.mark.live`
+- `asyncio_mode = "auto"` in pyproject.toml — no need for `@pytest.mark.asyncio`
+- CI runs: ruff lint + format → mypy → pytest unit → pytest eval
+
+### Eval Test Structure
+Each eval case in `tests/eval/test_eval_experiment.py` defines:
+- `address` — the input property address
+- `expected_municipality` — ground truth municipality name
+- `expected_zoning` — expected zoning code (e.g., "RS-1", "RM-25")
+- `density_range` — acceptable range for max dwelling units
+- `required_fields` — fields that must be non-null in `NumericZoningParams`
+
+### Test Fixtures (`tests/conftest.py`)
+- `mock_geocode_response` — fake Geocodio API response
+- `mock_property_response` — fake ArcGIS property data
+- `mock_llm_response` — fake LLM extraction with `NumericZoningParams`
+- `sample_zoning_chunks` — pre-embedded zoning text chunks
+
+## Common Errors Claude Makes
+
+1. **Forgetting async:** All I/O functions must be `async`. Don't use `requests` — use `httpx.AsyncClient`.
+2. **Missing Pydantic field defaults:** `NumericZoningParams` fields are `Optional[float] = None`. Don't make them required.
+3. **Wrong import paths:** Package is `plotlot`, not `src.plotlot`. Imports: `from plotlot.core.types import ...`
+4. **SSE format:** Backend SSE uses `data: {json}\n\n` format. Frontend parses with `EventSource` pattern in `api.ts`.
+5. **Calculator assumptions:** The density calculator uses 4 constraints (density, min_lot_area, FAR, buildable_envelope). All are optional — handle `None` gracefully.
+6. **ArcGIS API quirks:** MDC has two-layer zoning (land use + zoning overlay). Broward and Palm Beach use single-layer. Don't assume uniform schema.
+7. **Render timeout:** Render free tier has 30s proxy timeout. Long operations need SSE heartbeat or background tasks.
+8. **mypy strictness:** 28 known type errors (CI uses `|| true`). Don't introduce new ones. Goal: fix and make hard gate.
+
+## Environment Variables
+
+| Variable | Required | Used By | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | Backend | Neon PostgreSQL connection string (includes pgvector) |
+| `NVIDIA_API_KEY` | Yes | Backend | NVIDIA NIM API for LLM + embeddings |
+| `GEOCODIO_API_KEY` | Yes | Backend | Geocodio geocoding service |
+| `GOOGLE_MAPS_API_KEY` | Yes | Frontend | Google Maps satellite view + Places autocomplete |
+| `SENTRY_DSN` | No | Both | Sentry error tracking |
+| `MLFLOW_TRACKING_URI` | No | Backend | Auto-derived from `DATABASE_URL` if not set |
+| `KIMI_API_KEY` | No | Backend | Kimi K2.5 fallback LLM (optional) |
+| `NEXT_PUBLIC_API_URL` | Yes | Frontend | Backend API URL for client-side requests |
+
+Copy `.env.example` to `.env` and fill in values. Never commit `.env` files.
+
+## Deployment
+
+| Service | Platform | URL Pattern |
+|---------|----------|-------------|
+| Backend API | Render (free tier, Docker) | `plotlot-api.onrender.com` |
+| Frontend | Vercel (free tier) | `plotlot.vercel.app` |
+| Database | Neon (free tier) | PostgreSQL connection string in `DATABASE_URL` |
+| MLflow | Neon PostgreSQL backend | Auto-derived from `DATABASE_URL` |
+
+**Deploy checklist:**
+1. Backend: push to `main` → Render auto-deploys from Dockerfile
+2. Frontend: push to `main` → Vercel auto-deploys
+3. Database migrations: `uv run alembic upgrade head` (run before deploy if schema changed)
+4. Verify health: `curl https://plotlot-api.onrender.com/health`
+
+### Render-Specific Concerns
+- Free tier has 30s proxy timeout — all long operations need SSE heartbeat or background tasks
+- Cold start can take 30-60s. First request after idle may timeout.
+- Docker build uses `plotlot/Dockerfile`. Build context is `plotlot/`.
+- Health check endpoint: `/health`
+
+### Vercel-Specific Concerns
+- `next.config.ts` configures API rewrites to avoid CORS issues in production
+- Environment variables set in Vercel dashboard (not committed)
+- Serverless function timeout: 10s on free tier
+
+## Pipeline Deep Dive
+
+The analysis pipeline runs as a sequence of steps, each streamed to the frontend via SSE:
+
+1. **Geocode** (`retrieval/geocode.py`) — Geocodio API → lat/lng, county, municipality, FIPS code
+2. **Property Lookup** (`pipeline/lookup.py` + `retrieval/property.py`) — Routes to correct county ArcGIS API:
+   - MDC: two-layer query (land use layer + zoning overlay layer)
+   - Broward: parcel layer with zoning field
+   - Palm Beach: spatial zoning query with geometry
+3. **Zoning Search** (`retrieval/search.py`) — pgvector hybrid search (RRF fusion of cosine similarity + BM25), limit=15 chunks
+4. **LLM Extraction** (`retrieval/llm.py`) — Agentic LLM with tool calling extracts `NumericZoningParams`:
+   - `max_density_units_per_acre` — e.g., 25.0 for RM-25
+   - `min_lot_area_sqft` — minimum lot size per unit
+   - `max_far` — floor area ratio
+   - `max_lot_coverage_pct` — maximum lot coverage percentage
+   - `max_height_ft` — maximum building height
+   - `setback_front_ft`, `setback_side_ft`, `setback_rear_ft` — setback requirements
+5. **Calculator** (`pipeline/calculator.py`) — Deterministic computation:
+   - Applies 4 constraints: density, min_lot_area, FAR, buildable_envelope
+   - Each constraint produces a max-units figure
+   - Final result = `min(all constraints)` — the binding constraint
+   - Returns `DensityAnalysis` with per-constraint breakdown
+
+## Data Model Reference
+
+### `NumericZoningParams` (core/types.py)
+All fields are `Optional[float] = None`. The LLM extracts what it can find; the calculator handles `None` gracefully.
+
+Key fields: `max_density_units_per_acre`, `min_lot_area_sqft`, `max_far`, `max_lot_coverage_pct`, `max_height_ft`, `setback_front_ft`, `setback_side_ft`, `setback_rear_ft`, `min_unit_size_sqft`, `max_stories`
+
+### `DensityAnalysis` (core/types.py)
+Result of the calculator. Contains:
+- `max_units` — final answer (integer)
+- `binding_constraint` — which of the 4 constraints limited the result
+- `constraint_results` — dict of each constraint's individual max-units figure
+- `buildable_area_sqft` — lot area minus setbacks
+- `parameters` — the `NumericZoningParams` used
+
+### `PropertyInfo` (core/types.py)
+Property data from ArcGIS: `address`, `lot_area_sqft`, `zoning_code`, `land_use`, `county`, `municipality`, `folio_number`, `geometry`
+
+## Ingestion Pipeline
+
+The ingestion pipeline (`pipeline/ingest.py`) processes a municipality's zoning ordinances:
+
+1. **Discovery** — Query Municode API to find the municipality's code library
+2. **Scrape** — Download all zoning-related sections (Title/Chapter filtering)
+3. **Chunk** — Split into ~500-token chunks with overlap, preserving section headers
+4. **Embed** — NVIDIA NIM embeddings (1024d vectors)
+5. **Store** — Upsert into pgvector with metadata (municipality, section, chapter)
+
+Currently ingested municipalities and chunk counts:
+| Municipality | Chunks | Notes |
+|-------------|--------|-------|
+| Miami Gardens | 3,561 | Most complete coverage |
+| Miami-Dade County | 2,666 | Unincorporated MDC |
+| Boca Raton | 1,538 | Palm Beach County |
+| Miramar | 241 | Broward County |
+| Fort Lauderdale | 136 | Broward County |
+
+88 municipalities are discoverable on Municode. West Palm Beach uses enCodePlus (not supported yet).
+
+## Chat System
+
+The agentic chat (`api/chat.py`) provides conversational property research:
+
+- **10 tools** available per turn, dynamically masked based on conversation state
+- **3-step workflow:** geocode → lookup_property_info → search_zoning_ordinance
+- **Session memory:** LRU cache, 100 sessions max, 1hr TTL per session
+- **Token budget:** 50K tokens per session to prevent runaway costs
+- **Geocode cache:** Session-level lat/lng cache for consistent coordinate precision
+
+## Performance & Cost
+
+- **LLM costs:** NVIDIA NIM Llama 3.3 70B is the primary model. Circuit breaker trips after 3 failures in 5 minutes, falls back to Kimi K2.5.
+- **Embedding costs:** NVIDIA NIM embeddings at ingestion time only. No per-query embedding cost (queries are embedded at search time).
+- **Database:** Neon free tier (0.5 GB storage, 190 compute hours/month). Currently at ~8,142 chunks.
+- **Caching:** Response cache in `api/cache.py` prevents duplicate pipeline runs for same address.
+- **Retry strategy:** Exponential backoff on network-bound steps (scrape, embed, ArcGIS). Max 3 retries.
+
+## Current State (as of 2026-03-11)
 
 ### What's Built
-- **DATA:** Municode auto-discovery (88 municipalities), scraper, chunker, NVIDIA embedder (1024d), pgvector hybrid search (RRF fusion), multi-county property lookup (MDC two-layer zoning, Broward parcels, Palm Beach spatial zoning), admin ingestion endpoint
-- **BUILD:** Full agentic pipeline (geocode → property → search → LLM with tools → calculator), NumericZoningParams extraction, DensityAnalysis with 4-constraint breakdown (density, min lot area, FAR, buildable envelope)
-- **DEPLOY:** E2E working on Render + Neon + Vercel. SSE heartbeat pattern for Render's 30s proxy timeout. NVIDIA NIM Llama-only with intra-model fallback chain (Llama 3.3 70B → Kimi K2.5). Per-model circuit breakers.
-- **CHAT:** Agentic chat with 10 tools (geocode, lookup_property_info, zoning search, web search, property search, filter, dataset info, export, spreadsheet, document creation). 3-step workflow: geocode → lookup_property_info → search_zoning_ordinance. Session-level geocode cache for lat/lng precision.
-- **OBSERVABILITY:** MLflow tracing to Neon PostgreSQL (auto-derived from DATABASE_URL), /debug/llm diagnostics, /debug/traces endpoint, per-model token tracking
-- **HARDENING:** Bounded session memory (LRU eviction, 100 sessions max, 1hr TTL), retry with exponential backoff on network-bound pipeline steps (scrape, embed), token budget per chat session (50K cap), dynamic tool masking per turn
-- **CI/CD:** GitHub Actions — ruff lint + format check + mypy + pytest with pgvector service. Eval workflow with 10 golden test cases (5 positive, 3 boundary, 1 partial, 1 data quality). Runs on push to main and PRs.
+- Full agentic pipeline: geocode → property lookup → zoning search → LLM extraction → calculator
+- Agentic chat with 10 tools, session memory (LRU, 100 sessions, 1hr TTL)
+- SSE streaming with heartbeat for Render timeout
+- Municode auto-discovery (88 municipalities), scraper, chunker, NVIDIA embedder
+- pgvector hybrid search (RRF fusion, limit=15)
+- Multi-county property lookup (MDC two-layer, Broward, Palm Beach)
+- Admin ingestion endpoints (single + batch)
+- MLflow tracing to Neon PostgreSQL
+- Per-model circuit breakers, token budget (50K cap), dynamic tool masking
+- PDF proforma generation, satellite map, 3D envelope viewer, floor plans
+- CI/CD: GitHub Actions (lint + type-check + test + eval)
+- UI polish: collapsible sections, setback diagram, property intelligence card, copy-to-clipboard
 
-### Current Issues (as of 2026-02-19)
-1. **Data coverage**: 5 municipalities ingested (Miami Gardens 3,561, MDC 2,666, Boca Raton 1,538, Miramar 241, Fort Lauderdale 136). 88 municipalities discoverable on Municode. West Palm Beach moved to enCodePlus (not on Municode). Batch ingestion endpoint ready (`POST /admin/ingest/batch`).
-2. **Chat retrieval quality**: FIXED — Chat agent now uses same hybrid search parameters as pipeline (limit=15, full chunk text, RRF fusion). Both endpoints have consistent retrieval quality.
-3. **Admin ingestion**: POST /admin/ingest, POST /admin/ingest/batch, GET /admin/ingest/batch/status. Background task pattern for Render's 30s proxy timeout.
-4. **Frontend UX:** Current dark chat bubble design needs refresh to clean, modern Gemini-like centered layout.
-5. **Render cold start**: Free tier service sometimes fails to cold start (x-render-routing: no-server). May need to keep warm or upgrade.
-6. **mypy**: 28 type errors — `|| true` in CI. Fix and make hard gate.
+### Known Issues
+1. **Data coverage:** 5 municipalities ingested (Miami Gardens, MDC, Boca Raton, Miramar, Fort Lauderdale). 88 discoverable.
+2. **Render cold start:** Free tier sometimes returns `x-render-routing: no-server`. May need keep-warm.
+3. **mypy:** 28 type errors with `|| true` in CI. Needs cleanup.
+4. **West Palm Beach:** Moved to enCodePlus (not on Municode). Needs alternate scraper.
+5. **Frontend tests:** Playwright tests exist but are not yet integrated into CI.
+
+## Key File Paths
+
+| File | Purpose |
+|------|---------|
+| `src/plotlot/api/routes.py` | All API endpoints (/analyze, /chat, /admin) |
+| `src/plotlot/api/schemas.py` | Request/response Pydantic models |
+| `src/plotlot/pipeline/calculator.py` | Deterministic density calculator |
+| `src/plotlot/pipeline/lookup.py` | Property lookup orchestration |
+| `src/plotlot/retrieval/llm.py` | LLM client with fallback chain |
+| `src/plotlot/retrieval/search.py` | pgvector hybrid search |
+| `src/plotlot/retrieval/property.py` | County ArcGIS API clients |
+| `src/plotlot/core/types.py` | Core data models (NumericZoningParams, DensityAnalysis) |
+| `src/plotlot/config.py` | Environment config (Pydantic Settings) |
+| `frontend/src/app/page.tsx` | Main frontend page |
+| `frontend/src/components/AnalysisStream.tsx` | SSE streaming UI |
+| `frontend/src/lib/api.ts` | Backend API client |
+| `tests/eval/test_eval_experiment.py` | Main eval test suite |
+
+## Development Workflow
+
+### Starting a Session
+1. Launch with multi-model routing: `ccr code`
+2. Rules auto-load based on files you touch (`.claude/rules/`)
+3. Memory persists across sessions in `~/.claude/projects/.../memory/`
+
+### Slash Commands
+- `/dev` — Start backend + frontend dev servers
+- `/test` — Run lint + type check + unit tests + eval
+- `/deploy` — Deploy to Render + Vercel with pre-flight checks
+- `/ingest <municipality>` — Ingest zoning ordinances into vector DB
+
+### Quality Gates (Automatic via Hooks)
+- **Python files** auto-linted with ruff after every edit
+- **TypeScript files** auto-linted with next lint after every edit
+- **Stop hook** runs ruff check + unit tests before Claude finishes
+- **Sensitive files** (.env, credentials, lock files) blocked from edits
+
+### API Doc Lookups
+Use `chub` (not Context7) for token-efficient docs:
+```bash
+chub search anthropic        # Find available docs
+chub get anthropic/claude-api --lang py  # Fetch Python SDK docs
+```
+
+### Model Switching
+```bash
+/model gemini,gemini-3.1-pro-preview   # For research/thinking
+/model anthropic,claude-opus-4-6       # For code generation
+```
 
 ## Rules
 
 1. **Every code change ships with tests.** No exceptions.
-2. **Explain production relevance.** When building a feature, note: "In production at [scale], this pattern handles [problem]. Here's how to talk about it."
-3. **Interview prep is embedded.** After completing a significant feature, suggest how Earl should describe it in a system design interview or behavioral question.
-4. **No over-engineering.** Build what's needed now. Document what's needed later. Ship fast, iterate.
-5. **Track everything in MLflow.** Every pipeline run, every experiment, every eval. The paper trail IS the portfolio. MLflow is the single pane of glass for all MLOps/LLMOps observability.
-6. **Content-first milestones.** After each significant feature, identify the content angle: blog post, video, LinkedIn post. Building without sharing is wasted potential.
-7. **Follow the lifecycle phases.** Reference `docs/ML_LLMOPS_LIFECYCLE_PHASES.md` for the build order. Don't skip ahead or lose focus.
-8. **Use Claude Sonnet for email generation** as specified in global config.
-9. **Constraints beat capabilities.** Don't throw bigger models at problems. Constrain the model with structured tools, circuit breakers, and clear system prompts.
-10. **Every production failure becomes a regression test.** Turn user-reported issues into eval test cases. This is the Ramp pattern.
+2. **No over-engineering.** Build what's needed now. Ship fast, iterate.
+3. **Track everything in MLflow.** Every pipeline run, experiment, eval.
+4. **Constraints beat capabilities.** Don't throw bigger models at problems — constrain with structured tools, circuit breakers, clear system prompts.
+5. **Every production failure becomes a regression test.** The Ramp pattern.
+6. **Use Claude Sonnet for email generation** as specified in global config.
+7. **No `print()` in library code.** Structured logging only.
+8. **Pydantic everywhere.** No raw dicts crossing function boundaries.
+9. **Async-first for I/O.** `httpx`, `asyncpg`, `async def` — no blocking calls in async contexts.
+10. **SSE heartbeat for long operations.** Render's 30s proxy timeout is real.

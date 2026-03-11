@@ -16,6 +16,7 @@ from plotlot.retrieval.geocode import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_geocodio_response(
     formatted_address: str,
     city: str,
@@ -84,6 +85,7 @@ def _make_async_client(mock_response: MagicMock) -> AsyncMock:
 def _clear_geocode_cache():
     """Clear the module-level geocode cache between tests."""
     from plotlot.retrieval.geocode import _geocode_cache
+
     _geocode_cache.clear()
     yield
     _geocode_cache.clear()
@@ -92,6 +94,7 @@ def _clear_geocode_cache():
 # ---------------------------------------------------------------------------
 # Key-conversion helpers
 # ---------------------------------------------------------------------------
+
 
 class TestAddressToMunicipalityKey:
     def test_simple_name(self):
@@ -122,18 +125,23 @@ class TestCountyToKey:
 # Geocodio-primary tests (existing behaviour)
 # ---------------------------------------------------------------------------
 
+
 class TestGeocodeAddress:
     @pytest.mark.asyncio
     async def test_successful_geocode(self):
         mock_response = _mock_geocodio_response(
             "7940 Plantation Blvd, Miramar, FL 33023",
-            city="Miramar", county="Broward County",
-            lat=25.977, lng=-80.232,
+            city="Miramar",
+            county="Broward County",
+            lat=25.977,
+            lng=-80.232,
         )
         mock_client = _make_async_client(mock_response)
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=mock_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=mock_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = "test_key"
             result = await geocode_address("7940 Plantation Blvd, Miramar, FL")
 
@@ -147,13 +155,17 @@ class TestGeocodeAddress:
     async def test_county_suffix_stripped(self):
         mock_response = _mock_geocodio_response(
             "171 NE 209th Ter, Miami, FL 33179",
-            city="Miami Gardens", county="Miami-Dade County",
-            lat=25.949, lng=-80.179,
+            city="Miami Gardens",
+            county="Miami-Dade County",
+            lat=25.949,
+            lng=-80.179,
         )
         mock_client = _make_async_client(mock_response)
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=mock_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=mock_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = "test_key"
             result = await geocode_address("171 NE 209th Ter, Miami, FL 33179")
 
@@ -164,6 +176,7 @@ class TestGeocodeAddress:
 # ---------------------------------------------------------------------------
 # Census Geocoder tests
 # ---------------------------------------------------------------------------
+
 
 class TestCensusGeocode:
     """Direct tests for the _census_geocode helper."""
@@ -218,6 +231,7 @@ class TestCensusGeocode:
 # Fallback chain tests
 # ---------------------------------------------------------------------------
 
+
 class TestGeocodeFallbackChain:
     """Tests that geocode_address falls back to Census when Geocodio fails."""
 
@@ -232,8 +246,10 @@ class TestGeocodeFallbackChain:
         )
         census_client = _make_async_client(census_resp)
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=census_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", return_value=census_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = ""
             result = await geocode_address("171 NE 209th Ter, Miami, FL 33179")
 
@@ -268,8 +284,10 @@ class TestGeocodeFallbackChain:
                 return _make_async_client(geocodio_resp)
             return _make_async_client(census_resp)
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = "test_key"
             result = await geocode_address("100 Main St, Miami, FL 33101")
 
@@ -304,8 +322,10 @@ class TestGeocodeFallbackChain:
                 return geocodio_client
             return census_client
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = "test_key"
             result = await geocode_address("100 Main St, Miami, FL 33101")
 
@@ -332,8 +352,10 @@ class TestGeocodeFallbackChain:
                 return _make_async_client(geocodio_resp)
             return _make_async_client(census_resp)
 
-        with patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client), \
-             patch("plotlot.retrieval.geocode.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.geocode.httpx.AsyncClient", side_effect=_side_effect_client),
+            patch("plotlot.retrieval.geocode.settings") as mock_settings,
+        ):
             mock_settings.geocodio_api_key = "test_key"
             result = await geocode_address("some nonsense address")
 

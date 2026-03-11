@@ -1,0 +1,32 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths: ['plotlot/**']
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this PR for the PlotLot project. Check:
+            1. Python async correctness — no blocking calls in async contexts (requests, time.sleep)
+            2. Pydantic model completeness — no raw dicts crossing function boundaries
+            3. Test coverage — new code must have corresponding tests
+            4. SSE heartbeat — long operations need heartbeat for Render's 30s proxy timeout
+            5. Type hints — all function signatures must have type annotations
+            6. No print() in library code — use structlog or logging
+            7. Security — no hardcoded secrets, no SQL injection, no command injection
+          claude_args: "--max-turns 5"

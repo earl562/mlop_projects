@@ -10,7 +10,9 @@ import FloorPlanViewer from "./FloorPlanViewer";
 import PropertyCard from "./PropertyCard";
 import SatelliteMap from "./SatelliteMap";
 import SetbackDiagram from "./SetbackDiagram";
+import StreetView from "./StreetView";
 import PropertyIntelligence from "./PropertyIntelligence";
+import { useToast } from "./Toast";
 
 interface ZoningReportProps {
   report: ZoningReportData;
@@ -32,19 +34,19 @@ function ConfidenceBadge({ level }: { level: string }) {
 function CollapsibleSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 text-left"
+        className="flex items-center gap-2 text-left active:scale-[0.98]"
       >
+        <span className="section-pill">{title}</span>
         <svg
-          className={`h-3.5 w-3.5 shrink-0 text-stone-400 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+          className={`h-3 w-3 text-[var(--text-muted)] transition-transform duration-200 ${open ? "rotate-90" : ""}`}
           viewBox="0 0 20 20"
           fill="currentColor"
         >
           <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
         </svg>
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">{title}</h3>
       </button>
       {open && <div className="animate-fade-in">{children}</div>}
     </div>
@@ -52,21 +54,17 @@ function CollapsibleSection({ title, defaultOpen = true, children }: { title: st
 }
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      toast("Copied to clipboard");
     } catch { /* clipboard API may be blocked */ }
   };
-  if (copied) {
-    return <span className="text-[10px] font-medium text-emerald-600 animate-fade-in">Copied!</span>;
-  }
   return (
     <button
       onClick={handleCopy}
-      className="inline-flex h-5 w-5 items-center justify-center rounded text-stone-300 transition-colors hover:text-stone-500"
+      className="inline-flex h-5 w-5 items-center justify-center rounded text-stone-300 transition-colors hover:text-[var(--text-muted)] active:scale-[0.98]"
       title="Copy"
     >
       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -79,9 +77,9 @@ function CopyButton({ text }: { text: string }) {
 function DataRow({ label, value }: { label: string; value: string }) {
   if (!value || value === "null" || value === "undefined" || value === "Not specified") return null;
   return (
-    <div className="flex justify-between gap-2 border-b border-stone-200 py-1.5">
-      <span className="shrink-0 text-xs text-stone-500 sm:text-sm">{label}</span>
-      <span className="text-right text-xs font-medium text-stone-800 sm:text-sm">{value}</span>
+    <div className="flex justify-between gap-2 border-b border-[var(--border)] py-1.5">
+      <span className="shrink-0 text-xs text-[var(--text-muted)] sm:text-sm">{label}</span>
+      <span className="text-right text-xs font-medium text-[var(--text-primary)] sm:text-sm">{value}</span>
     </div>
   );
 }
@@ -108,8 +106,8 @@ function UsesList({ title, uses, color }: { title: string; uses: string[] | stri
   };
   return (
     <div>
-      <h4 className="mb-1.5 text-xs font-medium text-stone-500">{title}</h4>
-      <div className="flex flex-wrap gap-1.5">
+      <h4 className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">{title}</h4>
+      <div className="flex flex-wrap gap-2">
         {list.map((use, i) => (
           <span key={i} className={`rounded-md px-2 py-0.5 text-xs ${colors[color]}`}>
             {use}
@@ -128,7 +126,7 @@ function parseNumericFt(value: string | undefined | null): number {
 
 const mdComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
-  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-stone-800">{children}</strong>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
   ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>,
   ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>,
   li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
@@ -187,15 +185,15 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       : "";
 
   return (
-    <div className="w-full space-y-4 rounded-xl border-l-4 border-l-amber-400 border border-stone-200 bg-white p-4 shadow-sm sm:space-y-6 sm:p-6">
+    <div className="w-full space-y-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 sm:space-y-8 sm:rounded-3xl sm:p-8" style={{ boxShadow: "var(--shadow-card)" }}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h2 className="truncate text-lg font-bold text-stone-800 sm:text-xl">{report.formatted_address}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-display text-xl text-[var(--text-primary)] sm:text-2xl">{report.formatted_address}</h2>
             <CopyButton text={report.formatted_address} />
           </div>
-          <p className="mt-1 text-xs text-stone-500 sm:text-sm">
+          <p className="mt-1 text-xs text-[var(--text-muted)] sm:text-sm">
             {report.municipality}, {report.county} County
           </p>
         </div>
@@ -204,7 +202,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           <button
             onClick={handleDownloadPDF}
             disabled={pdfLoading}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:bg-stone-50 hover:text-stone-800 disabled:opacity-50 sm:min-h-0 sm:min-w-0"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98] disabled:opacity-50 sm:min-h-0 sm:min-w-0"
             title="Download PDF report"
           >
             {pdfLoading ? (
@@ -224,30 +222,35 @@ export default function ZoningReport({ report }: ZoningReportProps) {
 
       {/* Satellite map */}
       {report.lat != null && report.lng != null && (
-        <SatelliteMap lat={report.lat} lng={report.lng} address={report.formatted_address} />
+        <SatelliteMap lat={report.lat} lng={report.lng} address={report.formatted_address} parcelGeometry={report.property_record?.parcel_geometry} />
+      )}
+
+      {/* Street View */}
+      {report.lat != null && report.lng != null && (
+        <StreetView lat={report.lat} lng={report.lng} address={report.formatted_address} />
       )}
 
       {/* Zoning district — with copy */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <span className="text-2xl font-black text-amber-700 sm:text-3xl">{report.zoning_district}</span>
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+        <span className="font-display text-3xl text-[var(--text-primary)] sm:text-4xl">{report.zoning_district}</span>
         <CopyButton text={report.zoning_district} />
-        <span className="text-xs text-stone-500 sm:text-sm">{report.zoning_description}</span>
+        <span className="text-sm text-[var(--text-muted)]">{report.zoning_description}</span>
       </div>
 
       {/* Summary — markdown rendered, collapsible if long */}
       {report.summary && (
-        <div className={`rounded-lg ${confidenceBorder} bg-[#faf8f5] p-4`}>
+        <div className={`rounded-lg ${confidenceBorder} bg-[var(--bg-surface-raised)] p-4`}>
           {report.confidence !== "high" && (
-            <div className="mb-2 flex items-center gap-1.5">
+            <div className="mb-2 flex items-center gap-2">
               <svg className={`h-4 w-4 ${report.confidence === "low" ? "text-red-500" : "text-amber-500"}`} viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
               </svg>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                 {report.confidence} confidence
               </span>
             </div>
           )}
-          <div className="text-sm leading-relaxed text-stone-600">
+          <div className="text-sm leading-relaxed text-[var(--text-secondary)]">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
               {displaySummary}
             </ReactMarkdown>
@@ -255,7 +258,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           {isLongSummary && (
             <button
               onClick={() => setSummaryExpanded(!summaryExpanded)}
-              className="mt-2 text-xs font-medium text-amber-700 transition-colors hover:text-amber-600"
+              className="mt-2 text-xs font-medium text-amber-700 transition-colors hover:text-amber-600 active:scale-[0.98]"
             >
               {summaryExpanded ? "Show less" : "Show full analysis"}
             </button>
@@ -271,20 +274,21 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       {/* Financial Summary */}
       {report.numeric_params?.property_type && report.density_analysis && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">Financial Summary</h3>
-          <div className="rounded-lg bg-[#faf8f5] p-4">
+          <h3 className="section-pill">Financial Summary</h3>
+          <div className="rounded-lg bg-[var(--bg-surface-raised)] p-4">
             <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-semibold text-stone-700">
+              <span className="text-sm font-semibold text-[var(--text-secondary)]">
                 {report.numeric_params.property_type === "land" && "Land / Development Site"}
                 {report.numeric_params.property_type === "single_family" && "Single-Family Residential"}
                 {report.numeric_params.property_type === "multifamily" && "Multifamily (2-4 Units)"}
                 {report.numeric_params.property_type === "commercial_mf" && "Commercial Multifamily (5+ Units)"}
+                {report.numeric_params.property_type === "commercial" && "Commercial"}
               </span>
-              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500 uppercase">
+              <span className="rounded-md bg-[var(--bg-surface-raised)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] uppercase">
                 {report.numeric_params.property_type}
               </span>
             </div>
-            <div className="text-xs text-stone-500 leading-relaxed">
+            <div className="text-xs text-[var(--text-muted)] leading-relaxed">
               {report.numeric_params.property_type === "land" && (
                 <p>Development potential: {report.density_analysis.max_units} units on {report.property_record?.lot_size_sqft?.toLocaleString() || "N/A"} sqft.</p>
               )}
@@ -297,6 +301,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
               {report.numeric_params.property_type === "commercial_mf" && (
                 <p>Commercial multifamily ({report.density_analysis.max_units} units max). Valued via income approach (NOI / Cap Rate).</p>
               )}
+              {report.numeric_params.property_type === "commercial" && (
+                <p>Commercial site. Max GLA: {report.density_analysis.max_gla_sqft?.toLocaleString() || "N/A"} sqft. Parking at {report.numeric_params.parking_per_1000_gla_sqft || "N/A"} per 1,000 SF.</p>
+              )}
             </div>
           </div>
         </div>
@@ -304,7 +311,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
 
       {/* Dimensional Standards — collapsible, default open */}
       <CollapsibleSection title="Dimensional Standards" defaultOpen={true}>
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           <DataRow label="Max Height" value={report.max_height} />
           <DataRow label="Max Density" value={report.max_density} />
           <DataRow label="Floor Area Ratio" value={report.floor_area_ratio} />
@@ -334,9 +341,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
             ].map((s) => {
               const display = s.value && s.value !== "null" ? s.value : "N/A";
               return (
-                <div key={s.label} className="rounded-lg bg-stone-50 p-2 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)] sm:p-3">
-                  <div className="text-[10px] text-stone-500 sm:text-xs">{s.label}</div>
-                  <div className="mt-0.5 text-base font-semibold text-stone-800 sm:mt-1 sm:text-lg">{display}</div>
+                <div key={s.label} className="rounded-lg bg-[var(--bg-surface-raised)] p-2 text-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)] sm:p-3">
+                  <div className="text-xs text-[var(--text-muted)]">{s.label}</div>
+                  <div className="mt-1 text-base font-semibold text-[var(--text-primary)] sm:text-lg">{display}</div>
                 </div>
               );
             })}
@@ -344,12 +351,15 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         </CollapsibleSection>
       )}
 
-      {/* 3D Buildable Envelope — multi-unit only */}
-      {maxUnits >= 2 && (() => {
-        const maxHeight = report.numeric_params?.max_height_ft || 35;
+      {/* 3D Building View — all property types with lot dimensions */}
+      {(() => {
+        const np = report.numeric_params;
+        const da = report.density_analysis;
+        const maxHeight = np?.max_height_ft || 35;
+        const lotSize = da?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
         if (lotWidth > 0 && lotDepth > 0) {
           return (
-            <CollapsibleSection title="3D Buildable Envelope" defaultOpen={true}>
+            <CollapsibleSection title="3D Building View" defaultOpen={true}>
               <EnvelopeViewerWrapper
                 lotWidthFt={lotWidth}
                 lotDepthFt={lotDepth}
@@ -357,7 +367,14 @@ export default function ZoningReport({ report }: ZoningReportProps) {
                 setbackSideFt={setbackSide}
                 setbackRearFt={setbackRear}
                 maxHeightFt={maxHeight}
-                buildableAreaSqft={report.density_analysis?.buildable_area_sqft ?? undefined}
+                buildableAreaSqft={da?.buildable_area_sqft ?? undefined}
+                maxStories={np?.max_stories ?? undefined}
+                maxLotCoveragePct={np?.max_lot_coverage_pct ?? undefined}
+                far={np?.far ?? undefined}
+                lotSizeSqft={lotSize || undefined}
+                propertyType={np?.property_type ?? undefined}
+                maxUnits={da?.max_units ?? undefined}
+                parkingPerUnit={np?.parking_spaces_per_unit ?? undefined}
               />
             </CollapsibleSection>
           );
@@ -365,14 +382,14 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         return null;
       })()}
 
-      {/* Floor Plan — multi-unit only */}
-      {maxUnits >= 2 && (() => {
+      {/* Floor Plan — all property types with buildable dimensions */}
+      {(() => {
         const da = report.density_analysis;
         const np = report.numeric_params;
-        if (!da?.buildable_area_sqft || !da?.lot_width_ft || !da?.lot_depth_ft) return null;
-        const buildW = Math.max(0, (da.lot_width_ft || 0) - 2 * setbackSide);
-        const buildD = Math.max(0, (da.lot_depth_ft || 0) - setbackFront - setbackRear);
+        const buildW = Math.max(0, lotWidth - 2 * setbackSide);
+        const buildD = Math.max(0, lotDepth - setbackFront - setbackRear);
         const maxHeight = np?.max_height_ft || 35;
+        const lotSize = da?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
         if (buildW <= 0 || buildD <= 0) return null;
         return (
           <CollapsibleSection title="Floor Plan" defaultOpen={false}>
@@ -380,14 +397,22 @@ export default function ZoningReport({ report }: ZoningReportProps) {
               buildableWidthFt={buildW}
               buildableDepthFt={buildD}
               maxHeightFt={maxHeight}
-              maxUnits={da.max_units || 1}
+              maxStories={np?.max_stories || 2}
+              maxLotCoveragePct={np?.max_lot_coverage_pct || 100}
+              far={np?.far || 0}
+              maxUnits={da?.max_units || 1}
+              minUnitSizeSqft={np?.min_unit_size_sqft || 400}
+              parkingPerUnit={np?.parking_spaces_per_unit || 2}
+              lotSizeSqft={lotSize}
+              propertyType={np?.property_type || "single_family"}
+              zoningDistrict={report.zoning_district}
             />
           </CollapsibleSection>
         );
       })()}
 
-      {/* Development Summary — single-unit lots */}
-      {maxUnits < 2 && (() => {
+      {/* Development Summary — compact stats for all property types */}
+      {(() => {
         const buildW = lotWidth > 0 ? Math.max(0, lotWidth - 2 * setbackSide) : 0;
         const buildD = lotDepth > 0 ? Math.max(0, lotDepth - setbackFront - setbackRear) : 0;
         const footprint = buildW > 0 && buildD > 0 ? buildW * buildD : 0;
@@ -397,35 +422,44 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         const lotSize = report.density_analysis?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
         const buildingArea = report.property_record?.building_area_sqft || 0;
         const coverageUsed = lotSize > 0 && buildingArea > 0 ? ((buildingArea / lotSize) * 100).toFixed(1) : null;
+        const isCommercial = report.numeric_params?.property_type === "commercial";
+
+        if (!footprint && !maxStories && !lotCoverage) return null;
 
         return (
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">Development Summary</h3>
+            <h3 className="section-pill">Development Summary</h3>
             <div className="rounded-lg bg-amber-50/50 border border-amber-200 p-4 space-y-3">
-              <p className="text-sm font-medium text-stone-700">This lot permits one single-family dwelling.</p>
+              <p className="text-sm font-medium text-[var(--text-secondary)]">
+                {isCommercial
+                  ? "Commercial development site"
+                  : maxUnits >= 2
+                    ? `Multifamily — up to ${maxUnits} units`
+                    : "Single-family residential lot"}
+              </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {footprint > 0 && (
-                  <div className="rounded-lg bg-white p-2.5">
-                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Buildable Footprint</div>
-                    <div className="mt-0.5 text-sm font-semibold text-stone-800">{Math.round(footprint).toLocaleString()} sqft</div>
+                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Buildable Footprint</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{Math.round(footprint).toLocaleString()} sqft</div>
                   </div>
                 )}
-                <div className="rounded-lg bg-white p-2.5">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-500">Max Height</div>
-                  <div className="mt-0.5 text-sm font-semibold text-stone-800">
+                <div className="rounded-lg bg-[var(--bg-surface)] p-3">
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Max Height</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
                     {maxHeight} ft{maxStories ? ` / ${maxStories} stories` : ""}
                   </div>
                 </div>
                 {lotCoverage && (
-                  <div className="rounded-lg bg-white p-2.5">
-                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Max Lot Coverage</div>
-                    <div className="mt-0.5 text-sm font-semibold text-stone-800">{lotCoverage}%</div>
+                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Max Lot Coverage</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{lotCoverage}%</div>
                   </div>
                 )}
                 {coverageUsed && (
-                  <div className="rounded-lg bg-white p-2.5">
-                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Current Coverage</div>
-                    <div className="mt-0.5 text-sm font-semibold text-stone-800">{coverageUsed}%</div>
+                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Current Coverage</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{coverageUsed}%</div>
                   </div>
                 )}
               </div>
@@ -460,21 +494,23 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <div className="space-y-2">
           <button
             onClick={() => setSourcesOpen(!sourcesOpen)}
-            className="flex min-h-[44px] items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-stone-500 transition-colors hover:text-stone-700"
+            className="flex min-h-[44px] items-center gap-2 active:scale-[0.98]"
           >
+            <span className="section-pill">
+              View {report.sources.length} source{report.sources.length !== 1 ? "s" : ""}
+            </span>
             <svg
-              className={`h-3.5 w-3.5 transition-transform ${sourcesOpen ? "rotate-90" : ""}`}
+              className={`h-3 w-3 text-[var(--text-muted)] transition-transform ${sourcesOpen ? "rotate-90" : ""}`}
               viewBox="0 0 20 20"
               fill="currentColor"
             >
               <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
             </svg>
-            View {report.sources.length} source{report.sources.length !== 1 ? "s" : ""}
           </button>
           {sourcesOpen && (
             <div className="space-y-1 animate-fade-in">
               {report.sources.map((source, i) => (
-                <div key={i} className="text-xs text-stone-500">
+                <div key={i} className="text-xs text-[var(--text-muted)]">
                   {source}
                 </div>
               ))}
@@ -484,11 +520,11 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       )}
 
       {/* Action bar */}
-      <div className="border-t border-stone-200 pt-4 flex items-center justify-end gap-3">
+      <div className="border-t border-[var(--border)] pt-6 flex items-center justify-end gap-3">
         <button
           onClick={handleDownloadPDF}
           disabled={pdfLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--text-primary)] px-5 py-2.5 text-sm font-medium text-[var(--bg-primary)] transition-all hover:opacity-80 active:scale-[0.98] disabled:opacity-50"
         >
           {pdfLoading ? (
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">

@@ -15,6 +15,25 @@ from plotlot.pipeline.lookup import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_mlflow_tracking(tmp_path):
+    """Redirect MLflow tracking to a temp SQLite DB so tests don't hit corrupted mlruns/."""
+    import mlflow
+
+    # End any active run leaked from other test modules
+    if mlflow.active_run():
+        mlflow.end_run()
+
+    prev_uri = mlflow.get_tracking_uri()
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    mlflow.set_experiment("test-lookup")
+    yield
+    # Clean up any run started during this test
+    if mlflow.active_run():
+        mlflow.end_run()
+    mlflow.set_tracking_uri(prev_uri)
+
+
 def _make_geo(**kwargs):
     defaults = {
         "formatted_address": "7940 Plantation Blvd, Miramar, FL 33023",
@@ -99,7 +118,6 @@ class TestBuildReport:
 class TestReportToDict:
     def test_full_report(self):
         """report_to_dict serializes a complete ZoningReport."""
-        from plotlot.core.types import DensityAnalysis, NumericZoningParams
         args = {
             "zoning_district": "RS-4",
             "summary": "Residential district",
@@ -128,7 +146,11 @@ class TestReportToDict:
 class TestLookupAddress:
     @pytest.mark.asyncio
     async def test_geocode_failure(self):
-        with patch("plotlot.pipeline.lookup.geocode_address", return_value=None):
+        with patch(
+            "plotlot.pipeline.lookup.geocode_address",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
             result = await lookup_address("bad address")
         assert result is None
 
@@ -140,25 +162,31 @@ class TestLookupAddress:
         async def mock_call_llm(messages, tools=None):
             return {
                 "content": "",
-                "tool_calls": [{
-                    "id": "call_1",
-                    "function": {
-                        "name": "submit_report",
-                        "arguments": json.dumps({
-                            "zoning_district": "RS-4",
-                            "zoning_description": "Single Family Residential",
-                            "summary": "Residential district allowing single-family homes.",
-                            "confidence": "high",
-                        }),
-                    },
-                }],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "function": {
+                            "name": "submit_report",
+                            "arguments": json.dumps(
+                                {
+                                    "zoning_district": "RS-4",
+                                    "zoning_description": "Single Family Residential",
+                                    "summary": "Residential district allowing single-family homes.",
+                                    "confidence": "high",
+                                }
+                            ),
+                        },
+                    }
+                ],
             }
 
-        with patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()), \
-             patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()), \
-             patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]), \
-             patch("plotlot.pipeline.lookup.get_session", return_value=mock_session), \
-             patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm):
+        with (
+            patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()),
+            patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()),
+            patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]),
+            patch("plotlot.pipeline.lookup.get_session", return_value=mock_session),
+            patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm),
+        ):
             result = await lookup_address("7940 Plantation Blvd, Miramar, FL")
 
         assert isinstance(result, ZoningReport)
@@ -173,19 +201,23 @@ class TestLookupAddress:
 
         async def mock_call_llm(messages, tools=None):
             return {
-                "content": json.dumps({
-                    "zoning_district": "R-1",
-                    "summary": "Single family zone",
-                    "confidence": "medium",
-                }),
+                "content": json.dumps(
+                    {
+                        "zoning_district": "R-1",
+                        "summary": "Single family zone",
+                        "confidence": "medium",
+                    }
+                ),
                 "tool_calls": [],
             }
 
-        with patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()), \
-             patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()), \
-             patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]), \
-             patch("plotlot.pipeline.lookup.get_session", return_value=mock_session), \
-             patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm):
+        with (
+            patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()),
+            patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()),
+            patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]),
+            patch("plotlot.pipeline.lookup.get_session", return_value=mock_session),
+            patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm),
+        ):
             result = await lookup_address("171 NE 209th Ter, Miami, FL")
 
         assert isinstance(result, ZoningReport)
@@ -197,13 +229,16 @@ class TestLookupAddress:
 
         # Clear pipeline cache to avoid hits from prior tests
         from plotlot.pipeline.lookup import _pipeline_cache
+
         _pipeline_cache.clear()
 
-        with patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()), \
-             patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()), \
-             patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]), \
-             patch("plotlot.pipeline.lookup.get_session", return_value=mock_session), \
-             patch("plotlot.retrieval.llm.call_llm", return_value=None):
+        with (
+            patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()),
+            patch("plotlot.pipeline.lookup.lookup_property", return_value=_make_prop()),
+            patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]),
+            patch("plotlot.pipeline.lookup.get_session", return_value=mock_session),
+            patch("plotlot.retrieval.llm.call_llm", return_value=None),
+        ):
             result = await lookup_address("7940 Plantation Blvd, Miramar, FL")
 
         assert isinstance(result, ZoningReport)

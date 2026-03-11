@@ -194,7 +194,10 @@ class TestPropertyPackageLookup:
             side_effect=RuntimeError("ArcGIS down"),
         ):
             result = await lookup_property(
-                "171 NE 209th Ter", "Miami-Dade", lat=25.9, lng=-80.2,
+                "171 NE 209th Ter",
+                "Miami-Dade",
+                lat=25.9,
+                lng=-80.2,
             )
 
         assert result is None
@@ -219,7 +222,10 @@ class TestRetrievalBackwardCompat:
             return_value=mock_record,
         ):
             result = await lookup_property(
-                "171 NE 209th Ter", "Miami-Dade", lat=25.9, lng=-80.2,
+                "171 NE 209th Ter",
+                "Miami-Dade",
+                lat=25.9,
+                lng=-80.2,
             )
 
         assert result is not None

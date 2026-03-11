@@ -17,9 +17,7 @@ MAX_CHUNK_SIZE = 1500
 OVERLAP = 200
 
 # Common zone code patterns in South Florida ordinances
-ZONE_CODE_PATTERN = re.compile(
-    r"\b([A-Z]{1,4}[-\s]?\d{1,3}(?:\.\d{1,2})?(?:[-/][A-Z0-9]+)?)\b"
-)
+ZONE_CODE_PATTERN = re.compile(r"\b([A-Z]{1,4}[-\s]?\d{1,3}(?:\.\d{1,2})?(?:[-/][A-Z0-9]+)?)\b")
 
 
 def _extract_zone_codes(text: str) -> list[str]:
@@ -98,9 +96,7 @@ def chunk_sections(sections: list[RawSection]) -> list[TextChunk]:
         if not text or len(text) < 50:
             continue
 
-        chapter, sec_num, title = _parse_chapter_section(
-            section.heading, section.parent_heading
-        )
+        chapter, sec_num, title = _parse_chapter_section(section.heading, section.parent_heading)
         zone_codes = _extract_zone_codes(text)
 
         text_parts = _split_text(text)

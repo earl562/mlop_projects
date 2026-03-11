@@ -39,6 +39,7 @@ except ImportError:
 # Decorators
 # ---------------------------------------------------------------------------
 
+
 def trace(name: str | None = None, **kwargs):
     """Decorator: wraps function with MLflow trace if available."""
     if _HAS_MLFLOW:
@@ -54,6 +55,7 @@ def trace(name: str | None = None, **kwargs):
             return await fn(*args, **kw)
 
         import asyncio
+
         return async_wrapper if asyncio.iscoroutinefunction(fn) else wrapper
 
     return passthrough
@@ -62,6 +64,7 @@ def trace(name: str | None = None, **kwargs):
 # ---------------------------------------------------------------------------
 # Context managers
 # ---------------------------------------------------------------------------
+
 
 @contextmanager
 def start_span(name: str = "span", **kwargs):
@@ -99,6 +102,7 @@ def start_run(**kwargs):
 # ---------------------------------------------------------------------------
 # Logging functions (no-op when MLflow absent)
 # ---------------------------------------------------------------------------
+
 
 def log_params(params: dict) -> None:
     if _HAS_MLFLOW:
@@ -174,6 +178,7 @@ def enable_async_logging() -> None:
 # ---------------------------------------------------------------------------
 # No-op span for when MLflow is absent
 # ---------------------------------------------------------------------------
+
 
 class _NoOpSpan:
     """Dummy span that accepts set_inputs/set_outputs without error."""

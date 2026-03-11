@@ -50,19 +50,24 @@ async def _embed_batch(
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 or e.response.status_code >= 500:
-                delay = BASE_DELAY * (2 ** attempt)
+                delay = BASE_DELAY * (2**attempt)
                 logger.warning(
                     "Embedding API %d (attempt %d/%d), retrying in %.1fs",
-                    e.response.status_code, attempt + 1, MAX_RETRIES, delay,
+                    e.response.status_code,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    delay,
                 )
                 await asyncio.sleep(delay)
             else:
                 raise
         except httpx.TimeoutException:
-            delay = BASE_DELAY * (2 ** attempt)
+            delay = BASE_DELAY * (2**attempt)
             logger.warning(
                 "Embedding API timeout (attempt %d/%d), retrying in %.1fs",
-                attempt + 1, MAX_RETRIES, delay,
+                attempt + 1,
+                MAX_RETRIES,
+                delay,
             )
             await asyncio.sleep(delay)
 
@@ -108,27 +113,33 @@ async def embed_texts(
     semaphore = asyncio.Semaphore(CONCURRENT_BATCHES)
 
     async def _run_batch(
-        batch_idx: int, i: int,
+        batch_idx: int,
+        i: int,
     ) -> tuple[int, list[list[float]]]:
         batch = texts[i : i + BATCH_SIZE]
         batch = [t[:2000] for t in batch]
 
         async with semaphore:
             with start_span(
-                name=f"embed_batch_{batch_idx}", span_type="EMBEDDING",
+                name=f"embed_batch_{batch_idx}",
+                span_type="EMBEDDING",
             ) as span:
                 span.set_inputs({"batch_size": len(batch), "input_type": input_type})
                 batch_embeddings = await _embed_batch(client, batch, headers, input_type)
-                span.set_outputs({"embedding_dim": len(batch_embeddings[0]) if batch_embeddings else 0})
+                span.set_outputs(
+                    {"embedding_dim": len(batch_embeddings[0]) if batch_embeddings else 0}
+                )
             logger.debug(
-                "Embedded batch %d-%d (%dd)", i, i + len(batch), EMBEDDING_DIM,
+                "Embedded batch %d-%d (%dd)",
+                i,
+                i + len(batch),
+                EMBEDDING_DIM,
             )
         return batch_idx, batch_embeddings
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         tasks = [
-            _run_batch(batch_idx, i)
-            for batch_idx, i in enumerate(range(0, len(texts), BATCH_SIZE))
+            _run_batch(batch_idx, i) for batch_idx, i in enumerate(range(0, len(texts), BATCH_SIZE))
         ]
         results = await asyncio.gather(*tasks)
 

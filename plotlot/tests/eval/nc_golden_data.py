@@ -55,7 +55,14 @@ NC_GOLDEN_CASES = [
 ]
 
 # Required fields every golden case must have
-REQUIRED_CASE_FIELDS = {"address", "municipality", "county", "state", "expected_zone_prefix", "expected_fields"}
+REQUIRED_CASE_FIELDS = {
+    "address",
+    "municipality",
+    "county",
+    "state",
+    "expected_zone_prefix",
+    "expected_fields",
+}
 
 # Municipalities that should be covered in the NC golden dataset
 NC_MUNICIPALITIES = {"Charlotte", "Huntersville", "Cornelius", "Davidson", "Matthews"}

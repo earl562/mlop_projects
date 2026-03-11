@@ -1,6 +1,5 @@
 """Tests for the HTML chunker module."""
 
-
 from plotlot.core.types import RawSection
 from plotlot.ingestion.chunker import (
     _extract_zone_codes,
@@ -65,7 +64,9 @@ class TestSplitText:
         assert len(parts) == 1
 
     def test_long_text_splits(self):
-        text = "\n\n".join(f"Paragraph {i} with enough content to be meaningful." for i in range(50))
+        text = "\n\n".join(
+            f"Paragraph {i} with enough content to be meaningful." for i in range(50)
+        )
         parts = _split_text(text, max_size=200, overlap=50)
         assert len(parts) > 1
 

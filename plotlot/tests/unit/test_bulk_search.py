@@ -12,7 +12,6 @@ from plotlot.retrieval.bulk_search import (
     MDC_FIELDS,
     PBC_FIELDS,
     BROWARD_FIELDS,
-    DatasetInfo,
     PropertySearchParams,
     build_where_clause,
     bulk_property_search,
@@ -184,7 +183,11 @@ class TestSafeFilter:
         assert result[0]["owner"] == "JOHN DOE"
 
     def test_less_than_or_equal(self):
-        records = [{"assessed_value": 50000}, {"assessed_value": 100000}, {"assessed_value": 200000}]
+        records = [
+            {"assessed_value": 50000},
+            {"assessed_value": 100000},
+            {"assessed_value": 200000},
+        ]
         result = _safe_filter(records, "assessed_value <= 100000")
         assert len(result) == 2
 
@@ -279,9 +282,18 @@ class TestNormalizeRecord:
 
     def test_missing_geometry(self):
         """Missing geometry produces None lat/lng."""
-        attrs = {"FOLIO": "123", "TRUE_SITE_ADDR": "A", "TRUE_SITE_CITY": "B",
-                 "TRUE_OWNER1": "C", "DOR_CODE_CUR": "0000", "LOT_SIZE": 0,
-                 "YEAR_BUILT": 0, "ASSESSED_VAL_CUR": 0, "PRICE_1": 0, "DOS_1": ""}
+        attrs = {
+            "FOLIO": "123",
+            "TRUE_SITE_ADDR": "A",
+            "TRUE_SITE_CITY": "B",
+            "TRUE_OWNER1": "C",
+            "DOR_CODE_CUR": "0000",
+            "LOT_SIZE": 0,
+            "YEAR_BUILT": 0,
+            "ASSESSED_VAL_CUR": 0,
+            "PRICE_1": 0,
+            "DOS_1": "",
+        }
         result = _normalize_record(attrs, None, MDC_FIELDS)
         assert result["lat"] is None
         assert result["lng"] is None
@@ -314,7 +326,11 @@ class TestBulkPropertySearch:
             }
             for i in range(50)
         ]
-        with patch("plotlot.retrieval.bulk_search._query_arcgis", new_callable=AsyncMock, return_value=mock_features):
+        with patch(
+            "plotlot.retrieval.bulk_search._query_arcgis",
+            new_callable=AsyncMock,
+            return_value=mock_features,
+        ):
             results = await bulk_property_search(
                 PropertySearchParams(county="Miami-Dade", land_use_type="vacant_residential")
             )
@@ -328,16 +344,26 @@ class TestBulkPropertySearch:
         mock_features = [
             {
                 "attributes": {
-                    "FOLIO": f"F{i}", "TRUE_SITE_ADDR": f"{i} ST",
-                    "TRUE_SITE_CITY": "MIAMI", "TRUE_OWNER1": "O",
-                    "DOR_CODE_CUR": "0000", "LOT_SIZE": 0, "YEAR_BUILT": 0,
-                    "ASSESSED_VAL_CUR": 0, "PRICE_1": 0, "DOS_1": "",
+                    "FOLIO": f"F{i}",
+                    "TRUE_SITE_ADDR": f"{i} ST",
+                    "TRUE_SITE_CITY": "MIAMI",
+                    "TRUE_OWNER1": "O",
+                    "DOR_CODE_CUR": "0000",
+                    "LOT_SIZE": 0,
+                    "YEAR_BUILT": 0,
+                    "ASSESSED_VAL_CUR": 0,
+                    "PRICE_1": 0,
+                    "DOS_1": "",
                 },
                 "geometry": None,
             }
             for i in range(200)
         ]
-        with patch("plotlot.retrieval.bulk_search._query_arcgis", new_callable=AsyncMock, return_value=mock_features):
+        with patch(
+            "plotlot.retrieval.bulk_search._query_arcgis",
+            new_callable=AsyncMock,
+            return_value=mock_features,
+        ):
             results = await bulk_property_search(
                 PropertySearchParams(county="Miami-Dade", max_results=100)
             )
@@ -346,7 +372,9 @@ class TestBulkPropertySearch:
     @pytest.mark.asyncio
     async def test_empty_results(self):
         """No results returns empty list."""
-        with patch("plotlot.retrieval.bulk_search._query_arcgis", new_callable=AsyncMock, return_value=[]):
+        with patch(
+            "plotlot.retrieval.bulk_search._query_arcgis", new_callable=AsyncMock, return_value=[]
+        ):
             results = await bulk_property_search(
                 PropertySearchParams(county="Miami-Dade", land_use_type="vacant_residential")
             )
@@ -358,10 +386,16 @@ class TestBulkPropertySearch:
         page1 = [
             {
                 "attributes": {
-                    "FOLIO": f"F{i}", "TRUE_SITE_ADDR": f"{i} ST",
-                    "TRUE_SITE_CITY": "MIAMI", "TRUE_OWNER1": "O",
-                    "DOR_CODE_CUR": "0000", "LOT_SIZE": 0, "YEAR_BUILT": 0,
-                    "ASSESSED_VAL_CUR": 0, "PRICE_1": 0, "DOS_1": "",
+                    "FOLIO": f"F{i}",
+                    "TRUE_SITE_ADDR": f"{i} ST",
+                    "TRUE_SITE_CITY": "MIAMI",
+                    "TRUE_OWNER1": "O",
+                    "DOR_CODE_CUR": "0000",
+                    "LOT_SIZE": 0,
+                    "YEAR_BUILT": 0,
+                    "ASSESSED_VAL_CUR": 0,
+                    "PRICE_1": 0,
+                    "DOS_1": "",
                 },
                 "geometry": None,
             }
@@ -369,6 +403,7 @@ class TestBulkPropertySearch:
         ]
 
         call_count = 0
+
         async def mock_arcgis(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -391,8 +426,20 @@ class TestBulkPropertySearch:
 class TestUtilities:
     def test_compute_stats(self):
         records = [
-            {"lot_size_sqft": 5000, "assessed_value": 50000, "city": "MIAMI", "last_sale_price": 0, "year_built": 0},
-            {"lot_size_sqft": 15000, "assessed_value": 150000, "city": "MIRAMAR", "last_sale_price": 0, "year_built": 0},
+            {
+                "lot_size_sqft": 5000,
+                "assessed_value": 50000,
+                "city": "MIAMI",
+                "last_sale_price": 0,
+                "year_built": 0,
+            },
+            {
+                "lot_size_sqft": 15000,
+                "assessed_value": 150000,
+                "city": "MIRAMAR",
+                "last_sale_price": 0,
+                "year_built": 0,
+            },
         ]
         stats = compute_dataset_stats(records)
         assert stats["count"] == 2
@@ -404,11 +451,13 @@ class TestUtilities:
         assert compute_dataset_stats([])["count"] == 0
 
     def test_describe_search(self):
-        desc = describe_search({
-            "county": "Miami-Dade",
-            "land_use_type": "vacant_residential",
-            "ownership_min_years": 20,
-        })
+        desc = describe_search(
+            {
+                "county": "Miami-Dade",
+                "land_use_type": "vacant_residential",
+                "ownership_min_years": 20,
+            }
+        )
         assert "Miami-Dade" in desc
         assert "Vacant Residential" in desc
         assert "20" in desc

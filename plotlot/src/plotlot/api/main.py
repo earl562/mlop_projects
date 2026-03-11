@@ -34,6 +34,20 @@ async def lifespan(app: FastAPI):
     """Initialize DB on startup, cleanup on shutdown."""
     setup_logging(json_format=settings.log_json, level=settings.log_level)
 
+    # Initialize Sentry error tracking
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+
+            sentry_sdk.init(
+                dsn=settings.sentry_dsn,
+                traces_sample_rate=0.1,
+                environment="production",
+            )
+            logger.info("Sentry error tracking enabled")
+        except Exception as e:
+            logger.warning("Sentry init failed: %s", e)
+
     # Initialize MLflow tracing
     from plotlot.observability.tracing import (
         set_tracking_uri,
@@ -249,67 +263,103 @@ async def debug_traces(limit: int = 10):
 
 @app.get("/debug/llm")
 async def debug_llm():
-    """Network diagnostics + multi-model LLM connectivity test.
+    """Multi-provider LLM connectivity test.
 
-    Tests DNS resolution, TCP connect, and multiple NVIDIA models to
-    pinpoint whether the issue is network-level or model-specific.
+    Tests all three providers in the fallback chain:
+    1. Claude Sonnet 4.6 (Anthropic)
+    2. Google Gemini 2.5 Flash
+    3. NVIDIA NIM (Llama + Kimi)
     """
-    import socket
     import time
     import httpx
     from plotlot.config import settings as _s
 
-    diag: dict = {}
+    diag: dict = {"providers": {}}
 
-    # --- Step 1: DNS resolution ---
-    host = "integrate.api.nvidia.com"
-    try:
+    # --- Provider 1: Claude ---
+    if _s.anthropic_api_key:
         t0 = time.monotonic()
-        addrs = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
-        dns_ms = round((time.monotonic() - t0) * 1000, 1)
-        resolved_ips = list({a[4][0] for a in addrs})
-        diag["dns"] = {"host": host, "ips": resolved_ips, "latency_ms": dns_ms}
-    except Exception as e:
-        diag["dns"] = {"host": host, "error": f"{type(e).__name__}: {e}"}
-
-    # --- Step 2: TCP connect to resolved IP ---
-    if diag["dns"].get("ips"):
-        ip = diag["dns"]["ips"][0]
         try:
-            t0 = time.monotonic()
-            sock = socket.create_connection((ip, 443), timeout=10)
-            tcp_ms = round((time.monotonic() - t0) * 1000, 1)
-            sock.close()
-            diag["tcp"] = {"ip": ip, "port": 443, "latency_ms": tcp_ms}
+            import anthropic
+
+            client = anthropic.AsyncAnthropic(
+                api_key=_s.anthropic_api_key,
+                timeout=15.0,
+            )
+            resp = await client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Say 'ok' in one word."}],
+            )
+            elapsed = round(time.monotonic() - t0, 2)
+            text = resp.content[0].text if resp.content else ""
+            diag["providers"]["claude"] = {
+                "status": "ok",
+                "model": "claude-sonnet-4-6",
+                "latency_s": elapsed,
+                "response": text[:100],
+            }
         except Exception as e:
-            diag["tcp"] = {"ip": ip, "port": 443, "error": f"{type(e).__name__}: {e}"}
+            elapsed = round(time.monotonic() - t0, 2)
+            diag["providers"]["claude"] = {
+                "status": "error",
+                "model": "claude-sonnet-4-6",
+                "error": f"{type(e).__name__}: {e}",
+                "elapsed_s": elapsed,
+            }
+    else:
+        diag["providers"]["claude"] = {"status": "no_api_key"}
 
-    # --- Step 3: Test multiple NVIDIA models ---
-    test_payload = {
-        "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
-        "temperature": 0,
-        "max_tokens": 5,
-    }
+    # --- Provider 2: Gemini ---
+    if _s.google_api_key:
+        gemini_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        gemini_headers = {
+            "Authorization": f"Bearer {_s.google_api_key}",
+            "Content-Type": "application/json",
+        }
+        t0 = time.monotonic()
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0),
+        ) as client:
+            try:
+                resp = await client.post(
+                    gemini_url,
+                    json={
+                        "model": "gemini-2.5-flash",
+                        "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
+                        "temperature": 0,
+                        "max_tokens": 5,
+                    },
+                    headers=gemini_headers,
+                )
+                elapsed = round(time.monotonic() - t0, 2)
+                diag["providers"]["gemini"] = {
+                    "status": resp.status_code,
+                    "model": "gemini-2.5-flash",
+                    "latency_s": elapsed,
+                    "body": resp.text[:300],
+                }
+            except Exception as e:
+                elapsed = round(time.monotonic() - t0, 2)
+                diag["providers"]["gemini"] = {
+                    "status": "error",
+                    "error": f"{type(e).__name__}: {e}",
+                    "elapsed_s": elapsed,
+                }
+    else:
+        diag["providers"]["gemini"] = {"status": "no_api_key"}
 
+    # --- Provider 3: NVIDIA NIM ---
     nvidia_models = [
-        "moonshotai/kimi-k2.5",
         "meta/llama-3.3-70b-instruct",
-        "minimaxai/minimax-m2.1",
+        "moonshotai/kimi-k2.5",
     ]
 
     api_key = _s.nvidia_api_key
     if not api_key:
-        diag["nvidia_models"] = {"error": "no_api_key"}
+        diag["providers"]["nvidia"] = {"status": "no_api_key"}
     else:
-        key_info = {
-            "key_len": len(api_key),
-            "key_prefix": api_key[:8] + "...",
-            "has_whitespace": api_key != api_key.strip(),
-            "has_newline": "\n" in api_key or "\r" in api_key,
-        }
-        diag["nvidia_key"] = key_info
-        diag["nvidia_models"] = {}
-
+        diag["providers"]["nvidia"] = {}
         headers = {
             "Authorization": f"Bearer {api_key.strip()}",
             "Content-Type": "application/json",
@@ -320,25 +370,37 @@ async def debug_llm():
             timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0),
         ) as client:
             for model in nvidia_models:
+                t0 = time.monotonic()
                 try:
-                    t0 = time.monotonic()
                     resp = await client.post(
                         url,
-                        json={**test_payload, "model": model},
+                        json={
+                            "model": model,
+                            "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
+                            "temperature": 0,
+                            "max_tokens": 5,
+                        },
                         headers=headers,
                     )
                     elapsed = round(time.monotonic() - t0, 2)
-                    diag["nvidia_models"][model] = {
+                    diag["providers"]["nvidia"][model] = {
                         "status": resp.status_code,
                         "latency_s": elapsed,
                         "body": resp.text[:300],
                     }
                 except Exception as e:
                     elapsed = round(time.monotonic() - t0, 2)
-                    diag["nvidia_models"][model] = {
+                    diag["providers"]["nvidia"][model] = {
                         "error": f"{type(e).__name__}: {e}",
                         "elapsed_s": elapsed,
                     }
+
+    # --- Circuit breaker states ---
+    from plotlot.retrieval.llm import _breakers
+
+    diag["circuit_breakers"] = {
+        name: {"state": cb.state, "failures": cb._failure_count} for name, cb in _breakers.items()
+    }
 
     return diag
 

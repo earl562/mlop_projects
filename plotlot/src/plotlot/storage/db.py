@@ -46,7 +46,8 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
         # Auto-populate search_vector on INSERT/UPDATE via trigger
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE OR REPLACE FUNCTION ordinance_chunks_search_vector_update()
             RETURNS trigger AS $$
             BEGIN
@@ -54,8 +55,10 @@ async def init_db() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-        """))
-        await conn.execute(text("""
+        """)
+        )
+        await conn.execute(
+            text("""
             DO $$ BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM pg_trigger WHERE tgname = 'trg_search_vector_update'
@@ -67,12 +70,15 @@ async def init_db() -> None:
                     EXECUTE FUNCTION ordinance_chunks_search_vector_update();
                 END IF;
             END $$;
-        """))
+        """)
+        )
         # GIN index for fast full-text search
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE INDEX IF NOT EXISTS idx_search_vector
             ON ordinance_chunks USING GIN (search_vector);
-        """))
+        """)
+        )
 
     logger.info("Database initialized")
 

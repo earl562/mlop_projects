@@ -72,9 +72,7 @@ class TestNCAddressFormat:
     """Validate address formatting for geocoding readiness."""
 
     # Pattern: street number + street name + city + state + zip
-    _ADDRESS_RE = re.compile(
-        r"^\d+\s+.+,\s+\w[\w\s]*,\s+NC\s+\d{5}$"
-    )
+    _ADDRESS_RE = re.compile(r"^\d+\s+.+,\s+\w[\w\s]*,\s+NC\s+\d{5}$")
 
     @pytest.mark.parametrize(
         "case",
@@ -100,8 +98,7 @@ class TestNCAddressFormat:
         assert len(parts) >= 3, f"Address {case['address']!r} has unexpected format"
         city_part = parts[-2].strip()
         assert case["municipality"] in city_part, (
-            f"Municipality {case['municipality']!r} not found in address city "
-            f"portion {city_part!r}"
+            f"Municipality {case['municipality']!r} not found in address city portion {city_part!r}"
         )
 
 
@@ -123,9 +120,7 @@ class TestNCMunicipalityDiversity:
 
     def test_charlotte_included(self):
         """Charlotte (city proper) must be in the golden dataset."""
-        charlotte_cases = [
-            c for c in NC_GOLDEN_CASES if c["municipality"] == "Charlotte"
-        ]
+        charlotte_cases = [c for c in NC_GOLDEN_CASES if c["municipality"] == "Charlotte"]
         assert len(charlotte_cases) >= 1, "No Charlotte cases in NC golden data"
 
 

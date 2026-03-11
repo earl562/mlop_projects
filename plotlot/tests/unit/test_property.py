@@ -74,33 +74,40 @@ class TestSafeFloat:
 class TestLookupProperty:
     @pytest.mark.asyncio
     async def test_miami_dade_success(self):
-        mock_features = [{
-            "attributes": {
-                "FOLIO": "34-1136-003-3330",
-                "TRUE_SITE_ADDR": "171 NE 209 TER",
-                "TRUE_SITE_CITY": "MIAMI GARDENS",
-                "TRUE_OWNER1": "ROBERT L HARRIS",
-                "DOR_CODE_CUR": "0100",
-                "DOR_DESC": "SINGLE FAMILY - GENERAL",
-                "BEDROOM_COUNT": 4,
-                "BATHROOM_COUNT": 3.0,
-                "HALF_BATHROOM_COUNT": 0,
-                "FLOOR_COUNT": 1,
-                "UNIT_COUNT": 1,
-                "BUILDING_ACTUAL_AREA": 2015.0,
-                "BUILDING_HEATED_AREA": 1935.0,
-                "LOT_SIZE": 7500.0,
-                "YEAR_BUILT": 1962,
-                "ASSESSED_VAL_CUR": 148298.0,
-                "PRICE_1": 69000.0,
-                "DOS_1": "12/01/1991",
-                "LEGAL": "LOT SIZE 75.000 X 100",
-            },
-            "geometry": {"x": -80.179, "y": 25.949},
-        }]
+        mock_features = [
+            {
+                "attributes": {
+                    "FOLIO": "34-1136-003-3330",
+                    "TRUE_SITE_ADDR": "171 NE 209 TER",
+                    "TRUE_SITE_CITY": "MIAMI GARDENS",
+                    "TRUE_OWNER1": "ROBERT L HARRIS",
+                    "DOR_CODE_CUR": "0100",
+                    "DOR_DESC": "SINGLE FAMILY - GENERAL",
+                    "BEDROOM_COUNT": 4,
+                    "BATHROOM_COUNT": 3.0,
+                    "HALF_BATHROOM_COUNT": 0,
+                    "FLOOR_COUNT": 1,
+                    "UNIT_COUNT": 1,
+                    "BUILDING_ACTUAL_AREA": 2015.0,
+                    "BUILDING_HEATED_AREA": 1935.0,
+                    "LOT_SIZE": 7500.0,
+                    "YEAR_BUILT": 1962,
+                    "ASSESSED_VAL_CUR": 148298.0,
+                    "PRICE_1": 69000.0,
+                    "DOS_1": "12/01/1991",
+                    "LEGAL": "LOT SIZE 75.000 X 100",
+                },
+                "geometry": {"x": -80.179, "y": 25.949},
+            }
+        ]
 
-        with patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features), \
-             patch("plotlot.retrieval.property._spatial_query_zoning", return_value=("R-1", "Single Family")):
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("R-1", "Single Family"),
+            ),
+        ):
             result = await lookup_property(
                 "171 NE 209th Ter, Miami, FL 33179",
                 county="Miami-Dade",
@@ -120,37 +127,46 @@ class TestLookupProperty:
 
     @pytest.mark.asyncio
     async def test_broward_success(self):
-        property_features = [{
-            "attributes": {
-                "FOLIO_NUMBER": "504210230010",
-                "SITUS_STREET_NUMBER": "7940",
-                "SITUS_STREET_DIRECTION": "",
-                "SITUS_STREET_NAME": "PLANTATION",
-                "SITUS_STREET_TYPE": "BLVD",
-                "SITUS_CITY": "MIRAMAR",
-                "NAME_LINE_1": "JOHN DOE",
-                "USE_CODE": "01",
-                "BLDG_USE_CODE": "01",
-                "BLDG_YEAR_BUILT": 2005,
-                "BLDG_ADJ_SQ_FOOTAGE": 2500.0,
-                "UNDER_AIR_SQFT": "2200",
-                "JUST_BUILDING_VALUE": 350000,
-            },
-        }]
-        parcel_features = [{
-            "attributes": {
-                "FOLIO": "504210230010",
-                "SHAPE.STArea()": 8000.0,
-            },
-        }]
+        property_features = [
+            {
+                "attributes": {
+                    "FOLIO_NUMBER": "504210230010",
+                    "SITUS_STREET_NUMBER": "7940",
+                    "SITUS_STREET_DIRECTION": "",
+                    "SITUS_STREET_NAME": "PLANTATION",
+                    "SITUS_STREET_TYPE": "BLVD",
+                    "SITUS_CITY": "MIRAMAR",
+                    "NAME_LINE_1": "JOHN DOE",
+                    "USE_CODE": "01",
+                    "BLDG_USE_CODE": "01",
+                    "BLDG_YEAR_BUILT": 2005,
+                    "BLDG_ADJ_SQ_FOOTAGE": 2500.0,
+                    "UNDER_AIR_SQFT": "2200",
+                    "JUST_BUILDING_VALUE": 350000,
+                },
+            }
+        ]
+        parcel_features = [
+            {
+                "attributes": {
+                    "FOLIO": "504210230010",
+                    "SHAPE.STArea()": 8000.0,
+                },
+            }
+        ]
 
         async def mock_arcgis(url, **kwargs):
             if "MapServer/16" in url:
                 return parcel_features
             return property_features
 
-        with patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_arcgis), \
-             patch("plotlot.retrieval.property._spatial_query_zoning", return_value=("RS-4", "Residential")):
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_arcgis),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("RS-4", "Residential"),
+            ),
+        ):
             result = await lookup_property(
                 "7940 Plantation Blvd, Miramar, FL",
                 county="Broward",
@@ -167,22 +183,24 @@ class TestLookupProperty:
 
     @pytest.mark.asyncio
     async def test_palm_beach_success(self):
-        mock_features = [{
-            "attributes": {
-                "PARCEL_NUMBER": "74434316090000100",
-                "SITE_ADDR_STR": "100 CLEMATIS ST",
-                "MUNICIPALITY": "WEST PALM BEACH",
-                "OWNER_NAME1": "CITY OF WPB",
-                "PROPERTY_USE": "86",
-                "YRBLT": "1990",
-                "ACRES": 0.5,
-                "ASSESSED_VAL": 500000.0,
-                "TOTAL_MARKET": 600000.0,
-                "PRICE": 400000,
-                "SALE_DATE": None,
-                "LEGAL1": "LOT 1 BLK A",
-            },
-        }]
+        mock_features = [
+            {
+                "attributes": {
+                    "PARCEL_NUMBER": "74434316090000100",
+                    "SITE_ADDR_STR": "100 CLEMATIS ST",
+                    "MUNICIPALITY": "WEST PALM BEACH",
+                    "OWNER_NAME1": "CITY OF WPB",
+                    "PROPERTY_USE": "86",
+                    "YRBLT": "1990",
+                    "ACRES": 0.5,
+                    "ASSESSED_VAL": 500000.0,
+                    "TOTAL_MARKET": 600000.0,
+                    "PRICE": 400000,
+                    "SALE_DATE": None,
+                    "LEGAL1": "LOT 1 BLK A",
+                },
+            }
+        ]
 
         with patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features):
             result = await lookup_property(
@@ -229,18 +247,20 @@ class TestLookupProperty:
     @pytest.mark.asyncio
     async def test_miami_dade_municipal_zoning_fallback(self):
         """Municipal zoning layer returns zone for incorporated cities."""
-        mock_features = [{
-            "attributes": {
-                "FOLIO": "12345",
-                "TRUE_SITE_ADDR": "100 NW 1 AVE",
-                "TRUE_SITE_CITY": "MIAMI GARDENS",
-                "TRUE_OWNER1": "OWNER",
-                "LOT_SIZE": 5000.0,
-                "YEAR_BUILT": 2000,
-                "LEGAL": "",
-            },
-            "geometry": {"x": -80.225, "y": 25.942},
-        }]
+        mock_features = [
+            {
+                "attributes": {
+                    "FOLIO": "12345",
+                    "TRUE_SITE_ADDR": "100 NW 1 AVE",
+                    "TRUE_SITE_CITY": "MIAMI GARDENS",
+                    "TRUE_OWNER1": "OWNER",
+                    "LOT_SIZE": 5000.0,
+                    "YEAR_BUILT": 2000,
+                    "LEGAL": "",
+                },
+                "geometry": {"x": -80.225, "y": 25.942},
+            }
+        ]
 
         # Municipal layer returns "GP", unincorporated would return empty
         async def mock_zoning(url, lat, lng):
@@ -248,8 +268,10 @@ class TestLookupProperty:
                 return ("GP", "")
             return ("", "")
 
-        with patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features), \
-             patch("plotlot.retrieval.property._spatial_query_zoning", side_effect=mock_zoning):
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features),
+            patch("plotlot.retrieval.property._spatial_query_zoning", side_effect=mock_zoning),
+        ):
             result = await lookup_property(
                 "100 NW 1st Ave, Miami Gardens, FL",
                 county="Miami-Dade",
@@ -264,18 +286,20 @@ class TestLookupProperty:
     @pytest.mark.asyncio
     async def test_miami_dade_unincorporated_zoning_fallback(self):
         """Falls back to unincorporated layer when municipal returns NONE."""
-        mock_features = [{
-            "attributes": {
-                "FOLIO": "67890",
-                "TRUE_SITE_ADDR": "200 SW 2 ST",
-                "TRUE_SITE_CITY": "UNINCORPORATED",
-                "TRUE_OWNER1": "OWNER",
-                "LOT_SIZE": 7000.0,
-                "YEAR_BUILT": 1985,
-                "LEGAL": "",
-            },
-            "geometry": {"x": -80.3, "y": 25.8},
-        }]
+        mock_features = [
+            {
+                "attributes": {
+                    "FOLIO": "67890",
+                    "TRUE_SITE_ADDR": "200 SW 2 ST",
+                    "TRUE_SITE_CITY": "UNINCORPORATED",
+                    "TRUE_OWNER1": "OWNER",
+                    "LOT_SIZE": 7000.0,
+                    "YEAR_BUILT": 1985,
+                    "LEGAL": "",
+                },
+                "geometry": {"x": -80.3, "y": 25.8},
+            }
+        ]
 
         # Municipal layer returns NONE, unincorporated returns real zone
         async def mock_zoning(url, lat, lng):
@@ -283,8 +307,10 @@ class TestLookupProperty:
                 return ("NONE", "")
             return ("RU-1", "Single Family Residential")
 
-        with patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features), \
-             patch("plotlot.retrieval.property._spatial_query_zoning", side_effect=mock_zoning):
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", return_value=mock_features),
+            patch("plotlot.retrieval.property._spatial_query_zoning", side_effect=mock_zoning),
+        ):
             result = await lookup_property(
                 "200 SW 2nd St, Miami, FL",
                 county="Miami-Dade",

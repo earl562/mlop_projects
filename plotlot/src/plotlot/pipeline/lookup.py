@@ -26,7 +26,7 @@ from plotlot.observability.tracing import (
     trace,
 )
 from plotlot.observability.prompts import get_active_prompt, log_prompt_to_run
-from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
+from plotlot.pipeline.calculator import calculate_max_units, calculate_max_gla, parse_lot_dimensions
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
@@ -263,18 +263,32 @@ async def lookup_address(address: str) -> ZoningReport | None:
             lot_width, lot_depth = parse_lot_dimensions(
                 report.property_record.lot_dimensions or "",
             )
-            report.density_analysis = calculate_max_units(
-                lot_size_sqft=report.property_record.lot_size_sqft,
-                params=report.numeric_params,
-                lot_width_ft=lot_width,
-                lot_depth_ft=lot_depth,
-            )
-            logger.info(
-                "Max units: %d (governing: %s, confidence: %s)",
-                report.density_analysis.max_units,
-                report.density_analysis.governing_constraint,
-                report.density_analysis.confidence,
-            )
+            if report.numeric_params.property_type == "commercial":
+                report.density_analysis = calculate_max_gla(
+                    lot_size_sqft=report.property_record.lot_size_sqft,
+                    params=report.numeric_params,
+                    lot_width_ft=lot_width,
+                    lot_depth_ft=lot_depth,
+                )
+                logger.info(
+                    "Max GLA: %s sqft (governing: %s, confidence: %s)",
+                    report.density_analysis.max_gla_sqft,
+                    report.density_analysis.governing_constraint,
+                    report.density_analysis.confidence,
+                )
+            else:
+                report.density_analysis = calculate_max_units(
+                    lot_size_sqft=report.property_record.lot_size_sqft,
+                    params=report.numeric_params,
+                    lot_width_ft=lot_width,
+                    lot_depth_ft=lot_depth,
+                )
+                logger.info(
+                    "Max units: %d (governing: %s, confidence: %s)",
+                    report.density_analysis.max_units,
+                    report.density_analysis.governing_constraint,
+                    report.density_analysis.confidence,
+                )
 
         # Log analysis metrics
         confidence_map = {"high": 1.0, "medium": 0.66, "low": 0.33}
@@ -412,6 +426,41 @@ async def _agentic_analysis(
                         "parking_spaces_per_unit": {
                             "type": "number",
                             "description": "Required parking spaces per dwelling unit (e.g., 2.0). NUMERIC ONLY.",
+                        },
+                        "parking_per_1000_gla_sqft": {
+                            "type": "number",
+                            "description": "Parking spaces per 1,000 sqft of GLA for commercial zones. NUMERIC ONLY.",
+                        },
+                        "max_gla_sqft": {
+                            "type": "number",
+                            "description": "Maximum gross leasable area in sqft. NUMERIC ONLY.",
+                        },
+                        "min_tenant_size_sqft": {
+                            "type": "number",
+                            "description": "Minimum individual tenant space in sqft. NUMERIC ONLY.",
+                        },
+                        "loading_spaces": {
+                            "type": "integer",
+                            "description": "Required loading docks/spaces. NUMERIC ONLY.",
+                        },
+                        "property_type": {
+                            "type": "string",
+                            "enum": [
+                                "land",
+                                "single_family",
+                                "multifamily",
+                                "commercial_mf",
+                                "commercial",
+                            ],
+                            "description": (
+                                "Property type based on zoning: "
+                                "R-*/RS-*/RE-* → single_family, "
+                                "RD-*/RM-*/MF-* with ≤4 units → multifamily, "
+                                "RD-*/RM-*/MF-* with 5+ units → commercial_mf, "
+                                "C-*/B-*/CI-*/CC-*/BU-*/GC-* → commercial, "
+                                "MU-* → commercial_mf, "
+                                "vacant/unzoned → land"
+                            ),
                         },
                     },
                     "required": ["summary", "confidence"],
@@ -696,6 +745,22 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
         except (ValueError, TypeError):
             return None
 
+    # Extract property_type — auto-detect from zoning district if not provided
+    prop_type = args.get("property_type")
+    if not prop_type:
+        district = (args.get("zoning_district") or "").upper()
+        if any(district.startswith(p) for p in ("R-", "RS-", "RE-")):
+            prop_type = "single_family"
+        elif any(district.startswith(p) for p in ("RD-", "RM-", "MF-")):
+            max_d = _num("max_density_units_per_acre")
+            prop_type = "commercial_mf" if max_d and max_d > 12 else "multifamily"
+        elif any(district.startswith(p) for p in ("C-", "B-", "MU-", "CI-", "CC-", "BU-", "GC-")):
+            # Pure commercial vs mixed-use
+            if any(district.startswith(p) for p in ("MU-",)):
+                prop_type = "commercial_mf"
+            else:
+                prop_type = "commercial"
+
     params = NumericZoningParams(
         max_density_units_per_acre=_num("max_density_units_per_acre"),
         min_lot_area_per_unit_sqft=_num("min_lot_area_per_unit_sqft"),
@@ -709,6 +774,11 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
         min_unit_size_sqft=_num("min_unit_size_sqft"),
         min_lot_width_ft=_num("min_lot_width_ft"),
         parking_spaces_per_unit=_num("parking_spaces_per_unit"),
+        parking_per_1000_gla_sqft=_num("parking_per_1000_gla_sqft"),
+        max_gla_sqft=_num("max_gla_sqft"),
+        min_tenant_size_sqft=_num("min_tenant_size_sqft"),
+        loading_spaces=_int("loading_spaces"),
+        property_type=prop_type,
     )
 
     # Return None if no values were extracted

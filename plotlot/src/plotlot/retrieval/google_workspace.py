@@ -50,7 +50,9 @@ async def _get_access_token() -> str:
     if _cached_token and time.time() < _token_expiry - 60:
         return _cached_token
 
-    if not all([settings.google_client_id, settings.google_client_secret, settings.google_refresh_token]):
+    if not all(
+        [settings.google_client_id, settings.google_client_secret, settings.google_refresh_token]
+    ):
         raise ValueError(
             "Google Workspace credentials not configured. "
             "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN in .env. "
@@ -58,12 +60,15 @@ async def _get_access_token() -> str:
         )
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(TOKEN_URL, data={
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "refresh_token": settings.google_refresh_token,
-            "grant_type": "refresh_token",
-        })
+        resp = await client.post(
+            TOKEN_URL,
+            data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "refresh_token": settings.google_refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
         resp.raise_for_status()
         data = resp.json()
 
@@ -84,6 +89,7 @@ def _auth_headers(token: str) -> dict[str, str]:
 # Drive sharing — make files accessible via link
 # ---------------------------------------------------------------------------
 
+
 async def _share_file(file_id: str, token: str) -> None:
     """Share a file as 'anyone with link can view'."""
     url = DRIVE_PERMISSIONS_URL.format(file_id=file_id)
@@ -100,6 +106,7 @@ async def _share_file(file_id: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 # Google Sheets
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SpreadsheetResult:
@@ -129,17 +136,25 @@ async def create_spreadsheet(
     all_values = [headers] + rows
     body = {
         "properties": {"title": title},
-        "sheets": [{
-            "properties": {"title": "Sheet1"},
-            "data": [{
-                "startRow": 0,
-                "startColumn": 0,
-                "rowData": [
-                    {"values": [{"userEnteredValue": {"stringValue": str(cell)}} for cell in row]}
-                    for row in all_values
+        "sheets": [
+            {
+                "properties": {"title": "Sheet1"},
+                "data": [
+                    {
+                        "startRow": 0,
+                        "startColumn": 0,
+                        "rowData": [
+                            {
+                                "values": [
+                                    {"userEnteredValue": {"stringValue": str(cell)}} for cell in row
+                                ]
+                            }
+                            for row in all_values
+                        ],
+                    }
                 ],
-            }],
-        }],
+            }
+        ],
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -163,6 +178,7 @@ async def create_spreadsheet(
 # ---------------------------------------------------------------------------
 # Google Docs
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DocumentResult:
@@ -201,12 +217,14 @@ async def create_document(
                 f"{DOCS_API}/{document_id}:batchUpdate",
                 headers=_auth_headers(token),
                 json={
-                    "requests": [{
-                        "insertText": {
-                            "location": {"index": 1},
-                            "text": content,
+                    "requests": [
+                        {
+                            "insertText": {
+                                "location": {"index": 1},
+                                "text": content,
+                            }
                         }
-                    }]
+                    ]
                 },
             )
             resp.raise_for_status()

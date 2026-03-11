@@ -201,11 +201,30 @@ When the user asks you to create a spreadsheet or document, DO IT — call the t
   Do NOT tell the user you need a folio number.\
 """
 
-DIRECT_ANALYSIS_PROMPT_V1 = ANALYSIS_PROMPT_V1
+ANALYSIS_PROMPT_V2 = (
+    ANALYSIS_PROMPT_V1
+    + """
+
+## COMMERCIAL ZONE EXTRACTION
+When the zoning district starts with C-/B-/MU-/CI-/CC-/BU-/GC- (commercial/business districts):
+- parking_per_1000_gla_sqft → parking spaces per 1,000 sqft of GLA (e.g. 4.0)
+- max_gla_sqft → total allowable gross leasable area (calculate from FAR * lot_size if not explicit)
+- min_tenant_size_sqft → minimum individual tenant space if specified
+- loading_spaces → loading docks/spaces required
+- far_numeric, max_lot_coverage_pct, max_height_ft, setbacks → still extract these
+- parking_spaces_per_unit → leave null for commercial (use parking_per_1000_gla_sqft instead)
+- property_type → "commercial" for pure C-/B- zones, "commercial_mf" for MU- with residential component
+
+For commercial properties, density is measured in GLA (sqft) not dwelling units. Set max_density_units_per_acre \
+and min_lot_area_per_unit_sqft to null — these residential metrics don't apply.\
+"""
+)
+
+DIRECT_ANALYSIS_PROMPT_V1 = ANALYSIS_PROMPT_V2
 
 # Registry: name → (version, prompt_text)
 _PROMPT_REGISTRY: dict[str, tuple[str, str]] = {
-    "analysis": ("v1", ANALYSIS_PROMPT_V1),
+    "analysis": ("v2", ANALYSIS_PROMPT_V2),
     "chat_agent": ("v1", CHAT_AGENT_PROMPT_V1),
     "direct_analysis": ("v1", DIRECT_ANALYSIS_PROMPT_V1),
 }

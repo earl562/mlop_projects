@@ -110,11 +110,18 @@ async def _property_lookup(address: str) -> None:
         print()
 
     # Dimensional standards
-    has_dims = any([
-        report.setbacks.front, report.setbacks.side, report.setbacks.rear,
-        report.max_height, report.max_density, report.floor_area_ratio,
-        report.lot_coverage, report.min_lot_size,
-    ])
+    has_dims = any(
+        [
+            report.setbacks.front,
+            report.setbacks.side,
+            report.setbacks.rear,
+            report.max_height,
+            report.max_density,
+            report.floor_area_ratio,
+            report.lot_coverage,
+            report.min_lot_size,
+        ]
+    )
     if has_dims:
         print("Dimensional Standards:")
         if report.setbacks.front:
@@ -216,6 +223,7 @@ def ingest_main() -> None:
         _run_discover()
     elif sys.argv[1] == "--all":
         from plotlot.pipeline.ingest import ingest_all
+
         results = asyncio.run(ingest_all())
         print("\nIngestion results:")
         for key, count in sorted(results.items()):
@@ -225,6 +233,7 @@ def ingest_main() -> None:
     else:
         key = sys.argv[1]
         from plotlot.pipeline.ingest import ingest_municipality
+
         count = asyncio.run(ingest_municipality(key))
         print(f"\nIngested {count} chunks for {key}")
 

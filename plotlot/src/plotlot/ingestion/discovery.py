@@ -36,11 +36,22 @@ LIBRARY_API_URL = "https://library.municode.com/api"
 LIBRARY_HEADERS = {"X-CSRF": "1", "Accept": "application/json"}
 
 ZONING_KEYWORDS = [
-    "zoning", "land development", "land use", "uldc", "unified land",
-    "development code", "development regulations", "planning and zoning",
-    "building and zoning", "comprehensive zoning", "zoning regulations",
-    "zoning ordinance", "land development code", "land development regulations",
-    "appendix a", "appendix b",  # some munis put zoning in appendices
+    "zoning",
+    "land development",
+    "land use",
+    "uldc",
+    "unified land",
+    "development code",
+    "development regulations",
+    "planning and zoning",
+    "building and zoning",
+    "comprehensive zoning",
+    "zoning regulations",
+    "zoning ordinance",
+    "land development code",
+    "land development regulations",
+    "appendix a",
+    "appendix b",  # some munis put zoning in appendices
 ]
 
 # Disk cache settings
@@ -53,35 +64,103 @@ CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 # Miami-Dade, Broward, and Palm Beach counties.
 SOUTH_FLORIDA_MUNICIPALITIES: dict[str, list[str]] = {
     "miami_dade": [
-        "Aventura", "Bal Harbour", "Bay Harbor Islands", "Biscayne Park",
-        "Coral Gables", "Cutler Bay", "Doral", "El Portal", "Florida City",
-        "Golden Beach", "Hialeah", "Hialeah Gardens", "Homestead",
-        "Indian Creek Village", "Key Biscayne", "Medley", "Miami",
-        "Miami Beach", "Miami Gardens", "Miami Lakes", "Miami Springs",
-        "North Miami", "North Miami Beach", "Opa-locka", "Palmetto Bay",
-        "Pinecrest", "South Miami", "Sunny Isles Beach", "Surfside",
-        "Sweetwater", "Virginia Gardens", "West Miami",
+        "Aventura",
+        "Bal Harbour",
+        "Bay Harbor Islands",
+        "Biscayne Park",
+        "Coral Gables",
+        "Cutler Bay",
+        "Doral",
+        "El Portal",
+        "Florida City",
+        "Golden Beach",
+        "Hialeah",
+        "Hialeah Gardens",
+        "Homestead",
+        "Indian Creek Village",
+        "Key Biscayne",
+        "Medley",
+        "Miami",
+        "Miami Beach",
+        "Miami Gardens",
+        "Miami Lakes",
+        "Miami Springs",
+        "North Miami",
+        "North Miami Beach",
+        "Opa-locka",
+        "Palmetto Bay",
+        "Pinecrest",
+        "South Miami",
+        "Sunny Isles Beach",
+        "Surfside",
+        "Sweetwater",
+        "Virginia Gardens",
+        "West Miami",
     ],
     "broward": [
-        "Coconut Creek", "Cooper City", "Coral Springs", "Dania Beach",
-        "Deerfield Beach", "Fort Lauderdale", "Hallandale Beach",
-        "Lauderdale Lakes", "Lauderhill", "Margate", "Miramar",
-        "North Lauderdale", "Oakland Park", "Parkland", "Plantation",
-        "Sea Ranch Lakes", "Southwest Ranches", "Sunrise", "Tamarac",
-        "West Park", "Wilton Manors", "Davie", "Hillsboro Beach",
-        "Lauderdale-by-the-Sea", "Pembroke Park",
+        "Coconut Creek",
+        "Cooper City",
+        "Coral Springs",
+        "Dania Beach",
+        "Deerfield Beach",
+        "Fort Lauderdale",
+        "Hallandale Beach",
+        "Lauderdale Lakes",
+        "Lauderhill",
+        "Margate",
+        "Miramar",
+        "North Lauderdale",
+        "Oakland Park",
+        "Parkland",
+        "Plantation",
+        "Sea Ranch Lakes",
+        "Southwest Ranches",
+        "Sunrise",
+        "Tamarac",
+        "West Park",
+        "Wilton Manors",
+        "Davie",
+        "Hillsboro Beach",
+        "Lauderdale-by-the-Sea",
+        "Pembroke Park",
     ],
     "palm_beach": [
-        "Atlantis", "Belle Glade", "Boca Raton", "Boynton Beach",
-        "Cloud Lake", "Delray Beach", "Glen Ridge", "Greenacres",
-        "Gulf Stream", "Haverhill", "Highland Beach", "Hypoluxo",
-        "Juno Beach", "Jupiter", "Jupiter Inlet Colony",
-        "Lake Clarke Shores", "Lake Park", "Lake Worth Beach", "Lantana",
-        "Loxahatchee Groves", "Mangonia Park", "North Palm Beach",
-        "Ocean Ridge", "Pahokee", "Palm Beach", "Palm Beach Gardens",
-        "Palm Beach Shores", "Palm Springs", "Riviera Beach",
-        "Royal Palm Beach", "South Bay", "South Palm Beach", "Tequesta",
-        "Wellington", "West Palm Beach", "Westlake",
+        "Atlantis",
+        "Belle Glade",
+        "Boca Raton",
+        "Boynton Beach",
+        "Cloud Lake",
+        "Delray Beach",
+        "Glen Ridge",
+        "Greenacres",
+        "Gulf Stream",
+        "Haverhill",
+        "Highland Beach",
+        "Hypoluxo",
+        "Juno Beach",
+        "Jupiter",
+        "Jupiter Inlet Colony",
+        "Lake Clarke Shores",
+        "Lake Park",
+        "Lake Worth Beach",
+        "Lantana",
+        "Loxahatchee Groves",
+        "Mangonia Park",
+        "North Palm Beach",
+        "Ocean Ridge",
+        "Pahokee",
+        "Palm Beach",
+        "Palm Beach Gardens",
+        "Palm Beach Shores",
+        "Palm Springs",
+        "Riviera Beach",
+        "Royal Palm Beach",
+        "South Bay",
+        "South Palm Beach",
+        "Tequesta",
+        "Wellington",
+        "West Palm Beach",
+        "Westlake",
     ],
 }
 
@@ -89,14 +168,27 @@ SOUTH_FLORIDA_MUNICIPALITIES: dict[str, list[str]] = {
 # Covers Mecklenburg + surrounding counties (Cabarrus, Iredell, Union).
 NC_CHARLOTTE_METRO: dict[str, list[str]] = {
     "mecklenburg": [
-        "Charlotte", "Huntersville", "Cornelius", "Davidson", "Matthews",
-        "Mint Hill", "Pineville",
+        "Charlotte",
+        "Huntersville",
+        "Cornelius",
+        "Davidson",
+        "Matthews",
+        "Mint Hill",
+        "Pineville",
     ],
     "union": [
-        "Indian Trail", "Stallings", "Weddington", "Waxhaw", "Monroe",
+        "Indian Trail",
+        "Stallings",
+        "Weddington",
+        "Waxhaw",
+        "Monroe",
     ],
     "cabarrus": [
-        "Concord", "Kannapolis", "Harrisburg", "Midland", "Locust",
+        "Concord",
+        "Kannapolis",
+        "Harrisburg",
+        "Midland",
+        "Locust",
     ],
     "iredell": [
         "Mooresville",
@@ -175,13 +267,11 @@ def _read_disk_cache() -> dict[str, MunicodeConfig] | None:
         if age > CACHE_TTL_SECONDS:
             logger.info("Discovery cache expired (%.1f hours old)", age / 3600)
             return None
-        configs = {
-            key: MunicodeConfig(**data)
-            for key, data in payload.get("configs", {}).items()
-        }
+        configs = {key: MunicodeConfig(**data) for key, data in payload.get("configs", {}).items()}
         logger.info(
             "Loaded %d configs from disk cache (%.1f hours old)",
-            len(configs), age / 3600,
+            len(configs),
+            age / 3600,
         )
         return configs
     except (OSError, json.JSONDecodeError, TypeError) as e:
@@ -204,9 +294,7 @@ def _make_key(name: str) -> str:
 # Convenience flat set of all NC target municipality names (lowercased, underscored).
 # Defined after _make_key so the helper is available.
 NC_CHARLOTTE_METRO_KEYS: set[str] = {
-    _make_key(name)
-    for names in NC_CHARLOTTE_METRO.values()
-    for name in names
+    _make_key(name) for names in NC_CHARLOTTE_METRO.values() for name in names
 }
 
 
@@ -224,7 +312,8 @@ def _normalize(name: str) -> str:
 
 
 def _match_client(
-    target_name: str, fl_clients: list[dict],
+    target_name: str,
+    fl_clients: list[dict],
 ) -> dict | None:
     """Find the best matching Municode client for a municipality name.
 
@@ -292,14 +381,16 @@ async def _deep_search_toc(
     # Search children of top-level nodes
     for item in root_toc:
         node_id = str(
-            item.get("Id") or item.get("id")
-            or item.get("NodeId") or item.get("nodeId") or ""
+            item.get("Id") or item.get("id") or item.get("NodeId") or item.get("nodeId") or ""
         )
         if not node_id:
             continue
         children = await _fetch_json(
-            client, "codesToc/children",
-            productId=product_id, jobId=job_id, nodeId=node_id,
+            client,
+            "codesToc/children",
+            productId=product_id,
+            jobId=job_id,
+            nodeId=node_id,
         )
         if children and isinstance(children, list):
             child_matches = _search_toc_for_zoning(children)
@@ -309,7 +400,9 @@ async def _deep_search_toc(
 
 
 async def _fetch_json(
-    client: httpx.AsyncClient, path: str, **params: str | int,
+    client: httpx.AsyncClient,
+    path: str,
+    **params: str | int,
 ) -> dict | list | None:
     """GET request to the Municode Library API with error handling."""
     url = f"{LIBRARY_API_URL}/{path}"
@@ -348,7 +441,8 @@ async def _discover_municipality(
             return key, None
 
         code_products = [
-            p for p in products
+            p
+            for p in products
             if isinstance(p, dict) and p.get("ContentType", {}).get("Id") == "CODES"
         ]
         if not code_products:
@@ -367,8 +461,10 @@ async def _discover_municipality(
                 continue
 
             toc = await _fetch_json(
-                client, "codesToc/children",
-                productId=product_id, jobId=job_id,
+                client,
+                "codesToc/children",
+                productId=product_id,
+                jobId=job_id,
             )
             if not toc or not isinstance(toc, list):
                 continue
@@ -389,20 +485,27 @@ async def _discover_municipality(
 
             for candidate in sorted_matches:
                 node_id = str(
-                    candidate.get("Id") or candidate.get("id")
-                    or candidate.get("NodeId") or candidate.get("nodeId") or ""
+                    candidate.get("Id")
+                    or candidate.get("id")
+                    or candidate.get("NodeId")
+                    or candidate.get("nodeId")
+                    or ""
                 )
                 if not node_id:
                     continue
 
                 children = await _fetch_json(
-                    client, "codesToc/children",
-                    productId=product_id, jobId=job_id, nodeId=node_id,
+                    client,
+                    "codesToc/children",
+                    productId=product_id,
+                    jobId=job_id,
+                    nodeId=node_id,
                 )
                 if not children or not isinstance(children, list) or len(children) == 0:
                     logger.debug(
                         "Stub zoning chapter for %s: %s — trying next match",
-                        name, candidate.get("Heading", ""),
+                        name,
+                        candidate.get("Heading", ""),
                     )
                     continue
 
@@ -416,7 +519,12 @@ async def _discover_municipality(
                 )
                 logger.info(
                     "Discovered %s: client=%d product=%d job=%d node=%s (%d children)",
-                    name, client_id, product_id, job_id, node_id, len(children),
+                    name,
+                    client_id,
+                    product_id,
+                    job_id,
+                    node_id,
+                    len(children),
                 )
                 return key, config
 
@@ -446,9 +554,7 @@ async def discover_all(
         tasks = []
         for county, names in SOUTH_FLORIDA_MUNICIPALITIES.items():
             for name in names:
-                tasks.append(
-                    _discover_municipality(client, semaphore, county, name, fl_clients)
-                )
+                tasks.append(_discover_municipality(client, semaphore, county, name, fl_clients))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -489,9 +595,7 @@ async def discover_nc(
         tasks = []
         for county, names in NC_CHARLOTTE_METRO.items():
             for name in names:
-                tasks.append(
-                    _discover_municipality(client, semaphore, county, name, nc_clients)
-                )
+                tasks.append(_discover_municipality(client, semaphore, county, name, nc_clients))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -519,6 +623,7 @@ def get_nc_municode_configs() -> dict[str, MunicodeConfig]:
         Dict of {key: MunicodeConfig} for known NC Charlotte metro municipalities.
     """
     from plotlot.core.types import _NC_FALLBACK_CONFIGS
+
     return dict(_NC_FALLBACK_CONFIGS)
 
 
@@ -557,17 +662,20 @@ async def get_all_municode_configs(
         except Exception as e:
             logger.error("Combined discovery failed, returning fallback configs: %s", e)
             from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+
             _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
             return _cached_configs
 
         if not configs:
             logger.warning("Discovery returned 0 results, using fallback configs")
             from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+
             _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
             return _cached_configs
 
         # Merge in fallback configs for any municipalities not discovered
         from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
             if key not in configs:
                 configs[key] = fallback

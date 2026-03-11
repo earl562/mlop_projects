@@ -22,6 +22,7 @@ from plotlot.ingestion.discovery import (
 # Unit tests for helper functions
 # ---------------------------------------------------------------------------
 
+
 class TestMakeKey:
     def test_simple_name(self):
         assert _make_key("Fort Lauderdale") == "fort_lauderdale"
@@ -128,6 +129,7 @@ class TestSearchTocForZoning:
 # Integration tests with mocked HTTP
 # ---------------------------------------------------------------------------
 
+
 def _mock_fl_clients():
     return [
         {"ClientID": 2247, "ClientName": "Fort Lauderdale"},
@@ -223,10 +225,16 @@ class TestGetMunicodeConfigs:
 
         async def mock_discover(*args, **kwargs):
             call_count["n"] += 1
-            return {"test_city": MunicodeConfig(
-                municipality="Test City", county="test",
-                client_id=1, product_id=2, job_id=3, zoning_node_id="NODE1",
-            )}
+            return {
+                "test_city": MunicodeConfig(
+                    municipality="Test City",
+                    county="test",
+                    client_id=1,
+                    product_id=2,
+                    job_id=3,
+                    zoning_node_id="NODE1",
+                )
+            }
 
         with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
             result1 = await get_municode_configs()
@@ -242,10 +250,16 @@ class TestGetMunicodeConfigs:
 
         async def mock_discover(*args, **kwargs):
             call_count["n"] += 1
-            return {"test_city": MunicodeConfig(
-                municipality="Test City", county="test",
-                client_id=1, product_id=2, job_id=3, zoning_node_id="NODE1",
-            )}
+            return {
+                "test_city": MunicodeConfig(
+                    municipality="Test City",
+                    county="test",
+                    client_id=1,
+                    product_id=2,
+                    job_id=3,
+                    zoning_node_id="NODE1",
+                )
+            }
 
         with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
             await get_municode_configs()
@@ -278,10 +292,16 @@ class TestGetMunicodeConfigs:
     @pytest.mark.asyncio
     async def test_merges_fallback_configs(self):
         async def mock_discover(*args, **kwargs):
-            return {"coral_gables": MunicodeConfig(
-                municipality="Coral Gables", county="miami_dade",
-                client_id=100, product_id=200, job_id=300, zoning_node_id="CG_ZO",
-            )}
+            return {
+                "coral_gables": MunicodeConfig(
+                    municipality="Coral Gables",
+                    county="miami_dade",
+                    client_id=100,
+                    product_id=200,
+                    job_id=300,
+                    zoning_node_id="CG_ZO",
+                )
+            }
 
         with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
             configs = await get_municode_configs()
@@ -298,10 +318,16 @@ class TestClearCache:
 
         async def mock_discover(*args, **kwargs):
             call_count["n"] += 1
-            return {"test": MunicodeConfig(
-                municipality="Test", county="test",
-                client_id=1, product_id=2, job_id=3, zoning_node_id="N",
-            )}
+            return {
+                "test": MunicodeConfig(
+                    municipality="Test",
+                    county="test",
+                    client_id=1,
+                    product_id=2,
+                    job_id=3,
+                    zoning_node_id="N",
+                )
+            }
 
         with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
             await get_municode_configs()

@@ -1,4 +1,4 @@
-"""Tests for LLM client (NVIDIA NIM, Llama-only)."""
+"""Tests for LLM client — three-provider fallback chain."""
 
 import json
 
@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 from plotlot.retrieval.llm import (
     _build_user_prompt,
+    _convert_messages_for_anthropic,
+    _convert_tool_calls_from_anthropic,
+    _convert_tools_to_anthropic,
     _parse_llm_content,
     analyze_zoning,
     llm_response_to_report,
@@ -66,6 +69,73 @@ class TestParseLlmContent:
         assert result["key"] == "val"
 
 
+class TestToolConversion:
+    def test_convert_tools_to_anthropic(self):
+        openai_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_zoning",
+                    "description": "Search zoning code",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                },
+            }
+        ]
+        result = _convert_tools_to_anthropic(openai_tools)
+        assert len(result) == 1
+        assert result[0]["name"] == "search_zoning"
+        assert result[0]["description"] == "Search zoning code"
+        assert "properties" in result[0]["input_schema"]
+
+    def test_convert_tool_calls_from_anthropic_dict(self):
+        content_blocks = [
+            {"type": "text", "text": "Let me search..."},
+            {
+                "type": "tool_use",
+                "id": "tool_123",
+                "name": "search_zoning",
+                "input": {"query": "RS-4 setbacks"},
+            },
+        ]
+        result = _convert_tool_calls_from_anthropic(content_blocks)
+        assert len(result) == 1
+        assert result[0]["id"] == "tool_123"
+        assert result[0]["function"]["name"] == "search_zoning"
+        assert json.loads(result[0]["function"]["arguments"]) == {"query": "RS-4 setbacks"}
+
+    def test_convert_messages_for_anthropic(self):
+        messages = [
+            {"role": "system", "content": "You are a zoning expert."},
+            {"role": "user", "content": "Analyze this property."},
+            {
+                "role": "assistant",
+                "content": "I'll analyze it.",
+                "tool_calls": [
+                    {
+                        "id": "tc_1",
+                        "type": "function",
+                        "function": {
+                            "name": "search",
+                            "arguments": '{"q":"RS-4"}',
+                        },
+                    },
+                ],
+            },
+            {"role": "tool", "tool_call_id": "tc_1", "content": '{"status": "ok"}'},
+        ]
+        system, anthropic_msgs = _convert_messages_for_anthropic(messages)
+        assert system == "You are a zoning expert."
+        assert len(anthropic_msgs) == 3  # user, assistant, tool_result
+        assert anthropic_msgs[0]["role"] == "user"
+        assert anthropic_msgs[1]["role"] == "assistant"
+        assert anthropic_msgs[2]["role"] == "user"
+        assert anthropic_msgs[2]["content"][0]["type"] == "tool_result"
+
+
 class TestAnalyzeZoning:
     @pytest.mark.asyncio
     async def test_no_results_returns_empty(self):
@@ -73,13 +143,80 @@ class TestAnalyzeZoning:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_nvidia_primary_success(self):
+    async def test_claude_primary_success(self):
+        """Test that Claude is tried first when API key is present."""
+        import anthropic as _anthropic
+
+        mock_response = MagicMock()
+        mock_response.content = [
+            MagicMock(
+                type="text",
+                text=json.dumps(
+                    {
+                        "zoning_district": "RS-4",
+                        "summary": "Residential district",
+                        "confidence": "high",
+                    }
+                ),
+            )
+        ]
+        mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("plotlot.retrieval.llm.settings") as mock_settings,
+            patch.object(_anthropic, "AsyncAnthropic", return_value=mock_client),
+        ):
+            mock_settings.anthropic_api_key = "test_key"
+            mock_settings.google_api_key = ""
+            mock_settings.nvidia_api_key = ""
+
+            result = await analyze_zoning(
+                "123 Main St",
+                "Miramar",
+                "Broward",
+                [_make_result()],
+            )
+
+        assert result.get("zoning_district") == "RS-4"
+
+    @pytest.mark.asyncio
+    async def test_no_api_keys(self):
+        with patch("plotlot.retrieval.llm.settings") as mock_settings:
+            mock_settings.anthropic_api_key = ""
+            mock_settings.google_api_key = ""
+            mock_settings.nvidia_api_key = ""
+
+            result = await analyze_zoning(
+                "123 Main St",
+                "Miramar",
+                "Broward",
+                [_make_result()],
+            )
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_nvidia_fallback_with_kimi_reasoning_fix(self):
+        """Test that Kimi's reasoning_content field is used when content is null."""
         llm_response = {
-            "choices": [{"message": {"content": json.dumps({
-                "zoning_district": "RS-4",
-                "summary": "Residential district",
-                "confidence": "high",
-            })}}]
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "reasoning_content": json.dumps(
+                            {
+                                "zoning_district": "RS-4",
+                                "summary": "From reasoning",
+                                "confidence": "medium",
+                            }
+                        ),
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 30},
         }
 
         mock_resp = MagicMock()
@@ -91,28 +228,22 @@ class TestAnalyzeZoning:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client), \
-             patch("plotlot.retrieval.llm.settings") as mock_settings:
+        with (
+            patch("plotlot.retrieval.llm.httpx.AsyncClient", return_value=mock_client),
+            patch("plotlot.retrieval.llm.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = ""
+            mock_settings.google_api_key = ""
             mock_settings.nvidia_api_key = "test_nvidia_key"
 
             result = await analyze_zoning(
-                "123 Main St", "Miramar", "Broward", [_make_result()],
+                "123 Main St",
+                "Miramar",
+                "Broward",
+                [_make_result()],
             )
 
-        assert result["zoning_district"] == "RS-4"
-        # Should only call once (first NVIDIA model succeeds)
-        assert mock_client.post.call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_no_api_keys(self):
-        with patch("plotlot.retrieval.llm.settings") as mock_settings:
-            mock_settings.nvidia_api_key = ""
-
-            result = await analyze_zoning(
-                "123 Main St", "Miramar", "Broward", [_make_result()],
-            )
-
-        assert result == {}
+        assert result.get("zoning_district") == "RS-4"
 
 
 class TestLlmResponseToReport:
@@ -142,7 +273,7 @@ class TestLlmResponseToReport:
             county="Broward",
             lat=25.977,
             lng=-80.232,
-            sources=["Sec. 500 — Permitted Uses"],
+            sources=["Sec. 500 -- Permitted Uses"],
         )
 
         assert isinstance(report, ZoningReport)

@@ -9,7 +9,7 @@ const EnvelopeViewer = dynamic(() => import("./EnvelopeViewer"), {
     <div className="flex h-[400px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50">
       <div className="flex flex-col items-center gap-2">
         <svg
-          className="h-6 w-6 animate-spin text-stone-400"
+          className="h-6 w-6 animate-spin text-stone-500"
           viewBox="0 0 24 24"
           fill="none"
         >
@@ -27,7 +27,7 @@ const EnvelopeViewer = dynamic(() => import("./EnvelopeViewer"), {
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
-        <span className="text-sm text-stone-400">Loading 3D viewer...</span>
+        <span className="text-sm text-stone-500">Loading 3D viewer...</span>
       </div>
     </div>
   ),

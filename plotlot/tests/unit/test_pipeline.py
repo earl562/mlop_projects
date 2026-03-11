@@ -542,9 +542,7 @@ class TestIngestAllMLflowMetrics:
 
         # Find the ingest_all aggregate metrics call (last call with total_chunks)
         aggregate_calls = [
-            c
-            for c in mock_log_metrics.call_args_list
-            if "ingest.total_chunks" in c[0][0]
+            c for c in mock_log_metrics.call_args_list if "ingest.total_chunks" in c[0][0]
         ]
         assert len(aggregate_calls) == 1
         agg_metrics = aggregate_calls[0][0][0]

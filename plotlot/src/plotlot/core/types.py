@@ -319,6 +319,9 @@ class PropertyRecord:
     lat: float | None = None
     lng: float | None = None
 
+    # Parcel boundary polygon — [[lng, lat], ...] in WGS84
+    parcel_geometry: list[list[float]] | None = None
+
 
 # ---------------------------------------------------------------------------
 # Numeric zoning parameters (extracted by LLM for calculation)
@@ -341,6 +344,13 @@ class NumericZoningParams:
     min_unit_size_sqft: float | None = None  # e.g., 750.0
     min_lot_width_ft: float | None = None  # e.g., 75.0
     parking_spaces_per_unit: float | None = None  # e.g., 2.0
+    parking_per_1000_gla_sqft: float | None = None  # e.g., 4.0
+    max_gla_sqft: float | None = None  # total allowable GLA
+    min_tenant_size_sqft: float | None = None  # min individual tenant space
+    loading_spaces: int | None = None  # loading docks required
+    property_type: str | None = (
+        None  # "land" | "single_family" | "multifamily" | "commercial_mf" | "commercial"
+    )
 
 
 @dataclass
@@ -365,6 +375,7 @@ class DensityAnalysis:
     buildable_area_sqft: float | None = None
     lot_width_ft: float | None = None
     lot_depth_ft: float | None = None
+    max_gla_sqft: float | None = None  # commercial: max gross leasable area
     confidence: str = "low"
     notes: list[str] = field(default_factory=list)
 

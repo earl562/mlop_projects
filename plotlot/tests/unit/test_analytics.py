@@ -137,8 +137,12 @@ class TestAnalyticsStructure:
         record_request("/test", latency_ms=10.0)
         ep = get_analytics()["endpoints"]["/test"]
         expected_keys = {
-            "count", "errors", "error_rate",
-            "latency_p50_ms", "latency_p95_ms", "latency_p99_ms",
+            "count",
+            "errors",
+            "error_rate",
+            "latency_p50_ms",
+            "latency_p95_ms",
+            "latency_p99_ms",
         }
         assert set(ep.keys()) == expected_keys
 
@@ -151,6 +155,7 @@ class TestAnalyticsStructure:
 @pytest.fixture
 def transport():
     from plotlot.api.main import app
+
     return ASGITransport(app=app)
 
 
@@ -164,6 +169,7 @@ async def client(transport):
 def _reset_db_engine():
     """Reset the DB engine between tests to avoid event-loop-closed errors."""
     import plotlot.storage.db as db_mod
+
     db_mod._engine = None
     db_mod._session_factory = None
     yield
@@ -195,15 +201,15 @@ async def test_data_quality_endpoint(client):
 
     mock_rows = [
         (
-            "Miami Gardens",   # municipality
-            "Miami-Dade",      # county
-            3561,              # chunk_count
-            42,                # section_count
-            datetime(2025, 1, 1, tzinfo=timezone.utc),   # first_ingested
-            datetime(2025, 6, 15, tzinfo=timezone.utc),   # last_ingested
-            850,               # avg_chunk_length
-            120,               # min_chunk_length
-            4200,              # max_chunk_length
+            "Miami Gardens",  # municipality
+            "Miami-Dade",  # county
+            3561,  # chunk_count
+            42,  # section_count
+            datetime(2025, 1, 1, tzinfo=timezone.utc),  # first_ingested
+            datetime(2025, 6, 15, tzinfo=timezone.utc),  # last_ingested
+            850,  # avg_chunk_length
+            120,  # min_chunk_length
+            4200,  # max_chunk_length
         ),
         (
             "Fort Lauderdale",

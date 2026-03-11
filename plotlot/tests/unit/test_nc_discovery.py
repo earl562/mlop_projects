@@ -71,9 +71,20 @@ class TestNCStaticConfigs:
         assert "charlotte" in _NC_FALLBACK_CONFIGS
 
     def test_nc_fallback_has_expected_keys(self):
-        expected = {"charlotte", "huntersville", "cornelius", "davidson",
-                    "matthews", "mint_hill", "pineville", "concord",
-                    "kannapolis", "mooresville", "monroe", "waxhaw"}
+        expected = {
+            "charlotte",
+            "huntersville",
+            "cornelius",
+            "davidson",
+            "matthews",
+            "mint_hill",
+            "pineville",
+            "concord",
+            "kannapolis",
+            "mooresville",
+            "monroe",
+            "waxhaw",
+        }
         assert expected.issubset(set(_NC_FALLBACK_CONFIGS.keys()))
 
     def test_nc_configs_alias(self):
@@ -112,8 +123,12 @@ class TestGetNCMunicodeConfigs:
         """Should return a copy, not the mutable original."""
         configs = get_nc_municode_configs()
         configs["fake_city"] = MunicodeConfig(
-            municipality="Fake", county="fake",
-            client_id=0, product_id=0, job_id=0, zoning_node_id="",
+            municipality="Fake",
+            county="fake",
+            client_id=0,
+            product_id=0,
+            job_id=0,
+            zoning_node_id="",
         )
         # Original should be unchanged
         assert "fake_city" not in _NC_FALLBACK_CONFIGS
@@ -229,18 +244,28 @@ class TestGetAllMunicodeConfigs:
     @pytest.mark.asyncio
     async def test_combined_includes_fl_and_nc(self):
         async def mock_fl(*a, **kw):
-            return {"fort_lauderdale": MunicodeConfig(
-                municipality="Fort Lauderdale", county="broward",
-                client_id=2247, product_id=13463, job_id=482747,
-                zoning_node_id="FL_ZO",
-            )}
+            return {
+                "fort_lauderdale": MunicodeConfig(
+                    municipality="Fort Lauderdale",
+                    county="broward",
+                    client_id=2247,
+                    product_id=13463,
+                    job_id=482747,
+                    zoning_node_id="FL_ZO",
+                )
+            }
 
         async def mock_nc(*a, **kw):
-            return {"charlotte": MunicodeConfig(
-                municipality="Charlotte", county="mecklenburg",
-                client_id=19970, product_id=14045, job_id=489001,
-                zoning_node_id="NC_ZO",
-            )}
+            return {
+                "charlotte": MunicodeConfig(
+                    municipality="Charlotte",
+                    county="mecklenburg",
+                    client_id=19970,
+                    product_id=14045,
+                    job_id=489001,
+                    zoning_node_id="NC_ZO",
+                )
+            }
 
         with (
             patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_fl),
@@ -269,19 +294,30 @@ class TestGetAllMunicodeConfigs:
     @pytest.mark.asyncio
     async def test_get_municode_configs_delegates_to_all(self):
         """get_municode_configs() now returns FL + NC combined."""
+
         async def mock_fl(*a, **kw):
-            return {"miami_dade": MunicodeConfig(
-                municipality="Miami-Dade", county="miami_dade",
-                client_id=11719, product_id=10620, job_id=483425,
-                zoning_node_id="FL_ZO",
-            )}
+            return {
+                "miami_dade": MunicodeConfig(
+                    municipality="Miami-Dade",
+                    county="miami_dade",
+                    client_id=11719,
+                    product_id=10620,
+                    job_id=483425,
+                    zoning_node_id="FL_ZO",
+                )
+            }
 
         async def mock_nc(*a, **kw):
-            return {"charlotte": MunicodeConfig(
-                municipality="Charlotte", county="mecklenburg",
-                client_id=19970, product_id=14045, job_id=489001,
-                zoning_node_id="NC_ZO",
-            )}
+            return {
+                "charlotte": MunicodeConfig(
+                    municipality="Charlotte",
+                    county="mecklenburg",
+                    client_id=19970,
+                    product_id=14045,
+                    job_id=489001,
+                    zoning_node_id="NC_ZO",
+                )
+            }
 
         with (
             patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_fl),

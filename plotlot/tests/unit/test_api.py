@@ -5,7 +5,6 @@ without starting a real server. Pipeline is mocked to avoid real API/DB calls.
 """
 
 import json
-from dataclasses import asdict
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -174,11 +173,13 @@ async def test_analyze_pipeline_error(client):
 # Chat endpoint tests (Phase 5c)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_chat_streams_response(client):
     """Chat endpoint streams tokens via SSE."""
     # Clear memory between tests
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
@@ -203,6 +204,7 @@ async def test_chat_streams_response(client):
 async def test_chat_with_report_context(client):
     """Chat with report context doesn't error."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
@@ -235,7 +237,10 @@ async def test_chat_with_report_context(client):
             "/api/v1/chat",
             json={
                 "message": "Explain the density",
-                "history": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}],
+                "history": [
+                    {"role": "user", "content": "Hi"},
+                    {"role": "assistant", "content": "Hello"},
+                ],
                 "report_context": report_dict,
             },
         )
@@ -246,25 +251,32 @@ async def test_chat_with_report_context(client):
 async def test_chat_with_tool_use(client):
     """Chat agent uses tools and returns results."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
     # First call: LLM wants to use a tool
     tool_response = {
         "content": "",
-        "tool_calls": [{
-            "id": "call_123",
-            "function": {
-                "name": "search_zoning_ordinance",
-                "arguments": '{"municipality": "Miami Gardens", "query": "setback requirements"}',
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": "call_123",
+                "function": {
+                    "name": "search_zoning_ordinance",
+                    "arguments": '{"municipality": "Miami Gardens", "query": "setback requirements"}',
+                },
+            }
+        ],
     }
     # Second call: LLM gives final answer after receiving tool results
     final_response = {"content": "The setback requirements are 25ft front...", "tool_calls": []}
 
     with (
-        patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, side_effect=[tool_response, final_response]),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=[tool_response, final_response],
+        ),
         patch("plotlot.api.chat.hybrid_search", new_callable=AsyncMock, return_value=[]),
     ):
         resp = await client.post(
@@ -282,6 +294,7 @@ async def test_chat_with_tool_use(client):
 async def test_chat_session_memory(client):
     """Chat preserves conversation memory across requests."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
@@ -301,6 +314,7 @@ async def test_chat_session_memory(client):
 # ---------------------------------------------------------------------------
 # Portfolio endpoint tests (Phase 5b)
 # ---------------------------------------------------------------------------
+
 
 def _mock_report_dict() -> dict:
     """Build a report dict for portfolio tests."""
@@ -331,6 +345,7 @@ def _mock_report_dict() -> dict:
 def _reset_db_engine():
     """Reset the DB engine between tests to avoid event-loop-closed errors."""
     import plotlot.storage.db as db_mod
+
     db_mod._engine = None
     db_mod._session_factory = None
     yield
@@ -338,11 +353,123 @@ def _reset_db_engine():
     db_mod._session_factory = None
 
 
+def _make_portfolio_entry(**kwargs):
+    """Create a fake PortfolioEntry-like object for testing."""
+    from types import SimpleNamespace
+    from datetime import datetime, timezone
+
+    defaults = {
+        "id": 1,
+        "user_id": None,
+        "address": "171 NE 209th Ter, Miami Gardens, FL 33179",
+        "municipality": "Miami Gardens",
+        "county": "Miami-Dade",
+        "zoning_district": "R-1",
+        "report_json": _mock_report_dict(),
+        "notes": None,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)
+
+
+def _mock_session_for_portfolio(store: dict):
+    """Build an AsyncMock session that simulates portfolio DB operations."""
+    from datetime import datetime, timezone
+
+    _next_id = {"val": 1}
+
+    session = AsyncMock()
+
+    # add() stores the entry temporarily
+    _pending = {}
+
+    def _add(entry):
+        _pending["entry"] = entry
+
+    session.add = _add
+
+    async def _refresh(entry):
+        entry.id = _next_id["val"]
+        _next_id["val"] += 1
+        entry.created_at = datetime.now(timezone.utc)
+        store[entry.id] = entry
+
+    session.refresh = _refresh
+
+    async def _commit():
+        pass
+
+    session.commit = _commit
+
+    async def _rollback():
+        pass
+
+    session.rollback = _rollback
+
+    async def _close():
+        pass
+
+    session.close = _close
+
+    async def _execute(stmt):
+        """Route based on statement type."""
+        from sqlalchemy.sql import Delete, Select
+
+        result = AsyncMock()
+
+        if isinstance(stmt, Delete):
+            # Extract the bound id from the where clause
+            compiled = stmt.compile()
+            params = compiled.params
+            target_id = None
+            for key, val in params.items():
+                if "id" in key:
+                    target_id = int(val)
+                    break
+            deleted = 0
+            if target_id and target_id in store:
+                del store[target_id]
+                deleted = 1
+            result.rowcount = deleted
+            return result
+
+        if isinstance(stmt, Select):
+            compiled = stmt.compile()
+            params = compiled.params
+            target_id = None
+            for key, val in params.items():
+                if "id" in key:
+                    target_id = int(val)
+                    break
+
+            if target_id is not None:
+                # Single item lookup
+                entry = store.get(target_id)
+                result.scalar_one_or_none = lambda e=entry: e
+            else:
+                # List all
+                scalars_mock = AsyncMock()
+                scalars_mock.all = lambda: list(store.values())
+                result.scalars = lambda: scalars_mock
+            return result
+
+        return result
+
+    session.execute = _execute
+    return session
+
+
 @pytest.mark.asyncio
 async def test_portfolio_save_and_list(client):
     """Save an analysis and retrieve it from portfolio."""
+    store = {}
+    session = _mock_session_for_portfolio(store)
+
     report_dict = _mock_report_dict()
-    resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
     assert resp.status_code == 200
     saved = resp.json()
     assert saved["municipality"] == "Miami Gardens"
@@ -350,7 +477,8 @@ async def test_portfolio_save_and_list(client):
     assert "id" in saved
 
     # List
-    resp = await client.get("/api/v1/portfolio")
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.get("/api/v1/portfolio")
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) >= 1
@@ -360,22 +488,31 @@ async def test_portfolio_save_and_list(client):
 @pytest.mark.asyncio
 async def test_portfolio_delete(client):
     """Delete an analysis from portfolio."""
+    store = {}
+    session = _mock_session_for_portfolio(store)
+
     report_dict = _mock_report_dict()
-    resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.post("/api/v1/portfolio", json={"report": report_dict})
     analysis_id = resp.json()["id"]
 
-    resp = await client.delete(f"/api/v1/portfolio/{analysis_id}")
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.delete(f"/api/v1/portfolio/{analysis_id}")
     assert resp.status_code == 200
 
     # Verify the specific entry is gone (404)
-    resp = await client.get(f"/api/v1/portfolio/{analysis_id}")
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.get(f"/api/v1/portfolio/{analysis_id}")
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_portfolio_not_found(client):
     """Get non-existent analysis → 404."""
-    resp = await client.get("/api/v1/portfolio/99999")
+    store = {}
+    session = _mock_session_for_portfolio(store)
+    with patch("plotlot.api.portfolio.get_session", new_callable=AsyncMock, return_value=session):
+        resp = await client.get("/api/v1/portfolio/99999")
     assert resp.status_code == 404
 
 
@@ -383,30 +520,37 @@ async def test_portfolio_not_found(client):
 # Google Workspace tool tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_chat_create_spreadsheet_tool(client):
     """Chat agent creates a spreadsheet via tool call."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
-        "tool_calls": [{
-            "id": "call_sheet",
-            "function": {
-                "name": "create_spreadsheet",
-                "arguments": json.dumps({
-                    "title": "Test Lots",
-                    "headers": ["Address", "Zoning"],
-                    "rows": [["123 Main St", "R-1"]],
-                }),
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": "call_sheet",
+                "function": {
+                    "name": "create_spreadsheet",
+                    "arguments": json.dumps(
+                        {
+                            "title": "Test Lots",
+                            "headers": ["Address", "Zoning"],
+                            "rows": [["123 Main St", "R-1"]],
+                        }
+                    ),
+                },
+            }
+        ],
     }
     final_response = {"content": "Here's your spreadsheet!", "tool_calls": []}
 
     from plotlot.retrieval.google_workspace import SpreadsheetResult
+
     mock_result = SpreadsheetResult(
         spreadsheet_id="abc123",
         spreadsheet_url="https://docs.google.com/spreadsheets/d/abc123",
@@ -414,8 +558,14 @@ async def test_chat_create_spreadsheet_tool(client):
     )
 
     with (
-        patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, side_effect=[tool_response, final_response]),
-        patch("plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=[tool_response, final_response],
+        ),
+        patch(
+            "plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
+        ),
     ):
         resp = await client.post(
             "/api/v1/chat",
@@ -431,25 +581,31 @@ async def test_chat_create_spreadsheet_tool(client):
 async def test_chat_create_document_tool(client):
     """Chat agent creates a document via tool call."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
-        "tool_calls": [{
-            "id": "call_doc",
-            "function": {
-                "name": "create_document",
-                "arguments": json.dumps({
-                    "title": "Zoning Report",
-                    "content": "Analysis of R-1 zoning district...",
-                }),
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": "call_doc",
+                "function": {
+                    "name": "create_document",
+                    "arguments": json.dumps(
+                        {
+                            "title": "Zoning Report",
+                            "content": "Analysis of R-1 zoning district...",
+                        }
+                    ),
+                },
+            }
+        ],
     }
     final_response = {"content": "Created your report!", "tool_calls": []}
 
     from plotlot.retrieval.google_workspace import DocumentResult
+
     mock_result = DocumentResult(
         document_id="doc456",
         document_url="https://docs.google.com/document/d/doc456/edit",
@@ -457,7 +613,11 @@ async def test_chat_create_document_tool(client):
     )
 
     with (
-        patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, side_effect=[tool_response, final_response]),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=[tool_response, final_response],
+        ),
         patch("plotlot.api.chat.create_document", new_callable=AsyncMock, return_value=mock_result),
     ):
         resp = await client.post(
@@ -474,41 +634,66 @@ async def test_chat_create_document_tool(client):
 # Property research tool tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_chat_search_properties(client):
     """Agent calls search_properties and returns summary."""
     from plotlot.api.chat import _sessions
+
     _sessions._conversations.clear()
     _sessions._datasets.clear()
     _sessions._last_access.clear()
 
     tool_response = {
         "content": "",
-        "tool_calls": [{
-            "id": "call_search",
-            "function": {
-                "name": "search_properties",
-                "arguments": json.dumps({
-                    "county": "Miami-Dade",
-                    "land_use_type": "vacant_residential",
-                    "ownership_min_years": 20,
-                }),
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": "call_search",
+                "function": {
+                    "name": "search_properties",
+                    "arguments": json.dumps(
+                        {
+                            "county": "Miami-Dade",
+                            "land_use_type": "vacant_residential",
+                            "ownership_min_years": 20,
+                        }
+                    ),
+                },
+            }
+        ],
     }
     final_response = {"content": "Found 3 vacant lots in Miami-Dade...", "tool_calls": []}
 
     mock_records = [
-        {"folio": f"F{i}", "address": f"{i} MAIN ST", "city": "MIAMI",
-         "county": "Miami-Dade", "owner": "OWNER", "land_use_code": "0000",
-         "lot_size_sqft": 7500, "year_built": 0, "assessed_value": 50000,
-         "sale_price": 25000, "sale_date": "01/01/2000", "lat": 25.9, "lng": -80.2}
+        {
+            "folio": f"F{i}",
+            "address": f"{i} MAIN ST",
+            "city": "MIAMI",
+            "county": "Miami-Dade",
+            "owner": "OWNER",
+            "land_use_code": "0000",
+            "lot_size_sqft": 7500,
+            "year_built": 0,
+            "assessed_value": 50000,
+            "sale_price": 25000,
+            "sale_date": "01/01/2000",
+            "lat": 25.9,
+            "lng": -80.2,
+        }
         for i in range(3)
     ]
 
     with (
-        patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, side_effect=[tool_response, final_response]),
-        patch("plotlot.api.chat.bulk_property_search", new_callable=AsyncMock, return_value=mock_records),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=[tool_response, final_response],
+        ),
+        patch(
+            "plotlot.api.chat.bulk_property_search",
+            new_callable=AsyncMock,
+            return_value=mock_records,
+        ),
     ):
         resp = await client.post(
             "/api/v1/chat",
@@ -525,38 +710,56 @@ async def test_chat_export_dataset(client):
     """Agent exports dataset to Google Sheets."""
     from plotlot.api.chat import _sessions
     from plotlot.retrieval.bulk_search import DatasetInfo
+
     _sessions._conversations.clear()
     _sessions._datasets.clear()
     _sessions._last_access.clear()
 
     # Pre-populate a dataset for session "test-export"
-    _sessions.set_dataset("test-export", DatasetInfo(
-        records=[
-            {"folio": "123", "address": "100 MAIN ST", "city": "MIAMI",
-             "county": "Miami-Dade", "owner": "OWNER", "land_use_code": "0000",
-             "lot_size_sqft": 7500, "year_built": 0, "assessed_value": 50000,
-             "sale_price": 25000, "sale_date": "2000-01-01", "lat": 25.9, "lng": -80.2},
-        ],
-        search_params={"county": "Miami-Dade"},
-        query_description="Vacant Residential In Miami-Dade",
-        total_available=1,
-        fetched_at="2026-01-01T00:00:00",
-    ))
+    _sessions.set_dataset(
+        "test-export",
+        DatasetInfo(
+            records=[
+                {
+                    "folio": "123",
+                    "address": "100 MAIN ST",
+                    "city": "MIAMI",
+                    "county": "Miami-Dade",
+                    "owner": "OWNER",
+                    "land_use_code": "0000",
+                    "lot_size_sqft": 7500,
+                    "year_built": 0,
+                    "assessed_value": 50000,
+                    "sale_price": 25000,
+                    "sale_date": "2000-01-01",
+                    "lat": 25.9,
+                    "lng": -80.2,
+                },
+            ],
+            search_params={"county": "Miami-Dade"},
+            query_description="Vacant Residential In Miami-Dade",
+            total_available=1,
+            fetched_at="2026-01-01T00:00:00",
+        ),
+    )
     _sessions.touch("test-export")
 
     tool_response = {
         "content": "",
-        "tool_calls": [{
-            "id": "call_export",
-            "function": {
-                "name": "export_dataset",
-                "arguments": json.dumps({"title": "My Export"}),
-            },
-        }],
+        "tool_calls": [
+            {
+                "id": "call_export",
+                "function": {
+                    "name": "export_dataset",
+                    "arguments": json.dumps({"title": "My Export"}),
+                },
+            }
+        ],
     }
     final_response = {"content": "Here's your spreadsheet!", "tool_calls": []}
 
     from plotlot.retrieval.google_workspace import SpreadsheetResult
+
     mock_result = SpreadsheetResult(
         spreadsheet_id="exp789",
         spreadsheet_url="https://docs.google.com/spreadsheets/d/exp789",
@@ -564,8 +767,14 @@ async def test_chat_export_dataset(client):
     )
 
     with (
-        patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, side_effect=[tool_response, final_response]),
-        patch("plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=[tool_response, final_response],
+        ),
+        patch(
+            "plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
+        ),
     ):
         resp = await client.post(
             "/api/v1/chat",
