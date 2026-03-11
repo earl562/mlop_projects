@@ -329,6 +329,15 @@ export default function Home() {
 
   const hasReport = messages.some((m) => m.report);
 
+  const handleNewAnalysis = useCallback(() => {
+    setMessages([]);
+    setCurrentReport(null);
+    setSessionId(null);
+    setInput("");
+    setIsProcessing(false);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   // ─── Welcome State ────────────────────────────────────────────────────
   if (isWelcome) {
     return (
@@ -403,15 +412,6 @@ export default function Home() {
       </div>
     );
   }
-
-  const handleNewAnalysis = useCallback(() => {
-    setMessages([]);
-    setCurrentReport(null);
-    setSessionId(null);
-    setInput("");
-    setIsProcessing(false);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
 
   // ─── Conversation State ───────────────────────────────────────────────
   return (
