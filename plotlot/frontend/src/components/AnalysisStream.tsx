@@ -14,12 +14,12 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  connecting: "Establishing connection to PlotLot server...",
-  geocoding: "Looking up coordinates and municipality...",
-  property: "Fetching lot size and property data from county records...",
-  search: "Searching zoning ordinances in municipal code...",
-  analysis: "AI analyzing zoning regulations and extracting standards...",
-  calculation: "Computing max allowable units from zoning constraints...",
+  connecting: "Connecting...",
+  geocoding: "Locating property...",
+  property: "Pulling county records...",
+  search: "Searching zoning code...",
+  analysis: "Extracting standards...",
+  calculation: "Computing max units...",
 };
 
 interface AnalysisStreamProps {

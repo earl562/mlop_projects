@@ -141,59 +141,73 @@ export async function streamAnalysis(
   onResult: (report: ZoningReportData) => void,
   onError: (error: string) => void,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/v1/analyze/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: "Request failed" }));
-    onError(extractErrorMessage(err, response.status));
-    return;
-  }
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/analyze/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+      signal: controller.signal,
+    });
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    onError("No response stream available");
-    return;
-  }
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Request failed" }));
+      onError(extractErrorMessage(err, response.status));
+      return;
+    }
 
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let eventType = "";
-  let eventData = "";
+    const reader = response.body?.getReader();
+    if (!reader) {
+      onError("No response stream available");
+      return;
+    }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let eventType = "";
+    let eventData = "";
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        eventData = line.slice(6).trim();
-      } else if (line === "" && eventType && eventData) {
-        try {
-          const parsed = JSON.parse(eventData);
-          if (eventType === "status") {
-            onStatus(parsed as PipelineStatus);
-          } else if (eventType === "result") {
-            onResult(parsed as ZoningReportData);
-          } else if (eventType === "error") {
-            onError(parsed.detail || "Unknown error");
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          eventData = line.slice(6).trim();
+        } else if (line === "" && eventType && eventData) {
+          try {
+            const parsed = JSON.parse(eventData);
+            if (eventType === "status") {
+              onStatus(parsed as PipelineStatus);
+            } else if (eventType === "result") {
+              onResult(parsed as ZoningReportData);
+            } else if (eventType === "error") {
+              onError(parsed.detail || "Unknown error");
+            }
+          } catch {
+            // Skip malformed events
           }
-        } catch {
-          // Skip malformed events
+          eventType = "";
+          eventData = "";
         }
-        eventType = "";
-        eventData = "";
       }
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      onError("Request timed out after 2 minutes. The server may be starting up \u2014 try again.");
+      return;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -355,4 +369,51 @@ export async function deleteFromPortfolio(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) throw new Error("Failed to delete");
+}
+
+// ---------------------------------------------------------------------------
+// Building Render (AI-generated architectural visualization)
+// ---------------------------------------------------------------------------
+
+export interface BuildingViewImage {
+  view: string;  // "front", "aerial", "side"
+  image_base64: string;
+  prompt_used: string;
+}
+
+export interface BuildingRenderData {
+  views: BuildingViewImage[];
+  cached: boolean;
+  generation_time_ms: number;
+}
+
+export interface BuildingRenderParams {
+  property_type: string;
+  stories: number;
+  total_width_ft: number;
+  total_depth_ft: number;
+  max_height_ft: number;
+  lot_width_ft: number;
+  lot_depth_ft: number;
+  zoning_district: string;
+  unit_count: number;
+  setback_front_ft: number;
+  setback_side_ft: number;
+  setback_rear_ft: number;
+  municipality?: string;
+}
+
+export async function renderBuilding(params: BuildingRenderParams): Promise<BuildingRenderData> {
+  const response = await fetch(`${API_BASE}/api/v1/render/building`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Render failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+
+  return response.json();
 }

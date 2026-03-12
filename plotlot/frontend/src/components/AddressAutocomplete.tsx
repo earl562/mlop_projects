@@ -26,6 +26,8 @@ function AutocompleteInner({
   const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const serviceRef = useRef<google.maps.places.AutocompleteService | null>(null);
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -49,12 +51,13 @@ function AutocompleteInner({
 
   const fetchPredictions = useCallback(
     (input: string) => {
-      if (!serviceRef.current || !sessionTokenRef.current || input.length < 3) {
+      if (!serviceRef.current || !sessionTokenRef.current || input.length < 2) {
         setPredictions([]);
         setShowDropdown(false);
         return;
       }
 
+      setIsSearching(true);
       serviceRef.current.getPlacePredictions(
         {
           input,
@@ -63,7 +66,9 @@ function AutocompleteInner({
           types: ["address"],
         },
         (results, status) => {
+          setIsSearching(false);
           if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+            setError(null);
             // Filter to Florida addresses
             const flPredictions = results.filter(
               (p) =>
@@ -73,6 +78,10 @@ function AutocompleteInner({
             setPredictions(flPredictions.length > 0 ? flPredictions : results.slice(0, 5));
             setShowDropdown(flPredictions.length > 0 || results.length > 0);
             setSelectedIndex(-1);
+          } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+            setError("Address suggestions unavailable");
+            setPredictions([]);
+            setShowDropdown(false);
           } else {
             setPredictions([]);
             setShowDropdown(false);
@@ -84,6 +93,7 @@ function AutocompleteInner({
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
     const val = e.target.value;
     onChange(val);
     fetchPredictions(val);
@@ -132,6 +142,18 @@ function AutocompleteInner({
         className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder-stone-400 outline-none"
         autoComplete="off"
       />
+      {/* Loading indicator */}
+      {isSearching && !showDropdown && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
+          <div className="flex items-center gap-2 px-3 py-3 text-xs text-stone-500">
+            <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Searching addresses...
+          </div>
+        </div>
+      )}
       {showDropdown && predictions.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
           {predictions.map((prediction, index) => (
@@ -167,6 +189,11 @@ function AutocompleteInner({
           <div className="border-t border-[var(--border)] px-3 py-1.5">
             <span className="text-xs text-stone-500">Powered by Google</span>
           </div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute left-0 right-0 top-full z-40 mt-1 px-1">
+          <span className="text-xs text-amber-600 dark:text-amber-400">{error}</span>
         </div>
       )}
     </div>

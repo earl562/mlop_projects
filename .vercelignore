@@ -10,13 +10,17 @@ plotlot/uv.lock
 plotlot/pyproject.toml
 plotlot/Dockerfile
 
+# Frontend build artifacts & deps
+plotlot/frontend/node_modules/
+plotlot/frontend/.next/
+plotlot/frontend/tests/
+plotlot/frontend/playwright-report/
+plotlot/frontend/test-results/
+
 # Screenshots and test artifacts
 *.png
 *.jpg
 *.docx
-plotlot/frontend/tests/screenshots/
-plotlot/frontend/playwright-report/
-plotlot/frontend/test-results/
 plotlot/test-results/
 
 # Logs

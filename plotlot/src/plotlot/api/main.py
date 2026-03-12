@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from plotlot.api.auth import get_current_user
 from plotlot.api.chat import router as chat_router
 from plotlot.api.geometry import router as geometry_router
+from plotlot.api.render import router as render_router
 from plotlot.api.middleware import rate_limiter
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.routes import router
@@ -176,6 +177,7 @@ app.include_router(router)
 app.include_router(chat_router)
 app.include_router(portfolio_router)
 app.include_router(geometry_router)
+app.include_router(render_router)
 
 
 @app.get("/health")

@@ -8,23 +8,28 @@ import { FloorPlanLayout, Room, Door, Window } from "@/lib/floorplan-generator";
 
 const ROOM_FILLS: Record<string, string> = {
   living: "#FAFAF8",
-  kitchen: "#F5F2ED",
-  dining: "#FAF8F5",
+  kitchen: "#FAFAF8",
+  dining: "#FAFAF8",
   bedroom: "#FAFAF8",
-  bathroom: "#EDF2F8",
+  bathroom: "#D4E8F0",
+  powder_room: "#D4E8F0",
   garage: "#F0EDEA",
-  laundry: "#EDF2F8",
-  entry: "#FAF8F5",
-  hallway: "#F5F2ED",
-  closet: "#F0EDEA",
+  laundry: "#FAFAF8",
+  entry: "#FAFAF8",
+  hallway: "#FAFAF8",
+  closet: "#FAFAF8",
+  walk_in_closet: "#FAFAF8",
+  porch: "#E8E2D4",
+  pantry: "#FAFAF8",
   corridor: "#F0EDEA",
   stairwell: "#E8E5E0",
   mechanical: "#E8E5E0",
   lobby: "#FAF8F5",
   open_floor: "#FAFAF8",
+  storage: "#F0EDEA",
 };
 
-const WALL_EXT = 4;       // Exterior wall stroke
+const WALL_EXT = 6;       // Exterior wall stroke
 const WALL_INT = 1.5;     // Interior wall stroke
 const MARGIN = 55;
 
@@ -213,6 +218,96 @@ function GarageFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: n
   );
 }
 
+function PorchFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  if (w < 30 || h < 15) return null;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+
+  const tableW = Math.min(w * 0.15, 10);
+  const tableH = Math.min(h * 0.45, 6);
+  const chairW = Math.min(w * 0.06, 4);
+  const chairH = Math.min(h * 0.35, 5);
+
+  return (
+    <g stroke="#999" strokeWidth={0.6} fill="none" strokeDasharray="2.5,1.5">
+      {/* Outdoor table */}
+      <rect x={cx - tableW / 2} y={cy - tableH / 2} width={tableW} height={tableH} rx={1} />
+      {/* Chair left */}
+      <rect x={cx - tableW / 2 - chairW - 2} y={cy - chairH / 2} width={chairW} height={chairH} rx={0.5} />
+      {/* Chair right */}
+      <rect x={cx + tableW / 2 + 2} y={cy - chairH / 2} width={chairW} height={chairH} rx={0.5} />
+    </g>
+  );
+}
+
+function PantryFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  if (w < 12 || h < 12) return null;
+  const shelfCount = Math.min(Math.floor(h / 5), 4);
+  const shelfSpacing = h / (shelfCount + 1);
+
+  return (
+    <g stroke="#999" strokeWidth={0.5} fill="none">
+      {/* Shelving lines along top wall */}
+      {Array.from({ length: shelfCount }, (_, i) => (
+        <line key={`ts${i}`} x1={x + 2} y1={y + (i + 1) * shelfSpacing} x2={x + w - 2} y2={y + (i + 1) * shelfSpacing} />
+      ))}
+      {/* Vertical shelf support on left wall */}
+      <line x1={x + 3} y1={y + 2} x2={x + 3} y2={y + h - 2} strokeWidth={0.4} />
+    </g>
+  );
+}
+
+function WalkInClosetFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  if (w < 14 || h < 12) return null;
+
+  return (
+    <g stroke="#999" strokeWidth={0.5} fill="none">
+      {/* Hanging rod — left wall */}
+      <line x1={x + 3} y1={y + 3} x2={x + 3} y2={y + h * 0.7} strokeWidth={0.6} />
+      <line x1={x + 5} y1={y + 3} x2={x + 5} y2={y + h * 0.7} strokeWidth={0.3} />
+      {/* Hanging rod — right wall */}
+      <line x1={x + w - 3} y1={y + 3} x2={x + w - 3} y2={y + h * 0.7} strokeWidth={0.6} />
+      <line x1={x + w - 5} y1={y + 3} x2={x + w - 5} y2={y + h * 0.7} strokeWidth={0.3} />
+      {/* Shelf at back wall */}
+      <line x1={x + 3} y1={y + h - 3} x2={x + w - 3} y2={y + h - 3} strokeWidth={0.6} />
+      <line x1={x + 3} y1={y + h - 5} x2={x + w - 3} y2={y + h - 5} strokeWidth={0.3} />
+    </g>
+  );
+}
+
+function PowderRoomFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  if (w < 15 || h < 15) return null;
+
+  return (
+    <g stroke="#888" strokeWidth={0.6} fill="none">
+      {/* Toilet */}
+      <ellipse cx={x + w * 0.6} cy={y + h * 0.4} rx={2.5} ry={3.5} strokeWidth={0.6} />
+      {/* Tank */}
+      <rect x={x + w * 0.6 - 2.5} y={y + h * 0.4 + 3} width={5} height={2.5} rx={1} strokeWidth={0.5} />
+      {/* Small vanity/sink */}
+      <rect x={x + w * 0.2} y={y + h - 6} width={Math.min(w * 0.35, 10)} height={3.5} rx={0.5} strokeWidth={0.5} />
+      <ellipse cx={x + w * 0.2 + Math.min(w * 0.175, 5)} cy={y + h - 4.5} rx={1.8} ry={1.2} strokeWidth={0.4} />
+    </g>
+  );
+}
+
+function StorageFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  if (w < 12 || h < 10) return null;
+  const shelfCount = Math.min(Math.floor(w / 6), 3);
+  const shelfSpacing = w / (shelfCount + 1);
+
+  return (
+    <g stroke="#999" strokeWidth={0.4} fill="none">
+      {/* Shelf lines along walls */}
+      {Array.from({ length: shelfCount }, (_, i) => (
+        <line key={`ss${i}`} x1={x + (i + 1) * shelfSpacing} y1={y + 2} x2={x + (i + 1) * shelfSpacing} y2={y + h - 2} />
+      ))}
+      {/* Top shelf */}
+      <line x1={x + 2} y1={y + 3} x2={x + w - 2} y2={y + 3} strokeWidth={0.5} />
+    </g>
+  );
+}
+
 function StairsFurniture({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   if (w < 15 || h < 15) return null;
   const treadCount = Math.min(Math.floor(h / 2.5), 10);
@@ -266,7 +361,7 @@ function RoomBlock({ room, scale }: { room: Room; scale: number }) {
   const h = room.depth * scale;
   const fill = ROOM_FILLS[room.type] || "#FAFAF8";
   const isWet = room.isWetRoom;
-  const isExt = room.type === "garage" || room.type === "entry";
+  const isExt = room.type === "garage" || room.type === "entry" || room.type === "porch";
   const wallW = isExt ? WALL_EXT : WALL_INT;
 
   const dimStr = `${ftLabel(room.width)} x ${ftLabel(room.depth)}`;
@@ -430,6 +525,11 @@ function RoomFurniture({ room, scale }: { room: Room; scale: number }) {
     case "bathroom": return <BathroomFurniture x={x} y={y} w={w} h={h} />;
     case "garage": return <GarageFurniture x={x} y={y} w={w} h={h} />;
     case "stairwell": return <StairsFurniture x={x} y={y} w={w} h={h} />;
+    case "porch": return <PorchFurniture x={x} y={y} w={w} h={h} />;
+    case "pantry": return <PantryFurniture x={x} y={y} w={w} h={h} />;
+    case "walk_in_closet": return <WalkInClosetFurniture x={x} y={y} w={w} h={h} />;
+    case "powder_room": return <PowderRoomFurniture x={x} y={y} w={w} h={h} />;
+    case "storage": return <StorageFurniture x={x} y={y} w={w} h={h} />;
     default: return null;
   }
 }

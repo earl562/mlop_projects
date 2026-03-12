@@ -438,3 +438,4 @@ chub get anthropic/claude-api --lang py  # Fetch Python SDK docs
 8. **Pydantic everywhere.** No raw dicts crossing function boundaries.
 9. **Async-first for I/O.** `httpx`, `asyncpg`, `async def` — no blocking calls in async contexts.
 10. **SSE heartbeat for long operations.** Render's 30s proxy timeout is real.
+11. **CLI-first tooling.** Always prefer CLIs over manual steps or web dashboards — `vercel`, `gh`, `uv`, `npx`, etc. CLIs are scriptable, reproducible, and auditable. Example: `vercel env ls` over checking the Vercel dashboard.

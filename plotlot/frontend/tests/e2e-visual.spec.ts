@@ -60,18 +60,7 @@ test.describe("PlotLot E2E Visual Walkthrough", () => {
       console.log("✓ Setbacks section captured");
     }
 
-    // Step 8: Check for 3D Buildable Envelope section
-    const envelopeSection = page.locator("text=3D Buildable Envelope").first();
-    if (await envelopeSection.isVisible()) {
-      await envelopeSection.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(2000); // Wait for Three.js to render
-      await page.screenshot({ path: "tests/screenshots/e2e-08-3d-envelope.png" });
-      console.log("✓ 3D Envelope viewer captured");
-    } else {
-      console.log("⚠ 3D Envelope not visible (may need lot dimensions in report)");
-    }
-
-    // Step 9: Check for Floor Plan section
+    // Step 8: Check for Floor Plan section
     const floorPlanSection = page.locator("text=Floor Plan").first();
     if (await floorPlanSection.isVisible()) {
       await floorPlanSection.scrollIntoViewIfNeeded();

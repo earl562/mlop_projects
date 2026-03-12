@@ -4,9 +4,11 @@ import { DensityAnalysisData } from "@/lib/api";
 
 interface DensityBreakdownProps {
   analysis: DensityAnalysisData;
+  buildableFootprintSqft?: number;
+  currentCoveragePct?: string | null;
 }
 
-export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
+export default function DensityBreakdown({ analysis, buildableFootprintSqft, currentCoveragePct }: DensityBreakdownProps) {
   const isCommercial = analysis.max_gla_sqft != null;
   const maxRaw = Math.max(...analysis.constraints.map((c) => c.raw_value), 1);
 
@@ -69,6 +71,22 @@ export default function DensityBreakdown({ analysis }: DensityBreakdownProps) {
           );
         })}
       </div>
+
+      {/* Compact stats from development summary */}
+      {(buildableFootprintSqft || currentCoveragePct) && (
+        <div className="mt-4 flex flex-wrap gap-3 border-t border-[var(--border)] pt-3">
+          {buildableFootprintSqft != null && buildableFootprintSqft > 0 && (
+            <div className="text-xs text-[var(--text-muted)]">
+              <span className="font-medium text-[var(--text-secondary)]">{Math.round(buildableFootprintSqft).toLocaleString()} sqft</span> buildable footprint
+            </div>
+          )}
+          {currentCoveragePct && (
+            <div className="text-xs text-[var(--text-muted)]">
+              <span className="font-medium text-[var(--text-secondary)]">{currentCoveragePct}%</span> current coverage
+            </div>
+          )}
+        </div>
+      )}
 
       {analysis.notes.length > 0 && (
         <div className="mt-3 space-y-1">

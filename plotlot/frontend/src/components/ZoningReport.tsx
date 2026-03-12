@@ -1,16 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
-import EnvelopeViewerWrapper from "./EnvelopeViewerWrapper";
+import BuildingRenderViewer from "./BuildingRenderViewer";
 import FloorPlanViewer from "./FloorPlanViewer";
-import PropertyCard from "./PropertyCard";
-import SatelliteMap from "./SatelliteMap";
+import ParcelViewer from "./ParcelViewer";
 import SetbackDiagram from "./SetbackDiagram";
-import StreetView from "./StreetView";
 import PropertyIntelligence from "./PropertyIntelligence";
 import { useToast } from "./Toast";
 
@@ -124,18 +120,10 @@ function parseNumericFt(value: string | undefined | null): number {
   return match ? parseFloat(match[0]) : 0;
 }
 
-const mdComponents = {
-  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
-  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
-  ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>,
-  ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>,
-  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
-};
 
 export default function ZoningReport({ report }: ZoningReportProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   const handleDownloadPDF = useCallback(async () => {
     if (pdfLoading) return;
@@ -162,21 +150,21 @@ export default function ZoningReport({ report }: ZoningReportProps) {
     }
   }, [report, pdfLoading]);
 
-  const maxUnits = report.density_analysis?.max_units ?? 1;
-
   // Setback values
   const setbackFront = report.numeric_params?.setback_front_ft || parseNumericFt(report.setbacks?.front);
   const setbackSide = report.numeric_params?.setback_side_ft || parseNumericFt(report.setbacks?.side);
   const setbackRear = report.numeric_params?.setback_rear_ft || parseNumericFt(report.setbacks?.rear);
-  const lotWidth = report.density_analysis?.lot_width_ft || report.numeric_params?.min_lot_width_ft || 0;
-  const lotDepth = report.density_analysis?.lot_depth_ft || 0;
+  let lotWidth = report.density_analysis?.lot_width_ft || report.numeric_params?.min_lot_width_ft || 0;
+  let lotDepth = report.density_analysis?.lot_depth_ft || 0;
 
-  // Summary collapsibility
-  const summaryWords = report.summary ? report.summary.split(/\s+/).length : 0;
-  const isLongSummary = summaryWords > 150;
-  const displaySummary = isLongSummary && !summaryExpanded
-    ? report.summary.split(/\s+/).slice(0, 150).join(" ") + "..."
-    : report.summary;
+  // Estimate lot dimensions from lot area when width/depth unavailable (typical 1:1.4 ratio)
+  if (lotWidth <= 0 || lotDepth <= 0) {
+    const lotArea = report.density_analysis?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
+    if (lotArea > 0) {
+      lotWidth = Math.round(Math.sqrt(lotArea / 1.4));
+      lotDepth = Math.round(lotWidth * 1.4);
+    }
+  }
 
   const confidenceBorder = report.confidence === "low"
     ? "border-l-4 border-l-red-400"
@@ -220,14 +208,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         </div>
       </div>
 
-      {/* Satellite map */}
-      {report.lat != null && report.lng != null && (
-        <SatelliteMap lat={report.lat} lng={report.lng} address={report.formatted_address} parcelGeometry={report.property_record?.parcel_geometry} />
-      )}
-
-      {/* Street View */}
-      {report.lat != null && report.lng != null && (
-        <StreetView lat={report.lat} lng={report.lng} address={report.formatted_address} />
+      {/* Parcel Viewer — unified split-panel with property details + interactive map */}
+      {report.property_record && (
+        <ParcelViewer report={report} />
       )}
 
       {/* Zoning district — with copy */}
@@ -237,75 +220,49 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <span className="text-sm text-[var(--text-muted)]">{report.zoning_description}</span>
       </div>
 
-      {/* Summary — markdown rendered, collapsible if long */}
-      {report.summary && (
-        <div className={`rounded-lg ${confidenceBorder} bg-[var(--bg-surface-raised)] p-4`}>
-          {report.confidence !== "high" && (
-            <div className="mb-2 flex items-center gap-2">
-              <svg className={`h-4 w-4 ${report.confidence === "low" ? "text-red-500" : "text-amber-500"}`} viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-              </svg>
-              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                {report.confidence} confidence
-              </span>
-            </div>
-          )}
-          <div className="text-sm leading-relaxed text-[var(--text-secondary)]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-              {displaySummary}
-            </ReactMarkdown>
-          </div>
-          {isLongSummary && (
-            <button
-              onClick={() => setSummaryExpanded(!summaryExpanded)}
-              className="mt-2 text-xs font-medium text-amber-700 transition-colors hover:text-amber-600 active:scale-[0.98]"
-            >
-              {summaryExpanded ? "Show less" : "Show full analysis"}
-            </button>
-          )}
+      {/* Confidence warning — inline next to header when not high */}
+      {report.confidence !== "high" && (
+        <div className={`flex items-center gap-2 rounded-lg ${confidenceBorder} bg-[var(--bg-surface-raised)] px-3 py-2`}>
+          <svg className={`h-4 w-4 shrink-0 ${report.confidence === "low" ? "text-red-500" : "text-amber-500"}`} viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+          </svg>
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            {report.confidence} confidence — verify with local zoning office
+          </span>
         </div>
       )}
 
       {/* Max Allowable Units — hero, always visible */}
-      {report.density_analysis && (
-        <DensityBreakdown analysis={report.density_analysis} />
-      )}
+      {report.density_analysis && (() => {
+        const buildW = lotWidth > 0 ? Math.max(0, lotWidth - 2 * setbackSide) : 0;
+        const buildD = lotDepth > 0 ? Math.max(0, lotDepth - setbackFront - setbackRear) : 0;
+        const footprint = buildW > 0 && buildD > 0 ? buildW * buildD : 0;
+        const lotSize = report.density_analysis.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
+        const buildingArea = report.property_record?.building_area_sqft || 0;
+        const coverageUsed = lotSize > 0 && buildingArea > 0 ? ((buildingArea / lotSize) * 100).toFixed(1) : null;
+        return (
+          <DensityBreakdown
+            analysis={report.density_analysis}
+            buildableFootprintSqft={footprint > 0 ? footprint : undefined}
+            currentCoveragePct={coverageUsed}
+          />
+        );
+      })()}
 
-      {/* Financial Summary */}
+      {/* Property Type */}
       {report.numeric_params?.property_type && report.density_analysis && (
-        <div className="space-y-2">
-          <h3 className="section-pill">Financial Summary</h3>
-          <div className="rounded-lg bg-[var(--bg-surface-raised)] p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-semibold text-[var(--text-secondary)]">
-                {report.numeric_params.property_type === "land" && "Land / Development Site"}
-                {report.numeric_params.property_type === "single_family" && "Single-Family Residential"}
-                {report.numeric_params.property_type === "multifamily" && "Multifamily (2-4 Units)"}
-                {report.numeric_params.property_type === "commercial_mf" && "Commercial Multifamily (5+ Units)"}
-                {report.numeric_params.property_type === "commercial" && "Commercial"}
-              </span>
-              <span className="rounded-md bg-[var(--bg-surface-raised)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] uppercase">
-                {report.numeric_params.property_type}
-              </span>
-            </div>
-            <div className="text-xs text-[var(--text-muted)] leading-relaxed">
-              {report.numeric_params.property_type === "land" && (
-                <p>Development potential: {report.density_analysis.max_units} units on {report.property_record?.lot_size_sqft?.toLocaleString() || "N/A"} sqft.</p>
-              )}
-              {report.numeric_params.property_type === "single_family" && (
-                <p>Single-family lot. Provide purchase price and ARV for ROI analysis.</p>
-              )}
-              {report.numeric_params.property_type === "multifamily" && (
-                <p>Small multifamily ({report.density_analysis.max_units} units max). Provide rent/unit for NOI and cap rate.</p>
-              )}
-              {report.numeric_params.property_type === "commercial_mf" && (
-                <p>Commercial multifamily ({report.density_analysis.max_units} units max). Valued via income approach (NOI / Cap Rate).</p>
-              )}
-              {report.numeric_params.property_type === "commercial" && (
-                <p>Commercial site. Max GLA: {report.density_analysis.max_gla_sqft?.toLocaleString() || "N/A"} sqft. Parking at {report.numeric_params.parking_per_1000_gla_sqft || "N/A"} per 1,000 SF.</p>
-              )}
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="section-pill">Property Type</span>
+          <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
+            {report.numeric_params.property_type === "land" && "Land / Development"}
+            {report.numeric_params.property_type === "single_family" && "Single-Family"}
+            {report.numeric_params.property_type === "multifamily" && "Multifamily (2-4)"}
+            {report.numeric_params.property_type === "commercial_mf" && "Commercial MF (5+)"}
+            {report.numeric_params.property_type === "commercial" && "Commercial"}
+          </span>
+          <span className="text-xs text-[var(--text-muted)]">
+            {report.density_analysis.max_units} unit{report.density_analysis.max_units !== 1 ? "s" : ""} on {(report.density_analysis.lot_size_sqft || report.property_record?.lot_size_sqft || 0).toLocaleString()} sqft
+          </span>
         </div>
       )}
 
@@ -351,37 +308,6 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         </CollapsibleSection>
       )}
 
-      {/* 3D Building View — all property types with lot dimensions */}
-      {(() => {
-        const np = report.numeric_params;
-        const da = report.density_analysis;
-        const maxHeight = np?.max_height_ft || 35;
-        const lotSize = da?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
-        if (lotWidth > 0 && lotDepth > 0) {
-          return (
-            <CollapsibleSection title="3D Building View" defaultOpen={true}>
-              <EnvelopeViewerWrapper
-                lotWidthFt={lotWidth}
-                lotDepthFt={lotDepth}
-                setbackFrontFt={setbackFront}
-                setbackSideFt={setbackSide}
-                setbackRearFt={setbackRear}
-                maxHeightFt={maxHeight}
-                buildableAreaSqft={da?.buildable_area_sqft ?? undefined}
-                maxStories={np?.max_stories ?? undefined}
-                maxLotCoveragePct={np?.max_lot_coverage_pct ?? undefined}
-                far={np?.far ?? undefined}
-                lotSizeSqft={lotSize || undefined}
-                propertyType={np?.property_type ?? undefined}
-                maxUnits={da?.max_units ?? undefined}
-                parkingPerUnit={np?.parking_spaces_per_unit ?? undefined}
-              />
-            </CollapsibleSection>
-          );
-        }
-        return null;
-      })()}
-
       {/* Floor Plan — all property types with buildable dimensions */}
       {(() => {
         const da = report.density_analysis;
@@ -411,61 +337,31 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         );
       })()}
 
-      {/* Development Summary — compact stats for all property types */}
+      {/* AI Architectural Render — Gemini-generated front, aerial, side views */}
       {(() => {
-        const buildW = lotWidth > 0 ? Math.max(0, lotWidth - 2 * setbackSide) : 0;
-        const buildD = lotDepth > 0 ? Math.max(0, lotDepth - setbackFront - setbackRear) : 0;
-        const footprint = buildW > 0 && buildD > 0 ? buildW * buildD : 0;
-        const maxHeight = report.numeric_params?.max_height_ft || 35;
-        const maxStories = report.numeric_params?.max_stories || null;
-        const lotCoverage = report.numeric_params?.max_lot_coverage_pct || null;
-        const lotSize = report.density_analysis?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
-        const buildingArea = report.property_record?.building_area_sqft || 0;
-        const coverageUsed = lotSize > 0 && buildingArea > 0 ? ((buildingArea / lotSize) * 100).toFixed(1) : null;
-        const isCommercial = report.numeric_params?.property_type === "commercial";
-
-        if (!footprint && !maxStories && !lotCoverage) return null;
-
-        return (
-          <div className="space-y-2">
-            <h3 className="section-pill">Development Summary</h3>
-            <div className="rounded-lg bg-amber-50/50 border border-amber-200 p-4 space-y-3">
-              <p className="text-sm font-medium text-[var(--text-secondary)]">
-                {isCommercial
-                  ? "Commercial development site"
-                  : maxUnits >= 2
-                    ? `Multifamily — up to ${maxUnits} units`
-                    : "Single-family residential lot"}
-              </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {footprint > 0 && (
-                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
-                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Buildable Footprint</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{Math.round(footprint).toLocaleString()} sqft</div>
-                  </div>
-                )}
-                <div className="rounded-lg bg-[var(--bg-surface)] p-3">
-                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Max Height</div>
-                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
-                    {maxHeight} ft{maxStories ? ` / ${maxStories} stories` : ""}
-                  </div>
-                </div>
-                {lotCoverage && (
-                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
-                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Max Lot Coverage</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{lotCoverage}%</div>
-                  </div>
-                )}
-                {coverageUsed && (
-                  <div className="rounded-lg bg-[var(--bg-surface)] p-3">
-                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Current Coverage</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{coverageUsed}%</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
+        const np = report.numeric_params;
+        const da = report.density_analysis;
+        const maxHeight = np?.max_height_ft || 35;
+        if (lotWidth > 0 && lotDepth > 0) {
+          return (
+            <CollapsibleSection title="AI Architectural Render" defaultOpen={false}>
+              <BuildingRenderViewer
+                lotWidthFt={lotWidth}
+                lotDepthFt={lotDepth}
+                setbackFrontFt={setbackFront}
+                setbackSideFt={setbackSide}
+                setbackRearFt={setbackRear}
+                maxHeightFt={maxHeight}
+                maxStories={np?.max_stories ?? undefined}
+                propertyType={np?.property_type ?? undefined}
+                maxUnits={da?.max_units ?? undefined}
+                zoningDistrict={report.zoning_district}
+                municipality={report.municipality}
+              />
+            </CollapsibleSection>
+          );
+        }
+        return null;
       })()}
 
       {/* Property Intelligence — collapsible, default collapsed */}
@@ -481,13 +377,6 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           <UsesList title="Prohibited" uses={report.prohibited_uses} color="red" />
         </div>
       </CollapsibleSection>
-
-      {/* Property Record — collapsible, default collapsed */}
-      {report.property_record && (
-        <CollapsibleSection title="Property Record" defaultOpen={false}>
-          <PropertyCard record={report.property_record} />
-        </CollapsibleSection>
-      )}
 
       {/* Sources — collapsible */}
       {report.sources.length > 0 && (

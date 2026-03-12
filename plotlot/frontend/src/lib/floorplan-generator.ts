@@ -39,7 +39,12 @@ export type RoomType =
   | "stairwell"
   | "mechanical"
   | "lobby"
-  | "open_floor";
+  | "open_floor"
+  | "porch"
+  | "pantry"
+  | "walk_in_closet"
+  | "powder_room"
+  | "storage";
 
 export interface Room {
   name: string;
@@ -128,7 +133,6 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
   const stories = computeStories(input);
   const farLimit = input.far > 0 ? input.far * input.lotSizeSqft : Infinity;
   const totalFloorArea = Math.min(footprintSqft * stories, farLimit);
-  const floorArea = totalFloorArea / stories;
 
   const rooms: Room[] = [];
   const doors: Door[] = [];
@@ -137,64 +141,118 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
   // Room allocation percentages (of total floor area)
   const hasGarage = input.parkingPerUnit >= 1.5;
   const garageW = hasGarage ? clamp(width * 0.35, 16, 24) : 0;
-  const garageD = hasGarage ? clamp(depth * 0.3, 18, 24) : 0;
   const hasBed3 = totalFloorArea >= 1200;
 
   if (stories >= 2) {
     // ── Two-story layout ──
-    // Ground floor: garage, living, kitchen, dining, laundry, half bath, entry
-    const groundArea = floorArea;
+    // Ground floor: front porch, foyer, living, dining, kitchen, pantry,
+    //               laundry, powder room, garage, rear porch
+
+    const porchD = clamp(depth * 0.08, 6, 8);
+    const rearPorchD = clamp(depth * 0.08, 7, 8);
+    const innerDepth = depth - porchD - rearPorchD;
     const rightW = width - garageW;
 
-    // Garage (front-left)
+    // Front Porch (full width, at y=0)
+    rooms.push({
+      name: "Front Porch",
+      x: 0, y: 0,
+      width, depth: porchD,
+      floor: 1, type: "porch", isWetRoom: false,
+    });
+    doors.push({ x: width / 2, y: porchD, wall: "north", width: 3, isExterior: true });
+
+    // Garage (left, behind porch)
     if (hasGarage) {
+      const gD = clamp(innerDepth * 0.35, 18, 24);
       rooms.push({
         name: "2-Car Garage",
-        x: 0, y: 0,
-        width: garageW, depth: garageD,
+        x: 0, y: porchD,
+        width: garageW, depth: gD,
         floor: 1, type: "garage", isWetRoom: false,
       });
-      // Garage door
-      doors.push({ x: garageW / 2, y: 0, wall: "south", width: 16, isExterior: true });
+      doors.push({ x: garageW / 2, y: porchD, wall: "south", width: 16, isExterior: true });
+
+      // Storage in garage area
+      const storageW = clamp(garageW * 0.45, 7, 9);
+      const storageD = clamp(4, 4, 4);
+      rooms.push({
+        name: "Storage",
+        x: 0, y: porchD + gD,
+        width: storageW, depth: storageD,
+        floor: 1, type: "storage", isWetRoom: false,
+      });
+
+      // Laundry (behind garage, next to storage)
+      const laundryW = clamp(garageW - storageW, 5, 10);
+      const laundryD = storageD;
+      rooms.push({
+        name: "Laundry",
+        x: storageW, y: porchD + gD,
+        width: laundryW, depth: laundryD,
+        floor: 1, type: "laundry", isWetRoom: true,
+      });
     }
 
-    // Entry / Foyer (front-right)
+    // Entry / Foyer (behind porch, right of garage)
     const entryW = clamp(rightW * 0.3, 6, 10);
-    const entryD = clamp(depth * 0.15, 5, 8);
+    const entryD = clamp(innerDepth * 0.15, 5, 8);
     rooms.push({
-      name: "Entry",
-      x: garageW, y: 0,
+      name: "Foyer",
+      x: garageW, y: porchD,
       width: entryW, depth: entryD,
       floor: 1, type: "entry", isWetRoom: false,
     });
-    doors.push({ x: garageW + entryW / 2, y: 0, wall: "south", width: 3, isExterior: true });
 
-    // Living Room (front-right, next to entry)
+    // Powder Room (near entry)
+    const powderW = clamp(5, 5, 6);
+    const powderD = clamp(5, 5, 5);
+    rooms.push({
+      name: "Powder Room",
+      x: garageW, y: porchD + entryD,
+      width: powderW, depth: powderD,
+      floor: 1, type: "powder_room", isWetRoom: true,
+    });
+
+    // Living Room (front-right, next to foyer)
     const livingW = rightW - entryW;
-    const livingD = clamp(depth * 0.4, 12, 18);
+    const livingD = clamp(innerDepth * 0.4, 12, 18);
     rooms.push({
       name: "Living Room",
-      x: garageW + entryW, y: 0,
+      x: garageW + entryW, y: porchD,
       width: livingW, depth: livingD,
       floor: 1, type: "living", isWetRoom: false,
     });
-    windows.push({ x: garageW + entryW + livingW / 2, y: 0, wall: "south", width: 4 });
+    windows.push({ x: width, y: porchD + livingD / 2, wall: "east", width: 4 });
 
-    // Kitchen (back-left, behind garage)
+    // Kitchen (behind living/garage area)
     const kitchenW = clamp(width * 0.4, 10, 16);
-    const kitchenD = clamp(depth * 0.3, 10, 14);
-    const kitchenY = Math.max(garageD, livingD);
+    const kitchenY = porchD + Math.max(hasGarage ? clamp(innerDepth * 0.35, 18, 24) + 4 : entryD + powderD, livingD);
+    const kitchenD = clamp(innerDepth * 0.25, 10, 14);
+    const clampedKitchenD = Math.min(kitchenD, depth - rearPorchD - kitchenY);
     rooms.push({
       name: "Kitchen",
       x: 0, y: kitchenY,
-      width: kitchenW, depth: kitchenD,
+      width: kitchenW, depth: clampedKitchenD,
       floor: 1, type: "kitchen", isWetRoom: true,
     });
-    doors.push({ x: kitchenW, y: kitchenY + kitchenD / 2, wall: "east", width: 3, isExterior: false });
+    doors.push({ x: kitchenW, y: kitchenY + clampedKitchenD / 2, wall: "east", width: 3, isExterior: false });
 
-    // Dining (back-right, adjacent to kitchen)
+    // Pantry (adjacent to kitchen)
+    const pantryW = clamp(6, 4, 6);
+    const pantryD = clamp(4, 4, 4);
+    if (kitchenY + clampedKitchenD + pantryD <= depth - rearPorchD) {
+      rooms.push({
+        name: "Pantry",
+        x: 0, y: kitchenY + clampedKitchenD,
+        width: pantryW, depth: pantryD,
+        floor: 1, type: "pantry", isWetRoom: false,
+      });
+    }
+
+    // Dining (right of kitchen)
     const diningW = width - kitchenW;
-    const diningD = kitchenD;
+    const diningD = clampedKitchenD;
     rooms.push({
       name: "Dining",
       x: kitchenW, y: kitchenY,
@@ -202,32 +260,20 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       floor: 1, type: "dining", isWetRoom: false,
     });
 
-    // Laundry (behind garage, small)
-    const laundryW = clamp(garageW * 0.5, 5, 8);
-    const laundryD = clamp(depth * 0.1, 4, 6);
-    const laundryY = kitchenY + kitchenD;
-    if (laundryY + laundryD <= depth) {
-      rooms.push({
-        name: "Laundry",
-        x: 0, y: laundryY,
-        width: laundryW, depth: laundryD,
-        floor: 1, type: "laundry", isWetRoom: true,
-      });
-    }
-
-    // Half Bath (ground floor)
-    const halfBathW = clamp(width * 0.1, 4, 6);
-    const halfBathD = clamp(depth * 0.08, 4, 5);
+    // Rear Porch (full width, at the back)
     rooms.push({
-      name: "Half Bath",
-      x: laundryW, y: laundryY,
-      width: halfBathW, depth: halfBathD,
-      floor: 1, type: "bathroom", isWetRoom: true,
+      name: "Rear Porch",
+      x: 0, y: depth - rearPorchD,
+      width, depth: rearPorchD,
+      floor: 1, type: "porch", isWetRoom: false,
     });
+    windows.push({ x: width / 2, y: depth, wall: "north", width: 6 });
 
-    // Upper floor: master suite + bath, bedrooms, hall bath
+    // ── Upper floor ──
+    // Master suite, walk-in closet, master bath, bedroom 2, bedroom 3, hall bath
+
     const masterW = clamp(width * 0.45, 12, 18);
-    const masterD = clamp(depth * 0.45, 12, 16);
+    const masterD = clamp(depth * 0.4, 12, 16);
     rooms.push({
       name: "Master Suite",
       x: 0, y: 0,
@@ -235,19 +281,30 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       floor: 2, type: "bedroom", isWetRoom: false,
     });
     windows.push({ x: masterW / 2, y: 0, wall: "south", width: 4 });
+    windows.push({ x: 0, y: masterD / 2, wall: "west", width: 4 });
 
-    // Master Bath
-    const mbathW = clamp(masterW * 0.5, 6, 10);
-    const mbathD = clamp(depth * 0.15, 5, 8);
+    // Walk-in Closet (between master and master bath)
+    const wicW = clamp(8, 6, 10);
+    const wicD = clamp(6, 5, 8);
+    rooms.push({
+      name: "Walk-in Closet",
+      x: 0, y: masterD,
+      width: wicW, depth: wicD,
+      floor: 2, type: "walk_in_closet", isWetRoom: false,
+    });
+
+    // Master Bath (next to walk-in closet)
+    const mbathW = clamp(masterW - wicW, 6, 12);
+    const mbathD = wicD;
     rooms.push({
       name: "Master Bath",
-      x: 0, y: masterD,
+      x: wicW, y: masterD,
       width: mbathW, depth: mbathD,
       floor: 2, type: "bathroom", isWetRoom: true,
     });
-    doors.push({ x: mbathW / 2, y: masterD, wall: "north", width: 2.5, isExterior: false });
+    doors.push({ x: wicW, y: masterD + mbathD / 2, wall: "west", width: 2.5, isExterior: false });
 
-    // Bedroom 2
+    // Bedroom 2 (right side, front)
     const bed2W = width - masterW;
     const bed2D = clamp(depth * 0.4, 10, 14);
     rooms.push({
@@ -257,12 +314,13 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       floor: 2, type: "bedroom", isWetRoom: false,
     });
     windows.push({ x: masterW + bed2W / 2, y: 0, wall: "south", width: 3 });
+    windows.push({ x: width, y: bed2D / 2, wall: "east", width: 3 });
     doors.push({ x: masterW, y: bed2D / 2, wall: "west", width: 2.5, isExterior: false });
 
     // Bedroom 3 (if area allows)
     if (hasBed3) {
       const bed3W = width - masterW;
-      const bed3D = clamp(depth * 0.35, 10, 12);
+      const bed3D = clamp(depth * 0.3, 10, 12);
       const bed3Y = bed2D;
       if (bed3Y + bed3D <= depth) {
         rooms.push({
@@ -275,7 +333,7 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       }
     }
 
-    // Hall Bath (upper)
+    // Hall Bath (upper, back-right)
     const hbathW = clamp(width * 0.15, 5, 8);
     const hbathD = clamp(depth * 0.12, 5, 7);
     rooms.push({
@@ -290,40 +348,84 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
     windows.push({ x: width * 0.75, y: depth, wall: "north", width: 3 });
   } else {
     // ── Single-story layout ──
-    // 2-column grid: left column, right column
+    // Room adjacency flow with front/rear porches and proper room relationships
+
+    const porchD = clamp(depth * 0.07, 6, 8);
+    const rearPorchD = clamp(depth * 0.07, 7, 8);
+    const innerDepth = depth - porchD - rearPorchD;
 
     const leftColW = hasGarage ? clamp(width * 0.4, 16, 24) : clamp(width * 0.45, 12, 20);
     const rightColW = width - leftColW;
 
-    let leftY = 0;
-    let rightY = 0;
+    // ── Front Porch (full width, at y=0) ──
+    rooms.push({
+      name: "Front Porch",
+      x: 0, y: 0,
+      width, depth: porchD,
+      floor: 1, type: "porch", isWetRoom: false,
+    });
 
-    // Garage (front-left)
+    let leftY = porchD;
+    let rightY = porchD;
+
+    // Garage (front-left, behind porch)
     if (hasGarage) {
-      const gD = clamp(depth * 0.3, 18, 22);
+      const gD = clamp(innerDepth * 0.33, 18, 22);
       rooms.push({
         name: "2-Car Garage",
-        x: 0, y: 0,
+        x: 0, y: porchD,
         width: leftColW, depth: gD,
         floor: 1, type: "garage", isWetRoom: false,
       });
-      doors.push({ x: leftColW / 2, y: 0, wall: "south", width: 16, isExterior: true });
-      leftY = gD;
+      doors.push({ x: leftColW / 2, y: porchD, wall: "south", width: 16, isExterior: true });
+      leftY = porchD + gD;
+
+      // Storage room in garage area
+      const storageW = clamp(9, 7, 9);
+      const storageD = clamp(4, 4, 4);
+      rooms.push({
+        name: "Storage",
+        x: 0, y: leftY,
+        width: storageW, depth: storageD,
+        floor: 1, type: "storage", isWetRoom: false,
+      });
+
+      // Laundry (next to storage, behind garage)
+      const laundryW = clamp(leftColW - storageW, 5, 10);
+      rooms.push({
+        name: "Laundry",
+        x: storageW, y: leftY,
+        width: laundryW, depth: storageD,
+        floor: 1, type: "laundry", isWetRoom: true,
+      });
+      leftY += storageD;
     }
 
-    // Entry (front-right)
-    const entryD = clamp(depth * 0.1, 4, 6);
+    // Entry / Foyer (behind porch, right column, centered)
+    const entryW = clamp(rightColW * 0.5, 6, 12);
+    const entryD = clamp(innerDepth * 0.1, 4, 6);
     rooms.push({
-      name: "Entry",
-      x: leftColW, y: 0,
-      width: rightColW, depth: entryD,
+      name: "Foyer",
+      x: leftColW, y: porchD,
+      width: entryW, depth: entryD,
       floor: 1, type: "entry", isWetRoom: false,
     });
-    doors.push({ x: leftColW + rightColW / 2, y: 0, wall: "south", width: 3, isExterior: true });
-    rightY = entryD;
+    doors.push({ x: leftColW + entryW / 2, y: porchD, wall: "south", width: 3, isExterior: true });
+
+    // Powder Room (near entry, right of foyer)
+    const powderW = clamp(5, 5, 6);
+    const powderD = clamp(5, 5, 5);
+    rooms.push({
+      name: "Powder Room",
+      x: leftColW + entryW, y: porchD,
+      width: powderW, depth: powderD,
+      floor: 1, type: "powder_room", isWetRoom: true,
+    });
+
+    rightY = porchD + entryD;
 
     // Living Room (right, below entry)
-    const livingD = clamp(depth * 0.3, 12, 16);
+    const livingD = clamp(innerDepth * 0.3, 12, 16);
     rooms.push({
       name: "Living Room",
       x: leftColW, y: rightY,
@@ -333,8 +435,8 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
     windows.push({ x: leftColW + rightColW, y: rightY + livingD / 2, wall: "east", width: 4 });
     rightY += livingD;
 
-    // Kitchen (left, below garage)
-    const kitchenD = clamp(depth * 0.22, 10, 14);
+    // Kitchen (left, below garage/laundry area)
+    const kitchenD = clamp(innerDepth * 0.22, 10, 14);
     rooms.push({
       name: "Kitchen",
       x: 0, y: leftY,
@@ -342,10 +444,20 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       floor: 1, type: "kitchen", isWetRoom: true,
     });
     doors.push({ x: leftColW, y: leftY + kitchenD / 2, wall: "east", width: 3, isExterior: false });
-    leftY += kitchenD;
+
+    // Pantry (adjacent to kitchen)
+    const pantryW = clamp(6, 4, 6);
+    const pantryD = clamp(4, 4, 4);
+    rooms.push({
+      name: "Pantry",
+      x: 0, y: leftY + kitchenD,
+      width: pantryW, depth: pantryD,
+      floor: 1, type: "pantry", isWetRoom: false,
+    });
+    leftY += kitchenD + pantryD;
 
     // Dining (right, below living)
-    const diningD = clamp(depth * 0.15, 8, 12);
+    const diningD = clamp(innerDepth * 0.15, 8, 12);
     rooms.push({
       name: "Dining",
       x: leftColW, y: rightY,
@@ -354,39 +466,46 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
     });
     rightY += diningD;
 
-    // Laundry (left, small)
-    const laundryD = clamp(depth * 0.08, 4, 6);
-    rooms.push({
-      name: "Laundry",
-      x: 0, y: leftY,
-      width: clamp(leftColW * 0.5, 5, 8), depth: laundryD,
-      floor: 1, type: "laundry", isWetRoom: true,
-    });
-    leftY += laundryD;
-
     // Master Suite (back-left)
-    const masterD = clamp(depth - leftY, 12, 18);
+    const masterD = clamp(depth - rearPorchD - leftY, 12, 18);
+    const masterW = leftColW;
     rooms.push({
       name: "Master Suite",
       x: 0, y: leftY,
-      width: leftColW, depth: masterD,
+      width: masterW, depth: masterD,
       floor: 1, type: "bedroom", isWetRoom: false,
     });
     windows.push({ x: 0, y: leftY + masterD / 2, wall: "west", width: 4 });
     doors.push({ x: leftColW, y: leftY + masterD / 2, wall: "east", width: 2.5, isExterior: false });
 
-    // Master Bath (inline)
-    const mbathW = clamp(leftColW * 0.4, 6, 10);
-    const mbathD = clamp(masterD * 0.35, 5, 8);
-    rooms.push({
-      name: "Master Bath",
-      x: 0, y: leftY + masterD,
-      width: mbathW, depth: mbathD,
-      floor: 1, type: "bathroom", isWetRoom: true,
-    });
+    // Walk-in Closet (between master and master bath)
+    const wicW = clamp(8, 6, 10);
+    const wicD = clamp(6, 5, 8);
+    const wicY = leftY + masterD;
+    const wicFits = wicY + wicD <= depth - rearPorchD;
+    if (wicFits) {
+      rooms.push({
+        name: "Walk-in Closet",
+        x: 0, y: wicY,
+        width: wicW, depth: wicD,
+        floor: 1, type: "walk_in_closet", isWetRoom: false,
+      });
+    }
+
+    // Master Bath (next to walk-in closet)
+    const mbathW = clamp(masterW - wicW, 6, 10);
+    const mbathD = wicD;
+    if (wicFits) {
+      rooms.push({
+        name: "Master Bath",
+        x: wicW, y: wicY,
+        width: mbathW, depth: mbathD,
+        floor: 1, type: "bathroom", isWetRoom: true,
+      });
+    }
 
     // Bedroom 2 (back-right)
-    const bed2D = clamp(depth - rightY, 10, 16);
+    const bed2D = clamp(depth - rearPorchD - rightY, 10, 16);
     const hallBathW = clamp(rightColW * 0.35, 5, 8);
     const bed2W = rightColW - hallBathW;
     rooms.push({
@@ -395,7 +514,7 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
       width: bed2W, depth: bed2D,
       floor: 1, type: "bedroom", isWetRoom: false,
     });
-    windows.push({ x: leftColW + bed2W / 2, y: depth, wall: "north", width: 3 });
+    windows.push({ x: leftColW + bed2W / 2, y: depth - rearPorchD, wall: "north", width: 3 });
     doors.push({ x: leftColW, y: rightY + bed2D / 2, wall: "west", width: 2.5, isExterior: false });
 
     // Hall Bath (back-right corner)
@@ -408,17 +527,29 @@ function generateSingleFamily(input: FloorPlanInput): FloorPlanLayout {
     });
 
     // Bedroom 3 (if area allows)
-    if (hasBed3 && rightY + bed2D + 10 <= depth) {
-      rooms.push({
-        name: "Bedroom 3",
-        x: leftColW + bed2W, y: rightY + hbathD,
-        width: hallBathW, depth: bed2D - hbathD,
-        floor: 1, type: "bedroom", isWetRoom: false,
-      });
+    if (hasBed3) {
+      const bed3Remaining = bed2D - hbathD;
+      if (bed3Remaining >= 8) {
+        rooms.push({
+          name: "Bedroom 3",
+          x: leftColW + bed2W, y: rightY + hbathD,
+          width: hallBathW, depth: bed3Remaining,
+          floor: 1, type: "bedroom", isWetRoom: false,
+        });
+      }
     }
+
+    // ── Rear Porch (full width, at the back) ──
+    rooms.push({
+      name: "Rear Porch",
+      x: 0, y: depth - rearPorchD,
+      width, depth: rearPorchD,
+      floor: 1, type: "porch", isWetRoom: false,
+    });
 
     // Back wall windows
     windows.push({ x: width * 0.25, y: depth, wall: "north", width: 3 });
+    windows.push({ x: width * 0.75, y: depth, wall: "north", width: 3 });
   }
 
   // Compliance

@@ -68,10 +68,10 @@ function extractAddress(text: string): string | null {
 // ---------------------------------------------------------------------------
 
 const WELCOME_SUGGESTIONS = [
-  { label: "Analyze a property in Miami Gardens", icon: "\u{1F3E0}" },
-  { label: "Find vacant lots in Miami-Dade", icon: "\u{1F4CA}" },
-  { label: "Zoning rules in Miramar", icon: "\u{1F4CB}" },
-  { label: "What can I build on my lot?", icon: "\u{1F3D7}\uFE0F" },
+  { label: "Analyze a property in Miami Gardens", icon: "\u{1F3E0}", type: "prompt" as const },
+  { label: "Find vacant lots in Miami-Dade", icon: "\u{1F4CA}", type: "chat" as const },
+  { label: "Zoning rules in Miramar", icon: "\u{1F4CB}", type: "chat" as const },
+  { label: "What can I build on my lot?", icon: "\u{1F3D7}\uFE0F", type: "chat" as const },
 ];
 
 const FOLLOWUP_SUGGESTIONS = [
@@ -183,18 +183,9 @@ export default function Home() {
         );
 
         if (finalReport) {
-          const r = finalReport as ZoningReportData;
-          const summary = [];
-          summary.push(`**${r.zoning_district}** — ${r.zoning_description} in ${r.municipality}, ${r.county} County.`);
-          if (r.density_analysis) {
-            summary.push(`Max **${r.density_analysis.max_units} unit(s)** (governed by ${r.density_analysis.governing_constraint}).`);
-          }
-          if (r.summary) summary.push(r.summary);
-          summary.push("\nAsk me anything about this property's zoning.");
-
           addMessage({
             role: "assistant",
-            content: summary.join(" "),
+            content: "Here's the full zoning analysis. Ask me anything about this property.",
           });
         }
       } catch (err) {
@@ -398,7 +389,14 @@ export default function Home() {
           {WELCOME_SUGGESTIONS.map((s) => (
             <button
               key={s.label}
-              onClick={() => sendMessage(s.label)}
+              onClick={() => {
+                if (s.type === "prompt") {
+                  setInput("Miami Gardens, FL ");
+                  inputRef.current?.focus();
+                } else {
+                  sendMessage(s.label);
+                }
+              }}
               disabled={isProcessing}
               className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:py-2.5 sm:text-sm"
             >
