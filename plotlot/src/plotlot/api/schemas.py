@@ -105,6 +105,15 @@ class PropertyRecordResponse(BaseModel):
     zoning_layer_url: str = ""
 
 
+class SourceRefResponse(BaseModel):
+    """A source ordinance chunk backing an extracted value."""
+
+    section: str = ""
+    section_title: str = ""
+    chunk_text_preview: str = ""
+    score: float = 0.0
+
+
 class ZoningReportResponse(BaseModel):
     """Full zoning analysis response."""
 
@@ -139,6 +148,9 @@ class ZoningReportResponse(BaseModel):
     summary: str = ""
     sources: list[str] = []
     confidence: str = ""
+
+    # Inline citations — source ordinance chunks backing extracted values
+    source_refs: list[SourceRefResponse] = []
 
     # Progressive autonomy metadata (Klarna confidence-gated pattern)
     confidence_warning: str = ""

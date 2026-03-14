@@ -322,6 +322,9 @@ class PropertyRecord:
     # Parcel boundary polygon — [[lng, lat], ...] in WGS84
     parcel_geometry: list[list[float]] | None = None
 
+    # Dynamic zoning layer URL (discovered via ArcGIS Hub)
+    zoning_layer_url: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Numeric zoning parameters (extracted by LLM for calculation)
@@ -395,6 +398,20 @@ class Setbacks:
 
 
 @dataclass
+class SourceRef:
+    """A reference to a source ordinance chunk backing an extracted value.
+
+    Links extracted zoning parameters back to the specific ordinance text
+    they came from — enables inline citations in the frontend (Perplexity-style).
+    """
+
+    section: str = ""
+    section_title: str = ""
+    chunk_text_preview: str = ""  # First 200 chars of the source chunk
+    score: float = 0.0
+
+
+@dataclass
 class ZoningReport:
     """Structured zoning analysis for a property address.
 
@@ -436,7 +453,74 @@ class ZoningReport:
     numeric_params: NumericZoningParams | None = None
     density_analysis: DensityAnalysis | None = None
 
+    # Comparable sales + pro forma
+    comp_analysis: "CompAnalysis | None" = None
+    pro_forma: "LandProForma | None" = None
+
     # Summary
     summary: str = ""
     sources: list[str] = field(default_factory=list)
     confidence: str = ""  # "high", "medium", "low"
+
+    # Inline citations — maps extracted values back to source ordinance chunks
+    source_refs: list[SourceRef] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Comparable sales types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ComparableSale:
+    """A single comparable land sale from county property appraiser data."""
+
+    address: str = ""
+    sale_price: float = 0.0
+    sale_date: str = ""
+    lot_size_sqft: float = 0.0
+    zoning_code: str = ""
+    distance_miles: float = 0.0
+    price_per_acre: float = 0.0
+    price_per_unit: float | None = None
+    adjustments: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class CompAnalysis:
+    """Comparable sales analysis results."""
+
+    comparables: list[ComparableSale] = field(default_factory=list)
+    median_price_per_acre: float = 0.0
+    estimated_land_value: float = 0.0
+    adv_per_unit: float | None = None
+    confidence: float = 0.0  # 0.0-1.0 based on comp count and recency
+    notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Land deal pro forma (residual land valuation)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LandProForma:
+    """Residual land valuation for land deal intelligence.
+
+    GDV = Max Units × ADV per Unit
+    Max Land Price = GDV - Hard Costs - Soft Costs - Builder Margin
+    """
+
+    gross_development_value: float = 0.0
+    hard_costs: float = 0.0
+    soft_costs: float = 0.0
+    builder_margin: float = 0.0
+    max_land_price: float = 0.0
+    cost_per_door: float = 0.0
+    construction_cost_psf: float = 175.0
+    avg_unit_size_sqft: float = 1000.0
+    adv_per_unit: float = 0.0
+    max_units: int = 0
+    soft_cost_pct: float = 20.0
+    builder_margin_pct: float = 25.0
+    notes: list[str] = field(default_factory=list)

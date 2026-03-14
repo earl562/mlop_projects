@@ -140,6 +140,13 @@ export interface LandProFormaData {
   notes: string[];
 }
 
+export interface SourceRefData {
+  section: string;
+  section_title: string;
+  chunk_text_preview: string;
+  score: number;
+}
+
 export interface ZoningReportData {
   address: string;
   formatted_address: string;
@@ -167,6 +174,7 @@ export interface ZoningReportData {
   summary: string;
   sources: string[];
   confidence: string;
+  source_refs?: SourceRefData[];
   confidence_warning?: string;
   suggested_next_steps?: string[];
 }
