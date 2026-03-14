@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useMapsLibrary } from "@vis.gl/react-google-maps";
 
-const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface AddressAutocompleteProps {
   value: string;
@@ -14,32 +15,10 @@ interface AddressAutocompleteProps {
 }
 
 interface Suggestion {
-  placeId: string;
+  id: string;
   mainText: string;
   secondaryText: string;
   fullText: string;
-}
-
-/** Load Google Maps script once, return a promise that resolves when ready. */
-let _loadPromise: Promise<void> | null = null;
-function loadGoogleMaps(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (window.google?.maps?.places) return Promise.resolve();
-  if (_loadPromise) return _loadPromise;
-
-  _loadPromise = new Promise((resolve, reject) => {
-    if (!MAPS_KEY) {
-      reject(new Error("NEXT_PUBLIC_GOOGLE_MAPS_KEY not set"));
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
-  return _loadPromise;
 }
 
 export default function AddressAutocomplete({
@@ -54,24 +33,20 @@ export default function AddressAutocomplete({
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isSearching, setIsSearching] = useState(false);
-  const [mapsReady, setMapsReady] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const serviceRef = useRef<google.maps.places.AutocompleteService | null>(null);
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
 
-  // Load Google Maps on mount
+  // Load Places library via @vis.gl/react-google-maps hook
+  const places = useMapsLibrary("places");
+
+  // Initialize AutocompleteService when Places library is ready
   useEffect(() => {
-    loadGoogleMaps()
-      .then(() => {
-        serviceRef.current = new google.maps.places.AutocompleteService();
-        sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-        setMapsReady(true);
-      })
-      .catch(() => {
-        // Google Maps unavailable — autocomplete will be disabled
-      });
-  }, []);
+    if (!places) return;
+    serviceRef.current = new places.AutocompleteService();
+    sessionTokenRef.current = new places.AutocompleteSessionToken();
+  }, [places]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -84,46 +59,83 @@ export default function AddressAutocomplete({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Geocodio fallback when Google Places is unavailable
+  const fetchGeocodioSuggestions = useCallback(async (query: string) => {
+    try {
+      const resp = await fetch(
+        `${API_URL}/api/v1/autocomplete?q=${encodeURIComponent(query)}`,
+      );
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return (data.suggestions || []).map(
+        (s: { address: string; street: string; city: string; state: string; zip: string }, i: number) => ({
+          id: `geo-${i}`,
+          mainText: s.street || s.address,
+          secondaryText: [s.city, s.state, s.zip].filter(Boolean).join(", "),
+          fullText: s.address,
+        }),
+      );
+    } catch {
+      return [];
+    }
+  }, []);
+
   const fetchSuggestions = useCallback(
-    (query: string) => {
-      if (query.length < 3 || !serviceRef.current || !mapsReady) {
+    async (query: string) => {
+      if (query.length < 3) {
         setSuggestions([]);
         setShowDropdown(false);
         return;
       }
 
       setIsSearching(true);
-      serviceRef.current.getPlacePredictions(
-        {
-          input: query,
-          types: ["address"],
-          componentRestrictions: { country: "us" },
-          sessionToken: sessionTokenRef.current!,
-        },
-        (predictions, status) => {
-          setIsSearching(false);
-          if (
-            status !== google.maps.places.PlacesServiceStatus.OK ||
-            !predictions
-          ) {
-            setSuggestions([]);
-            setShowDropdown(false);
-            return;
-          }
 
-          const results: Suggestion[] = predictions.map((p) => ({
-            placeId: p.place_id,
-            mainText: p.structured_formatting.main_text,
-            secondaryText: p.structured_formatting.secondary_text,
-            fullText: p.description,
-          }));
-          setSuggestions(results);
-          setShowDropdown(results.length > 0);
-          setSelectedIndex(-1);
-        },
-      );
+      // Try Google Places first
+      if (serviceRef.current && sessionTokenRef.current) {
+        serviceRef.current.getPlacePredictions(
+          {
+            input: query,
+            types: ["address"],
+            componentRestrictions: { country: "us" },
+            sessionToken: sessionTokenRef.current,
+          },
+          (predictions, status) => {
+            setIsSearching(false);
+            if (
+              status === google.maps.places.PlacesServiceStatus.OK &&
+              predictions &&
+              predictions.length > 0
+            ) {
+              const results: Suggestion[] = predictions.map((p) => ({
+                id: p.place_id,
+                mainText: p.structured_formatting.main_text,
+                secondaryText: p.structured_formatting.secondary_text,
+                fullText: p.description,
+              }));
+              setSuggestions(results);
+              setShowDropdown(true);
+              setSelectedIndex(-1);
+              return;
+            }
+            // Google failed — fall through to Geocodio
+            fetchGeocodioSuggestions(query).then((results) => {
+              setSuggestions(results);
+              setShowDropdown(results.length > 0);
+              setSelectedIndex(-1);
+            });
+          },
+        );
+        return;
+      }
+
+      // No Google Places available — use Geocodio
+      const results = await fetchGeocodioSuggestions(query);
+      setSuggestions(results);
+      setShowDropdown(results.length > 0);
+      setSelectedIndex(-1);
+      setIsSearching(false);
     },
-    [mapsReady],
+    [fetchGeocodioSuggestions],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,7 +151,9 @@ export default function AddressAutocomplete({
     setSuggestions([]);
     setShowDropdown(false);
     // Reset session token after selection (Google billing optimization)
-    sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+    if (places) {
+      sessionTokenRef.current = new places.AutocompleteSessionToken();
+    }
     onSelect(suggestion.fullText);
   };
 
@@ -210,7 +224,7 @@ export default function AddressAutocomplete({
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
           {suggestions.map((s, index) => (
             <button
-              key={s.placeId}
+              key={s.id}
               onClick={() => handleSelect(s)}
               className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors ${
                 index === selectedIndex
@@ -236,14 +250,12 @@ export default function AddressAutocomplete({
               </div>
             </button>
           ))}
-          {/* Google attribution (required by TOS) */}
-          <div className="flex justify-end border-t border-[var(--border)] px-3 py-1.5">
-            <img
-              src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3_hdpi.png"
-              alt="Powered by Google"
-              className="h-4 dark:invert"
-            />
-          </div>
+          {/* Google attribution (required by TOS when using Places API) */}
+          {serviceRef.current && (
+            <div className="flex justify-end border-t border-[var(--border)] px-3 py-1.5">
+              <span className="text-[9px] text-stone-400">Powered by Google</span>
+            </div>
+          )}
         </div>
       )}
     </div>
