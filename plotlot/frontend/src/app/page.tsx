@@ -4,13 +4,24 @@ import { useState, useRef, useEffect, useCallback, FormEvent, useId } from "reac
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ZoningReport from "@/components/ZoningReport";
+import TabbedReport from "@/components/TabbedReport";
+import DealTypeSelector from "@/components/DealTypeSelector";
+import type { DealType } from "@/components/DealTypeSelector";
+import PipelineApproval from "@/components/PipelineApproval";
 import AnalysisStream from "@/components/AnalysisStream";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+import ModeToggle from "@/components/ModeToggle";
+import type { AppMode } from "@/components/ModeToggle";
+import CapabilityChips from "@/components/CapabilityChips";
+import ToolCards from "@/components/ToolCards";
+import DocumentCanvas from "@/components/DocumentCanvas";
+import InputBar from "@/components/InputBar";
 import {
   PipelineStatus,
   ZoningReportData,
   ChatMessageData,
   ToolUseEvent,
+  ThinkingEvent,
   streamAnalysis,
   streamChat,
   saveAnalysis,
@@ -32,6 +43,7 @@ interface DisplayMessage {
   content: string;
   isStreaming?: boolean;
   pipelineSteps?: PipelineStatus[];
+  thinkingEvents?: ThinkingEvent[];
   report?: ZoningReportData;
   saveStatus?: "idle" | "saving" | "saved" | "error";
   toolActivity?: ToolActivity[];
@@ -56,9 +68,11 @@ function extractAddress(text: string): string | null {
     return text.trim();
   }
   if (/\b(analyze|look up|lookup|check|search|zoning (?:for|rules|regulations|code)|what can .* build)\b/i.test(text) && FL_PATTERNS.test(text)) {
+    // Only extract if there's an actual street address (starts with a number)
     const match = text.match(/\d+\s+[\w\s]+(?:,\s*[\w\s]+){0,3}/);
     if (match) return match[0].trim();
-    return text.replace(/^.*?(analyze|look up|lookup|check|search|zoning (?:for|rules|regulations|code))\s*/i, "").trim();
+    // No street address found — route to chat instead
+    return null;
   }
   return null;
 }
@@ -66,13 +80,6 @@ function extractAddress(text: string): string | null {
 // ---------------------------------------------------------------------------
 // Suggestions
 // ---------------------------------------------------------------------------
-
-const WELCOME_SUGGESTIONS = [
-  { label: "Analyze a property in Miami Gardens", icon: "\u{1F3E0}", type: "prompt" as const },
-  { label: "Find vacant lots in Miami-Dade", icon: "\u{1F4CA}", type: "chat" as const },
-  { label: "Zoning rules in Miramar", icon: "\u{1F4CB}", type: "chat" as const },
-  { label: "What can I build on my lot?", icon: "\u{1F3D7}\uFE0F", type: "chat" as const },
-];
 
 const FOLLOWUP_SUGGESTIONS = [
   "What can I build on this lot?",
@@ -86,11 +93,17 @@ const FOLLOWUP_SUGGESTIONS = [
 // ---------------------------------------------------------------------------
 
 export default function Home() {
+  const [mode, setMode] = useState<AppMode>("lookup");
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentReport, setCurrentReport] = useState<ZoningReportData | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Lookup mode: deal type flow
+  const [pendingAddress, setPendingAddress] = useState<string | null>(null);
+  const [selectedDealType, setSelectedDealType] = useState<DealType | null>(null);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const [docCanvasOpen, setDocCanvasOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idPrefix = useId();
@@ -120,7 +133,7 @@ export default function Home() {
 
   // Run the full analysis pipeline
   const runAnalysis = useCallback(
-    async (address: string) => {
+    async (address: string, skipSteps: string[] = []) => {
       const progressId = addMessage({
         role: "system",
         content: "",
@@ -128,13 +141,18 @@ export default function Home() {
           step: "connecting",
           message: "Connecting to server...",
         }],
+        thinkingEvents: [],
       });
 
       try {
         let finalReport: ZoningReportData | null = null;
 
         await streamAnalysis(
-          address,
+          {
+            address,
+            dealType: selectedDealType || "land_deal",
+            skipSteps,
+          },
           (status) => {
             setMessages((prev) =>
               prev.map((m) => {
@@ -180,6 +198,17 @@ export default function Home() {
               retryAddress: address,
             } as Partial<DisplayMessage>);
           },
+          (thinkingEvent) => {
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== progressId) return m;
+                return {
+                  ...m,
+                  thinkingEvents: [...(m.thinkingEvents || []), thinkingEvent],
+                };
+              }),
+            );
+          },
         );
 
         if (finalReport) {
@@ -196,7 +225,7 @@ export default function Home() {
         });
       }
     },
-    [addMessage, updateMessage],
+    [addMessage, updateMessage, selectedDealType],
   );
 
   // Send a chat message
@@ -209,12 +238,32 @@ export default function Home() {
       addMessage({ role: "user", content: text.trim() });
 
       const address = extractAddress(text);
+
+      // Lookup mode: address → deal type selector → pipeline
+      if (mode === "lookup" && address) {
+        setPendingAddress(address);
+        setSelectedDealType(null);
+        setCurrentReport(null);
+        setIsProcessing(false);
+        return;
+      }
+
+      // Lookup mode: no address found — prompt for one
+      if (mode === "lookup" && !address) {
+        addMessage({
+          role: "assistant",
+          content: "I need a property address to run a lookup analysis. Please enter a full US address (e.g., **7940 Plantation Blvd, Miramar, FL 33023**).\n\nSwitch to **Agent** mode if you'd like to have a conversation about zoning or real estate.",
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Agent mode: address detected — run pipeline directly
       if (address && !currentReport) {
         await runAnalysis(address);
         setIsProcessing(false);
         return;
       }
-
       if (address && currentReport) {
         setCurrentReport(null);
         await runAnalysis(address);
@@ -222,7 +271,7 @@ export default function Home() {
         return;
       }
 
-      // Regular chat
+      // Regular chat (agent mode only)
       const assistantId = addMessage({
         role: "assistant",
         content: "",
@@ -298,7 +347,7 @@ export default function Home() {
 
       setIsProcessing(false);
     },
-    [messages, isProcessing, currentReport, sessionId, addMessage, updateMessage, runAnalysis],
+    [messages, isProcessing, currentReport, sessionId, mode, addMessage, updateMessage, runAnalysis],
   );
 
   const handleSave = useCallback(
@@ -321,19 +370,56 @@ export default function Home() {
 
   const hasReport = messages.some((m) => m.report);
 
+  // Handle deal type selection in lookup mode — show pipeline approval
+  const handleDealTypeSelect = useCallback(
+    (dealType: DealType) => {
+      if (!pendingAddress) return;
+      setSelectedDealType(dealType);
+      setAwaitingApproval(true);
+    },
+    [pendingAddress],
+  );
+
+  // Handle pipeline approval — run with selected skip steps
+  const handlePipelineApprove = useCallback(
+    async (skipSteps: string[]) => {
+      if (!pendingAddress) return;
+      const address = pendingAddress;
+      setAwaitingApproval(false);
+      setPendingAddress(null);
+      setIsProcessing(true);
+      try {
+        await runAnalysis(address, skipSteps);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [pendingAddress, runAnalysis],
+  );
+
+  const handlePipelineCancel = useCallback(() => {
+    setAwaitingApproval(false);
+    setSelectedDealType(null);
+  }, []);
+
   const handleNewAnalysis = useCallback(() => {
     setMessages([]);
     setCurrentReport(null);
     setSessionId(null);
+    setPendingAddress(null);
+    setSelectedDealType(null);
+    setAwaitingApproval(false);
     setInput("");
     setIsProcessing(false);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // ─── Welcome State ────────────────────────────────────────────────────
+  // Mode toggle is now the imported ModeToggle component
+
+  // ─── Welcome State (both modes) ────────────────────────────────────
   if (isWelcome) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 sm:px-6">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center px-4 pt-[15vh] sm:px-6">
         {/* Greeting */}
         <div className="mb-10 text-center animate-fade-up sm:mb-14">
           <div className="mb-4 flex items-center justify-center gap-2 animate-fade-up delay-1">
@@ -343,15 +429,15 @@ export default function Home() {
             <span className="text-sm tracking-wide text-[var(--text-muted)]">Hi there</span>
           </div>
           <h1 className="font-display text-4xl leading-tight text-[var(--text-primary)] animate-fade-up delay-2 sm:text-6xl sm:leading-[1.1]">
-            Analyze any property<br className="hidden sm:block" /> in South Florida
+            Analyze any property<br className="hidden sm:block" /> in the US
           </h1>
           <p className="mt-4 text-sm text-[var(--text-muted)] animate-fade-up delay-3 sm:text-base">
-            Zoning codes, density limits, and development potential — in seconds
+            Zoning, density, comps, pro forma, and development potential — in seconds
           </p>
         </div>
 
-        {/* Input bar */}
-        <form onSubmit={handleSubmit} className="mb-6 w-full max-w-xl animate-fade-up delay-3 sm:mb-8">
+        {/* Input bar — z-30 so autocomplete dropdown (z-50 inside) paints above chips below */}
+        <form onSubmit={handleSubmit} className="relative z-30 mb-6 w-full max-w-xl animate-fade-up delay-3 sm:mb-8">
           <div
             className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-3.5"
             style={{ boxShadow: "var(--shadow-elevated)" }}
@@ -361,9 +447,10 @@ export default function Home() {
               value={input}
               onChange={setInput}
               onSelect={(address) => sendMessage(address)}
-              placeholder="Enter an address or ask a question..."
+              placeholder={mode === "lookup" ? "Enter a property address..." : "Enter an address or ask a question..."}
               disabled={isProcessing}
             />
+            <ModeToggle mode={mode} onChange={setMode} />
             <button
               type="submit"
               disabled={!input.trim() || isProcessing}
@@ -384,31 +471,24 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Suggestion chips */}
-        <div className="grid w-full max-w-xl grid-cols-2 gap-2 animate-fade-up delay-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-2.5">
-          {WELCOME_SUGGESTIONS.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => {
-                if (s.type === "prompt") {
-                  setInput("Miami Gardens, FL ");
-                  inputRef.current?.focus();
-                } else {
-                  sendMessage(s.label);
-                }
-              }}
+        {/* Capability chips / Tool cards — z-0 so autocomplete dropdown from form above paints on top */}
+        <div className="relative z-0 min-h-[72px] w-full max-w-xl animate-fade-up delay-4">
+          {mode === "lookup" ? (
+            <CapabilityChips mode={mode} onSelect={sendMessage} disabled={isProcessing} />
+          ) : (
+            <ToolCards
+              onAnalyze={() => inputRef.current?.focus()}
+              onGenerateDoc={() => setDocCanvasOpen(true)}
+              onSendPrompt={sendMessage}
               disabled={isProcessing}
-              className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:py-2.5 sm:text-sm"
-            >
-              <span className="mr-1.5">{s.icon}</span>
-              {s.label}
-            </button>
-          ))}
+              hasReport={!!currentReport}
+            />
+          )}
         </div>
 
         {/* Footer */}
         <p className="mt-16 text-center text-xs text-[var(--text-muted)] animate-fade-in delay-4">
-          PlotLot covers 104 municipalities across Miami-Dade, Broward &amp; Palm Beach counties
+          PlotLot analyzes zoning, density, comps &amp; pro forma for any US property
         </p>
       </div>
     );
@@ -441,26 +521,35 @@ export default function Home() {
                   <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
                     P
                   </div>
-                  <AnalysisStream steps={msg.pipelineSteps} error={null} onWrongProperty={handleNewAnalysis} />
+                  <AnalysisStream
+                    steps={msg.pipelineSteps}
+                    error={null}
+                    onWrongProperty={handleNewAnalysis}
+                    thinkingEvents={msg.thinkingEvents}
+                  />
                 </div>
               )}
 
-              {/* Embedded report */}
+              {/* Embedded report — TabbedReport for lookup mode, ZoningReport for agent */}
               {msg.report && (
                 <div className="space-y-3 animate-fade-up">
-                  <ZoningReport report={msg.report} />
+                  {selectedDealType ? (
+                    <TabbedReport report={msg.report} dealType={selectedDealType} />
+                  ) : (
+                    <ZoningReport report={msg.report} />
+                  )}
                   {msg.report.confidence_warning && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
                       <div className="flex items-start gap-3">
                         <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                         </svg>
                         <div>
-                          <p className="text-sm font-medium text-amber-800">{msg.report.confidence_warning}</p>
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-400">{msg.report.confidence_warning}</p>
                           {msg.report.suggested_next_steps && msg.report.suggested_next_steps.length > 0 && (
                             <ul className="mt-1.5 space-y-1">
                               {msg.report.suggested_next_steps.map((step, i) => (
-                                <li key={i} className="text-xs text-amber-700">&#8226; {step}</li>
+                                <li key={i} className="text-xs text-amber-700 dark:text-amber-500">&#8226; {step}</li>
                               ))}
                             </ul>
                           )}
@@ -468,7 +557,13 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setDocCanvasOpen(true)}
+                      className="min-h-[44px] rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
+                    >
+                      Generate Documents
+                    </button>
                     <button
                       onClick={() => handleSave(msg.id, msg.report!)}
                       disabled={msg.saveStatus === "saving" || msg.saveStatus === "saved"}
@@ -490,25 +585,32 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Tool activity indicators */}
+              {/* Tool use badges (ChatGPT-style) */}
               {msg.toolActivity && msg.toolActivity.length > 0 && (
                 <div className="mb-2 flex justify-start">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
                       P
                     </div>
-                    <div className="space-y-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {msg.toolActivity.map((t, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-stone-500">
+                        <span
+                          key={i}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                            t.status === "running"
+                              ? "border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                              : "border border-[var(--border)] bg-[var(--bg-surface-raised)] text-[var(--text-muted)]"
+                          }`}
+                        >
                           {t.status === "running" ? (
-                            <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse-dot" />
                           ) : (
-                            <svg className="h-3.5 w-3.5 text-stone-500" viewBox="0 0 20 20" fill="currentColor">
+                            <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
-                          <span className={t.status === "complete" ? "text-stone-500" : "text-stone-600"}>{t.message}</span>
-                        </div>
+                          {t.status === "complete" ? `Used ${t.tool}` : t.message}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -520,7 +622,7 @@ export default function Home() {
                 <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   {msg.role === "user" ? (
                     /* User message — right-aligned plain text, no bubble */
-                    <div className="max-w-[90%] text-sm leading-relaxed text-stone-600 sm:max-w-[75%]">
+                    <div className="max-w-[90%] text-sm leading-relaxed text-[var(--text-secondary)] sm:max-w-[75%]">
                       {msg.content}
                     </div>
                   ) : (
@@ -550,9 +652,9 @@ export default function Home() {
                               </div>
                             ),
                             thead: ({ children }) => <thead className="bg-[var(--bg-surface-raised)]">{children}</thead>,
-                            tbody: ({ children }) => <tbody className="[&>tr:nth-child(even)]:bg-stone-50">{children}</tbody>,
+                            tbody: ({ children }) => <tbody className="[&>tr:nth-child(even)]:bg-[var(--bg-surface-raised)]">{children}</tbody>,
                             th: ({ children }) => <th className="border-b border-[var(--border)] px-3 py-1.5 text-left font-semibold text-[var(--text-secondary)]">{children}</th>,
-                            td: ({ children }) => <td className="border-b border-[var(--border)] px-3 py-1.5 text-stone-600">{children}</td>,
+                            td: ({ children }) => <td className="border-b border-[var(--border)] px-3 py-1.5 text-[var(--text-secondary)]">{children}</td>,
                           }}
                         >
                           {msg.content}
@@ -562,7 +664,7 @@ export default function Home() {
                           <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                         )}
                         {msg.isStreaming && !msg.content && (
-                          <span className="inline-flex items-center gap-1 text-stone-500">
+                          <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
                             <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
                             <span className="text-xs">Thinking...</span>
                           </span>
@@ -602,6 +704,26 @@ export default function Home() {
               )}
             </div>
           ))}
+          {/* Deal type selector — appears when address entered in lookup mode */}
+          {pendingAddress && !selectedDealType && (
+            <div className="mx-auto max-w-xl px-3 py-4 sm:px-0">
+              <DealTypeSelector onSelect={handleDealTypeSelect} disabled={isProcessing} />
+            </div>
+          )}
+
+          {/* Pipeline approval gate — appears after deal type selection */}
+          {pendingAddress && selectedDealType && awaitingApproval && (
+            <div className="mx-auto max-w-xl px-3 py-4 sm:px-0 animate-fade-up">
+              <PipelineApproval
+                address={pendingAddress}
+                dealType={selectedDealType}
+                onApprove={handlePipelineApprove}
+                onCancel={handlePipelineCancel}
+                disabled={isProcessing}
+              />
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -612,8 +734,8 @@ export default function Home() {
         <div className="input-fade-bg h-8 pointer-events-none" />
 
         <div className="bg-[var(--bg-primary)] px-3 pb-3 sm:px-4 sm:pb-4">
-          {/* Follow-up suggestions */}
-          {!isProcessing && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
+          {/* Follow-up suggestions — agent mode only */}
+          {mode === "agent" && !isProcessing && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
             <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2 px-3 sm:gap-2 sm:px-0">
               {FOLLOWUP_SUGGESTIONS.map((s) => (
                 <button
@@ -628,41 +750,33 @@ export default function Home() {
             </div>
           )}
 
-          {/* Floating input bar */}
-          <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-            <div
-              className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-3"
-              style={{ boxShadow: "var(--shadow-elevated)" }}
-            >
-              <AddressAutocomplete
-                inputRef={inputRef}
-                value={input}
-                onChange={setInput}
-                onSelect={(address) => sendMessage(address)}
-                placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
-                disabled={isProcessing}
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || isProcessing}
-                aria-label="Send message"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] transition-all hover:opacity-80 disabled:opacity-20 sm:h-9 sm:w-9"
-              >
-                {isProcessing ? (
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </form>
+          {/* Input bar — hidden in lookup mode after report is shown */}
+          {!(mode === "lookup" && hasReport) && (
+            <InputBar
+              inputRef={inputRef}
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              onAddressSelect={(address) => sendMessage(address)}
+              mode={mode}
+              onModeChange={setMode}
+              placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
+              disabled={isProcessing || !!pendingAddress || awaitingApproval}
+              isProcessing={isProcessing}
+            />
+          )}
+
         </div>
       </div>
+
+      {/* Document Canvas modal */}
+      {currentReport && (
+        <DocumentCanvas
+          report={currentReport}
+          isOpen={docCanvasOpen}
+          onClose={() => setDocCanvasOpen(false)}
+        />
+      )}
     </div>
   );
 }

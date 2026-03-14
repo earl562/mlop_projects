@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
+import { useState, useRef, useCallback, useEffect } from "react";
 
-const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface AddressAutocompleteProps {
   value: string;
@@ -14,7 +13,15 @@ interface AddressAutocompleteProps {
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-function AutocompleteInner({
+interface Suggestion {
+  address: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export default function AddressAutocomplete({
   value,
   onChange,
   onSelect,
@@ -22,21 +29,12 @@ function AutocompleteInner({
   disabled,
   inputRef,
 }: AddressAutocompleteProps) {
-  const places = useMapsLibrary("places");
-  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const serviceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!places) return;
-    serviceRef.current = new places.AutocompleteService();
-    sessionTokenRef.current = new places.AutocompleteSessionToken();
-  }, [places]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -49,98 +47,77 @@ function AutocompleteInner({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const fetchPredictions = useCallback(
-    (input: string) => {
-      if (!serviceRef.current || !sessionTokenRef.current || input.length < 2) {
-        setPredictions([]);
-        setShowDropdown(false);
-        return;
-      }
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
 
-      setIsSearching(true);
-      serviceRef.current.getPlacePredictions(
-        {
-          input,
-          sessionToken: sessionTokenRef.current,
-          componentRestrictions: { country: "us" },
-          types: ["address"],
-        },
-        (results, status) => {
-          setIsSearching(false);
-          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-            setError(null);
-            // Filter to Florida addresses
-            const flPredictions = results.filter(
-              (p) =>
-                p.description.includes(", FL") ||
-                p.description.includes("Florida"),
-            );
-            setPredictions(flPredictions.length > 0 ? flPredictions : results.slice(0, 5));
-            setShowDropdown(flPredictions.length > 0 || results.length > 0);
-            setSelectedIndex(-1);
-          } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-            setError("Address suggestions unavailable");
-            setPredictions([]);
-            setShowDropdown(false);
-          } else {
-            setPredictions([]);
-            setShowDropdown(false);
-          }
-        },
-      );
-    },
-    [],
-  );
+    setIsSearching(true);
+    try {
+      const resp = await fetch(`${API_URL}/api/v1/autocomplete?q=${encodeURIComponent(query)}`);
+      if (!resp.ok) throw new Error("API error");
+      const data = await resp.json();
+      const results: Suggestion[] = data.suggestions || [];
+      setSuggestions(results);
+      setShowDropdown(results.length > 0);
+      setSelectedIndex(-1);
+    } catch {
+      setSuggestions([]);
+      setShowDropdown(false);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setError(null);
     const val = e.target.value;
     onChange(val);
-    fetchPredictions(val);
+
+    // Debounce API calls (300ms)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchSuggestions(val), 300);
   };
 
-  const handleSelectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
-    const address = prediction.description;
-    onChange(address);
-    setPredictions([]);
+  const handleSelect = (suggestion: Suggestion) => {
+    onChange(suggestion.address);
+    setSuggestions([]);
     setShowDropdown(false);
-    // Reset session token after selection
-    if (places) {
-      sessionTokenRef.current = new places.AutocompleteSessionToken();
-    }
-    onSelect(address);
+    onSelect(suggestion.address);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showDropdown || predictions.length === 0) return;
+    if (!showDropdown || suggestions.length === 0) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < predictions.length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : predictions.length - 1));
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
     } else if (e.key === "Enter" && selectedIndex >= 0) {
       e.preventDefault();
-      handleSelectPrediction(predictions[selectedIndex]);
+      handleSelect(suggestions[selectedIndex]);
     } else if (e.key === "Escape") {
       setShowDropdown(false);
     }
   };
 
   return (
-    <div ref={wrapperRef} className="relative flex-1">
+    <div ref={wrapperRef} className="relative z-50 flex-1">
       <input
         ref={inputRef}
         type="text"
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        onFocus={() => predictions.length > 0 && setShowDropdown(true)}
+        onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
         placeholder={placeholder}
         disabled={disabled}
         className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder-stone-400 outline-none"
         autoComplete="off"
+        aria-label={placeholder || "Enter an address"}
       />
       {/* Loading indicator */}
       {isSearching && !showDropdown && (
@@ -154,12 +131,12 @@ function AutocompleteInner({
           </div>
         </div>
       )}
-      {showDropdown && predictions.length > 0 && (
+      {showDropdown && suggestions.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
-          {predictions.map((prediction, index) => (
+          {suggestions.map((s, index) => (
             <button
-              key={prediction.place_id}
-              onClick={() => handleSelectPrediction(prediction)}
+              key={s.address}
+              onClick={() => handleSelect(s)}
               className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors ${
                 index === selectedIndex
                   ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
@@ -177,48 +154,15 @@ function AutocompleteInner({
                 <circle cx="12" cy="10" r="3" />
               </svg>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">
-                  {prediction.structured_formatting.main_text}
-                </div>
+                <div className="truncate font-medium">{s.street}</div>
                 <div className="truncate text-xs text-stone-500">
-                  {prediction.structured_formatting.secondary_text}
+                  {s.city}{s.state ? `, ${s.state}` : ""}{s.zip ? ` ${s.zip}` : ""}
                 </div>
               </div>
             </button>
           ))}
-          <div className="border-t border-[var(--border)] px-3 py-1.5">
-            <span className="text-xs text-stone-500">Powered by Google</span>
-          </div>
-        </div>
-      )}
-      {error && (
-        <div className="absolute left-0 right-0 top-full z-40 mt-1 px-1">
-          <span className="text-xs text-amber-600 dark:text-amber-400">{error}</span>
         </div>
       )}
     </div>
-  );
-}
-
-export default function AddressAutocomplete(props: AddressAutocompleteProps) {
-  // Without API key, render a plain input
-  if (!MAPS_KEY) {
-    return (
-      <input
-        ref={props.inputRef}
-        type="text"
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        placeholder={props.placeholder}
-        disabled={props.disabled}
-        className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder-stone-400 outline-none"
-      />
-    );
-  }
-
-  return (
-    <APIProvider apiKey={MAPS_KEY}>
-      <AutocompleteInner {...props} />
-    </APIProvider>
   );
 }

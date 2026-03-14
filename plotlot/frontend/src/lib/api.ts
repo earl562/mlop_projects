@@ -14,6 +14,19 @@ export interface PipelineStatus {
   lot_sqft?: number;
 }
 
+export interface ThinkingEvent {
+  step: string;
+  thoughts: string[];
+}
+
+export type DealType = "land_deal" | "wholesale" | "creative_finance" | "hybrid";
+
+export interface AnalysisOptions {
+  address: string;
+  dealType?: DealType;
+  skipSteps?: string[];
+}
+
 export interface SetbacksData {
   front: string;
   side: string;
@@ -88,6 +101,43 @@ export interface PropertyRecordData {
   lat: number | null;
   lng: number | null;
   parcel_geometry?: number[][] | null;
+  zoning_layer_url?: string;
+}
+
+export interface ComparableSaleData {
+  address: string;
+  sale_price: number;
+  sale_date: string;
+  lot_size_sqft: number;
+  zoning_code: string;
+  distance_miles: number;
+  price_per_acre: number;
+  price_per_unit: number | null;
+  adjustments: Record<string, number>;
+}
+
+export interface CompAnalysisData {
+  comparables: ComparableSaleData[];
+  median_price_per_acre: number;
+  estimated_land_value: number;
+  adv_per_unit: number | null;
+  confidence: number;
+}
+
+export interface LandProFormaData {
+  gross_development_value: number;
+  hard_costs: number;
+  soft_costs: number;
+  builder_margin: number;
+  max_land_price: number;
+  cost_per_door: number;
+  construction_cost_psf: number;
+  avg_unit_size_sqft: number;
+  adv_per_unit: number;
+  max_units: number;
+  soft_cost_pct: number;
+  builder_margin_pct: number;
+  notes: string[];
 }
 
 export interface ZoningReportData {
@@ -112,6 +162,8 @@ export interface ZoningReportData {
   property_record: PropertyRecordData | null;
   numeric_params: NumericParamsData | null;
   density_analysis: DensityAnalysisData | null;
+  comp_analysis: CompAnalysisData | null;
+  pro_forma: LandProFormaData | null;
   summary: string;
   sources: string[];
   confidence: string;
@@ -136,10 +188,11 @@ function extractErrorMessage(err: { detail?: unknown }, status: number): string 
  * Uses Server-Sent Events for step-by-step updates.
  */
 export async function streamAnalysis(
-  address: string,
+  options: AnalysisOptions,
   onStatus: (status: PipelineStatus) => void,
   onResult: (report: ZoningReportData) => void,
   onError: (error: string) => void,
+  onThinking?: (event: ThinkingEvent) => void,
 ): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120_000);
@@ -148,7 +201,11 @@ export async function streamAnalysis(
     const response = await fetch(`${API_BASE}/api/v1/analyze/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({
+        address: options.address,
+        deal_type: options.dealType || "land_deal",
+        skip_steps: options.skipSteps || [],
+      }),
       signal: controller.signal,
     });
 
@@ -189,6 +246,8 @@ export async function streamAnalysis(
               onStatus(parsed as PipelineStatus);
             } else if (eventType === "result") {
               onResult(parsed as ZoningReportData);
+            } else if (eventType === "thinking") {
+              onThinking?.(parsed as ThinkingEvent);
             } else if (eventType === "error") {
               onError(parsed.detail || "Unknown error");
             }
@@ -416,4 +475,74 @@ export async function renderBuilding(params: BuildingRenderParams): Promise<Buil
   }
 
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Document Generation (Clause Builder)
+// ---------------------------------------------------------------------------
+
+export interface DocumentTemplateInfo {
+  document_type: string;
+  label: string;
+  description: string;
+  supported_deal_types: string[];
+  supported_formats: string[];
+  required_fields: string[];
+  optional_fields: string[];
+}
+
+export interface DocumentGenerateParams {
+  document_type: string;
+  deal_type: string;
+  context: Record<string, string | number>;
+  output_format?: string;
+}
+
+export interface DocumentPreviewClause {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface DocumentPreviewData {
+  document_type: string;
+  deal_type: string;
+  clause_count: number;
+  clauses: DocumentPreviewClause[];
+}
+
+export async function listDocumentTemplates(): Promise<DocumentTemplateInfo[]> {
+  const response = await fetch(`${API_BASE}/api/v1/documents/templates`);
+  if (!response.ok) throw new Error("Failed to load document templates");
+  return response.json();
+}
+
+export async function previewDocument(params: DocumentGenerateParams): Promise<DocumentPreviewData> {
+  const response = await fetch(`${API_BASE}/api/v1/documents/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Preview failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+
+  return response.json();
+}
+
+export async function generateDocument(params: DocumentGenerateParams): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/api/v1/documents/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Generation failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+
+  return response.blob();
 }
