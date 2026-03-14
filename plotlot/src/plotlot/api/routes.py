@@ -120,23 +120,6 @@ async def analyze_stream(request: AnalyzeRequest):
             lat = geo.get("lat")
             lng = geo.get("lng")
 
-            # Boundary enforcement — reject addresses outside South Florida
-            county_lower = county.lower() if county else ""
-            from plotlot.pipeline.lookup import VALID_COUNTIES
-
-            if county_lower not in VALID_COUNTIES:
-                yield _sse_event(
-                    "error",
-                    {
-                        "detail": (
-                            f"Address is in {county} County. "
-                            f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
-                        ),
-                        "error_type": "outside_coverage",
-                    },
-                )
-                return
-
             accuracy_score = geo.get("accuracy")
             if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
                 yield _sse_event(
@@ -338,6 +321,31 @@ async def analyze_stream(request: AnalyzeRequest):
                 )
                 set_tag("status", "success" if report.confidence != "low" else "low_confidence")
 
+            # Thinking transparency: stream what the LLM found
+            thinking_details = []
+            if report.zoning_district:
+                thinking_details.append(f"Identified zoning district: {report.zoning_district}")
+            if report.numeric_params:
+                np = report.numeric_params
+                if np.max_density_units_per_acre:
+                    thinking_details.append(f"Density: {np.max_density_units_per_acre} units/acre")
+                if np.max_height_ft:
+                    thinking_details.append(f"Height limit: {np.max_height_ft} ft")
+                if np.setback_front_ft:
+                    thinking_details.append(
+                        f"Setbacks: F={np.setback_front_ft}' S={np.setback_side_ft}' R={np.setback_rear_ft}'"
+                    )
+                if np.far:
+                    thinking_details.append(f"FAR: {np.far}")
+            if thinking_details:
+                yield _sse_event(
+                    "thinking",
+                    {
+                        "step": "analysis",
+                        "thoughts": thinking_details,
+                    },
+                )
+
             yield _sse_event(
                 "status",
                 {
@@ -348,7 +356,7 @@ async def analyze_stream(request: AnalyzeRequest):
             )
 
             # Step 5: Density calculation
-            if (
+            if "calculation" not in request.skip_steps and (
                 report.numeric_params
                 and report.property_record
                 and report.property_record.lot_size_sqft > 0
@@ -376,6 +384,103 @@ async def analyze_stream(request: AnalyzeRequest):
                         "message": f"Max units: {report.density_analysis.max_units} ({report.density_analysis.governing_constraint})",
                         "complete": True,
                     },
+                )
+            elif "calculation" in request.skip_steps:
+                yield _sse_event(
+                    "status",
+                    {"step": "calculation", "message": "Skipped", "complete": True},
+                )
+
+            # Step 6: Comparable sales (non-blocking, skippable)
+            if (
+                "comps" not in request.skip_steps
+                and report.property_record
+                and report.property_record.lat
+            ):
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "comps",
+                        "message": "Searching comparable sales...",
+                    },
+                )
+                try:
+                    from plotlot.pipeline.comps import find_comparables
+
+                    state = geo.get("state", "FL")
+                    comp_result = await asyncio.wait_for(
+                        find_comparables(report.property_record, state=state),
+                        timeout=30,
+                    )
+                    report.comp_analysis = comp_result
+                    comp_msg = (
+                        f"Found {len(comp_result.comparables)} comps"
+                        if comp_result.comparables
+                        else "No comparable sales found"
+                    )
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "comps",
+                            "message": comp_msg,
+                            "complete": True,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("Comp analysis failed (non-blocking): %s", e)
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "comps",
+                            "message": "Comp search unavailable",
+                            "complete": True,
+                        },
+                    )
+            elif "comps" in request.skip_steps:
+                yield _sse_event(
+                    "status",
+                    {"step": "comps", "message": "Skipped", "complete": True},
+                )
+
+            # Step 7: Land pro forma (skippable)
+            if (
+                "proforma" not in request.skip_steps
+                and report.density_analysis
+                and report.density_analysis.max_units > 0
+            ):
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "proforma",
+                        "message": "Calculating land pro forma...",
+                    },
+                )
+                try:
+                    from plotlot.pipeline.proforma import calculate_land_pro_forma
+
+                    report.pro_forma = calculate_land_pro_forma(
+                        density=report.density_analysis,
+                        comps=report.comp_analysis,
+                    )
+                    pf_msg = (
+                        f"Max offer: ${report.pro_forma.max_land_price:,.0f}"
+                        if report.pro_forma.max_land_price > 0
+                        else "Pro forma calculated (ADV needed for offer price)"
+                    )
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "proforma",
+                            "message": pf_msg,
+                            "complete": True,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("Pro forma failed (non-blocking): %s", e)
+            elif "proforma" in request.skip_steps:
+                yield _sse_event(
+                    "status",
+                    {"step": "proforma", "message": "Skipped", "complete": True},
                 )
 
             # Final result

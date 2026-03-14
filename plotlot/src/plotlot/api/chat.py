@@ -95,6 +95,10 @@ class SessionStore:
         self._tokens.pop(session_id, None)
         self._last_access.pop(session_id, None)
 
+    def get(self, session_id: str) -> Any:
+        """Get session object (compatibility method — always returns None)."""
+        return None
+
     def get_messages(self, session_id: str) -> list[dict]:
         self.touch(session_id)
         return self._conversations.setdefault(session_id, [])
@@ -393,6 +397,53 @@ CHAT_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "generate_document",
+            "description": (
+                "Generate a deal document (LOI, PSA, Deal Summary, or Pro Forma spreadsheet) "
+                "from the analysis context. Use this when the user asks to create, generate, "
+                "draft, or download a letter of intent, purchase agreement, deal summary, "
+                "or pro forma for a property they've analyzed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_type": {
+                        "type": "string",
+                        "enum": ["loi", "psa", "deal_summary", "proforma_spreadsheet"],
+                        "description": "Type of document to generate",
+                    },
+                    "deal_type": {
+                        "type": "string",
+                        "enum": [
+                            "land_deal",
+                            "subject_to",
+                            "wrap",
+                            "hybrid",
+                            "seller_finance",
+                            "wholesale",
+                        ],
+                        "description": "Type of deal structure",
+                    },
+                    "buyer_name": {
+                        "type": "string",
+                        "description": "Buyer name or entity (for LOI/PSA)",
+                    },
+                    "seller_name": {
+                        "type": "string",
+                        "description": "Seller name (for LOI/PSA)",
+                    },
+                    "purchase_price": {
+                        "type": "number",
+                        "description": "Purchase price in dollars (optional — uses pro forma max land price if omitted)",
+                    },
+                },
+                "required": ["document_type", "deal_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_properties",
             "description": (
                 "Search county property databases for properties matching criteria. "
@@ -590,8 +641,169 @@ CREATION_TOOLS = [
     in {
         "create_spreadsheet",
         "create_document",
+        "generate_document",
     }
 ]
+
+
+class IntentClassification:
+    """Lightweight intent classification for incoming chat messages.
+
+    Uses keyword matching (not LLM) to avoid extra API calls.
+    Guides tool selection and system prompt framing.
+    """
+
+    __slots__ = ("intent", "deal_type", "confidence")
+
+    def __init__(
+        self,
+        intent: str = "general_question",
+        deal_type: str | None = None,
+        confidence: float = 0.5,
+    ):
+        self.intent = intent
+        self.deal_type = deal_type
+        self.confidence = confidence
+
+
+# Keyword sets for intent detection
+_ZONING_KEYWORDS = {
+    "zoning",
+    "zone",
+    "setback",
+    "density",
+    "height limit",
+    "far ",
+    "floor area ratio",
+    "lot coverage",
+    "permitted use",
+    "conditional use",
+    "variance",
+    "overlay",
+    "land use",
+}
+_DEAL_KEYWORDS = {
+    "deal",
+    "offer",
+    "purchase",
+    "buy",
+    "invest",
+    "acquisition",
+    "pro forma",
+    "proforma",
+    "comps",
+    "comparable",
+    "arv",
+    "mao",
+    "wholesale",
+    "flip",
+    "subject to",
+    "sub-to",
+    "subto",
+    "wrap",
+    "seller finance",
+    "creative finance",
+    "hybrid",
+    "cash flow",
+    "equity",
+    "roi",
+    "cap rate",
+}
+_DOC_KEYWORDS = {
+    "loi",
+    "letter of intent",
+    "psa",
+    "purchase agreement",
+    "contract",
+    "document",
+    "generate",
+    "draft",
+    "deal summary",
+    "report",
+    "export",
+    "spreadsheet",
+    "download",
+}
+_DEAL_TYPE_PATTERNS: dict[str, set[str]] = {
+    "wholesale": {"wholesale", "assign", "assignment", "mao", "arv", "flip"},
+    "creative_finance": {
+        "creative",
+        "subject to",
+        "sub-to",
+        "subto",
+        "seller finance",
+        "wrap",
+        "owner finance",
+        "cash flow",
+        "monthly payment",
+    },
+    "hybrid": {"hybrid", "combination", "blended"},
+    "land_deal": {"land deal", "development", "build", "max units", "density"},
+}
+
+
+def _classify_intent(message: str) -> IntentClassification:
+    """Classify user message intent and deal type from keywords."""
+    msg_lower = message.lower()
+
+    # Score each intent category
+    zoning_score = sum(1 for kw in _ZONING_KEYWORDS if kw in msg_lower)
+    deal_score = sum(1 for kw in _DEAL_KEYWORDS if kw in msg_lower)
+    doc_score = sum(1 for kw in _DOC_KEYWORDS if kw in msg_lower)
+
+    # Determine primary intent
+    if doc_score >= 2 or (doc_score >= 1 and deal_score >= 1):
+        intent = "document_generation"
+        confidence = min(0.9, 0.5 + doc_score * 0.15)
+    elif deal_score >= 2:
+        intent = "deal_analysis"
+        confidence = min(0.9, 0.5 + deal_score * 0.1)
+    elif zoning_score >= 1:
+        intent = "zoning_lookup"
+        confidence = min(0.9, 0.5 + zoning_score * 0.15)
+    else:
+        intent = "general_question"
+        confidence = 0.5
+
+    # Detect deal type
+    deal_type = None
+    best_type_score = 0
+    for dtype, keywords in _DEAL_TYPE_PATTERNS.items():
+        score = sum(1 for kw in keywords if kw in msg_lower)
+        if score > best_type_score:
+            best_type_score = score
+            deal_type = dtype
+
+    return IntentClassification(intent=intent, deal_type=deal_type, confidence=confidence)
+
+
+def _build_intent_context(classification: IntentClassification) -> str:
+    """Build system prompt addition based on intent classification."""
+    parts = [f"\n\n## Detected Intent: {classification.intent}"]
+
+    if classification.deal_type:
+        label = classification.deal_type.replace("_", " ").title()
+        parts.append(f"Deal Type: {label}")
+
+    guidance = {
+        "zoning_lookup": (
+            "The user is asking about zoning rules. Prioritize geocode → property lookup → "
+            "zoning search. Focus on dimensional standards, setbacks, and permitted uses."
+        ),
+        "deal_analysis": (
+            "The user wants deal-level analysis. After zoning lookup, focus on comparable "
+            "sales, pro forma calculations, and investment metrics."
+        ),
+        "document_generation": (
+            "The user wants to generate a document. If you have report context, "
+            "use generate_document. Otherwise, gather the needed data first."
+        ),
+        "general_question": (
+            "Answer the user's question. Use tools only if needed for specific data."
+        ),
+    }
+    parts.append(guidance.get(classification.intent, ""))
+    return "\n".join(parts)
 
 
 def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
@@ -607,7 +819,23 @@ def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
         tools.extend(DATASET_TOOLS)
 
     # Show creation tools when the user mentions export/document keywords
-    creation_keywords = {"spreadsheet", "document", "export", "report", "download", "sheet", "doc"}
+    creation_keywords = {
+        "spreadsheet",
+        "document",
+        "export",
+        "report",
+        "download",
+        "sheet",
+        "doc",
+        "loi",
+        "psa",
+        "letter of intent",
+        "purchase agreement",
+        "pro forma",
+        "proforma",
+        "generate",
+        "draft",
+    }
     if any(kw in message.lower() for kw in creation_keywords):
         tools.extend(CREATION_TOOLS)
 
@@ -817,6 +1045,93 @@ async def _execute_create_document(title: str, content: str) -> str:
         return json.dumps({"status": "error", "message": f"Failed to create document: {str(e)}"})
 
 
+async def _execute_generate_document(session_id: str, args: dict) -> str:
+    """Generate a deal document via the clause builder engine."""
+    from plotlot.clauses.engine import assemble_document
+    from plotlot.clauses.loader import ClauseRegistry
+    from plotlot.clauses.schema import AssemblyConfig, DealContext, DealType, DocumentType
+
+    doc_type_str = args.get("document_type", "deal_summary")
+    deal_type_str = args.get("deal_type", "land_deal")
+
+    try:
+        doc_type = DocumentType(doc_type_str)
+        deal_type = DealType(deal_type_str)
+    except ValueError as e:
+        return json.dumps({"status": "error", "message": str(e)})
+
+    # Build context from session's active report if available
+    ctx_data: dict = {}
+    session = _sessions.get(session_id)
+    if session and hasattr(session, "report") and session.report:
+        rpt = session.report
+        ctx_data["property_address"] = getattr(rpt, "address", "")
+        ctx_data["formatted_address"] = getattr(rpt, "formatted_address", "")
+        ctx_data["municipality"] = getattr(rpt, "municipality", "")
+        ctx_data["county"] = getattr(rpt, "county", "")
+        ctx_data["zoning_district"] = getattr(rpt, "zoning_district", "")
+        ctx_data["zoning_description"] = getattr(rpt, "zoning_description", "")
+        if getattr(rpt, "property_record", None):
+            pr = rpt.property_record
+            ctx_data["apn"] = getattr(pr, "folio", "")
+            ctx_data["lot_size_sqft"] = getattr(pr, "lot_size_sqft", 0)
+            ctx_data["year_built"] = getattr(pr, "year_built", 0)
+            ctx_data["owner"] = getattr(pr, "owner", "")
+        if getattr(rpt, "density_analysis", None):
+            ctx_data["max_units"] = rpt.density_analysis.max_units
+            ctx_data["governing_constraint"] = rpt.density_analysis.governing_constraint
+        if getattr(rpt, "comp_analysis", None):
+            ctx_data["median_price_per_acre"] = rpt.comp_analysis.median_price_per_acre
+            ctx_data["estimated_land_value"] = rpt.comp_analysis.estimated_land_value
+        if getattr(rpt, "pro_forma", None):
+            pf = rpt.pro_forma
+            ctx_data["gross_development_value"] = pf.gross_development_value
+            ctx_data["hard_costs"] = pf.hard_costs
+            ctx_data["soft_costs"] = pf.soft_costs
+            ctx_data["max_land_price"] = pf.max_land_price
+
+    # Override with explicit args
+    if args.get("buyer_name"):
+        ctx_data["buyer_name"] = args["buyer_name"]
+    if args.get("seller_name"):
+        ctx_data["seller_name"] = args["seller_name"]
+    if args.get("purchase_price"):
+        ctx_data["purchase_price"] = float(args["purchase_price"])
+
+    output_format = "xlsx" if doc_type == DocumentType.proforma_spreadsheet else "docx"
+    config = AssemblyConfig(
+        document_type=doc_type,
+        deal_type=deal_type,
+        state_code=ctx_data.get("state_code", "FL"),
+        output_format=output_format,
+    )
+    context = DealContext(**{k: v for k, v in ctx_data.items() if v})
+
+    try:
+        registry = ClauseRegistry.from_directory()
+        doc = assemble_document(config, context, registry)
+        # Store the generated doc bytes in session for download
+        if session:
+            session.last_document = doc
+        return json.dumps(
+            {
+                "status": "success",
+                "document_type": doc_type_str,
+                "deal_type": deal_type_str,
+                "filename": doc.filename,
+                "content_type": doc.content_type,
+                "size_bytes": len(doc.data),
+                "message": (
+                    f"Generated {doc.filename} ({len(doc.data):,} bytes). "
+                    f"The user can download it from the Documents panel in the report."
+                ),
+            }
+        )
+    except Exception as e:
+        logger.warning("Document generation failed: %s", e)
+        return json.dumps({"status": "error", "message": f"Failed to generate document: {str(e)}"})
+
+
 async def _execute_search_properties(session_id: str, args: dict) -> str:
     """Search county property databases and store results in session."""
     try:
@@ -1020,6 +1335,8 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
             args.get("title", "Untitled"),
             args.get("content", ""),
         )
+    elif name == "generate_document":
+        return await _execute_generate_document(session_id, args)
     elif name == "search_properties":
         return await _execute_search_properties(session_id, args)
     elif name == "filter_dataset":
@@ -1058,10 +1375,21 @@ async def chat(request: ChatRequest):
             # Send session ID back to client for memory persistence
             yield _sse_event("session", {"session_id": session_id})
 
-            # Build system prompt with report context
+            # Classify intent before building prompt
+            intent = _classify_intent(request.message)
+            logger.info(
+                "Intent: %s (deal_type=%s, confidence=%.2f) for: %s",
+                intent.intent,
+                intent.deal_type,
+                intent.confidence,
+                request.message[:80],
+            )
+
+            # Build system prompt with report context + intent guidance
             system_content = AGENT_SYSTEM_PROMPT
             if request.report_context:
                 system_content += _build_report_context(request.report_context)
+            system_content += _build_intent_context(intent)
 
             messages = [{"role": "system", "content": system_content}]
 
@@ -1094,6 +1422,15 @@ async def chat(request: ChatRequest):
                 )
             except AttributeError:
                 pass  # No-op span in test env
+
+            # Emit intent classification as a thinking event
+            intent_thoughts = [f"Detected intent: {intent.intent.replace('_', ' ')}"]
+            if intent.deal_type:
+                intent_thoughts.append(f"Deal type: {intent.deal_type.replace('_', ' ').title()}")
+            yield _sse_event(
+                "thinking",
+                {"step": "intent", "thoughts": intent_thoughts},
+            )
 
             # Token budget check — prevent runaway cost
             if _sessions.get_tokens(session_id) >= MAX_TOKENS_PER_SESSION:
@@ -1162,6 +1499,7 @@ async def chat(request: ChatRequest):
                         "web_search": "Searching the web...",
                         "create_spreadsheet": "Creating spreadsheet...",
                         "create_document": "Creating document...",
+                        "generate_document": "Generating document...",
                         "search_properties": "Searching property records...",
                         "filter_dataset": "Filtering results...",
                         "get_dataset_info": "Checking dataset...",

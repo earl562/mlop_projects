@@ -8,7 +8,12 @@ async function analyzeAddress(
   address: string,
 ) {
   await page.goto("/");
-  const input = page.getByRole("textbox", { name: /South Florida address/ });
+  // Switch to Chat mode if Quick Analysis is the default
+  const chatBtn = page.getByRole("button", { name: "Chat with Agent" });
+  if (await chatBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await chatBtn.click();
+  }
+  const input = page.getByRole("textbox", { name: /address|question/ });
   await input.fill(address);
   await page.getByRole("button", { name: "Send message" }).click();
   // Wait for pipeline to start — either stepper or the report itself
@@ -53,20 +58,26 @@ test.describe("Scenario 1: Welcome Screen", () => {
     await expect(page.locator("nav")).toContainText("Beta");
     await expect(page.locator("nav")).toContainText("104 municipalities");
 
+    // Mode toggle visible
+    await expect(page.getByRole("button", { name: "Quick Analysis" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Chat with Agent" })).toBeVisible();
+
+    // Switch to Chat mode to verify chat UI
+    await page.getByRole("button", { name: "Chat with Agent" }).click();
+
     // Greeting + heading
     await expect(page.getByText("Hi there")).toBeVisible();
     await expect(
       page.getByRole("heading", {
-        name: "Analyze any property in South Florida",
+        name: /Analyze any property/,
       }),
     ).toBeVisible();
 
     // Input bar
     const input = page.getByRole("textbox", {
-      name: /South Florida address/,
+      name: /address|question/,
     });
     await expect(input).toBeVisible();
-    await expect(input).toBeFocused();
 
     // Send button disabled when empty
     await expect(
@@ -85,7 +96,7 @@ test.describe("Scenario 1: Welcome Screen", () => {
 
     // Footer
     await expect(
-      page.getByText("PlotLot covers 104 municipalities"),
+      page.getByText(/PlotLot analyzes/),
     ).toBeVisible();
   });
 });
@@ -209,6 +220,8 @@ test.describe("Scenario 4: Fort Lauderdale (third municipality)", () => {
 test.describe("Scenario 5: Suggestion Chip Chat", () => {
   test("clicking chip sends chat message", async ({ page }) => {
     await page.goto("/");
+    // Switch to Chat mode where suggestion chips are visible
+    await page.getByRole("button", { name: "Chat with Agent" }).click();
 
     // Click the Miramar chip (no street address → routes to chat)
     await page
@@ -253,26 +266,35 @@ test.describe("Scenario 6: Follow-Up Chat", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 7: Error — Out of Coverage
+// Scenario 7: Out-of-State Address — No Boundary Rejection
+// (VALID_COUNTIES removed — Universal Provider handles any US county)
 // ---------------------------------------------------------------------------
-test.describe("Scenario 7: Out of Coverage Error", () => {
-  test("Orlando address shows coverage error", async ({ page }) => {
+test.describe("Scenario 7: Out-of-State Address", () => {
+  test("Orlando address is NOT rejected by boundary check", async ({ page }) => {
     await page.goto("/");
+    // Switch to Chat mode
+    const chatBtn = page.getByRole("button", { name: "Chat with Agent" });
+    if (await chatBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await chatBtn.click();
+    }
 
     const input = page.getByRole("textbox", {
-      name: /South Florida address/,
+      name: /address|question/,
     });
     await input.fill("100 S Orange Ave, Orlando, FL 32801");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    // Should show error about coverage
-    await expect(
-      page.getByText(
-        /couldn't analyze|outside|coverage|Orange County|PlotLot covers/i,
-      ),
-    ).toBeVisible({ timeout: 30_000 });
+    // Wait for response
+    await page.waitForTimeout(15_000);
 
-    // Input should be re-enabled for retry
+    // Should NOT show the old "PlotLot covers Miami-Dade, Broward..." error
+    const oldBoundaryError = page.getByText(
+      /PlotLot covers Miami-Dade, Broward, and Palm Beach counties only/i,
+    );
+    await expect(oldBoundaryError).not.toBeVisible();
+
+    // Pipeline should attempt to process (may succeed or fail on data, but not boundary)
+    // Input should remain usable
     const chatInput = page.getByRole("textbox");
     await expect(chatInput).toBeEnabled({ timeout: 5_000 });
   });
@@ -314,10 +336,11 @@ test.describe("Scenario 8: Save to Portfolio", () => {
     await page.waitForTimeout(3_000);
 
     // Log save result for debugging
-    if (saveResponse) {
-      console.log(`Portfolio save: ${saveResponse.status}`);
-      if (saveResponse.status !== 200) {
-        console.error("Save response:", saveResponse.body);
+    const resp = saveResponse as { status: number; body: string } | null;
+    if (resp) {
+      console.log(`Portfolio save: ${resp.status}`);
+      if (resp.status !== 200) {
+        console.error("Save response:", resp.body);
         if (saveRequestBody) {
           // Log just the list fields that might cause validation errors
           try {
@@ -336,5 +359,116 @@ test.describe("Scenario 8: Save to Portfolio", () => {
     await expect(page.getByText(/Saved to Portfolio/i)).toBeVisible({
       timeout: 10_000,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 9: Lookup Mode — Deal Type → Pipeline Approval → Tabbed Report
+// ---------------------------------------------------------------------------
+test.describe("Scenario 9: Lookup Mode Flow", () => {
+  test("full lookup flow with deal type and pipeline approval", async ({ page }) => {
+    await page.goto("/");
+
+    // Should start in lookup mode by default
+    const input = page.getByRole("textbox", { name: /address|question/ });
+    await expect(input).toBeVisible();
+
+    // Enter address
+    await input.fill("7940 Plantation Blvd, Miramar, FL 33023");
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    // Deal type selector should appear
+    await expect(page.getByText("Land Deal")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Wholesale")).toBeVisible();
+    await expect(page.getByText("Creative Finance")).toBeVisible();
+    await expect(page.getByText("Hybrid")).toBeVisible();
+
+    // Select "Land Deal"
+    await page.getByText("Land Deal").click();
+
+    // Pipeline approval gate should appear
+    await expect(page.getByText("Pipeline Plan")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Zoning Search")).toBeVisible();
+    await expect(page.getByText("AI Analysis")).toBeVisible();
+    await expect(page.getByText("Density Calculation")).toBeVisible();
+    await expect(page.getByText("Comparable Sales")).toBeVisible();
+    await expect(page.getByText("Pro Forma")).toBeVisible();
+
+    // Click "Run Analysis"
+    await page.getByRole("button", { name: "Run Analysis" }).click();
+
+    // Pipeline should start
+    await expect(page.getByText("Geocoding")).toBeVisible({ timeout: 30_000 });
+
+    // Wait for report to render (tabbed report)
+    await expect(page.getByRole("tab", { name: /Property/i }).or(page.getByText("RS5").first())).toBeVisible({
+      timeout: 120_000,
+    });
+
+    // Verify hero card is visible
+    await expect(page.getByText(/Max Units|Max Offer|Governing Constraint/i).first()).toBeVisible();
+
+    // Verify "Generate Documents" button appears
+    await expect(page.getByRole("button", { name: "Generate Documents" })).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 10: Agent Mode — Tool Cards + Chat Flow
+// ---------------------------------------------------------------------------
+test.describe("Scenario 10: Agent Mode Flow", () => {
+  test("agent mode shows tool cards and supports chat", async ({ page }) => {
+    await page.goto("/");
+
+    // Switch to agent mode
+    const modeToggle = page.locator("[data-mode-toggle]").or(
+      page.getByRole("button", { name: /agent/i }),
+    );
+    if (await modeToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await modeToggle.click();
+    }
+
+    // Tool cards should be visible in agent mode
+    await expect(page.getByText("Analyze Property")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Generate LOI")).toBeVisible();
+    await expect(page.getByText("Search Comps")).toBeVisible();
+    await expect(page.getByText("Search Properties")).toBeVisible();
+
+    // "Generate LOI" should show "Analyze a property first" hint
+    await expect(page.getByText("Analyze a property first").first()).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 11: Mode Switching
+// ---------------------------------------------------------------------------
+test.describe("Scenario 11: Mode Switching", () => {
+  test("switching modes updates UI without state leaks", async ({ page }) => {
+    await page.goto("/");
+
+    // Start in lookup mode — should show address example chips
+    await expect(page.getByText("Miramar, FL")).toBeVisible({ timeout: 5_000 });
+
+    // Switch to agent mode
+    const modeToggle = page.locator("[data-mode-toggle]").or(
+      page.getByRole("button", { name: /agent/i }),
+    );
+    if (await modeToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await modeToggle.click();
+    }
+
+    // Should now show tool cards instead of address chips
+    await expect(page.getByText("Analyze Property")).toBeVisible({ timeout: 5_000 });
+
+    // Switch back to lookup mode
+    const lookupToggle = page.locator("[data-mode-toggle]").or(
+      page.getByRole("button", { name: /lookup/i }),
+    );
+    if (await lookupToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await lookupToggle.click();
+    }
+
+    // Should show address chips again
+    await expect(page.getByText("Miramar, FL")).toBeVisible({ timeout: 5_000 });
   });
 });

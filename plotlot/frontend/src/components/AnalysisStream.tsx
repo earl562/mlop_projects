@@ -1,8 +1,9 @@
 "use client";
 
-import { PipelineStatus } from "@/lib/api";
+import { PipelineStatus, ThinkingEvent } from "@/lib/api";
+import ThinkingIndicator from "@/components/ThinkingIndicator";
 
-const STEP_ORDER = ["connecting", "geocoding", "property", "search", "analysis", "calculation"];
+const STEP_ORDER = ["connecting", "geocoding", "property", "search", "analysis", "calculation", "comps", "proforma"];
 
 const STEP_LABELS: Record<string, string> = {
   connecting: "Connecting",
@@ -11,24 +12,40 @@ const STEP_LABELS: Record<string, string> = {
   search: "Zoning Search",
   analysis: "AI Analysis",
   calculation: "Max Units Calc",
+  comps: "Comparable Sales",
+  proforma: "Land Pro Forma",
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  connecting: "Connecting...",
-  geocoding: "Locating property...",
-  property: "Pulling county records...",
-  search: "Searching zoning code...",
-  analysis: "Extracting standards...",
-  calculation: "Computing max units...",
+  connecting: "Establishing connection to PlotLot servers...",
+  geocoding: "Resolving address to precise coordinates via Geocodio...",
+  property: "Querying county property appraiser records via ArcGIS...",
+  search: "Searching zoning ordinance database (hybrid vector + keyword)...",
+  analysis: "AI is reading zoning code and extracting dimensional standards...",
+  calculation: "Running 4-constraint density calculator (density, lot area, FAR, envelope)...",
+  comps: "Discovering comparable sales within 3-mile radius via ArcGIS Hub...",
+  proforma: "Computing residual land valuation (GDV - costs - margin = max offer)...",
+};
+
+// Narrative messages shown after each step completes (ChatGPT-style)
+const STEP_NARRATIVES: Record<string, (step: PipelineStatus) => string | null> = {
+  geocoding: (s) => s.resolved_address ? `Found property in ${s.resolved_address.split(",").slice(-2, -1)[0]?.trim() || "the target area"}` : null,
+  property: (s) => s.folio ? `Retrieved record: Folio ${s.folio}${s.lot_sqft ? `, ${Number(s.lot_sqft).toLocaleString()} sqft` : ""}` : "Property record retrieved",
+  search: () => "Found relevant zoning ordinance sections",
+  analysis: () => "Extracted numeric dimensional standards",
+  calculation: () => "Determined maximum allowable units",
+  comps: () => "Comparable sales analysis complete",
+  proforma: () => "Pro forma calculated — max offer price determined",
 };
 
 interface AnalysisStreamProps {
   steps: PipelineStatus[];
   error: string | null;
   onWrongProperty?: () => void;
+  thinkingEvents?: ThinkingEvent[];
 }
 
-export default function AnalysisStream({ steps, error, onWrongProperty }: AnalysisStreamProps) {
+export default function AnalysisStream({ steps, error, onWrongProperty, thinkingEvents = [] }: AnalysisStreamProps) {
   if (steps.length === 0 && !error) return null;
 
   const stepMap = new Map<string, PipelineStatus>();
@@ -155,11 +172,21 @@ export default function AnalysisStream({ steps, error, onWrongProperty }: Analys
                     {step?.message || STEP_DESCRIPTIONS[stepKey]}
                   </p>
                 )}
+                {isComplete && step && STEP_NARRATIVES[stepKey] && (
+                  <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-500">
+                    {STEP_NARRATIVES[stepKey]!(step)}
+                  </p>
+                )}
               </div>
             </div>
           );
         })}
       </div>
+      {/* Thinking transparency — collapsible AI reasoning */}
+      {thinkingEvents.length > 0 && (
+        <ThinkingIndicator events={thinkingEvents} />
+      )}
+
       {error && (
         <div className="mt-2 text-sm text-red-600">{error}</div>
       )}

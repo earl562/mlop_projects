@@ -15,7 +15,16 @@ class AnalyzeRequest(BaseModel):
         min_length=5,
         max_length=200,
         examples=["171 NE 209th Ter, Miami, FL 33179"],
-        description="South Florida property address (Miami-Dade, Broward, or Palm Beach County)",
+        description="US property address",
+    )
+    deal_type: str = Field(
+        default="land_deal",
+        pattern="^(land_deal|wholesale|creative_finance|hybrid)$",
+        description="Deal strategy type",
+    )
+    skip_steps: list[str] = Field(
+        default_factory=list,
+        description="Pipeline steps to skip: calculation, comps, proforma",
     )
 
 
@@ -93,6 +102,7 @@ class PropertyRecordResponse(BaseModel):
     lat: float | None = None
     lng: float | None = None
     parcel_geometry: list[list[float]] | None = None
+    zoning_layer_url: str = ""
 
 
 class ZoningReportResponse(BaseModel):
@@ -123,6 +133,8 @@ class ZoningReportResponse(BaseModel):
     property_record: PropertyRecordResponse | None = None
     numeric_params: NumericParamsResponse | None = None
     density_analysis: MaxAllowableUnitsResponse | None = None
+    comp_analysis: "CompAnalysisResponse | None" = None
+    pro_forma: "LandProFormaResponse | None" = None
 
     summary: str = ""
     sources: list[str] = []
@@ -133,11 +145,110 @@ class ZoningReportResponse(BaseModel):
     suggested_next_steps: list[str] = []
 
 
+# ---------------------------------------------------------------------------
+# Comparable Sales (Phase 6A)
+# ---------------------------------------------------------------------------
+
+
+class ComparableSaleResponse(BaseModel):
+    """A single comparable land sale."""
+
+    address: str = ""
+    sale_price: float = 0.0
+    sale_date: str = ""
+    lot_size_sqft: float = 0.0
+    zoning_code: str = ""
+    distance_miles: float = 0.0
+    price_per_acre: float = 0.0
+    price_per_unit: float | None = None
+    adjustments: dict[str, float] = {}
+
+
+class CompAnalysisResponse(BaseModel):
+    """Comparable sales analysis results."""
+
+    comparables: list[ComparableSaleResponse] = []
+    median_price_per_acre: float = 0.0
+    estimated_land_value: float = 0.0
+    adv_per_unit: float | None = None
+    confidence: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Land Pro Forma — Residual Valuation (Phase 6B)
+# ---------------------------------------------------------------------------
+
+
+class LandProFormaResponse(BaseModel):
+    """Residual land valuation pro forma."""
+
+    gross_development_value: float = 0.0
+    hard_costs: float = 0.0
+    soft_costs: float = 0.0
+    builder_margin: float = 0.0
+    max_land_price: float = 0.0
+    cost_per_door: float = 0.0
+    construction_cost_psf: float = 175.0
+    avg_unit_size_sqft: float = 1000.0
+    adv_per_unit: float = 0.0
+    max_units: int = 0
+    soft_cost_pct: float = 20.0
+    builder_margin_pct: float = 25.0
+    notes: list[str] = []
+
+
 class ErrorResponse(BaseModel):
     """Error response body."""
 
     detail: str
     error_type: str = "pipeline_error"
+
+
+# ---------------------------------------------------------------------------
+# Document Generation (Clause Builder)
+# ---------------------------------------------------------------------------
+
+
+class DocumentGenerateRequest(BaseModel):
+    """Request body for POST /api/v1/documents/generate and /preview."""
+
+    document_type: str = Field(
+        ...,
+        description="Document type: loi, psa, deal_summary, proforma_spreadsheet",
+    )
+    deal_type: str = Field(
+        default="land_deal",
+        description="Deal type: land_deal, subject_to, wrap, hybrid, seller_finance, wholesale",
+    )
+    context: dict = Field(
+        default_factory=dict,
+        description="Deal context fields (property_address, buyer_name, etc.)",
+    )
+    output_format: str | None = Field(
+        default=None,
+        description="Output format override: docx, xlsx. Auto-detected if omitted.",
+    )
+
+
+class DocumentPreviewResponse(BaseModel):
+    """Preview of rendered clauses without generating a file."""
+
+    document_type: str
+    deal_type: str
+    clause_count: int
+    clauses: list[dict] = []
+
+
+class DocumentTemplateInfo(BaseModel):
+    """Metadata about an available document template."""
+
+    document_type: str
+    label: str
+    description: str
+    supported_deal_types: list[str] = []
+    supported_formats: list[str] = []
+    required_fields: list[str] = []
+    optional_fields: list[str] = []
 
 
 # ---------------------------------------------------------------------------
