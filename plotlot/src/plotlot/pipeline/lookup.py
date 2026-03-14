@@ -41,8 +41,6 @@ PIPELINE_VERSION = "v2.2"
 _pipeline_cache: dict[str, tuple["ZoningReport", float]] = {}
 PIPELINE_CACHE_TTL = 1800  # 30 minutes
 
-# Geographic boundary — PlotLot covers South Florida tri-county area only
-VALID_COUNTIES = {"miami-dade", "broward", "palm beach"}
 
 # Geocodio accuracy levels that indicate a confident location match
 ACCEPTABLE_ACCURACY = {"rooftop", "range_interpolation", "nearest_rooftop_match", "point"}
@@ -155,22 +153,13 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         municipality = geo["municipality"]
         county = geo["county"]
+        state = geo.get("state", "")
         lat = geo.get("lat")
         lng = geo.get("lng")
 
         logger.info(
             "Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng
         )
-
-        # Boundary enforcement — reject addresses outside our coverage area
-        county_lower = county.lower() if county else ""
-        if county_lower not in VALID_COUNTIES:
-            set_tag("status", "rejected")
-            set_tag("failure_reason", "outside_coverage")
-            raise ValueError(
-                f"Address is in {county} County. "
-                f"PlotLot covers Miami-Dade, Broward, and Palm Beach counties only."
-            )
 
         # Geocoding accuracy check — reject low-confidence matches
         # Geocodio returns numeric `accuracy` (0-1) AND string `accuracy_type`
@@ -184,7 +173,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
             )
 
         # Step 2: Property Appraiser lookup
-        prop_record = await lookup_property(address, county, lat=lat, lng=lng)
+        prop_record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
 
         if prop_record:
             logger.info(
@@ -502,7 +491,7 @@ async def _agentic_analysis(
             # Try to parse content as JSON report (some models return JSON directly)
             try:
                 parsed = json.loads(content.strip().strip("`").lstrip("json\n"))
-                return _build_report(parsed, address, geo, prop_record, all_sources)
+                return _build_report(parsed, address, geo, prop_record, all_sources, search_results)
             except (json.JSONDecodeError, ValueError):
                 pass
 
@@ -579,7 +568,9 @@ async def _agentic_analysis(
                 logger.info("Agent submitted report")
                 # Deduplicate sources
                 all_sources = list(dict.fromkeys(all_sources))
-                return _build_report(fn_args, address, geo, prop_record, all_sources)
+                return _build_report(
+                    fn_args, address, geo, prop_record, all_sources, search_results
+                )
 
             else:
                 messages.append(
@@ -685,11 +676,31 @@ def _coerce_list(val) -> list[str]:
 
 
 def _build_report(
-    args: dict, address: str, geo: dict, prop_record, sources: list[str]
+    args: dict,
+    address: str,
+    geo: dict,
+    prop_record,
+    sources: list[str],
+    search_results: list | None = None,
 ) -> ZoningReport:
     """Build ZoningReport from agent submit_report args."""
+    from plotlot.core.types import SourceRef
+
     # Build numeric params from LLM-extracted values
     numeric_params = _extract_numeric_params(args)
+
+    # Build source_refs from top search results (for inline citations)
+    source_refs = []
+    if search_results:
+        for r in search_results[:5]:
+            source_refs.append(
+                SourceRef(
+                    section=r.section or "",
+                    section_title=r.section_title or "",
+                    chunk_text_preview=(r.chunk_text or "")[:200],
+                    score=r.score,
+                )
+            )
 
     return ZoningReport(
         address=address,
@@ -719,6 +730,7 @@ def _build_report(
         summary=args.get("summary", ""),
         sources=sources,
         confidence=args.get("confidence", "low"),
+        source_refs=source_refs,
     )
 
 
