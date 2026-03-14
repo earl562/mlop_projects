@@ -487,6 +487,34 @@ async def analyze_stream(request: AnalyzeRequest):
             report_dict = asdict(report)
             yield _sse_event("result", report_dict)
 
+            # Contextual suggestions based on deal type
+            deal_suggestions: dict[str, list[str]] = {
+                "land_deal": [
+                    "Generate an LOI for this property",
+                    "Run a detailed pro forma analysis",
+                    "Find comparable sales nearby",
+                ],
+                "wholesale": [
+                    "Calculate the MAO for this deal",
+                    "Generate an assignment contract",
+                    "Find comparable sales nearby",
+                ],
+                "creative_finance": [
+                    "Analyze existing mortgage terms",
+                    "Calculate monthly cash flow",
+                    "Generate a deal summary",
+                ],
+                "hybrid": [
+                    "Compare land deal vs creative finance",
+                    "Generate a deal summary",
+                    "Run a detailed pro forma analysis",
+                ],
+            }
+            suggestions = deal_suggestions.get(request.deal_type, deal_suggestions["land_deal"])
+            yield _sse_event(
+                "suggestions", {"suggestions": suggestions, "deal_type": request.deal_type}
+            )
+
             # Cache the result for future lookups
             try:
                 await cache_report(request.address, report_dict)

@@ -29,7 +29,7 @@ function CopyButton({ text }: { text: string }) {
     } catch { /* clipboard API may be blocked */ }
   };
   return (
-    <button onClick={handleCopy} className="inline-flex h-5 w-5 items-center justify-center rounded text-stone-300 transition-colors hover:text-[var(--text-muted)]" title="Copy">
+    <button onClick={handleCopy} className="inline-flex h-8 w-8 items-center justify-center rounded text-stone-300 transition-colors hover:text-[var(--text-muted)] sm:h-5 sm:w-5" title="Copy" aria-label="Copy to clipboard">
       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
       </svg>
@@ -171,8 +171,18 @@ const TABS: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
   },
 ];
 
+// Deal-type-specific tab visibility
+const DEAL_TABS: Record<DealType, ReportTab[]> = {
+  land_deal: ["property", "zoning", "analysis", "deal"],
+  wholesale: ["property", "zoning", "deal"],
+  creative_finance: ["property", "deal"],
+  hybrid: ["property", "zoning", "analysis", "deal"],
+};
+
 export default function TabbedReport({ report, dealType }: TabbedReportProps) {
-  const [activeTab, setActiveTab] = useState<ReportTab>("property");
+  const visibleTabIds = DEAL_TABS[dealType] || DEAL_TABS.land_deal;
+  const visibleTabs = TABS.filter((t) => visibleTabIds.includes(t.id));
+  const [activeTab, setActiveTab] = useState<ReportTab>(visibleTabIds[0]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const { toast } = useToast();
@@ -260,7 +270,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
 
       {/* Tab bar */}
       <div className="flex border-b border-t border-[var(--border)]" role="tablist" aria-label="Report sections">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             role="tab"
