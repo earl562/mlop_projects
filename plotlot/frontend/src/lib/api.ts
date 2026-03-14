@@ -202,6 +202,7 @@ export async function streamAnalysis(
   onResult: (report: ZoningReportData) => void,
   onError: (error: string) => void,
   onThinking?: (event: ThinkingEvent) => void,
+  onSuggestions?: (suggestions: string[]) => void,
   onRetry?: (attempt: number) => void,
 ): Promise<void> {
   const maxRetries = 1;
@@ -261,6 +262,8 @@ export async function streamAnalysis(
                 onResult(parsed as ZoningReportData);
               } else if (eventType === "thinking") {
                 onThinking?.(parsed as ThinkingEvent);
+              } else if (eventType === "suggestions") {
+                onSuggestions?.(parsed.suggestions || []);
               } else if (eventType === "error") {
                 onError(parsed.detail || "Unknown error");
               }

@@ -59,7 +59,7 @@ export default function AnalysisStream({ steps, error, onWrongProperty, thinking
   const propertyStep = stepMap.get("property");
 
   return (
-    <div className="py-2">
+    <div className="py-2" role="status" aria-live="polite" aria-label="Analysis progress">
       {/* Progress bar + step counter */}
       <div className="mb-4">
         <div className="mb-1.5 flex items-center justify-between">
@@ -73,7 +73,7 @@ export default function AnalysisStream({ steps, error, onWrongProperty, thinking
           </span>
           <span className="text-xs font-medium text-amber-600">{progressPct}%</span>
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-surface-raised)]">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-surface-raised)]" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100} aria-label={`Analysis ${progressPct}% complete`}>
           <div
             className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
             style={{ width: `${progressPct}%` }}

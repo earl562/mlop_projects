@@ -87,7 +87,7 @@ export default function PipelineApproval({
         </p>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2" role="group" aria-label="Pipeline steps to include">
         {PIPELINE_STEPS.map((step) => {
           const isEnabled = enabledSteps[step.key];
           return (

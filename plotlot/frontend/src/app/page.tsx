@@ -105,6 +105,7 @@ export default function Home() {
   const [selectedDealType, setSelectedDealType] = useState<DealType | null>(null);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [docCanvasOpen, setDocCanvasOpen] = useState(false);
+  const [contextualSuggestions, setContextualSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idPrefix = useId();
@@ -209,6 +210,9 @@ export default function Home() {
                 };
               }),
             );
+          },
+          (suggestions) => {
+            setContextualSuggestions(suggestions);
           },
         );
 
@@ -513,7 +517,7 @@ export default function Home() {
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto pb-52">
-        <div className="mx-auto max-w-3xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6">
+        <div className="mx-auto max-w-3xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6" role="log" aria-live="polite" aria-label="Analysis conversation">
           {messages.map((msg) => (
             <div key={msg.id} className="animate-fade-up">
               {/* Pipeline progress — inline stepper */}
@@ -737,6 +741,21 @@ export default function Home() {
         <div className="input-fade-bg h-8 pointer-events-none" />
 
         <div className="bg-[var(--bg-primary)] px-3 pb-3 sm:px-4 sm:pb-4">
+          {/* Contextual suggestions — lookup mode after report */}
+          {mode === "lookup" && hasReport && contextualSuggestions.length > 0 && !isProcessing && (
+            <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2 px-3 sm:gap-2 sm:px-0">
+              {contextualSuggestions.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => { setMode("agent"); sendMessage(s); }}
+                  className="min-h-[44px] rounded-full border border-amber-200 bg-amber-50/50 px-4 py-2 text-xs text-amber-700 transition-all hover:bg-amber-100 hover:-translate-y-0.5 active:scale-[0.98] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Follow-up suggestions — agent mode only */}
           {mode === "agent" && !isProcessing && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.isStreaming && (
             <div className="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2 px-3 sm:gap-2 sm:px-0">
