@@ -414,146 +414,351 @@ Theory without practice is blueprints without buildings. Here are progressive pr
 
 ### Phase 2 Projects: The Licensed Architect Track
 
-> You've managed buildings. Now you're going to design the structural systems themselves.
+> You've managed buildings. Now you're going to design the structural systems themselves. These projects directly mirror the representative projects listed in Anthropic's Software Engineer, Sandboxing (Systems) JD. Each one involves real ML workloads, measurable performance improvements, and production-grade engineering.
 
-#### Project 2.1: "The Foundation" — xv6 Operating System Labs
+#### Prerequisite: "Soil Science" — xv6 Operating System Labs
 
-**Real Estate Analogy**: Study soil science before you pour any foundation
+> **This is coursework, not a portfolio project.** Think of it as studying for your architect's license exam — mandatory, but you don't show it to clients.
 
-**What You'll Build**:
-- Complete MIT 6.1810 labs on the xv6 operating system
-- Focus areas: page tables, traps, system calls, scheduling, file system
-
-**Skills Practiced**:
-- Kernel programming in C
-- Virtual memory management (the master floorplan)
-- Process isolation at the kernel level
-- Interrupt handling (the fire alarm system)
+Complete MIT 6.1810 labs (page tables, traps, system calls, scheduling, file system). This gives you the kernel literacy required for everything below. Do this concurrently with Phase 1 projects, not sequentially after them.
 
 **Acceptance Criteria**:
 - [ ] All 6.1810 labs passing
-- [ ] Can explain: "How does xv6 isolate process memory using page tables?"
-- [ ] Can explain: "What happens during a trap from user to kernel mode?"
-- [ ] Written reflection on how xv6 concepts map to real sandboxing
+- [ ] Can explain from memory: page table walks, trap frames, context switch mechanics
+- [ ] Written reflection mapping xv6 concepts to real sandboxing primitives
 
 ---
 
-#### Project 2.2: "The Custom Foundation" — Build a Hypervisor
+#### Project 2.1: "The Custom Foundation" — LLM Inference-Optimized microVM
 
-**Real Estate Analogy**: Design a new type of foundation that supports multiple independent buildings on one lot
+> **JD Match**: *"Creating lightweight virtualization solutions tailored for AI inference"*
+>
+> **Real Estate Analogy**: Design a prefab home factory specifically engineered for data center tenants — every square inch optimized for compute density. Standard prefabs (generic Firecracker) waste space with features your tenants don't need. You're building custom units where the plumbing (I/O), electrical (CPU pinning), and HVAC (memory) are purpose-built for one type of occupant: LLM inference workloads.
 
 **What You'll Build**:
-- A minimal Type-2 hypervisor using KVM (Linux's built-in virtualization)
-- Boot a guest Linux kernel in a VM you created from scratch
-- Implement basic device emulation (serial console, block device)
-- Written in C or Rust
+- Fork or extend **Firecracker** (or Cloud Hypervisor) to create an inference-specialized microVM:
+  - **Custom guest kernel config**: Strip ~80% of unnecessary modules (no USB, no sound, no legacy drivers). Enable huge pages, KSM (Kernel Same-page Merging), and transparent huge pages for model weight regions
+  - **vCPU pinning**: Pin guest vCPUs to specific host cores, avoiding cross-NUMA scheduling. Configure `isolcpus` on the host to dedicate cores exclusively to microVM workloads
+  - **Balloon driver**: Implement dynamic memory adjustment between host and guest — reclaim unused guest memory during low-load periods, expand during batch inference
+  - **GPU passthrough**: Configure VFIO-based GPU passthrough (or virtio-gpu for shared GPU) so the microVM can run CUDA workloads directly
+  - **Snapshot/restore optimization**: Create VM snapshots with model weights already loaded in memory — "warm starts" that skip model loading entirely
+- Run actual LLM inference inside the microVM: **vLLM serving Llama 3 8B** (or llama.cpp with a quantized 70B)
+- Benchmark against three baselines: bare metal, Docker container, and stock Firecracker
 
-**Reference**: Study Firecracker's source code (50,000 lines of Rust) and kvmtool
+**Tech Stack**: Rust, KVM API (`/dev/kvm` ioctls), virtio device models, VFIO, Linux kernel config (`make menuconfig`), Firecracker/Cloud Hypervisor source code
 
-**Skills Practiced**:
-- KVM API (`/dev/kvm` ioctl interface)
-- x86 virtualization extensions (VT-x: VMCS, VMX, EPT)
-- Virtual device models (virtio)
-- Memory mapping for guest physical → host virtual translation
-- Rust systems programming (if you choose Rust)
+**Key Metrics to Measure**:
+- Cold start latency (target: <150ms to first inference)
+- Warm start latency via snapshot/restore (target: <30ms)
+- Inference throughput: tokens/sec at batch size 1, 8, 32
+- Memory overhead per microVM (target: <5MB VMM overhead)
+- p99 latency comparison: microVM vs. bare metal (target: <5% overhead)
 
 **Acceptance Criteria**:
-- [ ] Guest Linux kernel boots to userspace in your hypervisor
-- [ ] Serial console I/O works (you can type commands in the guest)
-- [ ] Memory isolation verified (guest can't access host memory)
-- [ ] Boot time measured and documented
-- [ ] Architecture document explaining your design decisions
+- [ ] Custom guest kernel boots in microVM with only ML-relevant modules
+- [ ] vLLM or llama.cpp runs inference end-to-end inside the microVM
+- [ ] GPU passthrough or virtio-gpu functional for CUDA workloads
+- [ ] Snapshot/restore with pre-loaded model weights operational
+- [ ] Benchmark report: "LLM Inference in Optimized microVMs — Performance Analysis" with flame graphs, latency distributions, and throughput curves
+- [ ] Architecture doc explaining every optimization decision and its measured impact
 
 ---
 
-#### Project 2.3: "The Prefab Factory" — Firecracker microVM Sandbox
+#### Project 2.2: "The Smart Elevator" — BPF-Based ML Workload Scheduler
 
-**Real Estate Analogy**: Build a factory that mass-produces prefab modular homes in under 200ms each
+> **JD Match**: *"Developing specialized I/O schedulers to prioritize ML workloads"*
+>
+> **Real Estate Analogy**: Your high-rise has one elevator system, but 80% of the traffic is freight (GPU data transfers). The default elevator (CFS/EEVDF scheduler) treats a delivery truck the same as a resident going to the lobby. You're building a custom elevator controller that recognizes freight, gives it express lanes, and coordinates all delivery trucks to arrive at the loading dock simultaneously (gang scheduling) — because if one truck is late, the entire shipment is delayed.
 
 **What You'll Build**:
-- Deploy Firecracker on a bare-metal or nested-virt machine
-- Build an orchestration layer that:
-  - Spins up microVMs on demand via Firecracker's REST API
-  - Injects user code into the microVM
-  - Captures output and returns results
-  - Destroys the microVM after execution
-- Optimize for cold-start latency (target: <200ms)
-- Implement snapshot/restore for "warm" starts
 
-**Skills Practiced**:
-- Firecracker microVM management
-- KVM-based virtualization in practice
-- Performance optimization (cold start, memory overhead)
-- The jailer security model (chroot + cgroups + seccomp)
-- REST API design for VM lifecycle management
+**Part A: Custom CPU Scheduler via sched_ext**
+- Write a **sched_ext** scheduler following the `scx_rustland` architecture:
+  - **Rust user-space component**: Complex scheduling logic — task classification, priority assignment, NUMA-aware CPU selection, and historical latency tracking
+  - **BPF kernel component**: Minimal fast-path — task enqueue/dequeue, dispatch queue management, safety watchdog
+  - Communication between user-space and kernel via **ring buffers**
+- Scheduler policies:
+  - **ML task detection**: Identify inference/training processes by cgroup label (e.g., `/ml-inference/*`), process name patterns, or `sched_setattr` hints
+  - **GPU jitter reduction**: When an ML task is about to launch a GPU kernel (detected via tracepoint on `ioctl` to `/dev/nvidia*`), pin it to a dedicated core and boost its priority to minimize CPU scheduling delay before GPU dispatch
+  - **NUMA affinity**: Automatically schedule ML tasks on the NUMA node closest to their allocated GPU (query topology from `/sys/devices/system/node/`)
+  - **Gang scheduling**: For distributed training, ensure all ranks (processes across VMs) are co-scheduled simultaneously — if rank 2 of 4 is descheduled, the all-reduce stalls ALL ranks
+- Safety: If your scheduler fails to schedule a task within 30s, sched_ext automatically falls back to default CFS
+
+**Part B: I/O Prioritization via BPF**
+- Attach BPF programs to the Linux block layer (`blk-mq` tracepoints):
+  - **Priority queue**: Model weight reads and KV cache page-ins get highest I/O priority
+  - **Checkpoint deadline**: Training checkpoint writes get deadline-based scheduling (must complete within N seconds or alert)
+  - **Background demotion**: System logs, metrics collection, and non-ML I/O get demoted to best-effort
+- Integrate with `io_uring` for async I/O submission from the ML workload side
+
+**Benchmarks** (run on real workloads):
+- PyTorch DDP ResNet-50 training: measure iteration time variance (jitter) with custom scheduler vs. CFS
+- vLLM Llama 3 8B serving: measure p50/p99/p999 token latency under concurrent load
+- Training checkpoint write latency with I/O prioritization vs. default
+
+**Tech Stack**: sched_ext framework, BPF/eBPF (libbpf), Rust (user-space scheduler), C (BPF programs), `io_uring`, Linux block layer, `perf sched` for analysis
+
+**Reference Material**:
+- [sched_ext: BPF-Powered CPU Schedulers in the Linux Kernel](https://free5gc.org/blog/20250305/20250305/)
+- [gpu_ext: Extensible OS Policies for GPUs via eBPF](https://arxiv.org/html/2512.12615) (Dec 2025) — 2x throughput with BPF GPU policies
+- [Linux Plumbers 2025: sched_ext GPU awareness talks](https://lpc.events/event/19/sessions/229/)
+- `scx_rustland` source code in the sched_ext repo
 
 **Acceptance Criteria**:
-- [ ] microVMs boot in <200ms
-- [ ] Code execution works end-to-end (submit code → get output)
-- [ ] Jailer is configured with full security (cgroups, seccomp, chroot)
-- [ ] Snapshot/restore reduces warm-start to <50ms
-- [ ] Memory overhead per microVM documented (<5MB target)
-- [ ] Comparison doc: "Firecracker microVM vs Docker container vs full VM"
+- [ ] sched_ext scheduler loads dynamically, falls back safely on failure
+- [ ] ML tasks are correctly classified and prioritized (verified via `/proc/sched_debug`)
+- [ ] Gang scheduling demonstrated: 4 PyTorch DDP ranks co-scheduled with <1ms skew
+- [ ] I/O prioritization measurably reduces model load time and checkpoint write latency
+- [ ] Benchmark report: "ML-Aware CPU and I/O Scheduling — Performance Impact on LLM Inference and Distributed Training"
+- [ ] Comparison table: Custom scheduler vs. CFS vs. EEVDF across all workloads
 
 ---
 
-#### Project 2.4: "The Smart Building" — Kernel Performance Optimization
+#### Project 2.3: "The Water System" — NUMA-Aware Memory Allocator for LLM Serving
 
-**Real Estate Analogy**: Retrofit a building with smart systems — IoT sensors, predictive HVAC, optimized elevator scheduling
+> **JD Match**: *"Implementing custom memory management schemes for large-scale distributed training"*
+>
+> **Real Estate Analogy**: You're designing the water distribution system for a 50-story mixed-use building where every floor has radically different plumbing needs. The penthouse restaurant (GPU attention layers) needs direct, high-pressure water lines with zero lag. The office floors (CPU embedding layers) can share mains. The basement storage (cold KV cache) uses a cistern that fills overnight. A standard uniform plumbing system wastes pressure on floors that don't need it and starves floors that do. You're building **zone-based water management** — each zone gets exactly the pressure and volume it needs.
 
 **What You'll Build**:
-- Take the Firecracker sandbox from Project 2.3 and optimize it for ML inference workloads:
-  - Kernel parameter tuning (scheduler, memory, networking)
-  - Custom cgroup configurations for GPU/CPU-intensive workloads
-  - eBPF-based monitoring and performance analysis
-  - NUMA-aware memory allocation
-- Benchmark before and after each optimization
 
-**Skills Practiced**:
-- Linux kernel tuning (sysctl, boot parameters)
-- eBPF programming (the smart building sensor network)
-- perf profiling and flame graphs
-- NUMA topology and memory placement
-- Performance benchmarking methodology
+**Part A: NUMA-Aware Model Weight Allocator**
+- Implement a custom memory allocator (C library with Python bindings, or Rust with FFI) that:
+  - **Queries NUMA topology** at startup: which CPU sockets, which memory nodes, which GPUs are on which NUMA node (`libnuma`, `/sys/devices/system/node/`)
+  - **Places model weight tensors** on the NUMA node local to the GPU that will consume them — attention head weights go on GPU-local DRAM, not remote DRAM
+  - **Uses huge pages** (2MB via `madvise(MADV_HUGEPAGE)` or 1GB via `hugetlbfs`) for model weight regions to reduce TLB misses. A 70B model in FP16 = ~140GB = ~70 million 4KB pages = massive TLB pressure. With 2MB huge pages, that's ~70K entries. With 1GB pages, ~140.
+  - **Memory binding**: Use `mbind()` / `set_mempolicy()` to enforce NUMA placement, preventing the kernel from migrating pages to remote nodes
+
+**Part B: PagedAttention-Inspired KV Cache Manager**
+- Implement a virtual memory-style KV cache manager (inspired by vLLM's PagedAttention):
+  - **Block-based allocation**: Divide KV cache memory into fixed-size blocks (like OS pages). Allocate blocks on demand per sequence, not pre-allocated per max sequence length
+  - **Block table**: Maintain a mapping table (like a page table) from logical KV positions to physical memory blocks
+  - **Copy-on-write**: For beam search or parallel sampling, share KV blocks between sequences and only copy when one sequence diverges
+  - **Memory defragmentation**: Periodically compact KV blocks to reduce fragmentation (like OS memory compaction)
+  - **Tiered storage**: Hot blocks (recent tokens) in GPU HBM → warm blocks in CPU DRAM → cold blocks on NVMe SSD, with transparent migration
+
+**Part C: Integration & Benchmarking**
+- Integrate as a custom allocator backend for **vLLM** or **llama.cpp**
+- Measure:
+  - **TLB miss reduction**: Before/after huge pages (using `perf stat -e dTLB-load-misses`)
+  - **NUMA remote access reduction**: Before/after NUMA-aware placement (using `perf stat -e node-load-misses`)
+  - **KV cache utilization**: What % of allocated memory contains actual token state? (baseline: 20-38% in naive systems per vLLM paper)
+  - **End-to-end inference latency**: p50/p99 token generation time with your allocator vs. default `malloc`
+
+**Tech Stack**: C or Rust, `mmap`, `mbind`/`set_mempolicy`, `madvise`, `hugetlbfs`, `libnuma`/`numactl`, `perf`/`cachegrind`/`numastat`, Python ctypes/cffi for integration
+
+**Reference Material**:
+- [vLLM PagedAttention Paper](https://arxiv.org/pdf/2309.06180) — "Efficient Memory Management for LLM Serving"
+- [KTransformers (SOSP '25)](https://madsys.cs.tsinghua.edu.cn/publication/ktransformers-unleashing-the-full-potential-of-cpu/gpu-hybrid-inference-for-moe-models/SOSP25-chen.pdf) — NUMA-aware tensor parallelism, 1.63x throughput
+- [CXL-Aware Memory Allocator](https://arxiv.org/html/2507.03305v2) — per-tensor NUMA-aware allocation, 21% improvement
+- [NVIDIA: CPU-GPU Memory Sharing for LLM Inference](https://developer.nvidia.com/blog/accelerate-large-scale-llm-inference-and-kv-cache-offload-with-cpu-gpu-memory-sharing/)
 
 **Acceptance Criteria**:
-- [ ] Baseline benchmarks documented (latency, throughput, memory)
-- [ ] At least 3 kernel optimizations implemented with measured impact
-- [ ] eBPF program monitors sandbox syscall patterns
-- [ ] Flame graph analysis identifies top bottlenecks
-- [ ] Final report: "Optimizing microVM Performance for ML Inference"
+- [ ] Allocator correctly queries NUMA topology and places tensors on GPU-local nodes
+- [ ] Huge page allocation verified (`/proc/meminfo` HugePages_Total)
+- [ ] PagedAttention-style KV cache with block table, CoW, and defragmentation working
+- [ ] TLB miss reduction ≥50% measured with `perf`
+- [ ] NUMA remote access reduction ≥60% measured with `numastat`
+- [ ] KV cache utilization ≥85% (up from ~30% baseline)
+- [ ] Benchmark report: "NUMA-Aware Memory Management for LLM Inference — From 30% to 85% KV Cache Utilization"
 
 ---
 
-#### Project 2.5: "The Development" — Production Sandbox Platform
+#### Project 2.4: "The Skywalks" — Inter-VM Communication for Distributed Training
 
-**Real Estate Analogy**: Build an entire mixed-use development — the capstone that combines everything
+> **JD Match**: *"Enhancing communication between VMs for distributed training workloads"*
+>
+> **Real Estate Analogy**: You have 4 adjacent buildings (microVMs) that need to move massive freight (gradient tensors) between them every 200ms. The current method: load freight onto a truck (TCP), drive it out one building's garage, across the street, and into the next building's garage. That's a 3-mile round trip for buildings that share a wall. You're building **skywalks** — enclosed elevated walkways with conveyor belts that move freight directly between buildings through shared walls (shared memory), bypassing the street (network stack) entirely.
 
 **What You'll Build**:
-- A production-grade sandbox execution platform combining ALL prior work:
-  - **Frontend**: API accepting code execution requests
-  - **Orchestrator**: Distributes work across a pool of machines
-  - **Executor**: Firecracker microVMs with optimized kernel configs
-  - **Isolation**: Full security stack (namespaces, cgroups, seccomp, KVM)
-  - **Observability**: Prometheus, Grafana, eBPF-based tracing
-  - **IaC**: Entire stack deployable via Terraform
 
-**Skills Practiced**:
-- Everything from Phase 1 and Phase 2 integrated
-- System design and architecture decisions
-- Production readiness (graceful degradation, circuit breakers, rate limiting)
-- Documentation and operational runbooks
+**Part A: Shared Memory Transport**
+- Implement a **shared memory ring buffer** between Firecracker microVMs:
+  - Host allocates a hugepage-backed shared memory region
+  - Each microVM maps the region via **ivshmem** (inter-VM shared memory) virtual PCI device
+  - Ring buffer protocol: lock-free SPSC (single-producer single-consumer) or MPMC ring with cache-line-aligned slots to avoid false sharing
+  - Zero-copy: producer writes gradient tensor directly into shared buffer, consumer reads in-place — no `memcpy`, no serialization
+- Control plane: **virtio-vsock** for metadata exchange (tensor shapes, synchronization signals)
+- Data plane: shared memory for bulk gradient transfer
 
-**This is your portfolio piece.** This is what you walk into the Anthropic interview with.
+**Part B: Custom PyTorch DDP Communication Backend**
+- Implement a PyTorch `ProcessGroupBackend` plugin that:
+  - Replaces TCP/NCCL with your shared-memory transport for inter-VM all-reduce
+  - **All-reduce implementation**: Ring all-reduce over shared memory — each VM reads from left neighbor's buffer, reduces with local gradients, writes to right neighbor's buffer
+  - Supports common collective operations: `all_reduce`, `broadcast`, `all_gather`
+  - Handles gradient quantization (FP32 → FP16 → INT8) in the communication layer to reduce bandwidth
+- Run **PyTorch DDP training** across 2-4 Firecracker microVMs, each VM acting as one training rank
+
+**Part C: Performance Analysis**
+- **eBPF monitoring**: Attach probes to measure:
+  - Communication latency per all-reduce call (microseconds)
+  - Bandwidth utilization of shared memory channel
+  - CPU overhead of the communication backend
+  - Time spent in synchronization barriers vs. actual data transfer
+- Benchmark against:
+  - **TCP-based NCCL**: Standard inter-VM communication over virtual network
+  - **Bare-metal NCCL**: No VM overhead, direct hardware access (the ceiling)
+  - **Your shared-memory backend**: The goal is to approach bare-metal performance
+
+**Tech Stack**: C/Rust (shared memory transport), Python (PyTorch backend plugin), virtio-vsock, ivshmem, DPDK virtio-user (optional for network-path comparison), eBPF, PyTorch DDP
+
+**Reference Material**:
+- [ACRN Inter-VM Shared Memory Communication](https://projectacrn.github.io/latest/tutorials/enable_ivshmem.html)
+- [DPDK Virtio-User for Container Networking](http://doc.dpdk.org/guides-25.11/howto/virtio_user_for_container_networking.html)
+- [Shared-Memory Optimizations for Inter-VM Communication (ACM Survey)](https://dl.acm.org/doi/abs/10.1145/2847562)
+- [NCCL: Optimized Primitives for Inter-GPU Communication](https://developer.nvidia.com/nccl)
 
 **Acceptance Criteria**:
-- [ ] End-to-end: submit code via API → execute in microVM → get results
-- [ ] Handles 100+ concurrent sandbox executions
-- [ ] Security audit: no container/VM escapes in threat model
-- [ ] Full observability dashboard
-- [ ] Operational runbook for common failure modes
-- [ ] Architecture document suitable for a system design interview
-- [ ] Public GitHub repo with clean README
+- [ ] Shared memory ring buffer functional between 2+ Firecracker microVMs
+- [ ] PyTorch DDP training completes successfully across microVMs using custom backend
+- [ ] All-reduce latency within 2x of bare-metal NCCL (measured via eBPF)
+- [ ] Zero-copy verified: no intermediate buffers in data path
+- [ ] Training convergence matches baseline (same loss curve as TCP/NCCL)
+- [ ] Benchmark report: "Inter-VM Communication for Distributed Training — Shared Memory vs. TCP vs. Bare Metal"
+
+---
+
+#### Project 2.5: "The Building Inspector's Dashboard" — eBPF Observability for Sandboxed ML Workloads
+
+> **JD Match**: *"Building monitoring and instrumentation tools to identify system-level bottlenecks"*
+>
+> **Real Estate Analogy**: You're installing a smart building management system with sensors embedded in every wall, pipe, wire, and elevator shaft. Not just smoke detectors (crash alerts) — **thermal cameras** that see heat patterns through walls (flame graphs), **flow meters** on every pipe junction (memory bandwidth), **vibration sensors** on every motor (scheduler latency), and a **central command center** (Grafana) that correlates all signals to predict failures before they happen. When a tenant calls to say "my apartment is cold," you already know it's because Pump 3B on Floor 7 is running at 40% capacity due to a clogged filter installed 3 weeks ago.
+
+**What You'll Build**:
+
+**Part A: eBPF Instrumentation Suite**
+A collection of purpose-built eBPF programs, each targeting a specific bottleneck class:
+
+| Program | What It Measures | Attachment Point | Real Estate Analogy |
+|---|---|---|---|
+| `sandbox-syscall-profiler` | Per-sandbox syscall latency histograms | `tracepoint/raw_syscalls/sys_enter` + `sys_exit` | Maintenance request response times per unit |
+| `page-fault-tracker` | Major/minor page fault rates, NUMA migration events | `tracepoint/exceptions/page_fault_user` | Plumbing leak detection per floor |
+| `sched-latency-monitor` | CPU runqueue wait time for ML tasks after GPU completion | `tracepoint/sched/sched_wakeup` + `sched_switch` | Elevator wait times per floor |
+| `vm-network-analyzer` | Inter-VM bandwidth, latency, packet drops | `tracepoint/net/net_dev_xmit` + `kprobe/tcp_sendmsg` | Skywalk traffic flow and congestion |
+| `memory-bandwidth-meter` | Per-NUMA-node memory bandwidth and remote access rates | `perf_event` hardware counters | Water pressure per zone |
+| `gpu-cpu-correlator` | Time between GPU kernel completion and next CPU-side dispatch | `kprobe` on NVIDIA `ioctl` + `sched_switch` | Freight elevator turnaround time |
+
+**Part B: Export & Visualization**
+- Export all metrics to **Prometheus** via BPF map → user-space exporter → Prometheus scrape
+- Pre-built **Grafana dashboards**:
+  - **Sandbox Overview**: Per-sandbox health score, resource utilization, anomaly flags
+  - **Scheduler Analysis**: Runqueue depth over time, ML task wait latency distribution, gang scheduling skew
+  - **Memory Heatmap**: NUMA node utilization, page fault rates, huge page coverage
+  - **Communication Monitor**: Inter-VM latency matrix, bandwidth utilization, dropped packets
+- **Automated flame graph generation**: On-demand `perf record` → flame graph SVG via `inferno` or Brendan Gregg's FlameGraph tools
+
+**Part C: Anomaly Detection**
+- Establish **baseline syscall profiles** for healthy sandboxes (e.g., "a healthy vLLM sandbox makes ~X syscalls/sec with this distribution")
+- Flag deviations: "Sandbox 47 has 10x more `futex` calls than baseline — likely lock contention"
+- Implement alerting rules in Prometheus: page fault rate spike → NUMA migration storm → investigate placement
+
+**Tech Stack**: eBPF (libbpf for production, bpftrace for prototyping), BCC, `perf_event` interface, Prometheus client library, Grafana, `inferno` (Rust flame graph generator), Python (exporter daemon)
+
+**Reference Material**:
+- *BPF Performance Tools* by Brendan Gregg (the bible)
+- [gpu_ext observability tools](https://arxiv.org/html/2512.12615) — eBPF on GPU devices
+- [bpftrace reference guide](https://github.com/iovisor/bpftrace/blob/master/docs/reference_guide.md)
+
+**Acceptance Criteria**:
+- [ ] All 6 eBPF programs functional and producing correct metrics
+- [ ] Prometheus scraping all metrics with <1s latency
+- [ ] Grafana dashboards showing real-time sandbox health across all dimensions
+- [ ] Anomaly detection correctly identifies at least 3 injected failure modes (lock contention, NUMA thrashing, I/O starvation)
+- [ ] Flame graph generation works on-demand for any running sandbox
+- [ ] Documentation: "eBPF Observability for Sandboxed ML Workloads — Operator's Guide"
+
+---
+
+#### Project 2.6: "The Development" — Production LLM Inference Sandbox Platform (Capstone)
+
+> **JD Match**: ALL six representative projects integrated into one system
+>
+> **Real Estate Analogy**: The entire mixed-use development — but not a cookie-cutter suburban subdivision. This is a purpose-built, smart, energy-efficient, high-density data center campus where every system (foundation, plumbing, electrical, elevator, security, building management) is custom-designed and integrated. The penthouse units (GPU nodes) have direct water lines (NUMA-aware memory). The skywalks (shared memory) move freight between buildings at conveyor-belt speed. The elevator system (BPF scheduler) knows which freight is time-sensitive. The building inspector (eBPF observability) has sensors in every wall. And the whole thing was built from prefab modules (optimized microVMs) that snap together in under 150ms.
+
+**What You'll Build**:
+- A production-grade LLM inference sandbox platform that integrates ALL prior Phase 2 work:
+  - **Execution substrate**: Inference-optimized microVMs from Project 2.1 (custom kernel, huge pages, GPU passthrough, snapshot/restore)
+  - **CPU/IO scheduling**: BPF-based ML scheduler from Project 2.2 (sched_ext for CPU, BPF for I/O priority)
+  - **Memory management**: NUMA-aware allocator from Project 2.3 (tensor placement, KV cache paging, huge pages)
+  - **Inter-VM communication**: Shared memory transport from Project 2.4 (for multi-VM tensor-parallel inference)
+  - **Observability**: eBPF monitoring suite from Project 2.5 (syscall profiling, scheduler analysis, memory heatmaps)
+
+**System Architecture**:
+```
+                                    ┌─────────────────────────┐
+                                    │    API Gateway (gRPC)    │
+                                    │  Accept inference reqs   │
+                                    └────────────┬────────────┘
+                                                 │
+                                    ┌────────────▼────────────┐
+                                    │     Orchestrator        │
+                                    │  - VM pool management   │
+                                    │  - Request routing      │
+                                    │  - Auto-scaling         │
+                                    └────────────┬────────────┘
+                                                 │
+                        ┌────────────────────────┼────────────────────────┐
+                        │                        │                        │
+               ┌────────▼────────┐      ┌────────▼────────┐     ┌────────▼────────┐
+               │  microVM Pool   │      │  microVM Pool   │     │  microVM Pool   │
+               │  (GPU Node 0)   │◄────►│  (GPU Node 1)   │◄───►│  (GPU Node 2)   │
+               │                 │ shared│                 │shared│                 │
+               │  ┌───────────┐  │memory │  ┌───────────┐  │mem  │  ┌───────────┐  │
+               │  │ vLLM +    │  │  ◄──► │  │ vLLM +    │  │◄──► │  │ vLLM +    │  │
+               │  │ Custom    │  │       │  │ Custom    │  │     │  │ Custom    │  │
+               │  │ Allocator │  │       │  │ Allocator │  │     │  │ Allocator │  │
+               │  └───────────┘  │       │  └───────────┘  │     │  └───────────┘  │
+               └────────┬────────┘       └────────┬────────┘     └────────┬────────┘
+                        │                         │                       │
+               ┌────────▼─────────────────────────▼───────────────────────▼────────┐
+               │                    Host Kernel Layer                               │
+               │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐ │
+               │  │ sched_ext    │  │ BPF I/O      │  │ eBPF Observability Suite │ │
+               │  │ ML Scheduler │  │ Prioritizer  │  │ (Prometheus + Grafana)   │ │
+               │  └──────────────┘  └──────────────┘  └──────────────────────────┘ │
+               └───────────────────────────────────────────────────────────────────┘
+```
+
+**End-to-End Flow**:
+1. Client sends inference request via gRPC
+2. Orchestrator selects a microVM from the warm pool (snapshot/restore, <30ms)
+3. Request routed to microVM running vLLM with NUMA-aware allocator
+4. For tensor-parallel inference: shared memory all-reduce across microVMs on same host
+5. BPF scheduler ensures ML tasks get priority CPU time, I/O prioritizer fast-tracks model weight loads
+6. eBPF suite monitors every layer, exports to Prometheus/Grafana
+7. Tokens streamed back to client via SSE
+
+**Key Demonstration**:
+- Run vLLM serving Llama 3 8B (or 70B with tensor parallelism across VMs)
+- Compare against **naive baseline**: stock Docker container, default kernel, TCP networking, no observability
+- Show measurable improvements across every dimension:
+
+| Metric | Naive Baseline | Your Platform | Improvement |
+|---|---|---|---|
+| Cold start latency | ~2-5s (Docker pull + model load) | <150ms (snapshot/restore) | 10-30x |
+| p99 token latency | Baseline measurement | Lower via scheduler + memory opts | Measurable |
+| KV cache utilization | ~30% (vLLM default) | ~85%+ (your paged allocator) | ~3x |
+| NUMA remote accesses | High (random placement) | Minimal (NUMA-aware) | ≥60% reduction |
+| Inter-VM all-reduce | TCP latency | Shared memory latency | Target 2-5x |
+| Observability | None / basic metrics | Full eBPF stack | Qualitative |
+
+**Security Stack** (non-negotiable — this is sandboxing):
+- KVM hardware virtualization (strongest isolation boundary)
+- seccomp-bpf syscall filtering on VMM process
+- Namespace isolation (PID, NET, MNT, USER)
+- Firecracker jailer (chroot + cgroup + seccomp)
+- No shared kernel between host and guest
+
+**Acceptance Criteria**:
+- [ ] End-to-end: submit prompt via API → spin up optimized microVM → run inference → stream tokens back
+- [ ] Handles 50+ concurrent inference requests with graceful queuing
+- [ ] All 5 subsystems integrated and working together (microVM + scheduler + memory + comms + observability)
+- [ ] Benchmark report with comparison table showing improvement across every metric
+- [ ] Security audit document: threat model, isolation boundaries, escape vector analysis
+- [ ] Full Grafana dashboard showing real-time platform health
+- [ ] Architecture document written as a **system design interview presentation** — diagrams, trade-offs, alternatives considered, why you chose what you chose
+- [ ] Public GitHub repo with clean README, architecture diagram, and benchmark results
+- [ ] **This is what you present at the Anthropic interview.**
 
 ---
 
@@ -583,29 +788,61 @@ Month 5-6: Inspection & Certification
 └── [ ] CHECKPOINT: Could you pass an Infrastructure Engineer interview? Practice.
 ```
 
-### Phase 2 Milestones (Months 7-12): Architect's License
+### Phase 2 Milestones (Months 7-18): Architect's License
+
+> Phase 2 is longer because the projects are production-grade. This isn't tutorial work — you're building systems that produce measurable performance improvements on real ML workloads.
 
 ```
-Month 7-8: Soil Science & Structural Engineering
-├── [ ] Project 2.1 complete (xv6 labs — all passing)
-├── [ ] Project 2.2 started (minimal hypervisor with KVM)
+Month 7-8: Soil Science & Foundation Pouring
+├── [ ] xv6 prerequisite labs complete (should have started in Phase 1)
+├── [ ] Project 2.1 started (inference-optimized microVM)
+│       └── Custom guest kernel config, vCPU pinning, Firecracker fork
 ├── [ ] Start MIT 6.172 (Performance Engineering) — first 6 lectures
 ├── [ ] Read: "Linux Kernel Development" by Robert Love (3rd Edition)
-└── [ ] Can explain: "How does KVM create a virtual machine at the hardware level?"
+├── [ ] Read: Firecracker paper (NSDI '20) + Firecracker source walkthrough
+└── [ ] Can explain: "How does KVM create a VM? What does Firecracker do differently than QEMU?"
 
-Month 9-10: Advanced Construction
-├── [ ] Project 2.2 complete (minimal hypervisor boots Linux)
-├── [ ] Project 2.3 complete (Firecracker microVM sandbox)
-├── [ ] MIT 6.172 — lectures 7-14, complete 2+ homework assignments
-├── [ ] Read Firecracker paper: "Firecracker: Lightweight Virtualization for Serverless Applications"
-└── [ ] Can explain: "What's the difference between KVM, QEMU, and Firecracker?"
+Month 9-10: Core Systems — Virtualization & Scheduling
+├── [ ] Project 2.1 complete (microVM boots, vLLM runs inference, benchmarks done)
+├── [ ] Project 2.2 started (BPF-based ML scheduler)
+│       └── sched_ext hello-world → ML task detection → NUMA-aware pinning
+├── [ ] MIT 6.172 — lectures 7-14 (cache optimization, parallelism, profiling)
+├── [ ] Read: "BPF Performance Tools" by Brendan Gregg, Chapters 1-8
+├── [ ] Study sched_ext source code (scx_rustland, scx_layered)
+└── [ ] Can explain: "How does sched_ext work? What are the safety guarantees?"
 
-Month 11-12: Capstone & Portfolio
-├── [ ] Project 2.4 complete (kernel performance optimization)
-├── [ ] Project 2.5 complete (production sandbox platform)
-├── [ ] MIT 6.172 — final project (Leiserchess)
-├── [ ] Architecture document for Project 2.5 polished for interviews
-├── [ ] CHECKPOINT: Could you pass a Systems Software Engineer interview? Practice.
+Month 11-12: Memory & Communication
+├── [ ] Project 2.2 complete (scheduler benchmarked against CFS on ML workloads)
+├── [ ] Project 2.3 started (NUMA-aware memory allocator)
+│       └── NUMA topology query → huge page allocation → KV cache paging
+├── [ ] Project 2.4 started (inter-VM shared memory communication)
+│       └── ivshmem ring buffer → PyTorch DDP backend
+├── [ ] Read: vLLM PagedAttention paper + KTransformers SOSP '25
+├── [ ] Read: ACRN ivshmem docs + DPDK virtio-user guide
+└── [ ] Can explain: "How does PagedAttention manage GPU memory like an OS manages RAM?"
+
+Month 13-14: Observability & Integration
+├── [ ] Project 2.3 complete (allocator integrated with vLLM, TLB miss reduction measured)
+├── [ ] Project 2.4 complete (shared-memory all-reduce benchmarked vs NCCL)
+├── [ ] Project 2.5 started (eBPF observability suite)
+│       └── 6 eBPF programs → Prometheus export → Grafana dashboards
+├── [ ] MIT 6.172 — complete remaining lectures + Leiserchess project
+└── [ ] Can explain: "Walk me through how you'd debug a latency spike in sandboxed LLM inference"
+
+Month 15-16: Capstone Construction
+├── [ ] Project 2.5 complete (observability suite with anomaly detection)
+├── [ ] Project 2.6 started (capstone: production LLM inference sandbox platform)
+│       └── Integrate all 5 subsystems, build orchestrator, wire gRPC API
+├── [ ] Benchmark: measure every metric in the comparison table
+├── [ ] Security audit: document threat model and isolation boundaries
+└── [ ] Architecture document first draft
+
+Month 17-18: Polish & Launch
+├── [ ] Project 2.6 complete (full platform operational)
+├── [ ] Benchmark report finalized with flame graphs, latency distributions, throughput curves
+├── [ ] Architecture document polished for system design interviews
+├── [ ] Public GitHub repo live with clean README, diagrams, and results
+├── [ ] CHECKPOINT: Could you pass a Systems Software Engineer interview? Mock interview.
 └── [ ] Apply to Anthropic.
 ```
 
@@ -626,19 +863,25 @@ Month 11-12: Capstone & Portfolio
 | Book | Real Estate Equivalent | Priority |
 |---|---|---|
 | *Linux Kernel Development* — Robert Love | The structural engineering textbook | Must-read |
-| *Understanding the Linux Kernel* — Bovet & Cesati | The deep geology survey | Deep reference |
+| *BPF Performance Tools* — Brendan Gregg | The smart building sensor installation manual | Must-read (Projects 2.2, 2.5) |
 | *Computer Systems: A Programmer's Perspective* (CS:APP) — Bryant & O'Hallaron | The materials science textbook | Must-read for perf |
+| *Understanding the Linux Kernel* — Bovet & Cesati | The deep geology survey | Deep reference |
 | *Operating Systems: Three Easy Pieces* (OSTEP) — Arpaci-Dusseau | The accessible intro to soil science | Great companion to 6.1810 |
-| *Programming Rust* — Blandy, Orendorff, Tindall | Modern engineered materials handbook | When you're ready for Rust |
+| *Programming Rust* — Blandy, Orendorff, Tindall | Modern engineered materials handbook | Must-read for Firecracker/sched_ext work |
 
-#### Key Papers
-| Paper | Why It Matters |
-|---|---|
-| *Firecracker: Lightweight Virtualization for Serverless Applications* (NSDI '20) | This IS the technology Anthropic builds on |
-| *Raft: In Search of an Understandable Consensus Protocol* | Core distributed systems — you'll implement this in 6.5840 |
-| *gVisor: Container Security Through Kernel Reimplementation* | Google's approach to sandboxing — alternative to Firecracker |
-| *The Google File System* | Foundational distributed storage paper |
-| *Bubblewrap: Unprivileged Sandboxing Tool* | Used by Anthropic's sandbox-runtime on Linux |
+#### Key Papers (Ordered by Project Relevance)
+| Paper | Project | Why It Matters |
+|---|---|---|
+| *Firecracker: Lightweight Virtualization for Serverless Applications* (NSDI '20) | 2.1 | This IS the technology Anthropic builds on. Read the source code too. |
+| *Efficient Memory Management for LLM Serving with PagedAttention* (SOSP '23) | 2.3 | OS-style virtual memory for KV cache. Your allocator project is inspired by this. |
+| *KTransformers: CPU/GPU Hybrid Inference for MoE Models* (SOSP '25) | 2.3 | NUMA-aware tensor parallelism — 1.63x throughput. Direct template for your allocator. |
+| *gpu_ext: Extensible OS Policies for GPUs via eBPF* (Dec 2025) | 2.2, 2.5 | eBPF on GPU devices — 2x throughput. The frontier of BPF-based ML scheduling. |
+| *sched_ext: A BPF-Extensible Scheduler Class* (LWN) | 2.2 | The framework you'll build your ML scheduler on. Read this before touching code. |
+| *Shared-Memory Optimizations for Inter-VM Communication* (ACM Survey) | 2.4 | Comprehensive survey of everything you'll implement in Project 2.4. |
+| *Raft: In Search of an Understandable Consensus Protocol* | Phase 1 | Core distributed systems — you'll implement this in 6.5840 |
+| *gVisor: Container Security Through Kernel Reimplementation* | General | Google's approach to sandboxing — alternative to Firecracker |
+| *The Google File System* | Phase 1 | Foundational distributed storage paper |
+| *Bubblewrap: Unprivileged Sandboxing Tool* | General | Used by Anthropic's sandbox-runtime on Linux |
 
 ---
 
@@ -663,6 +906,23 @@ Month 11-12: Capstone & Portfolio
 - [How AWS's Firecracker Virtual Machines Work — Amazon Science](https://www.amazon.science/blog/how-awss-firecracker-virtual-machines-work)
 - [How to sandbox AI agents in 2026: MicroVMs, gVisor & isolation strategies](https://northflank.com/blog/how-to-sandbox-ai-agents)
 
+### BPF & Scheduling
+- [sched_ext: BPF-Powered CPU Schedulers](https://free5gc.org/blog/20250305/20250305/) — Comprehensive sched_ext overview
+- [gpu_ext: eBPF Policies for GPUs](https://arxiv.org/html/2512.12615) — eBPF directly on NVIDIA GPUs (Dec 2025)
+- [Linux Plumbers 2025: sched_ext GPU Awareness](https://lpc.events/event/19/sessions/229/) — Future plans for ML-aware scheduling
+- [sched_ext Igalia Blog Series](https://blogs.igalia.com/changwoo/sched-ext-a-bpf-extensible-scheduler-class-part-1/) — Deep technical walkthrough
+
+### Memory Management for LLM
+- [vLLM PagedAttention Paper](https://arxiv.org/pdf/2309.06180) — OS-style virtual memory for KV cache
+- [KTransformers: NUMA-Aware MoE Inference (SOSP '25)](https://madsys.cs.tsinghua.edu.cn/publication/ktransformers-unleashing-the-full-potential-of-cpu/gpu-hybrid-inference-for-moe-models/SOSP25-chen.pdf)
+- [CXL-Aware Memory Allocator for LLM Fine-Tuning](https://arxiv.org/html/2507.03305v2)
+- [NVIDIA: CPU-GPU Memory Sharing for LLM Inference](https://developer.nvidia.com/blog/accelerate-large-scale-llm-inference-and-kv-cache-offload-with-cpu-gpu-memory-sharing/)
+
+### Inter-VM Communication
+- [ACRN Inter-VM Shared Memory (ivshmem)](https://projectacrn.github.io/latest/tutorials/enable_ivshmem.html)
+- [DPDK Virtio-User for Container Networking](http://doc.dpdk.org/guides-25.11/howto/virtio_user_for_container_networking.html)
+- [Shared-Memory Optimizations for Inter-VM Communication (ACM Survey)](https://dl.acm.org/doi/abs/10.1145/2847562)
+
 ### Community & Practice
 - [Raft Visualization](https://thesecretlivesofdata.com/raft/) — Interactive Raft consensus visualization
 - [Linux Insides](https://0xax.gitbooks.io/linux-insides/) — Free deep dive into Linux kernel internals
@@ -670,6 +930,10 @@ Month 11-12: Capstone & Portfolio
 
 ---
 
-> **Final Word**: You're not just studying for a job. You're building a career as a systems architect who understands computing from the silicon up to the cloud. The Infrastructure Engineer role is your entry point — it proves you can manage buildings at scale. The Systems Engineer role is your destination — it proves you can design the buildings themselves. Every project, every lab, every paper moves you closer to pouring your own foundation.
+> **Final Word**: You're not just studying for a job. You're building a career as a systems architect who understands computing from the silicon up to the cloud. The Infrastructure Engineer role (Phase 1, months 1-6) is your entry point — it proves you can manage buildings at scale. The Systems Engineer role (Phase 2, months 7-18) is your destination — it proves you can design the buildings themselves, optimize them for specific tenants (LLM workloads), and measure every improvement with hard numbers.
+>
+> The Phase 2 projects aren't tutorials. They're the same caliber of work listed in Anthropic's actual JD: optimized microVMs, BPF schedulers, NUMA-aware memory allocators, shared-memory inter-VM communication, and eBPF observability. Each project produces a benchmark report with real performance data. The capstone integrates all five into a production platform you can demo live.
+>
+> Every project, every lab, every paper moves you closer to pouring your own foundation.
 >
 > Now break ground.
