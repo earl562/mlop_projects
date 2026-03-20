@@ -3,18 +3,42 @@
 import { useState, useCallback } from "react";
 import { ZoningReportData } from "@/lib/api";
 import DensityBreakdown from "./DensityBreakdown";
-import BuildingRenderViewer from "./BuildingRenderViewer";
 import DocumentGenerator from "./DocumentGenerator";
-import FloorPlanViewer from "./FloorPlanViewer";
 import ParcelViewer from "./ParcelViewer";
 import SetbackDiagram from "./SetbackDiagram";
-import PropertyIntelligence from "./PropertyIntelligence";
-import DevelopmentConceptCard from "./DevelopmentConceptCard";
-import PropertyFlyoverVideo from "./PropertyFlyoverVideo";
 import { useToast } from "./Toast";
 
 interface ZoningReportProps {
   report: ZoningReportData;
+}
+
+const WELL_INDEXED = new Set([
+  "miami gardens", "miami-dade county", "miami dade county",
+  "boca raton", "miramar", "fort lauderdale",
+]);
+
+function getCoverageLevel(municipality: string | undefined): "full" | "partial" | "unknown" {
+  if (!municipality) return "unknown";
+  return WELL_INDEXED.has(municipality.toLowerCase()) ? "full" : "partial";
+}
+
+function CoverageBadge({ municipality }: { municipality: string | undefined }) {
+  const level = getCoverageLevel(municipality);
+  if (level === "unknown") return null;
+  if (level === "full") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Full zoning coverage
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+      <span className="text-[10px] leading-none">◐</span>
+      Partial coverage — zoning data may be limited
+    </span>
+  );
 }
 
 function ConfidenceBadge({ level }: { level: string }) {
@@ -191,6 +215,9 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           <p className="mt-1 text-xs text-[var(--text-muted)] sm:text-sm">
             {report.municipality}, {report.county} County
           </p>
+          <div className="mt-2">
+            <CoverageBadge municipality={report.municipality} />
+          </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <ConfidenceBadge level={report.confidence} />
@@ -230,6 +257,14 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <span className="text-sm text-[var(--text-muted)]">{report.zoning_description}</span>
       </div>
 
+      {/* Partial coverage callout */}
+      {getCoverageLevel(report.municipality) === "partial" && !report.zoning_district && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+          Zoning ordinance data isn&apos;t indexed for {report.municipality} yet.
+          Property record and comparable sales data are still available.
+        </div>
+      )}
+
       {/* Confidence warning — inline next to header when not high */}
       {report.confidence !== "high" && (
         <div className={`flex items-center gap-2 rounded-lg ${confidenceBorder} bg-[var(--bg-surface-raised)] px-3 py-2`}>
@@ -258,20 +293,6 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           />
         );
       })()}
-
-      {/* Development Concept — AI render of the completed build-out */}
-      {report.numeric_params?.property_type &&
-        report.density_analysis?.max_units != null &&
-        report.density_analysis.max_units > 0 && (
-          <DevelopmentConceptCard
-            address={report.formatted_address}
-            municipality={report.municipality}
-            zoningDistrict={report.zoning_district}
-            propertyType={report.numeric_params.property_type}
-            maxUnits={report.density_analysis.max_units}
-            lotSqft={report.density_analysis.lot_size_sqft || report.property_record?.lot_size_sqft || 0}
-          />
-        )}
 
       {/* Property Type */}
       {report.numeric_params?.property_type && report.density_analysis && (
@@ -331,77 +352,6 @@ export default function ZoningReport({ report }: ZoningReportProps) {
           </div>
         </CollapsibleSection>
       )}
-
-      {/* Floor Plan — all property types with buildable dimensions */}
-      {(() => {
-        const da = report.density_analysis;
-        const np = report.numeric_params;
-        const buildW = Math.max(0, lotWidth - 2 * setbackSide);
-        const buildD = Math.max(0, lotDepth - setbackFront - setbackRear);
-        const maxHeight = np?.max_height_ft || 35;
-        const lotSize = da?.lot_size_sqft || report.property_record?.lot_size_sqft || 0;
-        if (buildW <= 0 || buildD <= 0) return null;
-        return (
-          <CollapsibleSection title="Floor Plan" defaultOpen={false}>
-            <FloorPlanViewer
-              buildableWidthFt={buildW}
-              buildableDepthFt={buildD}
-              maxHeightFt={maxHeight}
-              maxStories={np?.max_stories || 2}
-              maxLotCoveragePct={np?.max_lot_coverage_pct || 100}
-              far={np?.far || 0}
-              maxUnits={da?.max_units || 1}
-              minUnitSizeSqft={np?.min_unit_size_sqft || 400}
-              parkingPerUnit={np?.parking_spaces_per_unit || 2}
-              lotSizeSqft={lotSize}
-              propertyType={np?.property_type || "single_family"}
-              zoningDistrict={report.zoning_district}
-            />
-          </CollapsibleSection>
-        );
-      })()}
-
-      {/* AI Architectural Render — Gemini-generated front, aerial, side views */}
-      {(() => {
-        const np = report.numeric_params;
-        const da = report.density_analysis;
-        const maxHeight = np?.max_height_ft || 35;
-        if (lotWidth > 0 && lotDepth > 0) {
-          return (
-            <CollapsibleSection title="AI Architectural Render" defaultOpen={false}>
-              <BuildingRenderViewer
-                lotWidthFt={lotWidth}
-                lotDepthFt={lotDepth}
-                setbackFrontFt={setbackFront}
-                setbackSideFt={setbackSide}
-                setbackRearFt={setbackRear}
-                maxHeightFt={maxHeight}
-                maxStories={np?.max_stories ?? undefined}
-                propertyType={np?.property_type ?? undefined}
-                maxUnits={da?.max_units ?? undefined}
-                zoningDistrict={report.zoning_district}
-                municipality={report.municipality}
-              />
-            </CollapsibleSection>
-          );
-        }
-        return null;
-      })()}
-
-      {/* Aerial Flyover Video — Veo 3 generated, on demand */}
-      {report.property_record && (
-        <PropertyFlyoverVideo
-          address={report.formatted_address}
-          lat={report.property_record.lat}
-          lng={report.property_record.lng}
-          municipality={report.municipality}
-        />
-      )}
-
-      {/* Property Intelligence — collapsible, default collapsed */}
-      <CollapsibleSection title="Property Intelligence" defaultOpen={false}>
-        <PropertyIntelligence report={report} />
-      </CollapsibleSection>
 
       {/* Permitted Uses — collapsible, default collapsed */}
       <CollapsibleSection title="Permitted Uses" defaultOpen={false}>
@@ -553,7 +503,7 @@ export default function ZoningReport({ report }: ZoningReportProps) {
       )}
 
       {/* Document Generation */}
-      <CollapsibleSection title="Generate Documents" defaultOpen={false}>
+      <CollapsibleSection title="Generate Documents" defaultOpen={!!report.pro_forma}>
         <DocumentGenerator report={report} />
       </CollapsibleSection>
 

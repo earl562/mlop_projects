@@ -82,7 +82,7 @@ export default function AddressAutocomplete({
 
   const fetchSuggestions = useCallback(
     async (query: string) => {
-      if (query.length < 3) {
+      if (query.length < 2) {
         setSuggestions([]);
         setShowDropdown(false);
         return;
@@ -159,8 +159,9 @@ export default function AddressAutocomplete({
     const val = e.target.value;
     onChange(val);
 
+    if (val.length >= 2) setIsSearching(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchSuggestions(val), 200);
+    debounceRef.current = setTimeout(() => fetchSuggestions(val), 50);
   };
 
   const handleSelect = (suggestion: Suggestion) => {

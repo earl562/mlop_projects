@@ -113,6 +113,7 @@ export default function Home() {
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [docCanvasOpen, setDocCanvasOpen] = useState(false);
   const [contextualSuggestions, setContextualSuggestions] = useState<string[]>([]);
+  const [inputError, setInputError] = useState<string | null>(null);
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -371,28 +372,26 @@ export default function Home() {
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isProcessing) return;
-      setIsProcessing(true);
-      setInput("");
-
-      addMessage({ role: "user", content: text.trim() });
 
       const address = extractAddress(text);
+
+      // Lookup mode: validate address BEFORE adding to chat
+      if (mode === "lookup" && !address) {
+        setInputError("Please enter a street address to run a lookup analysis");
+        return;
+      }
+
+      setIsProcessing(true);
+      setInput("");
+      setInputError(null);
+
+      addMessage({ role: "user", content: text.trim() });
 
       // Lookup mode: address → deal type selector → pipeline
       if (mode === "lookup" && address) {
         setPendingAddress(address);
         setSelectedDealType(null);
         setCurrentReport(null);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Lookup mode: no address found — prompt for one
-      if (mode === "lookup" && !address) {
-        addMessage({
-          role: "assistant",
-          content: "I need a property address to run a lookup analysis. Please enter a full US address (e.g., **7940 Plantation Blvd, Miramar, FL 33023**).\n\nSwitch to **Agent** mode if you'd like to have a conversation about zoning or real estate.",
-        });
         setIsProcessing(false);
         return;
       }
@@ -603,7 +602,7 @@ export default function Home() {
             <AddressAutocomplete
               inputRef={inputRef}
               value={input}
-              onChange={setInput}
+              onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
               onSelect={(address) => sendMessage(address)}
               placeholder={mode === "lookup" ? "Enter a property address..." : "Enter an address or ask a question..."}
               disabled={isProcessing}
@@ -627,6 +626,9 @@ export default function Home() {
               )}
             </button>
           </div>
+          {inputError && (
+            <p className="mt-2 px-1 text-xs text-red-500">{inputError}</p>
+          )}
         </motion.form>
 
         {/* Capability chips / Tool cards — z-0 so autocomplete dropdown from form above paints on top */}
@@ -936,18 +938,23 @@ export default function Home() {
 
           {/* Input bar — hidden in lookup mode after report is shown */}
           {!(mode === "lookup" && hasReport) && (
-            <InputBar
-              inputRef={inputRef}
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSubmit}
-              onAddressSelect={(address) => sendMessage(address)}
-              mode={mode}
-              onModeChange={setMode}
-              placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
-              disabled={isProcessing || !!pendingAddress || awaitingApproval}
-              isProcessing={isProcessing}
-            />
+            <div>
+              <InputBar
+                inputRef={inputRef}
+                value={input}
+                onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
+                onSubmit={handleSubmit}
+                onAddressSelect={(address) => sendMessage(address)}
+                mode={mode}
+                onModeChange={setMode}
+                placeholder={hasReport ? "Ask about this property's zoning..." : "Enter an address or ask a question..."}
+                disabled={isProcessing || !!pendingAddress || awaitingApproval}
+                isProcessing={isProcessing}
+              />
+              {inputError && (
+                <p className="mt-2 px-4 text-xs text-red-500">{inputError}</p>
+              )}
+            </div>
           )}
 
         </div>
