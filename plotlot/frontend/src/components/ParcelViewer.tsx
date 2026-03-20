@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
+import { useMapsLibrary } from "@vis.gl/react-google-maps";
 import { ZoningReportData } from "@/lib/api";
 
 const ArcGISParcelMap = dynamic(() => import("./ArcGISParcelMap"), {
@@ -173,16 +174,44 @@ function TabBar({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (
 }
 
 function StreetViewTab({ report }: { report: ZoningReportData }) {
-  const [imgError, setImgError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-
-  const streetViewUrl =
-    `https://maps.googleapis.com/maps/api/streetview` +
-    `?size=800x500&location=${report.lat},${report.lng}` +
-    `&fov=90&heading=0&pitch=5` +
-    `&key=${MAPS_KEY}`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
+  const [status, setStatus] = useState<"loading" | "ok" | "unavailable">("loading");
+  const streetViewLib = useMapsLibrary("streetView");
 
   const googleMapsUrl = `https://www.google.com/maps/@${report.lat},${report.lng},3a,75y,0h,90t/data=!3m1!1e1`;
+
+  useEffect(() => {
+    if (!streetViewLib || !containerRef.current) return;
+    if (panoramaRef.current) return;
+
+    // Check if imagery exists before creating the panorama (avoids blank "no imagery" state)
+    const svService = new streetViewLib.StreetViewService();
+    svService.getPanorama(
+      { location: { lat: report.lat!, lng: report.lng! }, radius: 50 },
+      (data: google.maps.StreetViewPanoramaData | null, svStatus: google.maps.StreetViewStatus) => {
+        if (svStatus === "OK" && data?.location?.pano && containerRef.current) {
+          const panorama = new streetViewLib.StreetViewPanorama(containerRef.current, {
+            pano: data.location.pano,
+            pov: { heading: 0, pitch: 5 },
+            zoom: 1,
+            addressControl: false,
+            fullscreenControl: false,
+            motionTrackingControl: false,
+            showRoadLabels: false,
+          });
+          panoramaRef.current = panorama;
+          setStatus("ok");
+        } else {
+          setStatus("unavailable");
+        }
+      },
+    );
+
+    return () => {
+      panoramaRef.current = null;
+    };
+  }, [streetViewLib, report.lat, report.lng]);
 
   if (!MAPS_KEY) {
     return (
@@ -197,7 +226,7 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
     );
   }
 
-  if (imgError) {
+  if (status === "unavailable") {
     return (
       <a
         href={googleMapsUrl}
@@ -217,16 +246,10 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
 
   return (
     <div className="relative h-full min-h-[220px] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
-      {!imgLoaded && (
-        <div className="h-full min-h-[220px] w-full animate-pulse bg-[var(--bg-surface-raised)]" />
+      {status === "loading" && (
+        <div className="absolute inset-0 z-10 animate-pulse bg-[var(--bg-surface-raised)]" />
       )}
-      <img
-        src={streetViewUrl}
-        alt={`Street view of ${report.formatted_address}`}
-        className={`h-full w-full object-cover ${imgLoaded ? "" : "absolute inset-0 opacity-0"}`}
-        onLoad={() => setImgLoaded(true)}
-        onError={() => setImgError(true)}
-      />
+      <div ref={containerRef} className="h-full w-full" style={{ minHeight: "220px" }} />
 
       {/* Bottom bar */}
       <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between bg-[var(--bg-surface)]/90 px-3 py-1.5 backdrop-blur-sm">

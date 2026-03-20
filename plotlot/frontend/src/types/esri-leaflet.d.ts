@@ -6,6 +6,7 @@ declare module "esri-leaflet" {
     layers?: number[];
     opacity?: number;
     f?: string;
+    proxy?: string;
   }
 
   function dynamicMapLayer(options: DynamicMapLayerOptions): L.Layer;
