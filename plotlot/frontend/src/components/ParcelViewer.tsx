@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useMapsLibrary } from "@vis.gl/react-google-maps";
 import { ZoningReportData } from "@/lib/api";
 
 const ArcGISParcelMap = dynamic(() => import("./ArcGISParcelMap"), {
@@ -174,59 +173,10 @@ function TabBar({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (
 }
 
 function StreetViewTab({ report }: { report: ZoningReportData }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
-  const [status, setStatus] = useState<"loading" | "ok" | "unavailable">("loading");
-  const streetViewLib = useMapsLibrary("streetView");
-
+  const [imgError, setImgError] = useState(false);
   const googleMapsUrl = `https://www.google.com/maps/@${report.lat},${report.lng},3a,75y,0h,90t/data=!3m1!1e1`;
 
-  useEffect(() => {
-    if (!streetViewLib || !containerRef.current) return;
-    if (panoramaRef.current) return;
-
-    // Check if imagery exists before creating the panorama (avoids blank "no imagery" state)
-    const svService = new streetViewLib.StreetViewService();
-    svService.getPanorama(
-      { location: { lat: report.lat!, lng: report.lng! }, radius: 50 },
-      (data: google.maps.StreetViewPanoramaData | null, svStatus: google.maps.StreetViewStatus) => {
-        if (svStatus === "OK" && data?.location?.pano && containerRef.current) {
-          const panorama = new streetViewLib.StreetViewPanorama(containerRef.current, {
-            pano: data.location.pano,
-            pov: { heading: 0, pitch: 5 },
-            zoom: 1,
-            addressControl: false,
-            fullscreenControl: false,
-            motionTrackingControl: false,
-            showRoadLabels: false,
-          });
-          panoramaRef.current = panorama;
-          setStatus("ok");
-        } else {
-          setStatus("unavailable");
-        }
-      },
-    );
-
-    return () => {
-      panoramaRef.current = null;
-    };
-  }, [streetViewLib, report.lat, report.lng]);
-
-  if (!MAPS_KEY) {
-    return (
-      <div className="flex h-full min-h-[220px] items-center justify-center rounded-b-xl bg-[var(--bg-surface-raised)] lg:rounded-bl-none lg:rounded-r-xl">
-        <div className="text-center">
-          <svg className="mx-auto h-8 w-8 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-          </svg>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">Street view unavailable</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === "unavailable") {
+  if (!MAPS_KEY || imgError) {
     return (
       <a
         href={googleMapsUrl}
@@ -238,21 +188,26 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
           <svg className="mx-auto h-8 w-8 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
           </svg>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">View on Google Maps</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">View on Google Maps ↗</p>
         </div>
       </a>
     );
   }
 
+  const staticUrl =
+    `https://maps.googleapis.com/maps/api/streetview` +
+    `?size=640x400&location=${report.lat},${report.lng}` +
+    `&fov=80&heading=0&pitch=5&key=${MAPS_KEY}`;
+
   return (
     <div className="relative h-full min-h-[220px] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
-      {status === "loading" && (
-        <div className="absolute inset-0 z-10 animate-pulse bg-[var(--bg-surface-raised)]" />
-      )}
-      <div ref={containerRef} className="h-full w-full" style={{ minHeight: "220px" }} />
-
-      {/* Bottom bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between bg-[var(--bg-surface)]/90 px-3 py-1.5 backdrop-blur-sm">
+      <img
+        src={staticUrl}
+        alt={`Street view of ${report.formatted_address}`}
+        className="h-full w-full object-cover"
+        onError={() => setImgError(true)}
+      />
+      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between bg-[var(--bg-surface)]/90 px-3 py-1.5 backdrop-blur-sm">
         <span className="text-xs text-[var(--text-muted)]">Google Street View</span>
         <a
           href={googleMapsUrl}

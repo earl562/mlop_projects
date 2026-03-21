@@ -21,19 +21,9 @@ interface ArcGISParcelMapProps {
   onFloodZone?: (zone: string, sfha: boolean) => void;
 }
 
-// County ArcGIS MapServer URLs — public, no auth required
-const COUNTY_MAP_SERVERS: Record<string, { url: string; layers?: number[] }> = {
-  "Miami-Dade": {
-    url: "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer",
-  },
-  "Broward": {
-    url: "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer",
-    layers: [16],
-  },
-  "Palm Beach": {
-    url: "https://maps.co.palm-beach.fl.us/arcgis/rest/services/OpenData/Planning_Open_Data/MapServer",
-  },
-};
+// Zoning layer uses the URL provided by the backend property record (zoningLayerUrl prop).
+// No hardcoded county fallbacks — county MapServers show broad district data that
+// doesn't accurately represent a specific parcel's zoning classification.
 
 // GIS overlay service URLs — public, CORS-enabled, no auth required
 const TOPOGRAPHY_URL = "https://carto.nationalmap.gov/arcgis/rest/services/contours/MapServer";
@@ -178,17 +168,14 @@ export default function ArcGISParcelMap({
     }).addTo(map);
 
     // --- Zoning ArcGIS layer (created but NOT added — default OFF) ---
-    // Use hardcoded county config if available, otherwise fall back to dynamic URL
-    const countyConfig = COUNTY_MAP_SERVERS[county];
-    const zoningUrl = countyConfig?.url || zoningLayerUrl;
-    if (zoningUrl) {
+    // Only renders if the backend provides a specific zoning layer URL for this parcel.
+    if (zoningLayerUrl) {
       import("esri-leaflet")
         .then((esri) => {
           const arcgisLayer = esri.dynamicMapLayer({
-            url: zoningUrl,
+            url: zoningLayerUrl,
             opacity: 0.6,
-            layers: countyConfig?.layers,
-                          proxy: "/api/gis-proxy",
+            proxy: "/api/gis-proxy",
           });
           zoningLayerRef.current = arcgisLayer;
           // Add if user already toggled zoning ON before import completed
@@ -284,7 +271,7 @@ export default function ArcGISParcelMap({
       topographyLayerRef.current = null;
       wetlandsLayerRef.current = null;
     };
-  }, [lat, lng, county, parcelGeometry, zoningLayerUrl]);
+  }, [lat, lng, parcelGeometry, zoningLayerUrl]);
 
   // --- Layer toggle effect (boundaries, dimensions, zoning) ---
   useEffect(() => {
