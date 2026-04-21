@@ -2,8 +2,10 @@
 
 from urllib.parse import parse_qs, urlparse, urlunparse
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+
+from plotlot.oauth.openai_auth import DEFAULT_AUTHORIZE_URL, DEFAULT_REDIRECT_URI, DEFAULT_TOKEN_URL
 
 
 class Settings(BaseSettings):
@@ -85,8 +87,30 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_access_token: str = ""  # OAuth-provided bearer token
     openai_base_url: str = "https://api.openai.com/v1"
+    # Optional scoping for legacy user keys / multi-org accounts.
+    # See: https://platform.openai.com/docs/api-reference/debugging-requests
+    openai_organization: str = ""
+    openai_project: str = ""
     openai_model: str = "gpt-4.1"
     openai_reasoning_effort: str = "medium"
+    # Local dev convenience: pull the Codex OAuth token from ~/.codex/auth.json.
+    # Opt-in via PLOTLOT_USE_CODEX_OAUTH=1 (kept false by default for safety).
+    use_codex_oauth: bool = Field(default=False, validation_alias="PLOTLOT_USE_CODEX_OAUTH")
+    codex_auth_file: str = Field(default="~/.codex/auth.json", validation_alias="PLOTLOT_CODEX_AUTH_FILE")
+    openai_oauth_client_id: str = ""
+    openai_oauth_authorize_url: str = DEFAULT_AUTHORIZE_URL
+    openai_oauth_token_url: str = DEFAULT_TOKEN_URL
+    openai_oauth_redirect_uri: str = DEFAULT_REDIRECT_URI
+    openai_oauth_scope: str = "openid offline_access"
+
+    # OpenRouter (OpenAI-compatible) — optional fallback provider
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # If unset, PlotLot will derive a default from OPENAI_MODEL (e.g. openai/gpt-4.1)
+    openrouter_model: str = ""
+    # Optional attribution headers (recommended by OpenRouter)
+    openrouter_http_referer: str = ""
+    openrouter_app_title: str = ""
 
     # Jina.ai search
     jina_api_key: str = ""
@@ -110,10 +134,47 @@ class Settings(BaseSettings):
             "stripe_webhook_secret",
             "clerk_jwks_url",
             "openai_base_url",
+            "openai_organization",
+            "openai_project",
+            "openrouter_api_key",
+            "openrouter_base_url",
+            "openrouter_model",
+            "openrouter_http_referer",
+            "openrouter_app_title",
+            "codex_auth_file",
+            "openai_oauth_client_id",
+            "openai_oauth_authorize_url",
+            "openai_oauth_token_url",
+            "openai_oauth_redirect_uri",
+            "openai_oauth_scope",
         ):
             val = getattr(self, field)
             if val and val != val.strip():
                 setattr(self, field, val.strip())
+        return self
+
+    @model_validator(mode="after")
+    def _maybe_load_codex_oauth(self) -> "Settings":
+        """Load Codex OAuth bearer token into OPENAI_ACCESS_TOKEN when opted in."""
+        if self.openai_api_key:
+            return self
+        if not self.use_codex_oauth:
+            return self
+
+        try:
+            from pathlib import Path
+
+            from plotlot.oauth.openai_auth import load_tokens
+
+            auth_path = Path(self.codex_auth_file).expanduser()
+            tokens = load_tokens(auth_path)
+            if not tokens or not tokens.access:
+                return self
+            self.openai_access_token = tokens.access
+        except Exception:
+            # Never block startup on local dev credential discovery.
+            return self
+
         return self
 
     # Google Workspace (Sheets/Docs creation)
