@@ -10,6 +10,8 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import TypedDict
 from urllib.parse import urlparse
 
 import uvicorn
@@ -28,11 +30,17 @@ from plotlot.api.routes import router
 from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
 from plotlot.observability.tracing import configure_mlflow
+from plotlot.oauth.openai_auth import has_saved_tokens
 from plotlot.storage.db import get_session, init_db
 
 logger = logging.getLogger(__name__)
 
-_runtime_health = {
+class _RuntimeHealth(TypedDict):
+    startup_mode: str
+    startup_warnings: list[str]
+
+
+_runtime_health: _RuntimeHealth = {
     "startup_mode": "starting",
     "startup_warnings": [],
 }
@@ -285,7 +293,15 @@ async def health():
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     database_ready = checks.get("database") == "ok"
-    agent_chat_ready = bool(settings.openai_access_token or settings.openai_api_key)
+    agent_chat_ready = bool(
+        settings.openai_access_token
+        or settings.openai_api_key
+        or settings.openrouter_api_key
+        or (
+            settings.use_codex_oauth
+            and has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+        )
+    )
     capability_details = {
         "db_backed_analysis_ready": {
             "ready": database_ready,
@@ -370,7 +386,7 @@ async def debug_traces(limit: int = 10):
 
 @app.get("/debug/llm")
 async def debug_llm():
-    """OpenAI SDK connectivity test for the primary LLM integration."""
+    """LLM connectivity test for OpenAI (primary) + OpenRouter (fallback)."""
     import time
     from openai import AsyncOpenAI
     from plotlot.config import settings as _s
@@ -384,6 +400,10 @@ async def debug_llm():
             client_kwargs = {"api_key": token, "timeout": 15.0}
             if _s.openai_base_url:
                 client_kwargs["base_url"] = _s.openai_base_url
+            if _s.openai_organization:
+                client_kwargs["organization"] = _s.openai_organization
+            if _s.openai_project:
+                client_kwargs["project"] = _s.openai_project
             client = AsyncOpenAI(**client_kwargs)
             resp = await client.chat.completions.create(
                 model=_s.openai_model or "gpt-4.1",
@@ -411,6 +431,56 @@ async def debug_llm():
             }
     else:
         diag["providers"]["openai"] = {"status": "no_credentials"}
+
+    # --- OpenRouter (fallback) ---
+    if _s.openrouter_api_key:
+        t0 = time.monotonic()
+        try:
+            headers: dict[str, str] = {}
+            if _s.openrouter_http_referer:
+                headers["HTTP-Referer"] = _s.openrouter_http_referer
+            if _s.openrouter_app_title:
+                headers["X-OpenRouter-Title"] = _s.openrouter_app_title
+
+            # If OPENROUTER_MODEL isn't set, derive from OPENAI_MODEL.
+            if _s.openrouter_model:
+                model = _s.openrouter_model
+            elif _s.openai_model and "/" not in _s.openai_model:
+                model = f"openai/{_s.openai_model}"
+            else:
+                model = _s.openai_model or "openai/gpt-4.1"
+
+            client = AsyncOpenAI(
+                api_key=_s.openrouter_api_key,
+                base_url=_s.openrouter_base_url,
+                timeout=15.0,
+                default_headers=headers or None,
+            )
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "Say 'ok' in one word."}],
+                max_completion_tokens=8,
+                temperature=0,
+            )
+            elapsed = round(time.monotonic() - t0, 2)
+            text = resp.choices[0].message.content or ""
+            diag["providers"]["openrouter"] = {
+                "status": "ok",
+                "model": model,
+                "base_url": _s.openrouter_base_url,
+                "latency_s": elapsed,
+                "response": text[:100],
+            }
+        except Exception as e:
+            elapsed = round(time.monotonic() - t0, 2)
+            diag["providers"]["openrouter"] = {
+                "status": "error",
+                "model": _s.openrouter_model or "(derived)",
+                "error": f"{type(e).__name__}: {e}",
+                "elapsed_s": elapsed,
+            }
+    else:
+        diag["providers"]["openrouter"] = {"status": "no_credentials"}
 
     # --- Circuit breaker states ---
     from plotlot.retrieval.llm import _breakers

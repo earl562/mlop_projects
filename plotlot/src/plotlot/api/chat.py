@@ -15,6 +15,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -37,6 +38,7 @@ from plotlot.retrieval.search import hybrid_search
 from plotlot.storage.db import get_session
 from plotlot.observability.prompts import get_active_prompt
 from plotlot.observability.tracing import start_span
+from plotlot.oauth.openai_auth import has_saved_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -154,10 +156,18 @@ AGENT_SYSTEM_PROMPT = get_active_prompt("chat_agent")
 
 
 def _llm_unavailable_detail() -> str:
-    if not (settings.openai_access_token or settings.openai_api_key):
+    if not (
+        settings.openai_access_token
+        or settings.openai_api_key
+        or settings.openrouter_api_key
+        or (
+            settings.use_codex_oauth
+            and has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+        )
+    ):
         return (
             "Chat is temporarily unavailable because no LLM credentials are configured. "
-            "Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN to enable agent responses."
+            "Set OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, OPENROUTER_API_KEY, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
         )
     return "Chat is temporarily unavailable because the LLM returned an empty response."
 

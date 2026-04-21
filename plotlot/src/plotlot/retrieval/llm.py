@@ -6,9 +6,14 @@ Supports three modes:
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
 Auth:
-  - OPENAI_API_KEY for direct API-key auth
-  - OPENAI_ACCESS_TOKEN for OAuth-backed bearer tokens supplied by the caller
-  - OPENAI_BASE_URL for gateway / proxy deployments
+  - Primary (OpenAI):
+      - OPENAI_API_KEY for direct API-key auth
+      - OPENAI_ACCESS_TOKEN for OAuth-backed bearer tokens supplied by the caller
+      - OPENAI_BASE_URL for gateway / proxy deployments
+  - Fallback (OpenRouter, OpenAI-compatible):
+      - OPENROUTER_API_KEY
+      - OPENROUTER_BASE_URL (defaults to https://openrouter.ai/api/v1)
+      - OPENROUTER_MODEL (optional; derived from OPENAI_MODEL when unset)
 """
 
 import asyncio
@@ -23,6 +28,7 @@ from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitEr
 from plotlot.config import settings
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 from plotlot.observability.tracing import log_metrics, start_span, trace
+from plotlot.oauth.openai_auth import get_valid_access_token, has_saved_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +36,7 @@ MAX_RETRIES = 2
 BASE_DELAY = 1.0
 DEFAULT_OPENAI_MODEL = "gpt-4.1"
 OPENAI_TIMEOUT_SECONDS = 60.0
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1"
 
 
 # ---------------------------------------------------------------------------
@@ -198,22 +205,89 @@ def _convert_messages_for_anthropic(messages: list[dict]) -> tuple[str, list[dic
 # ---------------------------------------------------------------------------
 
 
-def _get_openai_token() -> str:
-    """Return the bearer token the OpenAI SDK should use."""
-    return settings.openai_access_token or settings.openai_api_key
+def _has_openai_credentials() -> bool:
+    """Whether PlotLot has any viable OpenAI auth path configured."""
+    if settings.openai_api_key or settings.openai_access_token:
+        return True
+    if settings.use_codex_oauth:
+        from pathlib import Path
+
+        return has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+    return False
+
+
+async def _get_codex_oauth_token() -> str:
+    """Return a refreshable Codex OAuth access token when configured."""
+    if not settings.use_codex_oauth or not settings.openai_oauth_client_id:
+        return settings.openai_access_token
+
+    from pathlib import Path
+
+    return await get_valid_access_token(
+        client_id=settings.openai_oauth_client_id,
+        auth_file=Path(settings.codex_auth_file).expanduser(),
+        token_url=settings.openai_oauth_token_url,
+    )
 
 
 def _get_openai_model() -> str:
     return settings.openai_model or DEFAULT_OPENAI_MODEL
 
 
+def _get_openrouter_token() -> str:
+    return settings.openrouter_api_key
+
+
+def _get_openrouter_model() -> str:
+    """Return the OpenRouter model slug.
+
+    If OPENROUTER_MODEL isn't set, derive from OPENAI_MODEL (common local-dev setup).
+    """
+
+    if settings.openrouter_model:
+        return settings.openrouter_model
+
+    openai_model = _get_openai_model()
+    # If the user already provided a provider/model slug, keep it.
+    if "/" in openai_model:
+        return openai_model
+    return f"openai/{openai_model}" if openai_model else DEFAULT_OPENROUTER_MODEL
+
+
 def _get_openai_client() -> AsyncOpenAI:
+    if settings.openai_api_key:
+        api_key: str | Any = settings.openai_api_key
+    elif settings.use_codex_oauth:
+        api_key = _get_codex_oauth_token
+    else:
+        api_key = settings.openai_access_token
+
     kwargs: dict = {
-        "api_key": _get_openai_token(),
+        "api_key": api_key,
         "timeout": OPENAI_TIMEOUT_SECONDS,
     }
     if settings.openai_base_url:
         kwargs["base_url"] = settings.openai_base_url
+    if settings.openai_organization:
+        kwargs["organization"] = settings.openai_organization
+    if settings.openai_project:
+        kwargs["project"] = settings.openai_project
+    return AsyncOpenAI(**kwargs)
+
+
+def _get_openrouter_client() -> AsyncOpenAI:
+    headers: dict[str, str] = {}
+    if settings.openrouter_http_referer:
+        headers["HTTP-Referer"] = settings.openrouter_http_referer
+    if settings.openrouter_app_title:
+        headers["X-OpenRouter-Title"] = settings.openrouter_app_title
+
+    kwargs: dict = {
+        "api_key": _get_openrouter_token(),
+        "base_url": settings.openrouter_base_url,
+        "timeout": OPENAI_TIMEOUT_SECONDS,
+        "default_headers": headers or None,
+    }
     return AsyncOpenAI(**kwargs)
 
 
@@ -270,7 +344,7 @@ async def _call_openai(
     provider_name: str,
 ) -> dict | None:
     """Call Chat Completions via the official OpenAI SDK."""
-    if not _get_openai_token():
+    if not _has_openai_credentials():
         return None
 
     breaker = _get_breaker(provider_name)
@@ -349,6 +423,132 @@ async def _call_openai(
         return None
 
 
+async def _call_openrouter(
+    messages: list[dict],
+    *,
+    tools: list[dict] | None = None,
+    response_format: dict | None = None,
+    max_completion_tokens: int = 4000,
+    temperature: float = 0.1,
+    provider_name: str,
+) -> dict | None:
+    """Call Chat Completions via OpenRouter's OpenAI-compatible API."""
+
+    if not _get_openrouter_token():
+        return None
+
+    breaker = _get_breaker(provider_name)
+    if not breaker.allow_request():
+        logger.info("Circuit breaker OPEN for %s — skipping", provider_name)
+        return None
+
+    with start_span(
+        name=f"llm_provider_{provider_name.lower()}",
+        span_type="CHAT_MODEL",
+    ) as span:
+        model = _get_openrouter_model()
+        span.set_inputs(
+            {
+                "provider": provider_name,
+                "model": model,
+                "message_count": len(messages),
+            }
+        )
+        retries_used = 0
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                client = _get_openrouter_client()
+                kwargs: dict = {
+                    "model": cast(Any, model),
+                    "messages": cast(Any, messages),
+                    "temperature": temperature,
+                    "max_completion_tokens": max_completion_tokens,
+                    # Avoid OpenAI-only parameters unless we know the upstream supports them.
+                    "parallel_tool_calls": False,
+                }
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                if response_format:
+                    kwargs["response_format"] = response_format
+
+                response = await client.chat.completions.create(**kwargs)
+                message = response.choices[0].message
+                tool_calls = _message_to_tool_calls(message)
+                prompt_tokens, completion_tokens = _log_usage("openrouter", response.usage)
+
+                span.set_outputs(
+                    {
+                        "has_content": bool(message.content),
+                        "has_tool_calls": bool(tool_calls),
+                        "retries": retries_used,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                    }
+                )
+
+                breaker.record_success()
+                return {
+                    "content": message.content or "",
+                    "tool_calls": tool_calls,
+                }
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+                retries_used += 1
+                delay = BASE_DELAY * (2**attempt)
+                logger.warning(
+                    "%s transient error %s (attempt %d/%d), retrying in %.1fs",
+                    provider_name,
+                    type(exc).__name__,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                logger.error("%s failed: %s: %s", provider_name, type(exc).__name__, exc)
+                breaker.record_failure()
+                span.set_outputs({"error": f"{type(exc).__name__}: {exc}", "retries": retries_used})
+                return None
+
+        breaker.record_failure()
+        span.set_outputs({"error": "retry_exhausted", "retries": retries_used})
+        return None
+
+
+async def _call_llm_with_fallback(
+    messages: list[dict],
+    *,
+    tools: list[dict] | None = None,
+    response_format: dict | None = None,
+    max_completion_tokens: int = 4000,
+    temperature: float = 0.1,
+    openai_provider_name: str,
+    openrouter_provider_name: str,
+) -> dict | None:
+    """Try OpenAI first; fall back to OpenRouter when OpenAI fails/unavailable."""
+
+    result = await _call_openai(
+        messages,
+        tools=tools,
+        response_format=response_format,
+        max_completion_tokens=max_completion_tokens,
+        temperature=temperature,
+        provider_name=openai_provider_name,
+    )
+    if result is not None:
+        return result
+
+    return await _call_openrouter(
+        messages,
+        tools=tools,
+        response_format=response_format,
+        max_completion_tokens=max_completion_tokens,
+        temperature=temperature,
+        provider_name=openrouter_provider_name,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Agentic mode: call_llm() — returns tool_calls for the agent loop
 # ---------------------------------------------------------------------------
@@ -361,36 +561,26 @@ async def call_llm(
 ) -> dict | None:
     """Call the LLM with tool definitions and return the response."""
     clean_messages = _clean_messages_for_api(messages)
-    return await _call_openai(
+    return await _call_llm_with_fallback(
         clean_messages,
         tools=tools,
         max_completion_tokens=4000,
         temperature=0.1,
-        provider_name=f"OpenAI/{_get_openai_model()}",
+        openai_provider_name=f"OpenAI/{_get_openai_model()}",
+        openrouter_provider_name=f"OpenRouter/{_get_openrouter_model()}",
     )
 
 
 async def call_llm_stream(messages: list[dict]):
     """Stream LLM response tokens for conversational chat."""
-    if not _get_openai_token():
-        logger.error("OpenAI streaming requested with no configured credentials")
-        return
-
     clean_messages = _clean_messages_for_api(messages)
-    provider_name = f"OpenAI/{_get_openai_model()}"
-    breaker = _get_breaker(provider_name)
-    if not breaker.allow_request():
-        logger.error("Circuit breaker OPEN for %s — skipping stream", provider_name)
-        return
 
-    try:
-        client = _get_openai_client()
+    async def _stream_with_client(client: AsyncOpenAI, *, model: str) -> Any:
         stream = await client.chat.completions.create(
-            model=cast(Any, _get_openai_model()),
+            model=cast(Any, model),
             messages=cast(Any, clean_messages),
             temperature=0.3,
             max_completion_tokens=2000,
-            reasoning_effort=cast(Any, settings.openai_reasoning_effort),
             stream=True,
         )
         async for chunk in stream:
@@ -405,10 +595,62 @@ async def call_llm_stream(messages: list[dict]):
                     text = getattr(part, "text", None)
                     if text:
                         yield text
+
+    # Primary: OpenAI
+    if _has_openai_credentials():
+        provider_name = f"OpenAI/{_get_openai_model()}"
+        breaker = _get_breaker(provider_name)
+        if breaker.allow_request():
+            try:
+                client = _get_openai_client()
+                # OpenAI supports reasoning_effort; include it only here.
+                stream = await client.chat.completions.create(
+                    model=cast(Any, _get_openai_model()),
+                    messages=cast(Any, clean_messages),
+                    temperature=0.3,
+                    max_completion_tokens=2000,
+                    reasoning_effort=cast(Any, settings.openai_reasoning_effort),
+                    stream=True,
+                )
+                async for chunk in stream:
+                    for choice in chunk.choices:
+                        delta = choice.delta.content
+                        if not delta:
+                            continue
+                        if isinstance(delta, str):
+                            yield delta
+                            continue
+                        for part in delta:
+                            text = getattr(part, "text", None)
+                            if text:
+                                yield text
+                breaker.record_success()
+                return
+            except Exception as exc:
+                breaker.record_failure()
+                logger.error("OpenAI streaming failed: %s: %s", type(exc).__name__, exc)
+        else:
+            logger.error("Circuit breaker OPEN for %s — skipping stream", provider_name)
+
+    # Fallback: OpenRouter
+    if not _get_openrouter_token():
+        logger.error("LLM streaming requested with no configured credentials")
+        return
+
+    provider_name = f"OpenRouter/{_get_openrouter_model()}"
+    breaker = _get_breaker(provider_name)
+    if not breaker.allow_request():
+        logger.error("Circuit breaker OPEN for %s — skipping stream", provider_name)
+        return
+
+    try:
+        client = _get_openrouter_client()
+        async for text in _stream_with_client(client, model=_get_openrouter_model()):
+            yield text
         breaker.record_success()
     except Exception as exc:
         breaker.record_failure()
-        logger.error("OpenAI streaming failed: %s: %s", type(exc).__name__, exc)
+        logger.error("OpenRouter streaming failed: %s: %s", type(exc).__name__, exc)
 
 
 def _clean_messages_for_api(messages: list[dict]) -> list[dict]:
@@ -522,15 +764,16 @@ async def analyze_zoning(
         {"role": "user", "content": _build_user_prompt(address, municipality, county, results)},
     ]
 
-    result = await _call_openai(
+    result = await _call_llm_with_fallback(
         messages,
         response_format={"type": "json_object"},
         max_completion_tokens=2000,
         temperature=0.1,
-        provider_name=f"OpenAI/{_get_openai_model()}",
+        openai_provider_name=f"OpenAI/{_get_openai_model()}",
+        openrouter_provider_name=f"OpenRouter/{_get_openrouter_model()}",
     )
     if not result or not result.get("content"):
-        logger.error("OpenAI failed for analyze_zoning")
+        logger.error("LLM failed for analyze_zoning (OpenAI + OpenRouter)")
         return {}
 
     try:
