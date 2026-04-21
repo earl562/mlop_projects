@@ -1,0 +1,140 @@
+<svg width="720" height="420" viewBox="0 0 720 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Animated PlotLot house on a surveyed lot</title>
+  <desc id="desc">A stylized animated house sitting on a measured lot grid, representing PlotLot's zoning and site-feasibility workflow.</desc>
+  <defs>
+    <linearGradient id="bg" x1="94" y1="52" x2="626" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B1322"/>
+      <stop offset="1" stop-color="#101F39"/>
+    </linearGradient>
+    <linearGradient id="lotFill" x1="126" y1="112" x2="594" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17345F" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#0F2748" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="roofFill" x1="282" y1="129" x2="428" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7B267"/>
+      <stop offset="1" stop-color="#E38B35"/>
+    </linearGradient>
+    <linearGradient id="wallFill" x1="276" y1="182" x2="442" y2="306" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F5F1E8"/>
+      <stop offset="1" stop-color="#D6DCE7"/>
+    </linearGradient>
+    <linearGradient id="windowGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C6F6FF"/>
+      <stop offset="1" stop-color="#7CD7F4"/>
+    </linearGradient>
+    <filter id="shadow" x="203" y="93" width="314" height="257" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#06101F" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="lotClip">
+      <rect x="126" y="112" width="468" height="208" rx="20"/>
+    </clipPath>
+  </defs>
+
+  <rect x="18" y="18" width="684" height="384" rx="28" fill="url(#bg)"/>
+  <rect x="18" y="18" width="684" height="384" rx="28" stroke="#35527F" stroke-opacity="0.45" stroke-width="2"/>
+
+  <g opacity="0.8">
+    <path d="M126 320L594 320" stroke="#8EDAF2" stroke-opacity="0.45" stroke-width="2"/>
+    <path d="M126 112L594 112" stroke="#8EDAF2" stroke-opacity="0.2" stroke-width="2"/>
+    <path d="M126 112H594V320H126V112Z" fill="url(#lotFill)" stroke="#78C9E6" stroke-opacity="0.65" stroke-width="2.5"/>
+  </g>
+
+  <g clip-path="url(#lotClip)" opacity="0.34">
+    <path d="M126 140H594" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M126 176H594" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M126 212H594" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M126 248H594" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M126 284H594" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M166 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M226 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M286 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M346 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M406 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M466 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M526 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+    <path d="M586 112V320" stroke="#9FE0F6" stroke-width="1.2" stroke-dasharray="8 10"/>
+  </g>
+
+  <g opacity="0.75">
+    <path d="M126 94H594" stroke="#F3C177" stroke-width="2"/>
+    <path d="M126 88V100" stroke="#F3C177" stroke-width="2"/>
+    <path d="M204 88V100" stroke="#F3C177" stroke-width="2"/>
+    <path d="M282 88V100" stroke="#F3C177" stroke-width="2"/>
+    <path d="M360 84V104" stroke="#F3C177" stroke-width="2.8"/>
+    <path d="M438 88V100" stroke="#F3C177" stroke-width="2"/>
+    <path d="M516 88V100" stroke="#F3C177" stroke-width="2"/>
+    <path d="M594 88V100" stroke="#F3C177" stroke-width="2"/>
+  </g>
+
+  <g opacity="0.7">
+    <path d="M96 112V320" stroke="#F3C177" stroke-width="2"/>
+    <path d="M90 112H102" stroke="#F3C177" stroke-width="2"/>
+    <path d="M90 164H102" stroke="#F3C177" stroke-width="2"/>
+    <path d="M90 216H102" stroke="#F3C177" stroke-width="2.8"/>
+    <path d="M90 268H102" stroke="#F3C177" stroke-width="2"/>
+    <path d="M90 320H102" stroke="#F3C177" stroke-width="2"/>
+  </g>
+
+  <g clip-path="url(#lotClip)" opacity="0.8">
+    <rect x="96" y="116" width="52" height="200" fill="#9EE8FF" fill-opacity="0.14" filter="url(#glow)">
+      <animate attributeName="x" values="88;578;88" dur="8s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <g filter="url(#shadow)">
+    <ellipse cx="360" cy="312" rx="108" ry="22" fill="#091627" fill-opacity="0.48">
+      <animate attributeName="rx" values="108;114;108" dur="6s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <g>
+    <animateTransform attributeName="transform" type="translate" values="0 0; 0 -6; 0 0" dur="6s" repeatCount="indefinite"/>
+
+    <path d="M252 194L360 126L468 194" fill="url(#roofFill)" stroke="#F7C888" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M276 192H444V304H276V192Z" fill="url(#wallFill)" stroke="#DCE6F3" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M332 244H388V304H332V244Z" fill="#183456" stroke="#86CBE5" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M360 244V304" stroke="#86CBE5" stroke-width="3"/>
+    <path d="M288 214H328V254H288V214Z" fill="url(#windowGlow)" stroke="#A8E8FB" stroke-width="3"/>
+    <path d="M392 214H432V254H392V214Z" fill="url(#windowGlow)" stroke="#A8E8FB" stroke-width="3"/>
+    <path d="M308 214V254" stroke="#6EB8D8" stroke-width="2"/>
+    <path d="M288 234H328" stroke="#6EB8D8" stroke-width="2"/>
+    <path d="M412 214V254" stroke="#6EB8D8" stroke-width="2"/>
+    <path d="M392 234H432" stroke="#6EB8D8" stroke-width="2"/>
+    <path d="M264 304H456" stroke="#76D0EB" stroke-width="4" stroke-linecap="round"/>
+    <path d="M360 150V180" stroke="#F1F5F9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M360 180C360 180 346 174 336 166" stroke="#F1F5F9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M360 180C360 180 374 174 384 166" stroke="#F1F5F9" stroke-width="4" stroke-linecap="round"/>
+
+    <rect x="286" y="212" width="44" height="44" rx="8" fill="#9FE8FF" fill-opacity="0.12" filter="url(#glow)">
+      <animate attributeName="fill-opacity" values="0.16;0.34;0.16" dur="3.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="390" y="212" width="44" height="44" rx="8" fill="#9FE8FF" fill-opacity="0.18" filter="url(#glow)">
+      <animate attributeName="fill-opacity" values="0.3;0.12;0.3" dur="3.2s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <g opacity="0.72">
+    <circle cx="168" cy="334" r="4" fill="#79D3EE">
+      <animate attributeName="cy" values="334;328;334" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="210" cy="348" r="3" fill="#F2BB73">
+      <animate attributeName="cy" values="348;342;348" dur="3.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="548" cy="340" r="4" fill="#79D3EE">
+      <animate attributeName="cy" values="340;334;340" dur="3.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="512" cy="352" r="3" fill="#F2BB73">
+      <animate attributeName="cy" values="352;346;352" dur="4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <text x="360" y="370" text-anchor="middle" fill="#EAF4FF" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="700" letter-spacing="0.18em">PLOTLOT</text>
+  <text x="360" y="392" text-anchor="middle" fill="#8FC1DF" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" letter-spacing="0.22em">ZONING  SETBACKS  MAX UNITS</text>
+</svg>

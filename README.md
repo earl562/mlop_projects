@@ -1,5 +1,9 @@
 # PlotLot
 
+<p align="center">
+  <img src="docs/assets/plotlot-house-motion.svg" alt="Animated PlotLot house on a surveyed lot" width="720" />
+</p>
+
 PlotLot is an AI-assisted land feasibility platform for acquisition-minded builders, developers, and investors.
 
 Give it a property address and PlotLot helps answer the first question that matters in land: "What can I actually build here?" It resolves the parcel, identifies the governing municipality and zoning context, extracts setbacks and dimensional standards, and calculates the maximum allowable units for the lot. From there, users can move into comps, pro forma, and document workflows.
