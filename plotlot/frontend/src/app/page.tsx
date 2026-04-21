@@ -22,8 +22,6 @@ import InputBar from "@/components/InputBar";
 import {
   AnalysisError,
   PipelineStatus,
-  fetchRuntimeHealth,
-  RuntimeHealthData,
   ZoningReportData,
   ChatMessageData,
   ToolUseEvent,
@@ -118,7 +116,6 @@ export default function Home() {
   const [contextualSuggestions, setContextualSuggestions] = useState<string[]>([]);
   const [inputError, setInputError] = useState<string | null>(null);
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
-  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthData | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idPrefix = useId();
@@ -138,36 +135,6 @@ export default function Home() {
   useEffect(() => {
     inputRef.current?.focus();
   }, [isWelcome]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadHealth = async () => {
-      try {
-        const health = await fetchRuntimeHealth();
-        if (!cancelled) setRuntimeHealth(health);
-      } catch {
-        if (!cancelled) {
-          setRuntimeHealth({
-            status: "degraded",
-            checks: { backend: "unreachable" },
-            runtime: {
-              startup_mode: "degraded",
-              startup_warnings: ["backend_unreachable"],
-            },
-          });
-        }
-      }
-    };
-
-    void loadHealth();
-    const interval = window.setInterval(() => void loadHealth(), 30_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
 
   // Keep refs in sync with state
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -556,8 +523,6 @@ export default function Home() {
   };
 
   const hasReport = messages.some((m) => m.report);
-  const isBackendDegraded = runtimeHealth?.status === "degraded";
-  const capabilityDetails = runtimeHealth?.capability_details;
 
   // Handle deal type selection in lookup mode — show pipeline approval
   const handleDealTypeSelect = useCallback(
@@ -622,11 +587,11 @@ export default function Home() {
           transition={{ ...springGentle, delay: 0.08 }}
         >
           <span className="inline-flex h-2 w-2 rounded-full bg-[var(--brand-strong)]" />
-          PlotLot land intelligence
+          PlotLot
         </motion.div>
 
         <motion.div
-          className="mb-10 grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)] lg:items-end"
+          className="mb-10"
           variants={staggerContainer}
           initial="hidden"
           animate="visible"
@@ -650,45 +615,10 @@ export default function Home() {
             </motion.h1>
             <motion.p variants={staggerItem} className="mt-5 max-w-2xl text-[15px] leading-7 text-[var(--text-secondary)] sm:text-[17px]">
               {mode === "lookup"
-                ? "Zoning, density, comps, pro forma, and development potential — in seconds. PlotLot gives operators a structured path from address to decision-ready signal."
+                ? "Zoning, density, comps, pro forma, and development potential — in seconds"
                 : "Search properties, research zoning codes, or get answers from our database. Use agent mode when you need an exploratory partner, not just a single lookup."}
             </motion.p>
           </div>
-
-          <motion.div variants={staggerItem} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-[2rem] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-2 shadow-[var(--shadow-panel)] backdrop-blur-xl">
-              <div className="rounded-[calc(2rem-0.5rem)] border border-white/50 bg-[var(--bg-surface-raised)] p-4 dark:border-white/5">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Best for</p>
-                <p className="mt-2 text-lg font-medium text-[var(--text-primary)]">
-                  {mode === "lookup" ? "Structured analysis" : "Exploratory research"}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                  {mode === "lookup"
-                    ? "Run a guided property evaluation with explicit gates before the report."
-                    : "Use the assistant for property questions, comps, and follow-up investigation."}
-                </p>
-              </div>
-            </div>
-
-            <div className={`rounded-[2rem] border p-2 shadow-[var(--shadow-card)] backdrop-blur-xl ${isBackendDegraded ? "border-amber-200/70 bg-[var(--brand-subtle)] dark:border-amber-800/60 dark:bg-amber-950/30" : "border-emerald-200/70 bg-emerald-50/80 dark:border-emerald-800/60 dark:bg-emerald-950/30"}`}>
-              <div className={`rounded-[calc(2rem-0.5rem)] border p-4 ${isBackendDegraded ? "border-amber-200/70 dark:border-amber-800/40" : "border-emerald-200/70 dark:border-emerald-800/40"}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex h-2.5 w-2.5 rounded-full ${isBackendDegraded ? "bg-amber-500" : "bg-emerald-500"}`} />
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">System status</p>
-                </div>
-                <p className="mt-2 text-lg font-medium text-[var(--text-primary)]">
-                  {isBackendDegraded ? "Local backend is degraded" : "Local stack is ready"}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                  {isBackendDegraded
-                    ? capabilityDetails?.db_backed_analysis_ready?.reason === "database_unavailable" || runtimeHealth?.runtime?.startup_warnings?.includes("database_unavailable")
-                      ? "Frontend exploration is available, but database-backed analysis is limited until the local DB is restored."
-                      : "Some backend capabilities are limited right now. The UI will surface reduced functionality clearly."
-                    : "Core frontend and backend services are available for local iteration."}
-                </p>
-              </div>
-            </div>
-          </motion.div>
         </motion.div>
 
         {/* Input bar — z-30 so autocomplete dropdown (z-50 inside) paints above chips below */}
@@ -766,25 +696,6 @@ export default function Home() {
               county={currentReport?.county}
             />
           )}
-        </motion.div>
-
-        <motion.div
-          {...fadeUp}
-          transition={{ ...springGentle, delay: 0.42 }}
-          className="mt-8 grid w-full max-w-5xl grid-cols-1 gap-4 self-center md:grid-cols-3"
-        >
-          {[
-            ["Guided lookup", "Address to gated analysis to report, without mixing structured workflow into free-form chat."],
-            ["Premium trust states", "Coverage, degraded backend, and unsupported metrics should be product language, not raw failure output."],
-            ["Decision-ready reports", "Summary hierarchy, confidence cues, and clearer defaults make the report the strongest surface."],
-          ].map(([title, copy]) => (
-            <div key={title} className="rounded-[2rem] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-2 shadow-[var(--shadow-card)]">
-              <div className="rounded-[calc(2rem-0.5rem)] border border-white/50 bg-[var(--bg-surface-raised)] p-5 dark:border-white/5">
-                <p className="text-lg font-medium text-[var(--text-primary)]">{title}</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{copy}</p>
-              </div>
-            </div>
-          ))}
         </motion.div>
 
         {/* Footer */}

@@ -8,9 +8,6 @@ interface DealTypeOption {
   description: string;
   icon: React.ReactNode;
   metrics: string[];
-  supportLevel: "fully_supported" | "partial" | "limited";
-  supportLabel: string;
-  supportNote: string;
 }
 
 const DEAL_TYPES: DealTypeOption[] = [
@@ -24,51 +21,39 @@ const DEAL_TYPES: DealTypeOption[] = [
       </svg>
     ),
     metrics: ["Max Units", "Max Offer (RLV)", "Dev Margin %", "Governing Constraint"],
-    supportLevel: "fully_supported",
-    supportLabel: "Most complete",
-    supportNote: "Best current fit for PlotLot's live zoning and residual valuation pipeline.",
   },
   {
     id: "wholesale",
     label: "Wholesale",
-    description: "Use current land and comp signals for a fast wholesale screen",
+    description: "Find ARV, calculate MAO, and estimate assignment fee",
     icon: (
       <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
     metrics: ["ARV", "MAO (70%)", "Repair Est.", "Assignment Fee"],
-    supportLevel: "partial",
-    supportLabel: "Estimated",
-    supportNote: "Some values are directional estimates based on currently available comps and land data.",
   },
   {
     id: "creative_finance",
     label: "Creative Finance",
-    description: "Review equity and market context before deeper creative structuring",
+    description: "SubTo, wrap, or seller financing analysis",
     icon: (
       <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
       </svg>
     ),
     metrics: ["Rate Spread", "Equity Capture", "Monthly Cash Flow", "LTV"],
-    supportLevel: "limited",
-    supportLabel: "Limited",
-    supportNote: "This mode currently provides partial context, not a full creative-finance underwriting model.",
   },
   {
     id: "hybrid",
     label: "Hybrid",
-    description: "Compare multiple strategies while PlotLot expands full hybrid support",
+    description: "Blend strategies for optimal deal structure",
     icon: (
       <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
       </svg>
     ),
     metrics: ["Blended Rate", "Cash to Close", "Combined CF", "Exit Paths"],
-    supportLevel: "limited",
-    supportLabel: "Limited",
-    supportNote: "Use this for directional planning only until hybrid-specific backend analysis is added.",
   },
 ];
 
@@ -85,21 +70,10 @@ interface DealTypeSelectorProps {
 }
 
 export default function DealTypeSelector({ onSelect, disabled }: DealTypeSelectorProps) {
-  const supportClasses: Record<DealTypeOption["supportLevel"], string> = {
-    fully_supported: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
-    partial: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-    limited: "bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
-  };
-
   return (
     <div className="w-full animate-fade-up" data-testid="deal-type-selector">
       <div className="mb-4 text-center">
-        <p className="text-sm text-[var(--text-muted)]">
-          What type of deal are you evaluating?
-        </p>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          Support levels vary by strategy, so PlotLot now labels which paths are production-ready versus directional.
-        </p>
+        <p className="text-sm text-[var(--text-muted)]">What type of deal are you evaluating?</p>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {DEAL_TYPES.map((deal) => (
@@ -116,19 +90,12 @@ export default function DealTypeSelector({ onSelect, disabled }: DealTypeSelecto
                 <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] bg-amber-50 text-amber-700 transition-colors group-hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:group-hover:bg-amber-900/50">
                   {deal.icon}
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${supportClasses[deal.supportLevel]}`}>
-                  {deal.supportLabel}
-                </span>
               </div>
 
               <div className="mt-4">
                 <h3 className="text-sm font-semibold text-[var(--text-primary)]">{deal.label}</h3>
                 <p className="mt-1 text-[11px] leading-5 text-[var(--text-muted)]">{deal.description}</p>
               </div>
-
-              <p className="mt-3 text-[11px] leading-5 text-[var(--text-secondary)]">
-                {deal.supportNote}
-              </p>
 
               <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
                 {deal.metrics.slice(0, 2).map((m) => (

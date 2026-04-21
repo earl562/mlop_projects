@@ -5,7 +5,6 @@ import { UserButton } from "@clerk/nextjs";
 import { ThemeToggle } from "@/components/ThemeProvider";
 import ChatHistory from "@/components/ChatHistory";
 import type { ChatSession } from "@/lib/sessions";
-import type { RuntimeHealthData } from "@/lib/api";
 
 export type { ChatSession };
 
@@ -17,7 +16,6 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
-  runtimeHealth?: RuntimeHealthData | null;
 }
 
 /* ── Sidebar Component ─────────────────────────────────────────────── */
@@ -29,7 +27,6 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
-  runtimeHealth,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -41,8 +38,6 @@ export default function Sidebar({
         s.title.toLowerCase().includes(search.trim().toLowerCase())
       )
     : sessions;
-  const isDegraded = runtimeHealth?.status === "degraded";
-
   /* ── Keyboard shortcuts ─────────────────────────────────────────── */
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -96,7 +91,7 @@ export default function Sidebar({
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] tracking-[0.12em] text-[var(--text-muted)] uppercase">
-                    Land intelligence workspace
+                    AI zoning analysis
                   </p>
                 </div>
               </div>
@@ -104,10 +99,7 @@ export default function Sidebar({
             </div>
             <div className="mt-3 flex items-center gap-2">
               <span className="rounded-full bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)]">
-                5 states
-              </span>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] ${isDegraded ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"}`}>
-                {isDegraded ? "Degraded local backend" : "Local stack ready"}
+                104 municipalities
               </span>
             </div>
           </div>
@@ -167,11 +159,6 @@ export default function Sidebar({
 
       {/* Footer — user account + plan link */}
       <div className="relative z-10 border-t border-[var(--border-soft)] px-4 py-4">
-        {isDegraded && (
-          <div className="mb-3 rounded-[1.5rem] border border-amber-200/70 bg-[var(--brand-subtle)] px-3 py-2 text-[11px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-            Backend is reachable, but database-backed analysis is currently unavailable on localhost.
-          </div>
-        )}
         <div className="flex items-center justify-between">
         {clerkEnabled ? (
           <UserButton
@@ -200,7 +187,7 @@ export default function Sidebar({
             Free
           </a>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            5 states
+            104 municipalities
           </span>
         </div>
         </div>
