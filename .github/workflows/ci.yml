@@ -5,35 +5,49 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
+  repo-hygiene:
+    name: Repo Hygiene
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enforce no-media / no-generated-artifacts policy
+        run: python3 plotlot/scripts/check_repo_hygiene.py
+
+  backend-quality:
+    name: Backend Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: plotlot
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --dev
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
+      - run: uv sync --frozen --dev --extra eval
       - run: uv run ruff check src/ tests/
       - run: uv run ruff format --check src/ tests/
-
-  typecheck:
-    runs-on: ubuntu-latest
-    needs: lint
-    defaults:
-      run:
-        working-directory: plotlot
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --dev
       - run: uv run mypy src/plotlot/ --no-error-summary
 
-  test:
+  backend-unit:
+    name: Backend Unit Tests
     runs-on: ubuntu-latest
-    needs: typecheck
+    timeout-minutes: 20
+    needs: [repo-hygiene, backend-quality]
     defaults:
       run:
         working-directory: plotlot
@@ -54,43 +68,79 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
       - run: uv sync --frozen --dev --extra eval
       - run: uv run python -m pytest tests/unit/ -v --tb=short
 
-  frontend-ui:
+  frontend-quality:
+    name: Frontend Quality
     runs-on: ubuntu-latest
-    needs: test
+    timeout-minutes: 20
+    needs: [repo-hygiene]
     defaults:
       run:
         working-directory: plotlot/frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_GOOGLE_MAPS_KEY: dummy-key
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dummy
+      CLERK_SECRET_KEY: sk_test_dummy
+      STRIPE_SECRET_KEY: sk_test_dummy
+      STRIPE_PRO_PRICE_ID: price_test_dummy
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: plotlot/frontend/package-lock.json
       - run: npm ci
+      - run: npm run lint
+      - run: npm run build
       - run: npm run test:ui
 
   playwright-no-db:
+    name: Playwright No-DB
     runs-on: ubuntu-latest
-    needs: frontend-ui
+    timeout-minutes: 25
+    needs: [frontend-quality]
     defaults:
       run:
         working-directory: plotlot/frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: plotlot/frontend/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:no-db
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-no-db-artifacts
+          path: |
+            plotlot/frontend/playwright-report
+            plotlot/frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   playwright-db:
+    name: Playwright DB-Backed
     runs-on: ubuntu-latest
-    needs: frontend-ui
+    timeout-minutes: 30
+    needs: [backend-unit, frontend-quality]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -109,25 +159,46 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
       NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
-      - uses: astral-sh/setup-uv@v5
+          cache: npm
+          cache-dependency-path: plotlot/frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
       - run: uv sync --frozen --dev --extra eval
         working-directory: plotlot
       - run: uv run uvicorn plotlot.api.main:app --host 127.0.0.1 --port 8000 > /tmp/plotlot-api.log 2>&1 &
         working-directory: plotlot
-      - run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"healthy"'; then
-              exit 0
-            fi
-            sleep 2
-          done
-          cat /tmp/plotlot-api.log
-          echo "Backend failed db-backed preflight"
-          exit 1
+      - name: Wait for backend health
+        run: |
+          python3 - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          url = "http://127.0.0.1:8000/health"
+          last_body = ""
+
+          for _ in range(30):
+              try:
+                  with urllib.request.urlopen(url, timeout=5) as response:
+                      body = response.read().decode("utf-8")
+                  last_body = body
+                  payload = json.loads(body)
+                  if payload.get("status") == "healthy":
+                      raise SystemExit(0)
+              except Exception:
+                  pass
+              time.sleep(2)
+
+          print(last_body)
+          raise SystemExit("Backend failed db-backed preflight")
+          PY
         working-directory: plotlot
       - run: npm ci
         working-directory: plotlot/frontend
@@ -135,32 +206,14 @@ jobs:
         working-directory: plotlot/frontend
       - run: npm run test:e2e:db
         working-directory: plotlot/frontend
-
-  eval:
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: plotlot
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: plotlot
-          POSTGRES_PASSWORD: plotlot
-          POSTGRES_DB: plotlot
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U plotlot"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --dev --extra eval
-      - run: uv run python -m pytest tests/eval/ -v --tb=short
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-db-artifacts
+          path: |
+            /tmp/plotlot-api.log
+            plotlot/frontend/playwright-report
+            plotlot/frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7

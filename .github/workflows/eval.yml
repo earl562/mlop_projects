@@ -1,37 +1,54 @@
 name: Eval
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      run_live_provider_checks:
+        description: Run live provider validation against external municipal/property endpoints
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  eval:
+  offline-eval:
+    name: Offline Eval
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: plotlot
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: plotlot
-          POSTGRES_PASSWORD: plotlot
-          POSTGRES_DB: plotlot
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U plotlot"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
       - run: uv sync --frozen --dev --extra eval
       - run: uv run python -m pytest tests/eval/test_eval_scorers.py -v --tb=short
       - run: uv run python -m pytest tests/eval/test_eval_offline.py -v --tb=short
+
+  live-provider-checks:
+    name: Live Provider Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: inputs.run_live_provider_checks
+    defaults:
+      run:
+        working-directory: plotlot
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
+      - run: uv sync --frozen --dev --extra eval
+      - run: uv run python -m pytest tests/integration/test_hub_live.py tests/integration/test_universal_validation.py -m live -v --tb=short

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+// The Codex sandbox disallows binding to 0.0.0.0, so keep the dev server on loopback.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   testDir: "./tests",
@@ -26,10 +27,10 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "npm run dev",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
       url: BASE_URL,
       reuseExistingServer: true,
-      timeout: 30_000,
+      timeout: 90_000,
       env: { PLAYWRIGHT_TESTING: "1" },
     },
   ],

@@ -42,7 +42,7 @@ async function expectModeButtonState(active: Locator, inactive: Locator) {
 }
 
 test.describe("PlotLot design system", () => {
-  test("lookup welcome screen matches the current editorial hero contract", async ({ page }) => {
+  test("lookup welcome screen matches the current editorial hero contract", async ({ page }, testInfo) => {
     await gotoWelcome(page);
 
     await expect(page.getByText("Beta", { exact: true }).first()).toBeVisible();
@@ -63,10 +63,10 @@ test.describe("PlotLot design system", () => {
     }
 
     await expect(page.getByText(/PlotLot analyzes zoning, density, comps/i)).toBeVisible();
-    await page.screenshot({ path: "tests/screenshots/ds-01-lookup-welcome.png", fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("ds-01-lookup-welcome.png"), fullPage: true });
   });
 
-  test("agent welcome swaps into the tool-first surface without breaking the hero", async ({ page }) => {
+  test("agent welcome swaps into the tool-first surface without breaking the hero", async ({ page }, testInfo) => {
     await gotoWelcome(page);
 
     const lookupButton = page.getByRole("button", { name: "Lookup" });
@@ -90,7 +90,7 @@ test.describe("PlotLot design system", () => {
 
     await expect(page.getByText("Analyze a property first").first()).toBeVisible();
     await expectModeButtonState(agentButton, lookupButton);
-    await page.screenshot({ path: "tests/screenshots/ds-02-agent-welcome.png", fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("ds-02-agent-welcome.png"), fullPage: true });
   });
 
   test("theme toggle persists while switching between lookup and agent modes", async ({ page }) => {

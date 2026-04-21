@@ -87,6 +87,7 @@ export async function requireHealthyBackend(
 export async function gotoHome(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("send-button")).toBeVisible();
+  await expect(page.getByTestId("lookup-input")).toBeVisible();
   await page.waitForTimeout(300);
 }
 
@@ -105,8 +106,20 @@ export async function runLookupFlow(
   address: string,
   dealType: "land" | "wholesale" | "creative-finance" | "hybrid" = "land",
 ) {
-  await page.getByTestId("lookup-input").fill(address);
-  await page.getByTestId("send-button").click();
+  const input = page.getByTestId("lookup-input");
+  const sendButton = page.getByTestId("send-button");
+
+  // In some environments the page can hydrate after the first fill, wiping the input value.
+  // Retry until the controlled value "sticks" before attempting to submit.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await input.fill(address);
+    if ((await input.inputValue().catch(() => "")) === address) break;
+    await page.waitForTimeout(150);
+  }
+
+  await expect(input).toHaveValue(address, { timeout: 10_000 });
+  await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+  await sendButton.click();
 
   await expect(page.getByTestId("deal-type-selector")).toBeVisible({
     timeout: 10_000,

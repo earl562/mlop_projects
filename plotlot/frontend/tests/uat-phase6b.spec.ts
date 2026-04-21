@@ -14,13 +14,11 @@ import { test, expect } from "@playwright/test";
  */
 
 const TEST_ADDRESS = "4341 NW 183rd St, Miami Gardens, FL 33055";
-const SCREENSHOT_DIR = "tests/screenshots";
-
 test.describe("Phase 6B UAT", () => {
   // --------------------------------------------------------------------------
   // UAT-1: Welcome state renders
   // --------------------------------------------------------------------------
-  test("UAT-1: Welcome state renders correctly", async ({ page }) => {
+  test("UAT-1: Welcome state renders correctly", async ({ page }, testInfo) => {
     await page.goto("/", { waitUntil: "networkidle" });
 
     // Floating pill nav with "PlotLot" and "Beta"
@@ -43,13 +41,13 @@ test.describe("Phase 6B UAT", () => {
     await expect(sendBtn).toBeDisabled();
 
     // Screenshot
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/uat-6b-01-welcome.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("uat-6b-01-welcome.png"), fullPage: true });
   });
 
   // --------------------------------------------------------------------------
   // UAT-2: Pipeline step descriptions are telegraphic
   // --------------------------------------------------------------------------
-  test("UAT-2: Pipeline step descriptions are telegraphic", async ({ page }) => {
+  test("UAT-2: Pipeline step descriptions are telegraphic", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     await page.goto("/", { waitUntil: "networkidle" });
 
@@ -74,7 +72,7 @@ test.describe("Phase 6B UAT", () => {
     await expect(page.getByText(/Step \d+ of 6/)).toBeVisible({ timeout: 15_000 });
 
     // Screenshot the pipeline running
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/uat-6b-02-pipeline-running.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("uat-6b-02-pipeline-running.png"), fullPage: true });
 
     // Wait for pipeline to complete (zoning district appears in report)
     await expect(
@@ -132,7 +130,7 @@ test.describe("Phase 6B UAT", () => {
   // --------------------------------------------------------------------------
   // UAT-4: Report card has NO summary markdown block
   // --------------------------------------------------------------------------
-  test("UAT-4: Report card has NO summary markdown block", async ({ page }) => {
+  test("UAT-4: Report card has NO summary markdown block", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     await page.goto("/", { waitUntil: "networkidle" });
 
@@ -147,7 +145,7 @@ test.describe("Phase 6B UAT", () => {
     });
 
     // Screenshot the report card top
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/uat-6b-03-report-card-top.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("uat-6b-03-report-card-top.png"), fullPage: true });
 
     // Zoning district IS displayed (e.g. "RS-1" or similar R-prefixed)
     const zoningDistrict = page.locator(".font-display").filter({ hasText: /R-/ });
@@ -220,7 +218,7 @@ test.describe("Phase 6B UAT", () => {
   // --------------------------------------------------------------------------
   // UAT-7: Floor plan section exists
   // --------------------------------------------------------------------------
-  test("UAT-7: Floor plan section exists", async ({ page }) => {
+  test("UAT-7: Floor plan section exists", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
     await page.goto("/", { waitUntil: "networkidle" });
 
@@ -247,7 +245,7 @@ test.describe("Phase 6B UAT", () => {
     });
 
     // Screenshot the floor plan
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/uat-6b-04-floor-plan.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("uat-6b-04-floor-plan.png"), fullPage: true });
   });
 
   // --------------------------------------------------------------------------

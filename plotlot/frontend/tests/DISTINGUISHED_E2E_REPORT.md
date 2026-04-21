@@ -26,20 +26,24 @@ This walkthrough exercised:
 - Backend health during walkthrough: `degraded`
 - Root cause: local Postgres on `localhost:5433` was unavailable, so full report-generation paths were not validated in this run
 
-## Screenshot Evidence
+## Observed UI States
 
-- [Lookup welcome](./screenshots/distinguished/01-lookup-welcome.png)
-- [Lookup invalid input](./screenshots/distinguished/02-lookup-invalid-input.png)
-- [Deal type selector](./screenshots/distinguished/03-deal-type-selector.png)
-- [Pipeline approval](./screenshots/distinguished/04-pipeline-approval.png)
-- [Pipeline running](./screenshots/distinguished/05-pipeline-running.png)
-- [Agent welcome](./screenshots/distinguished/07-agent-welcome.png)
-- [Agent SSE error](./screenshots/distinguished/08-agent-sse-error.png)
-- [Agent connection failure](./screenshots/distinguished/09-agent-connection-failure.png)
-- [Pending lookup before mode switch](./screenshots/distinguished/10-pending-lookup-before-switch.png)
-- [Agent after mode switch](./screenshots/distinguished/11-agent-after-switch.png)
-- [Lookup after switch back](./screenshots/distinguished/12-lookup-after-switch-back.png)
-- [Lookup timeout retry state](./screenshots/distinguished/13-lookup-timeout-retry.png)
+This walkthrough captured the following states during local Playwright execution:
+
+- Lookup welcome
+- Lookup invalid input
+- Deal type selector
+- Pipeline approval
+- Pipeline running
+- Agent welcome
+- Agent SSE error handling
+- Agent connection failure handling
+- Pending lookup before mode switch
+- Agent after mode switch
+- Lookup after switching back
+- Lookup timeout and retry affordance
+
+Repository policy no longer stores screenshots in git. If visual evidence is needed for a future run, use Playwright output artifacts or CI artifacts instead of tracked image files.
 
 ## What Works
 

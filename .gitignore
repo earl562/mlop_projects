@@ -34,3 +34,29 @@ mlruns/
 **/node_modules/
 .vercel
 .omx/
+
+# Playwright and local capture artifacts
+.playwright-mcp/
+plotlot/frontend/playwright-report/
+plotlot/frontend/test-results/
+plotlot/frontend/tests/screenshots/
+plotlot/tests/screenshots/
+
+# Local PlotLot scratch outputs
+/plotlot-*.png
+/plotlot-*.md
+/plotlot-*.log
+/plotlot-*.json
+/plotlot-*-network.json
+/plotlot-*-analysis-*.json
+/plotlot-*-home-*.json
+
+# Root-level media dumps should never be tracked
+/*.png
+/*.jpg
+/*.jpeg
+/*.webm
+/*.zip
+
+# Python typing cache
+.mypy_cache/

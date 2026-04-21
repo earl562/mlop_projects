@@ -21,41 +21,46 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
-  const [resolved, setResolved] = useState<"light" | "dark">("light");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return "system";
+    }
 
-  const applyTheme = useCallback((t: Theme) => {
-    const isDark =
-      t === "dark" ||
-      (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark", isDark);
-    setResolved(isDark ? "dark" : "light");
+    return (localStorage.getItem("theme") as Theme | null) || "system";
+  });
+  const [systemDark, setSystemDark] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+
+  const resolved: "light" | "dark" =
+    theme === "system" ? (systemDark ? "dark" : "light") : theme;
+
+  const applyTheme = useCallback((mode: "light" | "dark") => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
   }, []);
 
   const setTheme = useCallback(
     (t: Theme) => {
       setThemeState(t);
       localStorage.setItem("theme", t);
-      applyTheme(t);
     },
-    [applyTheme],
+    [],
   );
 
   useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme | null;
-    const initial = stored || "system";
-    setThemeState(initial);
-    applyTheme(initial);
+    applyTheme(resolved);
+  }, [applyTheme, resolved]);
 
+  useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      if ((localStorage.getItem("theme") || "system") === "system") {
-        applyTheme("system");
-      }
-    };
+    const handler = (event: MediaQueryListEvent) => setSystemDark(event.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [applyTheme]);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, resolved, setTheme }}>

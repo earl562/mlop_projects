@@ -98,7 +98,7 @@ async def analyze(request: AnalyzeRequest, _: None = Depends(check_analysis_limi
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("Pipeline error for address: %s", request.address)
-        detail, _ = _describe_pipeline_error(e)
+        detail = _describe_pipeline_error(e)[0]
         raise HTTPException(status_code=502, detail=detail)
 
     if report is None:

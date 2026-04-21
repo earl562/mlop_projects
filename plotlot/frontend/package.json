@@ -10,6 +10,7 @@
     "test:ui": "vitest run --config vitest.config.ts",
     "test:e2e": "NEXT_PUBLIC_API_URL=http://localhost:8000 npx playwright test tests/smoke.no-db.spec.ts tests/mutation.spec.ts tests/lookup.db.spec.ts tests/agent.db.spec.ts tests/cross-mode.spec.ts --project=chromium",
     "test:e2e:no-db": "NEXT_PUBLIC_API_URL=http://localhost:8000 npx playwright test tests/smoke.no-db.spec.ts tests/mutation.spec.ts --project=chromium",
+    "test:e2e:vc": "NEXT_PUBLIC_API_URL=http://localhost:8000 npx playwright test tests/vc-readiness.no-db.spec.ts --project=chromium",
     "test:e2e:db": "NEXT_PUBLIC_API_URL=http://localhost:8000 npx playwright test tests/lookup.db.spec.ts tests/agent.db.spec.ts tests/cross-mode.spec.ts --project=chromium",
     "test:e2e:visual": "NEXT_PUBLIC_API_URL=http://localhost:8000 npx playwright test tests/visual-walkthrough.spec.ts --project=chromium"
   },

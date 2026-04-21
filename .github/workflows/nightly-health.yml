@@ -1,0 +1,56 @@
+name: Nightly Health
+
+on:
+  schedule:
+    - cron: "17 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-health
+  cancel-in-progress: false
+
+jobs:
+  deployed-api-health:
+    name: Deployed API Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check deployed PlotLot health endpoint
+        env:
+          PLOTLOT_HEALTH_URL: ${{ vars.PLOTLOT_HEALTH_URL }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          url = os.environ.get("PLOTLOT_HEALTH_URL") or "https://plotlot-api.onrender.com/health"
+          with urllib.request.urlopen(url, timeout=15) as response:
+              body = response.read().decode("utf-8")
+
+          print(body)
+          payload = json.loads(body)
+          status = payload.get("status")
+          if status != "healthy":
+              raise SystemExit(f"Expected deployed PlotLot health status to be healthy, got {status!r}")
+          PY
+
+  live-provider-health:
+    name: Live Provider Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: plotlot
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: plotlot
+      - run: uv sync --frozen --dev --extra eval
+      - run: uv run python -m pytest tests/integration/test_hub_live.py tests/integration/test_universal_validation.py -m live -v --tb=short
