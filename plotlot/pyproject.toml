@@ -48,6 +48,7 @@ plotlot = "plotlot.cli:main"
 plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
 plotlot-api = "plotlot.api.main:run"
+plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
 
 [build-system]
 requires = ["hatchling"]
