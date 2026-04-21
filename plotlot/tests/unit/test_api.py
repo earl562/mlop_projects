@@ -256,6 +256,9 @@ async def test_chat_reports_actionable_error_when_llm_unavailable(client):
     ):
         mock_settings.openai_api_key = ""
         mock_settings.openai_access_token = ""
+        mock_settings.openrouter_api_key = ""
+        mock_settings.use_codex_oauth = False
+        mock_settings.codex_auth_file = "~/.codex/auth.json"
         resp = await client.post(
             "/api/v1/chat",
             json={
@@ -269,6 +272,7 @@ async def test_chat_reports_actionable_error_when_llm_unavailable(client):
     body = resp.text
     assert "no LLM credentials are configured" in body
     assert "OPENAI_API_KEY" in body
+    assert "OPENROUTER_API_KEY" in body
 
 
 @pytest.mark.asyncio

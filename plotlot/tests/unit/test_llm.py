@@ -170,6 +170,7 @@ class TestAnalyzeZoning:
         ):
             mock_settings.openai_api_key = "test_key"
             mock_settings.openai_access_token = ""
+            mock_settings.use_codex_oauth = False
             mock_settings.openai_base_url = "https://api.openai.com/v1"
             mock_settings.openai_model = "gpt-4.1"
             mock_settings.openai_reasoning_effort = "medium"
@@ -188,6 +189,7 @@ class TestAnalyzeZoning:
         with patch("plotlot.retrieval.llm.settings") as mock_settings:
             mock_settings.openai_api_key = ""
             mock_settings.openai_access_token = ""
+            mock_settings.use_codex_oauth = False
 
             result = await analyze_zoning(
                 "123 Main St",
@@ -226,6 +228,7 @@ class TestAnalyzeZoning:
         ):
             mock_settings.openai_api_key = ""
             mock_settings.openai_access_token = "oauth-access-token"
+            mock_settings.use_codex_oauth = False
             mock_settings.openai_base_url = "https://gateway.example.com/v1"
             mock_settings.openai_model = "gpt-4.1"
             mock_settings.openai_reasoning_effort = "medium"
@@ -238,6 +241,56 @@ class TestAnalyzeZoning:
             )
 
         assert result.get("zoning_district") == "RS-4"
+
+    @pytest.mark.asyncio
+    async def test_codex_oauth_uses_refreshable_token_provider(self):
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content=json.dumps(
+                        {
+                            "zoning_district": "RS-4",
+                            "summary": "From codex oauth",
+                            "confidence": "medium",
+                        }
+                    ),
+                    tool_calls=[],
+                ),
+            )
+        ]
+        mock_response.usage = MagicMock(prompt_tokens=50, completion_tokens=30)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+            patch("plotlot.retrieval.llm.has_saved_tokens", return_value=True),
+            patch("plotlot.retrieval.llm.settings") as mock_settings,
+        ):
+            mock_settings.openai_api_key = ""
+            mock_settings.openai_access_token = ""
+            mock_settings.use_codex_oauth = True
+            mock_settings.codex_auth_file = "~/.codex/auth.json"
+            mock_settings.openai_oauth_client_id = "client_123"
+            mock_settings.openai_oauth_token_url = "https://auth.openai.com/oauth/token"
+            mock_settings.openai_base_url = "https://api.openai.com/v1"
+            mock_settings.openai_model = "gpt-4.1"
+            mock_settings.openai_reasoning_effort = "medium"
+
+            result = await analyze_zoning(
+                "123 Main St",
+                "Miramar",
+                "Broward",
+                [_make_result()],
+            )
+
+        assert result.get("zoning_district") == "RS-4"
+        _, client_kwargs = async_openai_ctor.call_args
+        assert callable(client_kwargs["api_key"])
+        _, kwargs = mock_client.chat.completions.create.await_args
+        assert kwargs["model"] == "gpt-4.1"
 
 
 class TestLlmResponseToReport:
