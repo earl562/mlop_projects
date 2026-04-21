@@ -1,0 +1,78 @@
+name: Dev Branch PR
+
+on:
+  push:
+    branches:
+      - "dev/**"
+      - "feat/**"
+      - "fix/**"
+      - "hotfix/**"
+      - "codex/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dev-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  open-draft-pr:
+    name: Open Draft PR To Main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const branch = context.ref.replace("refs/heads/", "");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = `${owner}:${branch}`;
+
+            const existing = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              head,
+              base: "main",
+              per_page: 100,
+            });
+
+            if (existing.length > 0) {
+              core.notice(`Draft PR already exists for ${branch}: #${existing[0].number}`);
+              return;
+            }
+
+            const commit = context.payload.head_commit ?? {};
+            const title = commit.message
+              ? `[Promote] ${commit.message.split("\n")[0].slice(0, 120)}`
+              : `[Promote] ${branch} -> main`;
+
+            const body = [
+              "## Promotion Summary",
+              "",
+              `This draft PR was auto-opened from \`${branch}\` so changes can flow through CI on a separate development branch before promotion to \`main\`.`,
+              "",
+              "## Promotion Checklist",
+              "",
+              "- [ ] Branch CI is green",
+              "- [ ] PR is ready for review (not draft) when the work is ready",
+              "- [ ] Required reviewer approval is collected",
+              "- [ ] No screenshots, Playwright outputs, or generated media are committed",
+              "- [ ] Merge to `main` only after approval",
+              "",
+              "Branch workflow reference: `docs/BRANCH_DELIVERY_WORKFLOW.md`",
+            ].join("\n");
+
+            const pr = await github.rest.pulls.create({
+              owner,
+              repo,
+              head: branch,
+              base: "main",
+              title,
+              body,
+              draft: true,
+            });
+
+            core.notice(`Created draft PR #${pr.data.number} for ${branch}`);

@@ -118,6 +118,18 @@ The repository is set up around three quality lanes:
 
 Generated screenshots, Playwright reports, and other large test artifacts are intentionally excluded from git. They should live in ignored local directories or GitHub Actions artifacts instead of repository history.
 
+## Branch Workflow
+
+PlotLot should use separate development branches for ongoing work and reserve `main` for approved changes.
+
+- push continuously to `codex/*`, `dev/*`, `feat/*`, `fix/*`, or `hotfix/*` branches
+- CI runs on every branch push
+- GitHub auto-opens a draft PR from those branches into `main`
+- when the work is ready, mark the PR ready for review and collect approval
+- merge to `main` only after approval
+
+Branch-flow details and the matching GitHub settings are in [BRANCH_DELIVERY_WORKFLOW.md](/Users/earlperry/Desktop/Projects/EP/docs/BRANCH_DELIVERY_WORKFLOW.md).
+
 ## Roadmap Direction
 
 - Durable agent memory and session recall
