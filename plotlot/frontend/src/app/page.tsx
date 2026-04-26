@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, FormEvent, useId } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { staggerContainer, staggerItem, fadeUp, springGentle } from "@/lib/motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,7 +9,6 @@ import ZoningReport from "@/components/ZoningReport";
 import TabbedReport from "@/components/TabbedReport";
 import DealTypeSelector from "@/components/DealTypeSelector";
 import type { DealType } from "@/components/DealTypeSelector";
-import PipelineApproval from "@/components/PipelineApproval";
 import AnalysisStream from "@/components/AnalysisStream";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import ModeToggle from "@/components/ModeToggle";
@@ -111,7 +110,6 @@ export default function Home() {
   // Lookup mode: deal type flow
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
   const [selectedDealType, setSelectedDealType] = useState<DealType | null>(null);
-  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [docCanvasOpen, setDocCanvasOpen] = useState(false);
   const [contextualSuggestions, setContextualSuggestions] = useState<string[]>([]);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -121,6 +119,7 @@ export default function Home() {
   const idPrefix = useId();
   const msgCounterRef = useRef(0);
   const localSessionIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const messagesRef = useRef<DisplayMessage[]>([]);
   const currentReportRef = useRef<ZoningReportData | null>(null);
   const modeRef = useRef<AppMode>("lookup");
@@ -141,12 +140,12 @@ export default function Home() {
   useEffect(() => { currentReportRef.current = currentReport; }, [currentReport]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { localSessionIdRef.current = localSessionId; }, [localSessionId]);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
 
-  // Fix 3: Mode switch — clear lookup-mode state
+  // Mode switch — clear lookup-mode state
   useEffect(() => {
     setPendingAddress(null);
     setSelectedDealType(null);
-    setAwaitingApproval(false);
     setContextualSuggestions([]);
   }, [mode]);
 
@@ -163,12 +162,12 @@ export default function Home() {
   // Mount: restore last session from localStorage
   useEffect(() => {
     const backendId = localStorage.getItem("plotlot_backend_session");
-    if (backendId) setSessionId(backendId);
-
     const lastId = localStorage.getItem("plotlot_last_session");
-    if (!lastId) return;
-    const session = getLocalSession(lastId);
-    if (!session || session.messages.length === 0) return;
+    const session = lastId ? getLocalSession(lastId) : undefined;
+    const resolvedBackendId = backendId || session?.backendSessionId || null;
+    if (resolvedBackendId) setSessionId(resolvedBackendId);
+
+    if (!lastId || !session || session.messages.length === 0) return;
 
     const restored: DisplayMessage[] = session.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -190,6 +189,38 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Flush current messages to localStorage — used on processing complete and on page unload.
+  const flushSession = useCallback(() => {
+    const msgs = messagesRef.current;
+    const report = currentReportRef.current;
+    const currentMode = modeRef.current;
+    const sid = localSessionIdRef.current;
+    const backendSid = sessionIdRef.current;
+
+    const saveable = msgs
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+      .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content, timestamp: new Date().toISOString() }));
+    if (saveable.length === 0) return;
+
+    // Use the first user message (typically the address) as the session title
+    const firstUser = saveable.find((m) => m.role === "user");
+    const title = firstUser?.content?.slice(0, 60) || "New conversation";
+    const extras = {
+      messages: saveable,
+      ...(report ? { report } : {}),
+      ...(backendSid ? { backendSessionId: backendSid } : {}),
+    };
+    if (sid) {
+      updateLocalSession(sid, extras);
+    } else {
+      const newSession = createLocalSession(currentMode);
+      updateLocalSession(newSession.id, { title, ...extras });
+      setLocalSessionId(newSession.id);
+      localSessionIdRef.current = newSession.id;
+    }
+    window.dispatchEvent(new CustomEvent("plotlot:sessions-changed"));
+  }, []);
+
   // Save messages to local session after processing completes
   useEffect(() => {
     if (isProcessing) {
@@ -198,28 +229,20 @@ export default function Home() {
     }
     if (!hasProcessedRef.current) return;
     hasProcessedRef.current = false;
+    flushSession();
+  }, [isProcessing, flushSession]);
 
-    const msgs = messagesRef.current;
-    const report = currentReportRef.current;
-    const currentMode = modeRef.current;
-    const sid = localSessionIdRef.current;
-
-    const saveable = msgs
-      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content && !m.isStreaming)
-      .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content, timestamp: new Date().toISOString() }));
-    if (saveable.length === 0) return;
-
-    const title = saveable[0]?.content?.slice(0, 60) || "New conversation";
-    if (sid) {
-      updateLocalSession(sid, { messages: saveable, ...(report ? { report } : {}) });
-    } else {
-      const newSession = createLocalSession(currentMode);
-      updateLocalSession(newSession.id, { title, messages: saveable, ...(report ? { report } : {}) });
-      setLocalSessionId(newSession.id);
-      localSessionIdRef.current = newSession.id;
-    }
-    window.dispatchEvent(new CustomEvent("plotlot:sessions-changed"));
-  }, [isProcessing]);
+  // Save on tab hidden or page unload so mid-stream sessions aren't lost
+  useEffect(() => {
+    const handleUnload = () => { if (hasProcessedRef.current) flushSession(); };
+    const handleVisibility = () => { if (document.visibilityState === "hidden") handleUnload(); };
+    window.addEventListener("beforeunload", handleUnload);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [flushSession]);
 
   // Listen for session selection from sidebar
   useEffect(() => {
@@ -247,10 +270,14 @@ export default function Home() {
       setMessages(restored);
       setLocalSessionId(id);
       localSessionIdRef.current = id;
+      // Restore backend session ID so agent context survives navigation
+      if (session.backendSessionId) {
+        setSessionId(session.backendSessionId);
+        sessionIdRef.current = session.backendSessionId;
+      }
       setInput("");
       setPendingAddress(null);
       setSelectedDealType(null);
-      setAwaitingApproval(false);
       setIsProcessing(false);
     };
     window.addEventListener("plotlot:session-selected", handler);
@@ -524,37 +551,22 @@ export default function Home() {
 
   const hasReport = messages.some((m) => m.report);
 
-  // Handle deal type selection in lookup mode — show pipeline approval
+  // Handle deal type selection — immediately kicks off the pipeline
   const handleDealTypeSelect = useCallback(
-    (dealType: DealType) => {
-      if (!pendingAddress) return;
-      setSelectedDealType(dealType);
-      setAwaitingApproval(true);
-    },
-    [pendingAddress],
-  );
-
-  // Handle pipeline approval — run with selected skip steps
-  const handlePipelineApprove = useCallback(
-    async (skipSteps: string[]) => {
+    async (dealType: DealType) => {
       if (!pendingAddress) return;
       const address = pendingAddress;
-      setAwaitingApproval(false);
+      setSelectedDealType(dealType);
       setPendingAddress(null);
       setIsProcessing(true);
       try {
-        await runAnalysis(address, skipSteps);
+        await runAnalysis(address);
       } finally {
         setIsProcessing(false);
       }
     },
     [pendingAddress, runAnalysis],
   );
-
-  const handlePipelineCancel = useCallback(() => {
-    setAwaitingApproval(false);
-    setSelectedDealType(null);
-  }, []);
 
   const handleNewAnalysis = useCallback(() => {
     setMessages([]);
@@ -565,7 +577,6 @@ export default function Home() {
     hasProcessedRef.current = false;
     setPendingAddress(null);
     setSelectedDealType(null);
-    setAwaitingApproval(false);
     setInput("");
     setIsProcessing(false);
     localStorage.removeItem("plotlot_backend_session");
@@ -597,12 +608,6 @@ export default function Home() {
           animate="visible"
         >
           <div className="max-w-5xl">
-            <motion.div
-              variants={staggerItem}
-              className="mb-4 text-sm tracking-wide text-[var(--text-muted)]"
-            >
-              Hi there
-            </motion.div>
             <motion.h1
               variants={staggerItem}
               className="max-w-5xl font-display text-[clamp(3.35rem,7vw,6.2rem)] leading-[0.98] text-[var(--text-primary)]"
@@ -638,8 +643,8 @@ export default function Home() {
                 value={input}
                 onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
                 onSelect={(address) => sendMessage(address)}
-                placeholder="Enter a property address..."
-                disabled={isProcessing}
+                placeholder={pendingAddress ? "Select a deal type below..." : "Enter a property address..."}
+                disabled={isProcessing || !!pendingAddress}
               />
             ) : (
               <input
@@ -678,14 +683,23 @@ export default function Home() {
           )}
         </motion.form>
 
-        {/* Capability chips / Tool cards — z-0 so autocomplete dropdown from form above paints on top */}
+        {/* Capability chips / Deal type selector / Tool cards */}
         <motion.div
           {...fadeUp}
           transition={{ ...springGentle, delay: 0.35 }}
-          className="relative z-0 min-h-[72px] w-full max-w-4xl self-center"
+          className="relative z-0 w-full max-w-4xl self-center"
         >
-          {mode === "lookup" ? (
-            <CapabilityChips mode={mode} onSelect={sendMessage} disabled={isProcessing} />
+          {pendingAddress && !selectedDealType ? (
+            <div className="animate-fade-up">
+              <p className="mb-3 text-center text-xs text-[var(--text-muted)]">
+                What type of deal are you underwriting?
+              </p>
+              <DealTypeSelector onSelect={handleDealTypeSelect} disabled={isProcessing} />
+            </div>
+          ) : mode === "lookup" ? (
+            <div className="min-h-[72px]">
+              <CapabilityChips mode={mode} onSelect={sendMessage} disabled={isProcessing} />
+            </div>
           ) : (
             <ToolCards
               onAnalyze={() => inputRef.current?.focus()}
@@ -934,25 +948,24 @@ export default function Home() {
               )}
             </div>
           ))}
-          {/* Deal type selector — appears when address entered in lookup mode */}
-          {pendingAddress && !selectedDealType && (
-            <div className="mx-auto max-w-xl px-3 py-4 sm:px-0">
-              <DealTypeSelector onSelect={handleDealTypeSelect} disabled={isProcessing} />
-            </div>
-          )}
-
-          {/* Pipeline approval gate — appears after deal type selection */}
-          {pendingAddress && selectedDealType && awaitingApproval && (
-            <div className="mx-auto max-w-xl px-3 py-4 sm:px-0 animate-fade-up">
-              <PipelineApproval
-                address={pendingAddress}
-                dealType={selectedDealType}
-                onApprove={handlePipelineApprove}
-                onCancel={handlePipelineCancel}
-                disabled={isProcessing}
-              />
-            </div>
-          )}
+          {/* Deal type selector — appears after address is entered in lookup mode */}
+          <AnimatePresence>
+            {pendingAddress && !selectedDealType && !isProcessing && (
+              <motion.div
+                key="deal-type-selector"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ type: "spring", stiffness: 300, damping: 28 }}
+                className="mx-auto max-w-xl px-3 py-4 sm:px-0"
+              >
+                <p className="mb-3 text-center text-xs text-[var(--text-muted)]">
+                  What type of deal are you underwriting?
+                </p>
+                <DealTypeSelector onSelect={handleDealTypeSelect} disabled={isProcessing} />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div ref={messagesEndRef} />
         </div>
@@ -1006,13 +1019,16 @@ export default function Home() {
                 onAddressSelect={(address) => sendMessage(address)}
                 mode={mode}
                 onModeChange={setMode}
-                placeholder={mode === "lookup"
-                  ? "Enter a property address..."
-                  : hasReport
-                    ? "Ask about this property's zoning..."
-                    : "Ask about zoning, density, or property data..."
+                placeholder={
+                  pendingAddress
+                    ? "Select a deal type below to continue..."
+                    : mode === "lookup"
+                      ? "Enter a property address..."
+                      : hasReport
+                        ? "Ask about this property's zoning..."
+                        : "Ask about zoning, density, or property data..."
                 }
-                disabled={isProcessing || !!pendingAddress || awaitingApproval}
+                disabled={isProcessing || !!pendingAddress}
                 isProcessing={isProcessing}
               />
               {inputError && (
