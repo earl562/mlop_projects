@@ -1,6 +1,14 @@
 import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+const loadConfig = async (subpath) => {
+  try {
+    return (await import(`eslint-config-next/${subpath}`)).default;
+  } catch {
+    return (await import(`eslint-config-next/${subpath}.js`)).default;
+  }
+};
+
+const nextVitals = await loadConfig("core-web-vitals");
+const nextTs = await loadConfig("typescript");
 
 const eslintConfig = defineConfig([
   ...nextVitals,

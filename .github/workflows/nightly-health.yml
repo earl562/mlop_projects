@@ -52,5 +52,5 @@ jobs:
           enable-cache: true
           python-version: "3.12"
           working-directory: plotlot
-      - run: uv sync --frozen --dev --extra eval
+      - run: uv sync --frozen --extra dev --extra eval
       - run: uv run python -m pytest tests/integration/test_hub_live.py tests/integration/test_universal_validation.py -m live -v --tb=short
