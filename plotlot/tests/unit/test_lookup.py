@@ -114,6 +114,34 @@ class TestBuildReport:
         report = _build_fallback_report("123 Main St", _make_geo(), None, [])
         assert report.zoning_district == ""
 
+    def test_fallback_salvages_search_result_fields(self):
+        result = _make_result(
+            zone_codes=["RM-12"],
+            chunk_text=(
+                "Maximum building height is 35 feet. "
+                "Maximum density is 12 dwelling units per acre. "
+                "Front setback 25 feet. Side setback 7.5 feet. Rear setback 20 feet. "
+                "Maximum lot coverage is 40%. Minimum lot size is 7,500 square feet. "
+                "Parking requirement: 2 spaces per unit."
+            ),
+        )
+
+        report = _build_fallback_report(
+            "123 Main St",
+            _make_geo(),
+            None,
+            ["Sec. 500"],
+            [result],
+        )
+
+        assert report.zoning_district == "RM-12"
+        assert report.max_height == "35 ft"
+        assert report.max_density == "12 units/acre"
+        assert report.setbacks.front == "25 ft"
+        assert report.numeric_params is not None
+        assert report.numeric_params.max_density_units_per_acre == 12.0
+        assert len(report.source_refs) == 1
+
 
 class TestReportToDict:
     def test_full_report(self):
