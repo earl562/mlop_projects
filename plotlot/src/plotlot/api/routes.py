@@ -329,6 +329,7 @@ async def analyze_stream(request: AnalyzeRequest):
                         geo,
                         prop_record,
                         [f"{r.section} — {r.section_title}" for r in search_results if r.section],
+                        search_results,
                     )
 
                 # Log analysis metrics inside the MLflow run

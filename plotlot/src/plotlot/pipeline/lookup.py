@@ -12,10 +12,11 @@ The LLM focuses on what it's good at: reasoning over the data.
 import hashlib
 import json
 import logging
+import re
 import time
 from dataclasses import fields as dataclass_fields
 
-from plotlot.core.types import NumericZoningParams, Setbacks, ZoningReport
+from plotlot.core.types import NumericZoningParams, Setbacks, SourceRef, ZoningReport
 from plotlot.observability.tracing import (
     log_dict,
     log_metrics,
@@ -677,6 +678,108 @@ def _coerce_list(val) -> list[str]:
     return []
 
 
+def _build_source_refs(search_results: list | None) -> list[SourceRef]:
+    source_refs: list[SourceRef] = []
+    if not search_results:
+        return source_refs
+
+    for r in search_results[:5]:
+        source_refs.append(
+            SourceRef(
+                section=r.section or "",
+                section_title=r.section_title or "",
+                chunk_text_preview=(r.chunk_text or "")[:200],
+                score=r.score,
+            )
+        )
+    return source_refs
+
+
+def _extract_fallback_insights(search_results: list | None) -> tuple[dict[str, str], NumericZoningParams | None]:
+    if not search_results:
+        return ({}, None)
+
+    combined = " ".join(r.chunk_text for r in search_results if getattr(r, "chunk_text", ""))
+    if not combined:
+        return ({}, None)
+
+    text = re.sub(r"\s+", " ", combined)
+
+    def _search_float(*patterns: str) -> float | None:
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    return float(match.group(1).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+        return None
+
+    def _search_int(*patterns: str) -> int | None:
+        value = _search_float(*patterns)
+        if value is None:
+            return None
+        return int(value)
+
+    def _search_sentence(*patterns: str) -> str:
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(0).strip(" .;")
+        return ""
+
+    def _fmt_ft(value: float | None) -> str:
+        return f"{value:g} ft" if value is not None else ""
+
+    max_height_ft = _search_float(
+        r"(?:maximum|max)\s+height[^.]{0,80}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b",
+        r"height[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b",
+    )
+    max_density_units = _search_float(
+        r"(?:maximum|max)\s+density[^.]{0,80}?(\d+(?:\.\d+)?)\s*(?:dwelling\s+units|units|du)\s*(?:per acre|/acre|du/ac)",
+        r"(\d+(?:\.\d+)?)\s*(?:dwelling\s+units|units|du)\s*(?:per acre|/acre|du/ac)",
+    )
+    far = _search_float(r"(?:floor area ratio|\bFAR\b)[^.]{0,40}?(\d+(?:\.\d+)?)")
+    lot_coverage_pct = _search_float(r"(?:lot coverage|coverage)[^.]{0,60}?(\d+(?:\.\d+)?)\s*%")
+    min_lot_area_sqft = _search_float(
+        r"(?:minimum|min)\s+lot\s+(?:size|area)[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
+        r"lot\s+area\s+per\s+unit[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
+    )
+    setback_front_ft = _search_float(r"front(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
+    setback_side_ft = _search_float(r"side(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
+    setback_rear_ft = _search_float(r"rear(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
+    parking_spaces_per_unit = _search_float(r"(\d+(?:\.\d+)?)\s+spaces?\s+per\s+(?:dwelling\s+)?unit")
+    max_stories = _search_int(r"(\d+)\s+stories?\b")
+    parking_requirements = _search_sentence(r"[^.]{0,80}parking[^.]{0,120}[.]?")
+
+    extracted: dict[str, str] = {
+        "max_height": _fmt_ft(max_height_ft),
+        "max_density": f"{max_density_units:g} units/acre" if max_density_units is not None else "",
+        "floor_area_ratio": f"{far:g}" if far is not None else "",
+        "lot_coverage": f"{lot_coverage_pct:g}%" if lot_coverage_pct is not None else "",
+        "min_lot_size": f"{min_lot_area_sqft:,.0f} sqft" if min_lot_area_sqft is not None else "",
+        "parking_requirements": parking_requirements,
+        "setbacks_front": _fmt_ft(setback_front_ft),
+        "setbacks_side": _fmt_ft(setback_side_ft),
+        "setbacks_rear": _fmt_ft(setback_rear_ft),
+    }
+
+    params = NumericZoningParams(
+        max_density_units_per_acre=max_density_units,
+        min_lot_area_per_unit_sqft=min_lot_area_sqft,
+        far=far,
+        max_lot_coverage_pct=lot_coverage_pct,
+        max_height_ft=max_height_ft,
+        max_stories=max_stories,
+        setback_front_ft=setback_front_ft,
+        setback_side_ft=setback_side_ft,
+        setback_rear_ft=setback_rear_ft,
+        parking_spaces_per_unit=parking_spaces_per_unit,
+    )
+    has_any = any(getattr(params, f.name) is not None for f in params.__dataclass_fields__.values())
+    return (extracted, params if has_any else None)
+
+
 def _build_report(
     args: dict,
     address: str,
@@ -686,23 +789,11 @@ def _build_report(
     search_results: list | None = None,
 ) -> ZoningReport:
     """Build ZoningReport from agent submit_report args."""
-    from plotlot.core.types import SourceRef
-
     # Build numeric params from LLM-extracted values
     numeric_params = _extract_numeric_params(args)
 
     # Build source_refs from top search results (for inline citations)
-    source_refs = []
-    if search_results:
-        for r in search_results[:5]:
-            source_refs.append(
-                SourceRef(
-                    section=r.section or "",
-                    section_title=r.section_title or "",
-                    chunk_text_preview=(r.chunk_text or "")[:200],
-                    score=r.score,
-                )
-            )
+    source_refs = _build_source_refs(search_results)
 
     return ZoningReport(
         address=address,
@@ -805,8 +896,27 @@ def _build_fallback_report(
     geo: dict,
     prop_record,
     sources: list[str],
+    search_results: list | None = None,
 ) -> ZoningReport:
     """Build report from collected data when LLM doesn't submit."""
+    deduped_sources = list(dict.fromkeys(sources))
+    zone_codes = list(
+        dict.fromkeys(
+            code
+            for result in (search_results or [])
+            for code in getattr(result, "zone_codes", [])
+            if code
+        )
+    )
+    extracted, numeric_params = _extract_fallback_insights(search_results)
+    zoning_district = (prop_record.zoning_code if prop_record else "") or (zone_codes[0] if zone_codes else "")
+    zoning_description = (prop_record.zoning_description if prop_record else "")
+    summary_bits = []
+    if zoning_district:
+        summary_bits.append(f"Fallback preserved zoning district {zoning_district}")
+    if numeric_params:
+        summary_bits.append("Recovered partial dimensional standards from retrieved ordinance text")
+
     return ZoningReport(
         address=address,
         formatted_address=geo.get("formatted_address", address),
@@ -814,11 +924,25 @@ def _build_fallback_report(
         county=geo.get("county", ""),
         lat=geo.get("lat"),
         lng=geo.get("lng"),
-        zoning_district=prop_record.zoning_code if prop_record else "",
-        zoning_description=prop_record.zoning_description if prop_record else "",
+        zoning_district=zoning_district,
+        zoning_description=zoning_description,
+        setbacks=Setbacks(
+            front=extracted.get("setbacks_front", ""),
+            side=extracted.get("setbacks_side", ""),
+            rear=extracted.get("setbacks_rear", ""),
+        ),
+        max_height=extracted.get("max_height", ""),
+        max_density=extracted.get("max_density", ""),
+        floor_area_ratio=extracted.get("floor_area_ratio", ""),
+        lot_coverage=extracted.get("lot_coverage", ""),
+        min_lot_size=extracted.get("min_lot_size", ""),
+        parking_requirements=extracted.get("parking_requirements", ""),
+        numeric_params=numeric_params,
         property_record=prop_record,
-        summary="Automated analysis incomplete. Property data and ordinance sections were retrieved — "
+        summary=("; ".join(summary_bits) + ". " if summary_bits else "")
+        + "Automated analysis incomplete. Property data and ordinance sections were retrieved — "
         "see sources below for relevant zoning regulations.",
-        sources=sources,
+        sources=deduped_sources,
         confidence="low",
+        source_refs=_build_source_refs(search_results),
     )
