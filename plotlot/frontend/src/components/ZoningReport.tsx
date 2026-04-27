@@ -17,6 +17,53 @@ interface ZoningReportProps {
   report: ZoningReportData;
 }
 
+const WELL_INDEXED = new Set([
+  "miami gardens", "miami-dade county", "miami dade county",
+  "boca raton", "miramar", "fort lauderdale",
+]);
+
+function getCoverageLevel(report: ZoningReportData): "full" | "partial" | "unknown" {
+  const municipality = report.municipality;
+  if (!municipality) return "unknown";
+  if (report.confidence === "low" && !report.zoning_district && !report.numeric_params) {
+    return "partial";
+  }
+  return WELL_INDEXED.has(municipality.toLowerCase()) ? "full" : "partial";
+}
+
+function CoverageBadge({ report }: { report: ZoningReportData }) {
+  const level = getCoverageLevel(report);
+  if (level === "unknown") return null;
+  if (level === "full") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Full zoning coverage
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+      <span className="text-[10px] leading-none">◐</span>
+      Partial coverage — zoning data may be limited
+    </span>
+  );
+}
+
+function ConfidenceBadge({ level }: { level: string }) {
+  const colors: Record<string, string> = {
+    high: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    medium: "bg-amber-100 text-amber-700 border-amber-200",
+    low: "bg-red-100 text-red-700 border-red-200",
+  };
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${colors[level] || colors.low}`}>
+      {level}
+    </span>
+  );
+}
+
+>>>>>>> b415455 (fix(plotlot): downgrade misleading fallback coverage badges)
 function CollapsibleSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -85,8 +132,12 @@ export default function ZoningReport({ report }: ZoningReportProps) {
             <h2 className="truncate font-display text-xl text-[var(--text-primary)] sm:text-2xl">{report.formatted_address}</h2>
             <CopyButton text={report.formatted_address} />
           </div>
-          <p className="mt-1 text-xs text-[var(--text-muted)] sm:text-sm">{report.municipality}, {report.county} County</p>
-          <div className="mt-2"><CoverageBadge municipality={report.municipality} /></div>
+          <p className="mt-1 text-xs text-[var(--text-muted)] sm:text-sm">
+            {report.municipality}, {report.county} County
+          </p>
+          <div className="mt-2">
+            <CoverageBadge report={report} />
+          </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <ConfidenceBadge level={report.confidence} />
@@ -120,7 +171,8 @@ export default function ZoningReport({ report }: ZoningReportProps) {
         <span className="text-sm text-[var(--text-muted)]">{report.zoning_description}</span>
       </div>
 
-      {getCoverageLevel(report.municipality) === "partial" && !report.zoning_district && (
+      {/* Partial coverage callout */}
+      {getCoverageLevel(report) === "partial" && !report.zoning_district && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
           Zoning ordinance data isn&apos;t indexed for {report.municipality} yet.
           Property record and comparable sales data are still available.

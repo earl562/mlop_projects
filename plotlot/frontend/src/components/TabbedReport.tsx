@@ -28,6 +28,150 @@ interface TabbedReportProps {
   dealType: DealType;
 }
 
+function CopyButton({ text }: { text: string }) {
+  const { toast } = useToast();
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Copied to clipboard");
+    } catch { /* clipboard API may be blocked */ }
+  };
+  return (
+    <button onClick={handleCopy} className="inline-flex h-8 w-8 items-center justify-center rounded text-stone-300 transition-colors hover:text-[var(--text-muted)] sm:h-5 sm:w-5" title="Copy" aria-label="Copy to clipboard">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+    </button>
+  );
+}
+
+const WELL_INDEXED = new Set([
+  "miami gardens", "miami-dade county", "miami dade county",
+  "boca raton", "miramar", "fort lauderdale",
+]);
+
+function getCoverageLevel(report: ZoningReportData): "full" | "partial" | "unknown" {
+  const municipality = report.municipality;
+  if (!municipality) return "unknown";
+  if (report.confidence === "low" && !report.zoning_district && !report.numeric_params) {
+    return "partial";
+  }
+  return WELL_INDEXED.has(municipality.toLowerCase()) ? "full" : "partial";
+}
+
+function CoverageBadge({ report }: { report: ZoningReportData }) {
+  const level = getCoverageLevel(report);
+  if (level === "unknown") return null;
+  if (level === "full") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Full zoning coverage
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+      <span className="text-[10px] leading-none">◐</span>
+      Partial coverage — zoning data may be limited
+    </span>
+  );
+}
+
+function ConfidenceBadge({ level }: { level: string }) {
+  const colors: Record<string, string> = {
+    high: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800",
+    medium: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800",
+    low: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800",
+  };
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${colors[level] || colors.low}`}>
+      {level}
+    </span>
+  );
+}
+
+function CitationBadge({ sourceRef, index }: { sourceRef: SourceRefData; index: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-block">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[9px] font-bold text-blue-700 transition-colors hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-400 dark:hover:bg-blue-800/40"
+        aria-label={`Source ${index + 1}: ${sourceRef.section_title}`}
+      >
+        {index + 1}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-lg sm:w-80">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              Source {index + 1}
+            </span>
+            <button onClick={() => setOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {sourceRef.section_title && (
+            <p className="mb-1 text-xs font-medium text-[var(--text-primary)]">{sourceRef.section_title}</p>
+          )}
+          {sourceRef.section && (
+            <p className="mb-1 text-[10px] text-[var(--text-muted)]">{sourceRef.section}</p>
+          )}
+          {sourceRef.chunk_text_preview && (
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+              &ldquo;{sourceRef.chunk_text_preview}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
+
+function DataRow({ label, value, citation }: { label: string; value: string; citation?: SourceRefData & { index: number } }) {
+  if (!value || value === "null" || value === "undefined" || value === "Not specified") return null;
+  return (
+    <div className="flex justify-between gap-2 border-b border-[var(--border)] py-1.5">
+      <span className="shrink-0 text-xs text-[var(--text-muted)] sm:text-sm">{label}</span>
+      <span className="flex items-center gap-0.5 text-right text-xs font-medium text-[var(--text-primary)] sm:text-sm">
+        {value}
+        {citation && <CitationBadge sourceRef={citation} index={citation.index} />}
+      </span>
+    </div>
+  );
+}
+
+function UsesList({ title, uses, color }: { title: string; uses: string[] | string | null | undefined; color: string }) {
+  let list: string[];
+  if (Array.isArray(uses)) list = uses;
+  else if (typeof uses === "string") {
+    try {
+      const parsed = JSON.parse(uses);
+      list = Array.isArray(parsed) ? parsed : [uses];
+    } catch { list = uses ? [uses] : []; }
+  } else list = [];
+  if (!list.length) return null;
+  const colors: Record<string, string> = { green: "bg-emerald-50 text-emerald-700", yellow: "bg-amber-50 text-amber-700", red: "bg-red-50 text-red-700" };
+  return (
+    <div>
+      <h4 className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">{title}</h4>
+      <div className="flex flex-wrap gap-2">
+        {list.map((use, i) => (
+          <span key={i} className={`rounded-md px-2 py-0.5 text-xs ${colors[color]}`}>{use}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function parseNumericFt(value: string | undefined | null): number {
+  if (!value) return 0;
+  const match = value.match(/[\d.]+/);
+  return match ? parseFloat(match[0]) : 0;
+}
 
 const TABS: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -133,7 +277,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
               {report.municipality}, {report.county} County
             </p>
             <div className="mt-2">
-              <CoverageBadge municipality={report.municipality} />
+              <CoverageBadge report={report} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -207,7 +351,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
         {activeTab === "zoning" && (
           <motion.div key="zoning" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={springGentle} className="space-y-6" data-testid="report-section-zoning">
             {/* Partial coverage callout */}
-            {getCoverageLevel(report.municipality) === "partial" && !report.zoning_district && (
+              {getCoverageLevel(report) === "partial" && !report.zoning_district && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                 Zoning ordinance data isn&apos;t indexed for {report.municipality} yet.
                 Property record and comparable sales data are still available.
