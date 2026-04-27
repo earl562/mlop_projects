@@ -19,6 +19,7 @@ import ToolCards from "@/components/ToolCards";
 import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import InputBar from "@/components/InputBar";
+import ThinkingIndicator from "@/components/ThinkingIndicator";
 import {
   AnalysisError,
   PipelineStatus,
@@ -430,6 +431,7 @@ export default function Home() {
         content: "",
         isStreaming: true,
         toolActivity: [],
+        thinkingEvents: [],
       });
 
       const history: ChatMessageData[] = [
@@ -473,6 +475,10 @@ export default function Home() {
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
                 const tools = m.toolActivity || [];
+                const lastTool = tools[tools.length - 1];
+                if (lastTool?.tool === toolEvent.tool && lastTool.message === toolEvent.message) {
+                  return m;
+                }
                 return {
                   ...m,
                   toolActivity: [...tools, { tool: toolEvent.tool, message: toolEvent.message, status: "running" as const }],
@@ -484,10 +490,25 @@ export default function Home() {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
-                const tools = (m.toolActivity || []).map((t) =>
-                  t.tool === toolName ? { ...t, status: "complete" as const } : t,
-                );
+                const tools = [...(m.toolActivity || [])];
+                for (let i = tools.length - 1; i >= 0; i -= 1) {
+                  if (tools[i].tool === toolName && tools[i].status === "running") {
+                    tools[i] = { ...tools[i], status: "complete" as const };
+                    break;
+                  }
+                }
                 return { ...m, toolActivity: tools };
+              }),
+            );
+          },
+          (thinkingEvent: ThinkingEvent) => {
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                return {
+                  ...m,
+                  thinkingEvents: [...(m.thinkingEvents || []), thinkingEvent],
+                };
               }),
             );
           },
@@ -805,37 +826,51 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Tool use badges (ChatGPT-style) */}
-              {msg.toolActivity && msg.toolActivity.length > 0 && (
-                <div className="mb-2 flex justify-start">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
-                      P
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {msg.toolActivity.map((t, i) => (
-                        <span
-                          key={i}
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                            t.status === "running"
-                              ? "border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                              : "border border-[var(--border)] bg-[var(--bg-surface-raised)] text-[var(--text-muted)]"
-                          }`}
-                        >
-                          {t.status === "running" ? (
-                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse-dot" />
-                          ) : (
-                            <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {t.status === "complete" ? `Used ${t.tool}` : t.message}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+              {msg.role === "assistant" && msg.thinkingEvents && msg.thinkingEvents.length > 0 && (
+                <div className="mb-2 ml-9 max-w-[95%] sm:max-w-[85%]">
+                  <ThinkingIndicator events={msg.thinkingEvents} />
                 </div>
               )}
+
+              {/* Tool use badges (ChatGPT-style) */}
+              {msg.toolActivity && msg.toolActivity.length > 0 && (() => {
+                const visibleTools = msg.thinkingEvents && msg.thinkingEvents.length > 0
+                  ? msg.toolActivity.filter((t) => t.status === "running").slice(-1)
+                  : msg.toolActivity;
+
+                if (visibleTools.length === 0) return null;
+
+                return (
+                  <div className="mb-2 flex justify-start">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
+                        P
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {visibleTools.map((t, i) => (
+                          <span
+                            key={i}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                              t.status === "running"
+                                ? "border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                                : "border border-[var(--border)] bg-[var(--bg-surface-raised)] text-[var(--text-muted)]"
+                            }`}
+                          >
+                            {t.status === "running" ? (
+                              <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse-dot" />
+                            ) : (
+                              <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                            {t.message}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Regular message */}
               {msg.content && msg.role !== "system" && (

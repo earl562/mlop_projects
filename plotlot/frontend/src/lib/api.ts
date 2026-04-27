@@ -407,6 +407,7 @@ export async function streamChat(
   onSession?: (sessionId: string) => void,
   onToolUse?: (event: ToolUseEvent) => void,
   onToolResult?: (tool: string) => void,
+  onThinking?: (event: ThinkingEvent) => void,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat`, {
     method: "POST",
@@ -456,6 +457,8 @@ export async function streamChat(
             onSession?.(parsed.session_id);
           } else if (eventType === "token") {
             onToken(parsed.content);
+          } else if (eventType === "thinking") {
+            onThinking?.(parsed as ThinkingEvent);
           } else if (eventType === "tool_use") {
             onToolUse?.(parsed as ToolUseEvent);
           } else if (eventType === "tool_result") {
