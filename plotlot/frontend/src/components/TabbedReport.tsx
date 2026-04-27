@@ -42,13 +42,17 @@ const WELL_INDEXED = new Set([
   "boca raton", "miramar", "fort lauderdale",
 ]);
 
-function getCoverageLevel(municipality: string | undefined): "full" | "partial" | "unknown" {
+function getCoverageLevel(report: ZoningReportData): "full" | "partial" | "unknown" {
+  const municipality = report.municipality;
   if (!municipality) return "unknown";
+  if (report.confidence === "low" && !report.zoning_district && !report.numeric_params) {
+    return "partial";
+  }
   return WELL_INDEXED.has(municipality.toLowerCase()) ? "full" : "partial";
 }
 
-function CoverageBadge({ municipality }: { municipality: string | undefined }) {
-  const level = getCoverageLevel(municipality);
+function CoverageBadge({ report }: { report: ZoningReportData }) {
+  const level = getCoverageLevel(report);
   if (level === "unknown") return null;
   if (level === "full") {
     return (
@@ -274,7 +278,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
               {report.municipality}, {report.county} County
             </p>
             <div className="mt-2">
-              <CoverageBadge municipality={report.municipality} />
+              <CoverageBadge report={report} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -352,7 +356,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
         {activeTab === "zoning" && (
           <div className="space-y-6 animate-fade-in" data-testid="report-section-zoning">
             {/* Partial coverage callout */}
-            {getCoverageLevel(report.municipality) === "partial" && !report.zoning_district && (
+              {getCoverageLevel(report) === "partial" && !report.zoning_district && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                 Zoning ordinance data isn&apos;t indexed for {report.municipality} yet.
                 Property record and comparable sales data are still available.
