@@ -142,19 +142,20 @@ function LandDealHero({ report }: { report: ZoningReportData }) {
 function WholesaleHero({ report }: { report: ZoningReportData }) {
   const comp = report.comp_analysis;
   const adv = comp?.adv_per_unit ?? comp?.estimated_land_value ?? 0;
-  const mao = adv > 0 ? adv * 0.7 : 0;
-  const repairEst = adv > 0 ? adv * 0.1 : 0;
-  const fee = adv > 0 ? Math.min(adv * 0.05, 15000) : 0;
+  const hasComps = adv > 0;
+  const mao = hasComps ? adv * 0.7 : 0;
+  const repairEst = hasComps ? adv * 0.1 : 0;
+  const fee = hasComps ? Math.min(adv * 0.05, 15000) : 0;
   const dom = comp?.comparables ? calcMedianDOM(comp.comparables) : null;
 
   return (
     <MetricGrid
       metrics={[
-        { label: "ARV", value: fmt(adv), highlight: true },
-        { label: "MAO (70%)", value: fmt(mao), highlight: true },
-        { label: "Repair Est.", value: fmt(repairEst), subtext: "~10% of ARV" },
-        { label: "Assignment Fee", value: fmt(fee), subtext: "~5% cap $15K" },
-        { label: "Comp DOM", value: dom !== null ? `${dom}d` : "N/A", subtext: "median days" },
+        { label: "ARV", value: hasComps ? fmt(adv) : "No recent comps", highlight: hasComps },
+        { label: "MAO (70%)", value: hasComps ? fmt(mao) : "No recent comps", highlight: hasComps },
+        { label: "Repair Est.", value: hasComps ? fmt(repairEst) : "—", subtext: hasComps ? "~10% of ARV" : undefined },
+        { label: "Assignment Fee", value: hasComps ? fmt(fee) : "—", subtext: hasComps ? "~5% cap $15K" : undefined },
+        { label: "Comp DOM", value: dom !== null ? `${dom}d` : "No recent comps", subtext: dom !== null ? "median days" : undefined },
       ]}
     />
   );
@@ -259,15 +260,16 @@ function HybridHero({ report }: { report: ZoningReportData }) {
       : null;
 
   const cashToClose = balance > 0 ? Math.max(0, mv - balance) * 0.05 + 5000 : null;
-  const estMonthlyRent = arv > 0 ? arv * 0.008 : mv * 0.008;
-  const combinedCF = payment > 0 ? estMonthlyRent - payment : null;
-  const totalEquity = mv > 0 && balance > 0 ? mv - balance : arv > 0 ? arv - mv : 0;
+  const baseValue = arv > 0 ? arv : mv;
+  const estMonthlyRent = baseValue > 0 ? baseValue * 0.008 : null;
+  const combinedCF = payment > 0 && estMonthlyRent !== null ? estMonthlyRent - payment : null;
+  const totalEquity = mv > 0 && balance > 0 ? mv - balance : arv > 0 && mv > 0 ? arv - mv : 0;
 
   const exitPaths: string[] = [];
   if (maxUnits > 1) exitPaths.push("Develop");
   if (totalEquity > 0) exitPaths.push("Wholesale");
   if (combinedCF !== null && combinedCF > 0) exitPaths.push("Hold");
-  if (arv > mv) exitPaths.push("Flip");
+  if (arv > 0 && mv > 0 && arv > mv) exitPaths.push("Flip");
   if (rate > 0 && rate < currentMarketRate) exitPaths.push("Wrap");
 
   return (
@@ -288,7 +290,7 @@ function HybridHero({ report }: { report: ZoningReportData }) {
           { label: "Cash to Close", value: cashToClose !== null ? fmt(cashToClose) : "Enter bal." },
           {
             label: "Combined CF",
-            value: combinedCF !== null ? fmt(Math.round(combinedCF)) : "Enter pmt",
+            value: combinedCF !== null ? fmt(Math.round(combinedCF)) : estMonthlyRent === null ? "No comp data" : "Enter pmt",
             highlight: combinedCF !== null && combinedCF > 0,
             subtext: combinedCF !== null ? "/month" : undefined,
           },

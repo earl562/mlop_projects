@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { ThemeToggle } from "@/components/ThemeProvider";
 import ChatHistory from "@/components/ChatHistory";
+import PortfolioPanel from "@/components/PortfolioPanel";
 import type { ChatSession } from "@/lib/sessions";
+import type { SavedAnalysis } from "@/lib/api";
 
 export type { ChatSession };
 
@@ -16,6 +18,7 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
+  onSelectAnalysis?: (analysis: SavedAnalysis) => void;
 }
 
 /* ── Sidebar Component ─────────────────────────────────────────────── */
@@ -27,7 +30,9 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
+  onSelectAnalysis,
 }: SidebarProps) {
+  const [activeTab, setActiveTab] = useState<"history" | "portfolio">("history");
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -132,29 +137,53 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* Search input */}
-      <div className="relative z-10 px-4 pb-3">
-        <input
-          ref={searchRef}
-          type="text"
-          placeholder="Search conversations..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm outline-none transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] focus:border-[var(--brand-soft-border)] focus:shadow-[var(--shadow-card)]"
-          style={{
-            color: "var(--text-primary)",
-          }}
-        />
+      {/* Tab switcher */}
+      <div className="relative z-10 px-4 pb-2">
+        <div className="flex rounded-full border border-[var(--border-soft)] bg-[var(--bg-inset)] p-0.5">
+          {(["history", "portfolio"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 rounded-full py-1.5 text-xs font-medium capitalize transition-all ${
+                activeTab === tab
+                  ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Chat history — scrollable */}
+      {/* Search — only shown on history tab */}
+      {activeTab === "history" && (
+        <div className="relative z-10 px-4 pb-3">
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Search conversations..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm outline-none transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] focus:border-[var(--brand-soft-border)] focus:shadow-[var(--shadow-card)]"
+            style={{ color: "var(--text-primary)" }}
+          />
+        </div>
+      )}
+
+      {/* Content — scrollable */}
       <div className="relative z-10 flex-1 overflow-y-auto px-3">
-        <ChatHistory
-          sessions={filtered}
-          activeSessionId={activeSessionId}
-          onSelect={onSelectSession}
-          onDelete={onDeleteSession}
-        />
+        {activeTab === "history" ? (
+          <ChatHistory
+            sessions={filtered}
+            activeSessionId={activeSessionId}
+            onSelect={onSelectSession}
+            onDelete={onDeleteSession}
+          />
+        ) : (
+          <PortfolioPanel onSelectAnalysis={onSelectAnalysis} />
+        )}
       </div>
 
       {/* Footer — user account + plan link */}

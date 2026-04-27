@@ -71,7 +71,7 @@ interface DealTypeSelectorProps {
 
 export default function DealTypeSelector({ onSelect, disabled }: DealTypeSelectorProps) {
   return (
-    <div className="w-full animate-fade-up" data-testid="deal-type-selector">
+    <div className="w-full" data-testid="deal-type-selector">
       <div className="mb-4 text-center">
         <p className="text-sm text-[var(--text-muted)]">What type of deal are you evaluating?</p>
       </div>

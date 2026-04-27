@@ -7,7 +7,7 @@ import { ZoningReportData } from "@/lib/api";
 const ArcGISParcelMap = dynamic(() => import("./ArcGISParcelMap"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full min-h-[220px] items-center justify-center bg-[var(--bg-surface-raised)]">
+    <div className="flex h-full min-h-[max(220px,40vh)] items-center justify-center bg-[var(--bg-surface-raised)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--text-muted)] border-t-transparent" />
     </div>
   ),
@@ -182,7 +182,7 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
         href={googleMapsUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex h-full min-h-[220px] items-center justify-center rounded-b-xl bg-[var(--bg-surface-raised)] transition-colors hover:bg-[var(--bg-surface-raised)]/80 lg:rounded-bl-none lg:rounded-r-xl"
+        className="flex h-full min-h-[max(220px,40vh)] items-center justify-center rounded-b-xl bg-[var(--bg-surface-raised)] transition-colors hover:bg-[var(--bg-surface-raised)]/80 lg:rounded-bl-none lg:rounded-r-xl"
       >
         <div className="text-center">
           <svg className="mx-auto h-8 w-8 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -200,7 +200,7 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
     `&fov=80&heading=0&pitch=5&key=${MAPS_KEY}`;
 
   return (
-    <div className="relative h-full min-h-[220px] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
+    <div className="relative h-full min-h-[max(220px,40vh)] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
       <img
         src={staticUrl}
         alt={`Street view of ${report.formatted_address}`}
@@ -224,7 +224,7 @@ function StreetViewTab({ report }: { report: ZoningReportData }) {
 
 function ParcelMapTab({ report, onFloodZone }: { report: ZoningReportData; onFloodZone?: (zone: string, sfha: boolean) => void }) {
   return (
-    <div className="h-full min-h-[220px] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
+    <div className="h-full min-h-[max(220px,40vh)] overflow-hidden rounded-b-xl lg:rounded-bl-none lg:rounded-r-xl">
       <ArcGISParcelMap
         lat={report.lat!}
         lng={report.lng!}

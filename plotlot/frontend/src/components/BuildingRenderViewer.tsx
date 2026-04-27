@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { renderBuilding, type BuildingRenderData } from "@/lib/api";
 
 interface BuildingRenderViewerProps {
@@ -40,6 +40,7 @@ export default function BuildingRenderViewer({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState("front");
+  const renderCache = useRef<Map<string, BuildingRenderData>>(new Map());
 
   const totalWidth = Math.max(0, lotWidthFt - 2 * setbackSideFt);
   const totalDepth = Math.max(0, lotDepthFt - setbackFrontFt - setbackRearFt);
@@ -50,6 +51,17 @@ export default function BuildingRenderViewer({
   const fetchRender = useCallback(async () => {
     if (totalWidth <= 0 || totalDepth <= 0) {
       setError("Buildable area too small for AI rendering");
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = [propType, stories, totalWidth, totalDepth, maxHeightFt,
+      lotWidthFt, lotDepthFt, zoningDistrict, unitCount,
+      setbackFrontFt, setbackSideFt, setbackRearFt, municipality].join("|");
+
+    const cached = renderCache.current.get(cacheKey);
+    if (cached) {
+      setResult(cached);
       setLoading(false);
       return;
     }
@@ -72,6 +84,7 @@ export default function BuildingRenderViewer({
         setback_rear_ft: setbackRearFt,
         municipality,
       });
+      renderCache.current.set(cacheKey, data);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate AI rendering");

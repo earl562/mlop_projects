@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { PipelineStatus, ThinkingEvent } from "@/lib/api";
 import ThinkingIndicator from "@/components/ThinkingIndicator";
+import { AnalysisStreamSkeleton } from "@/components/ReportSkeleton";
 import { springGentle } from "@/lib/motion";
 
 const STEP_ORDER = ["connecting", "geocoding", "property", "search", "analysis", "calculation", "comps", "proforma"];

@@ -17,6 +17,7 @@ import CapabilityChips from "@/components/CapabilityChips";
 import ToolCards from "@/components/ToolCards";
 import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { AnalysisStreamSkeleton } from "@/components/ReportSkeleton";
 import InputBar from "@/components/InputBar";
 import {
   AnalysisError,
@@ -748,6 +749,12 @@ export default function Home() {
           {messages.map((msg) => (
             <div key={msg.id} className="animate-fade-up">
               {/* Pipeline progress — inline stepper */}
+              {msg.pipelineSteps && msg.pipelineSteps.length === 0 && !msg.report && (
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">P</div>
+                  <div className="flex-1"><AnalysisStreamSkeleton /></div>
+                </div>
+              )}
               {msg.pipelineSteps && msg.pipelineSteps.length > 0 && !msg.report && (
                 <div className="flex items-start gap-3">
                   <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">

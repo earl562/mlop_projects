@@ -317,8 +317,26 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
         </div>
       )}
 
+      {/* Preview skeleton */}
+      {previewing && (
+        <div className="mt-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)] p-4">
+          <div className="flex items-center justify-between">
+            <div className="h-3 w-28 animate-shimmer rounded" />
+            <div className="h-3 w-12 animate-shimmer rounded" />
+          </div>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2 border-b border-[var(--border)] pb-3">
+              <div className="h-3.5 w-1/3 animate-shimmer rounded" />
+              <div className="h-3 w-full animate-shimmer rounded" />
+              <div className="h-3 w-5/6 animate-shimmer rounded" />
+              <div className="h-3 w-4/6 animate-shimmer rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Preview */}
-      {preview && (
+      {!previewing && preview && (
         <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-medium text-stone-700 dark:text-stone-300">

@@ -9,6 +9,7 @@
 :root {
   --font-geist-sans: "Geist", system-ui, -apple-system, sans-serif;
   --font-geist-mono: "Geist Mono", "SF Mono", "Fira Code", monospace;
+  --font-instrument-serif: "Instrument Serif", "Georgia", serif;
 
   /* Surface colors */
   --bg-primary: #f4efe7;
