@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { staggerContainer, staggerItem, fadeUp, springGentle } from "@/lib/motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import ZoningReport from "@/components/ZoningReport";
 import TabbedReport from "@/components/TabbedReport";
 import DealTypeSelector from "@/components/DealTypeSelector";
 import type { DealType } from "@/components/DealTypeSelector";
@@ -769,15 +768,11 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Embedded report — TabbedReport for lookup mode, ZoningReport for agent */}
+              {/* Embedded report — use the same polished report shell in both lookup and agent flows */}
               {msg.report && (
                 <div className="space-y-3 animate-fade-up">
                   <ErrorBoundary>
-                    {selectedDealType ? (
-                      <TabbedReport report={msg.report} dealType={selectedDealType} />
-                    ) : (
-                      <ZoningReport report={msg.report} />
-                    )}
+                    <TabbedReport report={msg.report} dealType={selectedDealType || "land_deal"} />
                   </ErrorBoundary>
                   {msg.report.confidence_warning && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
