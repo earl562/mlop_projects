@@ -211,6 +211,47 @@ async def test_analyze_stream_backend_unavailable_error_is_actionable(client):
     assert "data backend is offline" in resp.text
 
 
+@pytest.mark.asyncio
+async def test_analyze_stream_passes_state_to_property_lookup(client):
+    """Streaming analyze should pass geocoded state into property lookup for provider parity."""
+    geo = {
+        "municipality": "Miramar",
+        "county": "Broward",
+        "state": "FL",
+        "lat": 25.991341,
+        "lng": -80.24264,
+        "formatted_address": "7940 Plantation Blvd, Miramar, FL 33023",
+    }
+    mock_session = AsyncMock()
+
+    with (
+        patch("plotlot.api.routes.geocode_address", new_callable=AsyncMock, return_value=geo),
+        patch("plotlot.api.routes.lookup_property", new_callable=AsyncMock, return_value=None) as mock_lookup,
+        patch("plotlot.api.routes.get_cached_report", new_callable=AsyncMock, return_value=None),
+        patch("plotlot.api.routes.get_session", new_callable=AsyncMock, return_value=mock_session),
+        patch("plotlot.api.routes.hybrid_search", new_callable=AsyncMock, return_value=[]),
+        patch("plotlot.api.routes._agentic_analysis", new_callable=AsyncMock, side_effect=AssertionError("stop after property lookup")),
+        patch("plotlot.api.routes.start_run"),
+        patch("plotlot.api.routes.log_params"),
+        patch("plotlot.api.routes.log_metrics"),
+        patch("plotlot.api.routes.set_tag"),
+        patch("plotlot.api.routes.log_prompt_to_run"),
+    ):
+        resp = await client.post(
+            "/api/v1/analyze/stream",
+            json={"address": "7940 Plantation Blvd, Miramar, FL 33023"},
+        )
+
+    assert resp.status_code == 200
+    mock_lookup.assert_awaited_once_with(
+        "7940 Plantation Blvd, Miramar, FL 33023",
+        "Broward",
+        lat=25.991341,
+        lng=-80.24264,
+        state="FL",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Chat endpoint tests (Phase 5c)
 # ---------------------------------------------------------------------------

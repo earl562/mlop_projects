@@ -138,6 +138,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             municipality = geo["municipality"]
             county = geo["county"]
+            state = geo.get("state", "")
             lat = geo.get("lat")
             lng = geo.get("lng")
 
@@ -190,7 +191,7 @@ async def analyze_stream(request: AnalyzeRequest):
                 },
             )
             prop_task = asyncio.create_task(
-                lookup_property(request.address, county, lat=lat, lng=lng)
+                lookup_property(request.address, county, lat=lat, lng=lng, state=state)
             )
             prop_record = None
             for _tick in range(4):  # 4 × 10s = 40s max
