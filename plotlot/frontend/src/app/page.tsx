@@ -367,7 +367,7 @@ export default function Home() {
           },
         );
 
-        if (finalReport) {
+        if (finalReport && mode === "agent") {
           addMessage({
             role: "assistant",
             content: "Here's the full zoning analysis. Ask me anything about this property.",
@@ -381,7 +381,7 @@ export default function Home() {
         });
       }
     },
-    [addMessage, updateMessage, selectedDealType],
+    [addMessage, updateMessage, selectedDealType, mode],
   );
 
   // Send a chat message
