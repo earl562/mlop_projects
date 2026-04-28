@@ -209,6 +209,7 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = [
         "https://mlopprojects.vercel.app",
+        "https://plotlot-v2.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
