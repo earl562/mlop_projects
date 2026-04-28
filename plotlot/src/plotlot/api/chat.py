@@ -750,6 +750,35 @@ _DOC_KEYWORDS = {
     "spreadsheet",
     "download",
 }
+_GREETING_KEYWORDS = {
+    "hey",
+    "hello",
+    "hi",
+    "yo",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "what's up",
+    "whats up",
+}
+_LAND_SOURCING_KEYWORDS = {
+    "source",
+    "sourcing",
+    "vacant lot",
+    "vacant lots",
+    "infill",
+    "land leads",
+    "off-market",
+    "off market",
+    "owner list",
+    "parcel list",
+    "target market",
+    "criteria",
+    "assemblage",
+    "subdivide",
+    "entitlement",
+    "rezone",
+}
 _DEAL_TYPE_PATTERNS: dict[str, set[str]] = {
     "wholesale": {"wholesale", "assign", "assignment", "mao", "arv", "flip"},
     "creative_finance": {
@@ -771,16 +800,24 @@ _DEAL_TYPE_PATTERNS: dict[str, set[str]] = {
 def _classify_intent(message: str) -> IntentClassification:
     """Classify user message intent and deal type from keywords."""
     msg_lower = message.lower()
+    msg_clean = msg_lower.strip().rstrip("!?.")
+
+    if msg_clean in _GREETING_KEYWORDS or any(msg_clean.startswith(greet) for greet in _GREETING_KEYWORDS):
+        return IntentClassification(intent="greeting", confidence=0.9)
 
     # Score each intent category
     zoning_score = sum(1 for kw in _ZONING_KEYWORDS if kw in msg_lower)
     deal_score = sum(1 for kw in _DEAL_KEYWORDS if kw in msg_lower)
     doc_score = sum(1 for kw in _DOC_KEYWORDS if kw in msg_lower)
+    land_score = sum(1 for kw in _LAND_SOURCING_KEYWORDS if kw in msg_lower)
 
     # Determine primary intent
     if doc_score >= 2 or (doc_score >= 1 and deal_score >= 1):
         intent = "document_generation"
         confidence = min(0.9, 0.5 + doc_score * 0.15)
+    elif land_score >= 1 and deal_score < 2:
+        intent = "land_sourcing"
+        confidence = min(0.9, 0.55 + land_score * 0.12)
     elif deal_score >= 2:
         intent = "deal_analysis"
         confidence = min(0.9, 0.5 + deal_score * 0.1)
@@ -824,20 +861,37 @@ def _build_intent_context(classification: IntentClassification) -> str:
             "The user wants to generate a document. If you have report context, "
             "use generate_document. Otherwise, gather the needed data first."
         ),
+        "land_sourcing": (
+            "The user is trying to source land or build a prospect list. Help them narrow market, "
+            "lot type, zoning target, and acquisition criteria. Use property search tools when the "
+            "request is concrete enough to run a search."
+        ),
+        "greeting": (
+            "The user is greeting you or opening loosely. Respond naturally and briefly, then ask one "
+            "specific question about their land-sourcing or property-analysis goal. Do not force tools yet."
+        ),
         "general_question": (
-            "Answer the user's question. Use tools only if needed for specific data."
+            "Answer the user's question helpfully. If it sounds like an early-stage land-sourcing goal, "
+            "help them clarify market, criteria, or next steps before using tools. Use tools when concrete data is needed."
         ),
     }
     parts.append(guidance.get(classification.intent, ""))
     return "\n".join(parts)
 
 
-def _get_tools_for_turn(session_id: str, message: str) -> list[dict]:
+def _get_tools_for_turn(
+    session_id: str,
+    message: str,
+    classification: IntentClassification | None = None,
+) -> list[dict]:
     """Dynamic tool selection — only show tools relevant to the conversation state.
 
     Reduces context bloat and improves tool-use compliance. Inspired by
     Notion's context engineering pattern (context rot at 50-150k tokens).
     """
+    if classification and classification.intent == "greeting":
+        return []
+
     tools = list(CORE_TOOLS)
 
     # Show dataset tools only when there's an active dataset in session
@@ -1490,7 +1544,7 @@ async def chat(request: ChatRequest):
 
             # Agent loop — may use tools before responding
             for turn in range(MAX_AGENT_TURNS):
-                turn_tools = _get_tools_for_turn(session_id, request.message)
+                turn_tools = _get_tools_for_turn(session_id, request.message, intent)
                 response = await call_llm(messages, tools=turn_tools)
 
                 if not response:
