@@ -1134,8 +1134,26 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
     context = DealContext(**{k: v for k, v in ctx_data.items() if v})
 
     try:
+        from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
+
         registry = ClauseRegistry.from_directory()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
+
+        if isinstance(doc, SheetsProFormaResult):
+            return json.dumps(
+                {
+                    "status": "success",
+                    "document_type": doc_type_str,
+                    "deal_type": deal_type_str,
+                    "spreadsheet_url": doc.spreadsheet_url,
+                    "title": doc.title,
+                    "message": (
+                        f"Created Google Sheets pro forma: {doc.title}. "
+                        f"View it here: {doc.spreadsheet_url}"
+                    ),
+                }
+            )
+
         # Store the generated doc bytes in session for download
         if session:
             session.last_document = doc
