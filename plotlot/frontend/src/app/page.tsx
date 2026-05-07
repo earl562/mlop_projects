@@ -795,7 +795,7 @@ export default function Home() {
                 <div className="space-y-3 animate-fade-up">
                   <ErrorBoundary>
                     {selectedDealType ? (
-                      <TabbedReport report={msg.report} dealType={selectedDealType} />
+                      <TabbedReport report={msg.report} dealType={selectedDealType} sessionId={sessionId} />
                     ) : (
                       <ZoningReport report={msg.report} />
                     )}

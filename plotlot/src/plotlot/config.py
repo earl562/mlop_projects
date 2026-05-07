@@ -155,6 +155,7 @@ class Settings(BaseSettings):
             "openai_oauth_token_url",
             "openai_oauth_redirect_uri",
             "openai_oauth_scope",
+            "connector_encryption_key",
         ):
             val = getattr(self, field)
             if val and val != val.strip():
@@ -184,6 +185,10 @@ class Settings(BaseSettings):
             return self
 
         return self
+
+    # Connector Gateway — SMTP email outreach
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    connector_encryption_key: str = ""
 
     # Google Workspace (Sheets/Docs creation)
     google_client_id: str = ""

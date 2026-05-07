@@ -638,3 +638,147 @@ export async function generateDocument(params: DocumentGenerateParams): Promise<
 
   return response.blob();
 }
+
+// ---------------------------------------------------------------------------
+// Connector Gateway — SMTP Email Outreach (Phase 5)
+// ---------------------------------------------------------------------------
+
+export interface EmailConfigParams {
+  provider: "gmail" | "outlook" | "yahoo" | "custom";
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_username: string;
+  smtp_password: string;
+  from_name?: string;
+}
+
+export interface EmailConfigResult {
+  configured: boolean;
+  provider_hint: string;
+  from_name: string | null;
+  smtp_username: string;
+}
+
+export interface EmailStatusResult {
+  configured: boolean;
+  smtp_username: string | null;
+  from_name: string | null;
+  provider_hint: string | null;
+  daily_sends_used: number;
+  daily_sends_remaining: number;
+}
+
+export interface EmailDraftParams {
+  owner_name: string;
+  property_address: string;
+  zoning_district?: string;
+  max_units?: number;
+  offer_price?: number;
+  sender_name?: string;
+  custom_notes?: string;
+}
+
+export interface EmailDraftResult {
+  subject: string;
+  body_html: string;
+  body_text: string;
+}
+
+export interface EmailSendParams {
+  to_email: string;
+  to_name?: string;
+  subject: string;
+  body_html: string;
+  body_text?: string;
+}
+
+export interface EmailSendResult {
+  sent: boolean;
+  message_id: string | null;
+  daily_sends_used: number;
+}
+
+function connectorHeaders(sessionId: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "X-Session-ID": sessionId,
+  };
+}
+
+export async function configureEmailConnector(
+  params: EmailConfigParams,
+  sessionId: string,
+): Promise<EmailConfigResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connectors/email/configure`, {
+    method: "POST",
+    headers: connectorHeaders(sessionId),
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Configuration failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function getEmailConnectorStatus(sessionId: string): Promise<EmailStatusResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connectors/email/status`, {
+    headers: { "X-Session-ID": sessionId },
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Status check failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function testEmailConnector(sessionId: string): Promise<EmailSendResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connectors/email/test`, {
+    method: "POST",
+    headers: { "X-Session-ID": sessionId },
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Test failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function draftOutreachEmail(
+  params: EmailDraftParams,
+  sessionId: string,
+): Promise<EmailDraftResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connectors/email/draft`, {
+    method: "POST",
+    headers: connectorHeaders(sessionId),
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Draft generation failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function sendOutreachEmail(
+  params: EmailSendParams,
+  sessionId: string,
+): Promise<EmailSendResult> {
+  const response = await fetch(`${API_BASE}/api/v1/connectors/email/send`, {
+    method: "POST",
+    headers: connectorHeaders(sessionId),
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Send failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function disconnectEmailConnector(sessionId: string): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/connectors/email/disconnect`, {
+    method: "DELETE",
+    headers: { "X-Session-ID": sessionId },
+  });
+}

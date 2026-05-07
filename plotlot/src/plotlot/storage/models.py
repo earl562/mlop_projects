@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for pgvector storage."""
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase
 
@@ -122,6 +122,39 @@ class ReportCache(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False)  # TTL
     hit_count = Column(Integer, default=0)
+
+
+class ConnectorCredential(Base):
+    """SMTP credentials for the Outreach connector, encrypted at rest with Fernet.
+
+    Keyed by session_id (same value stored in plotlot_backend_session localStorage).
+    No user accounts required — session-scoped, single owner per session.
+    """
+
+    __tablename__ = "connector_credentials"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(128), nullable=False, unique=True, index=True)
+
+    # SMTP settings
+    smtp_host = Column(String(255), nullable=False)
+    smtp_port = Column(Integer, nullable=False, default=587)
+    smtp_username = Column(String(255), nullable=False)
+    smtp_password_enc = Column(Text, nullable=False)  # Fernet-encrypted
+
+    # From header
+    from_name = Column(String(255), nullable=True)
+
+    # Anti-spam: rolling daily counter, reset_at marks start of the current window
+    daily_send_count = Column(Integer, nullable=False, default=0)
+    send_count_reset_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class UserSubscription(Base):

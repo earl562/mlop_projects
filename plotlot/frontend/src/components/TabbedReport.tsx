@@ -20,12 +20,14 @@ import {
   ComparableSalesSection, ProFormaSection,
 } from "./ReportShared";
 import EvidencePanel from "./EvidencePanel";
+import { OutreachPanel } from "./OutreachPanel";
 
-type ReportTab = "property" | "zoning" | "analysis" | "deal" | "evidence";
+type ReportTab = "property" | "zoning" | "analysis" | "deal" | "evidence" | "outreach";
 
 interface TabbedReportProps {
   report: ZoningReportData;
   dealType: DealType;
+  sessionId?: string | null;
 }
 
 const TABS: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
@@ -74,6 +76,15 @@ const TABS: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    id: "outreach",
+    label: "Outreach",
+    icon: (
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+      </svg>
+    ),
+  },
 ];
 
 // Deal-type-specific tab visibility
@@ -84,8 +95,10 @@ const DEAL_TABS: Record<DealType, ReportTab[]> = {
   hybrid: ["property", "zoning", "analysis", "deal", "evidence"],
 };
 
-export default function TabbedReport({ report, dealType }: TabbedReportProps) {
-  const visibleTabIds = DEAL_TABS[dealType] || DEAL_TABS.land_deal;
+export default function TabbedReport({ report, dealType, sessionId }: TabbedReportProps) {
+  const hasOwner = Boolean(report.property_record?.owner);
+  const baseTabIds = DEAL_TABS[dealType] || DEAL_TABS.land_deal;
+  const visibleTabIds: ReportTab[] = hasOwner ? [...baseTabIds, "outreach"] : baseTabIds;
   const visibleTabs = TABS.filter((t) => visibleTabIds.includes(t.id));
   const [activeTab, setActiveTab] = useState<ReportTab>(visibleTabIds[0]);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -327,6 +340,13 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
         {/* Evidence Tab */}
         {activeTab === "evidence" && (
           <EvidencePanel key="evidence" report={report} />
+        )}
+
+        {/* Outreach Tab — only visible when owner info is present */}
+        {activeTab === "outreach" && (
+          <motion.div key="outreach" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={springGentle} className="space-y-6" data-testid="report-section-outreach">
+            <OutreachPanel report={report} sessionId={sessionId ?? null} />
+          </motion.div>
         )}
 
         {/* Deal Tab */}
