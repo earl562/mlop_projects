@@ -31,7 +31,7 @@ def normalize_address(address: str) -> str:
     return address.strip().lower().replace(",", "").replace(".", "").replace("  ", " ")
 
 
-async def get_cached_report(address: str) -> dict | None:
+async def get_cached_report(address: str, analysis_type: str = "residential") -> dict | None:
     """Check cache for a valid (non-expired) report.
 
     Returns the cached report_json dict if found, or None. Increments
@@ -43,19 +43,18 @@ async def get_cached_report(address: str) -> dict | None:
         result = await session.execute(
             select(ReportCache).where(
                 ReportCache.address_normalized == normalized,
+                ReportCache.analysis_type == analysis_type,
                 ReportCache.expires_at > datetime.now(timezone.utc),
             )
         )
         cached = result.scalar_one_or_none()
         if cached:
-            # Increment hit count
             await session.execute(
                 update(ReportCache)
                 .where(ReportCache.id == cached.id)
                 .values(hit_count=ReportCache.hit_count + 1)
             )
             await session.commit()
-            # Type-cast ORM attribute to dict
             report_data: dict[str, Any] = cast(dict, cached.report_json)  # type: ignore[assignment]
             return report_data
         return None
@@ -78,12 +77,11 @@ def _should_cache(report: dict) -> bool:
     return True
 
 
-async def cache_report(address: str, report: dict) -> None:
+async def cache_report(address: str, report: dict, analysis_type: str = "residential") -> None:
     """Store a report in cache with TTL.
 
-    Uses upsert semantics: if the address already exists in cache, the
-    report is replaced and the TTL is reset. This handles re-ingestion
-    or manual cache invalidation gracefully.
+    Uses upsert semantics: if the (address, analysis_type) key already exists,
+    the report is replaced and the TTL is reset.
 
     Quality gate: skips caching low-confidence or incomplete reports.
     """
@@ -91,8 +89,9 @@ async def cache_report(address: str, report: dict) -> None:
         import logging
 
         logging.getLogger(__name__).info(
-            "Skipping cache for %s (quality gate: confidence=%s, district=%s, params=%s)",
+            "Skipping cache for %s/%s (quality gate: confidence=%s, district=%s, params=%s)",
             address[:40],
+            analysis_type,
             report.get("confidence"),
             bool(report.get("zoning_district")),
             report.get("numeric_params") is not None,
@@ -102,13 +101,14 @@ async def cache_report(address: str, report: dict) -> None:
     normalized = normalize_address(address)
     session = await get_session()
     try:
-        # Upsert
         existing = await session.execute(
-            select(ReportCache).where(ReportCache.address_normalized == normalized)
+            select(ReportCache).where(
+                ReportCache.address_normalized == normalized,
+                ReportCache.analysis_type == analysis_type,
+            )
         )
         cached = existing.scalar_one_or_none()
         if cached:
-            # Type-cast ORM attributes for assignment
             cached.report_json = report  # type: ignore[assignment]
             cached.expires_at = datetime.now(timezone.utc) + timedelta(hours=CACHE_TTL_HOURS)  # type: ignore[assignment]
             cached.hit_count = 0  # type: ignore[assignment]
@@ -117,6 +117,7 @@ async def cache_report(address: str, report: dict) -> None:
                 ReportCache(
                     address=address,
                     address_normalized=normalized,
+                    analysis_type=analysis_type,
                     report_json=report,
                     expires_at=datetime.now(timezone.utc) + timedelta(hours=CACHE_TTL_HOURS),
                 )

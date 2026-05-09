@@ -52,6 +52,24 @@ ZONING_KEYWORDS = [
     "land development regulations",
     "appendix a",
     "appendix b",  # some munis put zoning in appendices
+    # Industrial / data center site selection keywords
+    "industrial",
+    "manufacturing",
+    "light industrial",
+    "heavy industrial",
+    "industrial district",
+    "industrial park",
+    "special use",
+    "utility",
+    "utilities",
+    "performance standards",
+    "noise",
+    "vibration",
+    "outdoor storage",
+    "loading",
+    "truck",
+    "warehouse",
+    "logistics",
 ]
 
 # Disk cache settings

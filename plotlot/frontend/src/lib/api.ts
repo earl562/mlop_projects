@@ -12,6 +12,10 @@ export interface PipelineStatus {
   resolved_address?: string;
   folio?: string;
   lot_sqft?: number;
+  // Data center scoring
+  composite_score?: number;
+  composite_rating?: string;
+  chunk_count?: number;
 }
 
 export interface ThinkingEvent {
@@ -781,4 +785,153 @@ export async function disconnectEmailConnector(sessionId: string): Promise<void>
     method: "DELETE",
     headers: { "X-Session-ID": sessionId },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Data Center Site Selection
+// ---------------------------------------------------------------------------
+
+export interface InfraSignalData {
+  name: string;
+  label: string;
+  score: number; // 0.0–1.0
+  rating: "Excellent" | "Good" | "Fair" | "Poor";
+  summary: string;
+  raw_value: string;
+  source: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface DataCenterParamsData {
+  zoning_code: string;
+  zoning_description: string;
+  is_industrial_permitted: boolean | null;
+  conditional_use_required: boolean | null;
+  setback_front_ft: number | null;
+  setback_side_ft: number | null;
+  setback_rear_ft: number | null;
+  max_height_ft: number | null;
+  max_lot_coverage_pct: number | null;
+  max_far: number | null;
+  noise_limit_db: number | null;
+  outdoor_equipment_allowed: boolean | null;
+  min_lot_area_sqft: number | null;
+  loading_docks_required: number | null;
+  utility_easement_notes: string;
+  source_sections: string[];
+}
+
+export interface SiteScorecardData {
+  address: string;
+  formatted_address: string;
+  municipality: string;
+  county: string;
+  lat: number | null;
+  lng: number | null;
+  property_record: PropertyRecordData | null;
+  power_signal: InfraSignalData | null;
+  fiber_signal: InfraSignalData | null;
+  flood_signal: InfraSignalData | null;
+  seismic_signal: InfraSignalData | null;
+  zoning_signal: InfraSignalData | null;
+  datacenter_params: DataCenterParamsData | null;
+  composite_score: number;
+  composite_rating: "Excellent" | "Good" | "Fair" | "Poor" | "Disqualified" | "";
+  summary: string;
+  deal_breakers: string[];
+  strengths: string[];
+  sources: string[];
+  confidence: "high" | "medium" | "low";
+}
+
+export type DatacenterPipelineSignalEvent = {
+  signal: string;
+  label: string;
+  score: number;
+  rating: string;
+  summary: string;
+  raw_value: string;
+  source: string;
+};
+
+export async function streamDatacenterAnalysis(
+  address: string,
+  onStatus: (status: PipelineStatus) => void,
+  onSignal: (event: DatacenterPipelineSignalEvent) => void,
+  onResult: (scorecard: SiteScorecardData) => void,
+  onError: (error: AnalysisError) => void,
+): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3 min for infra fetches
+
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/analyze/datacenter`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Request failed" }));
+      onError({ detail: extractErrorMessage(err, response.status), errorType: "pipeline_error" });
+      return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      onError({ detail: "No response stream available", errorType: "unknown" });
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let eventType = "";
+    let eventData = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          eventData = line.slice(6).trim();
+        } else if (line === "" && eventType && eventData) {
+          try {
+            const parsed = JSON.parse(eventData);
+            if (eventType === "status" || eventType === "cache_hit") {
+              onStatus(parsed as PipelineStatus);
+            } else if (eventType === "signal") {
+              onSignal(parsed as DatacenterPipelineSignalEvent);
+            } else if (eventType === "done") {
+              onResult(parsed as SiteScorecardData);
+            } else if (eventType === "error") {
+              onError({
+                detail: parsed.detail || "Unknown error",
+                errorType: (parsed.error_type || "unknown") as AnalysisErrorType,
+              });
+            }
+          } catch {
+            // Skip malformed events
+          }
+          eventType = "";
+          eventData = "";
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      onError({ detail: "Request timed out. Try again.", errorType: "timeout" });
+      return;
+    }
+    onError({ detail: "Connection failed. Try again.", errorType: "network_error" });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

@@ -167,7 +167,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             # Cache check — skip full pipeline for repeated addresses
             try:
-                cached = await get_cached_report(request.address)
+                cached = await get_cached_report(request.address, analysis_type="residential")
                 if cached:
                     logger.info("Cache HIT for %s", request.address)
                     yield _sse_event(
@@ -548,7 +548,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             # Cache the result for future lookups
             try:
-                await cache_report(request.address, report_dict)
+                await cache_report(request.address, report_dict, analysis_type="residential")
                 logger.info("Cached report for %s", request.address)
             except Exception as exc:
                 logger.warning("Cache write failed: %s", exc)

@@ -524,3 +524,99 @@ class LandProForma:
     soft_cost_pct: float = 20.0
     builder_margin_pct: float = 25.0
     notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Data Center Site Selection
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DataCenterParams:
+    """Zoning and physical parameters extracted for data center siting.
+
+    Separate from NumericZoningParams — data centers care about industrial
+    setbacks, noise limits, utility easements, and outdoor equipment areas,
+    not residential density math.
+    """
+
+    # Industrial zoning
+    zoning_code: str = ""
+    zoning_description: str = ""
+    is_industrial_permitted: bool | None = None  # True if I/M/BL district allows data centers
+    conditional_use_required: bool | None = None  # True if CUP/SUP needed
+
+    # Dimensional standards (industrial)
+    setback_front_ft: float | None = None
+    setback_side_ft: float | None = None
+    setback_rear_ft: float | None = None
+    max_height_ft: float | None = None
+    max_lot_coverage_pct: float | None = None
+    max_far: float | None = None
+
+    # Operational standards
+    noise_limit_db: float | None = None  # dB(A) at property line
+    outdoor_equipment_allowed: bool | None = None  # cooling towers, generators
+    min_lot_area_sqft: float | None = None
+    loading_docks_required: int | None = None
+
+    # Utility easements / special requirements
+    utility_easement_notes: str = ""
+    source_sections: list[str] = field(default_factory=list)
+
+
+@dataclass
+class InfraSignal:
+    """A single infrastructure signal (power, fiber, flood, seismic, zoning).
+
+    score: 0.0–1.0 (1.0 = best). Used to compute composite SiteScorecard.
+    """
+
+    name: str  # "power_grid" | "fiber" | "flood_zone" | "seismic" | "zoning"
+    label: str  # Human label, e.g., "Grid Capacity"
+    score: float  # 0.0–1.0
+    rating: str  # "Excellent" | "Good" | "Fair" | "Poor"
+    summary: str  # 1-2 sentence plain-language explanation
+    raw_value: str  # raw API value, e.g., "Zone X" or "1 Gbps fiber"
+    source: str  # API source, e.g., "EIA API" | "FCC NBM" | "FEMA NFIP"
+    confidence: str = "high"  # "high" | "medium" | "low"
+
+
+@dataclass
+class SiteScorecard:
+    """Data center site selection scorecard.
+
+    Composite score across 5 infrastructure signals. Each signal
+    contributes 20% to the composite (equal weighting for v1).
+    """
+
+    address: str
+    formatted_address: str
+    municipality: str
+    county: str
+    lat: float | None = None
+    lng: float | None = None
+
+    # Property
+    property_record: PropertyRecord | None = None
+
+    # Infrastructure signals
+    power_signal: InfraSignal | None = None
+    fiber_signal: InfraSignal | None = None
+    flood_signal: InfraSignal | None = None
+    seismic_signal: InfraSignal | None = None
+    zoning_signal: InfraSignal | None = None
+
+    # Extracted zoning params (industrial)
+    datacenter_params: DataCenterParams | None = None
+
+    # Composite score
+    composite_score: float = 0.0  # 0.0–1.0 weighted average of signals
+    composite_rating: str = ""  # "Excellent" | "Good" | "Fair" | "Poor" | "Disqualified"
+
+    # Executive summary
+    summary: str = ""
+    deal_breakers: list[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    confidence: str = "medium"

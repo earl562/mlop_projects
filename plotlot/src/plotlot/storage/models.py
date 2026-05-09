@@ -109,16 +109,21 @@ class PortfolioEntry(Base):
 class ReportCache(Base):
     """Cached zoning report to avoid redundant LLM calls for repeated addresses.
 
-    Reports are stored as JSON with a TTL (default 24h). The address_normalized
-    column provides a unique, deterministic cache key derived from the raw address.
+    Reports are stored as JSON with a TTL (default 24h). The composite key
+    (address_normalized, analysis_type) ensures residential and data center
+    analyses on the same address are cached independently.
     """
 
     __tablename__ = "report_cache"
+    __table_args__ = (
+        UniqueConstraint("address_normalized", "analysis_type", name="uq_report_cache_key"),
+    )
 
     id = Column(Integer, primary_key=True)
     address = Column(String, nullable=False, index=True)
-    address_normalized = Column(String, nullable=False, unique=True)  # lowercase, stripped
-    report_json = Column(JSON, nullable=False)  # full ZoningReportResponse as dict
+    address_normalized = Column(String, nullable=False)  # lowercase, stripped
+    analysis_type = Column(String(50), nullable=False, default="residential")  # residential|datacenter
+    report_json = Column(JSON, nullable=False)  # full report as dict
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False)  # TTL
     hit_count = Column(Integer, default=0)

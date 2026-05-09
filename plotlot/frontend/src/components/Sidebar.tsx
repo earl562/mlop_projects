@@ -215,6 +215,22 @@ export default function Sidebar({
         </button>
       </div>
 
+      {/* Data Center nav link */}
+      <div className="relative z-10 px-4 pb-2 pt-1">
+        <a
+          href="/datacenter"
+          className="group flex w-full items-center justify-between rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] shadow-[var(--shadow-card)] transition-colors hover:border-amber-700/40 hover:text-[var(--text-primary)]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-base leading-none" aria-hidden>🏭</span>
+            Data Center Sites
+          </span>
+          <span className="rounded-full border border-amber-700/30 bg-amber-700/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-500">
+            New
+          </span>
+        </a>
+      </div>
+
       {/* Tab switcher */}
       <div className="relative z-10 px-4 pb-2">
         <div className="flex rounded-full border border-[var(--border-soft)] bg-[var(--bg-inset)] p-0.5">
