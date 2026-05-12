@@ -18,16 +18,31 @@ from fastapi.responses import StreamingResponse
 
 from plotlot.api.cache import cache_report, get_cached_report
 from plotlot.api.schemas import AnalyzeRequest
-from plotlot.pipeline.datacenter import run_datacenter_pipeline
+from plotlot.core.types import InfraSignal
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
+from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["datacenter"])
 
 _DC_CACHE_QUALITY_FIELDS = ("composite_rating", "composite_score")
+
+
+def _unavailable_signal(name: str, label: str) -> InfraSignal:
+    """Return a neutral 0.5-score signal when a data source is unreachable."""
+    return InfraSignal(
+        name=name,
+        label=label,
+        score=0.5,
+        rating="Fair",
+        summary="Data unavailable — scored neutral.",
+        raw_value="N/A",
+        source="unavailable",
+        confidence="low",
+    )
 
 
 def _sse_event(event: str, data: dict) -> str:
@@ -91,7 +106,13 @@ async def analyze_datacenter(request: AnalyzeRequest):
             yield _sse_event("status", {"step": "property", "message": "Looking up parcel data..."})
             try:
                 prop = await asyncio.wait_for(
-                    lookup_property(lat, lng, municipality, county),
+                    lookup_property(
+                        request.address,
+                        county,
+                        lat=lat,
+                        lng=lng,
+                        state=geo.get("state", "FL"),
+                    ),
                     timeout=30.0,
                 )
             except asyncio.TimeoutError:
@@ -134,22 +155,21 @@ async def analyze_datacenter(request: AnalyzeRequest):
                     f"industrial zoning data center server farm {zoning_code} "
                     f"setback noise outdoor equipment conditional use {municipality}"
                 )
-                search_results = await hybrid_search(
-                    query=zoning_query,
-                    municipality=municipality,
-                    county=county,
-                    limit=15,
-                )
-                # Also try a broader industrial search if initial results are sparse
-                if len(search_results) < 5:
-                    broader = await hybrid_search(
-                        query=f"industrial manufacturing heavy industrial special use {municipality}",
-                        municipality=municipality,
-                        county=county,
-                        limit=10,
-                    )
-                    seen_sections = {r.section for r in search_results}
-                    search_results.extend(r for r in broader if r.section not in seen_sections)
+                dc_session = await get_session()
+                try:
+                    search_results = await hybrid_search(dc_session, municipality, zoning_query, limit=15)
+                    # Also try a broader industrial search if initial results are sparse
+                    if len(search_results) < 5:
+                        broader = await hybrid_search(
+                            dc_session,
+                            municipality,
+                            f"industrial manufacturing heavy industrial special use {municipality}",
+                            limit=10,
+                        )
+                        seen_sections = {r.section for r in search_results}
+                        search_results.extend(r for r in broader if r.section not in seen_sections)
+                finally:
+                    await dc_session.close()
             except Exception as exc:
                 logger.warning("DC zoning search failed: %s", exc)
                 search_results = []
@@ -220,10 +240,10 @@ async def analyze_datacenter(request: AnalyzeRequest):
                         logger.error("Signal task %s failed: %s", task_name, exc)
                     del pending[task_name]
 
-            power_signal = results.get("power")
-            fiber_signal = results.get("fiber")
-            flood_signal = results.get("flood")
-            seismic_signal = results.get("seismic")
+            power_signal = results.get("power") or _unavailable_signal("power_grid", "Power Grid")
+            fiber_signal = results.get("fiber") or _unavailable_signal("fiber", "Fiber Connectivity")
+            flood_signal = results.get("flood") or _unavailable_signal("flood_zone", "Flood Zone")
+            seismic_signal = results.get("seismic") or _unavailable_signal("seismic", "Seismic Risk")
             dc_params = results.get("zoning_params")
 
             # Score zoning signal from extracted params
