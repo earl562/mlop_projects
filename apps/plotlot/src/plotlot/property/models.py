@@ -35,7 +35,7 @@ class FieldMapping(BaseModel):
 
 
 class CountyCache(BaseModel):
-    """Cached county data in Firestore."""
+    """Cached county data for local property-discovery reuse."""
 
     county_key: str
     state: str

@@ -13,11 +13,11 @@ AI-powered zoning analysis and real estate intelligence platform. Given any US p
 | Frontend | Next.js 16, React 19, Tailwind CSS 4, TypeScript strict |
 | Backend | FastAPI, Python 3.12+, async-first (httpx, asyncpg) |
 | Database | Neon PostgreSQL + pgvector (1024d embeddings) |
-| LLM | Claude Sonnet 4.6 → Gemini 2.5 Flash → NVIDIA NIM Llama 3.3 70B → Kimi K2.5 |
+| LLM | Groq → NVIDIA NIM → OpenAI/Codex OAuth → OpenRouter fallback |
 | Embeddings | NVIDIA NIM (1024d) |
 | Auth | Clerk (JWT RS256) |
 | Payments | Stripe |
-| Maps | Google Maps + ESRI Leaflet (ArcGIS services) |
+| Maps | OpenStreetMap links + ESRI Leaflet (ArcGIS services) |
 | Media | FAL.ai (image + video generation) |
 | Observability | MLflow (Neon backend), structlog |
 | Deploy (frontend) | Vercel (standalone output) |
@@ -99,7 +99,7 @@ apps/plotlot/frontend/
 |-----------|------|---------|
 | `ParcelViewer.tsx` | 12.0 KB | ArcGIS Leaflet map — parcel boundaries, satellite/street layers, GIS overlays (topography, wetlands, water/sewer) |
 | `ArcGISParcelMap.tsx` | 18.5 KB | Low-level ESRI service map rendering with geometry handling |
-| `SatelliteMap.tsx` | 5.4 KB | Google Maps satellite view overlay |
+| `SatelliteMap.tsx` | 5.4 KB | OpenStreetMap property-location fallback link |
 | `SetbackDiagram.tsx` | 5.2 KB | SVG illustration of front/side/rear setback requirements |
 
 #### Documents & Visualization
@@ -107,14 +107,14 @@ apps/plotlot/frontend/
 |-----------|------|---------|
 | `DocumentGenerator.tsx` | 13.8 KB | Generate PDFs/DOCX — PSA, LOI, deal summary (clause builder) |
 | `PropertyFlyoverVideo.tsx` | 6.9 KB | AI-generated aerial flyover video via FAL.ai |
-| `BuildingRenderViewer.tsx` | 6.9 KB | AI-generated 3D building visualization |
+| `BuildingRenderViewer.tsx` | 6.9 KB | Local deterministic building visualization |
 | `FloorPlanSVG.tsx` | 29.3 KB | Procedurally generated SVG floor plans |
 | `FloorPlanViewer.tsx` | 1.9 KB | Floor plan SVG wrapper |
 
 #### Input & Navigation
 | Component | Size | Purpose |
 |-----------|------|---------|
-| `AddressAutocomplete.tsx` | 9.8 KB | Google Places autocomplete + manual entry fallback |
+| `AddressAutocomplete.tsx` | 9.8 KB | Geocodio autocomplete + manual entry fallback |
 | `InputBar.tsx` | 2.6 KB | Address/query input with suggestion chips |
 | `DealTypeSelector.tsx` | 4.7 KB | Radio buttons: land deal, wholesale, creative finance, hybrid |
 | `PipelineApproval.tsx` | 4.7 KB | "Approve to proceed" modal before pipeline execution |
@@ -140,7 +140,7 @@ apps/plotlot/frontend/
 | `ErrorBoundary.tsx` | 2.6 KB | React error boundary wrapper |
 | `DocumentCanvas.tsx` | 2.6 KB | Document preview/rendering canvas |
 | `ThemeProvider.tsx` | 3.2 KB | Dark/light mode toggle context |
-| `MapsProvider.tsx` | 1.1 KB | Google Maps JS API loader |
+| `MapsProvider.tsx` | 1.1 KB | No-op map provider wrapper |
 
 ### API Routes (`src/app/api/`)
 
@@ -200,7 +200,6 @@ apps/plotlot/frontend/
 |----------|---------|
 | `NEXT_PUBLIC_API_URL` | Backend base URL (localhost:8000 dev / Render prod) |
 | `NEXT_PUBLIC_APP_URL` | App URL for Stripe callbacks |
-| `NEXT_PUBLIC_GOOGLE_MAPS_KEY` | Google Maps + Places API |
 | `STRIPE_SECRET_KEY` | Stripe checkout session creation |
 | `STRIPE_PRO_PRICE_ID` | Stripe Pro plan price ID |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk auth (public) |
@@ -261,12 +260,12 @@ apps/plotlot/src/plotlot/
 │   ├── contracts.py     # Legal document generation
 │   └── ingest.py        # Municode ingestion pipeline (discovery→scrape→chunk→embed→store)
 ├── retrieval/
-│   ├── llm.py           # 3-provider LLM client + circuit breakers (886 lines)
+│   ├── llm.py           # OpenAI-compatible LLM client + circuit breakers
 │   ├── search.py        # Hybrid pgvector search with RRF fusion
 │   ├── geocode.py       # Address → lat/lng/municipality (Geocodio → Census fallback)
 │   ├── property.py      # County routing dispatcher
 │   ├── bulk_search.py   # Multi-record property queries
-│   └── google_workspace.py  # Google Sheets/Docs OAuth integration
+│   └── local_artifacts.py  # Local DOCX/XLSX artifact generation
 ├── property/
 │   ├── __init__.py      # Provider registry + lookup_property() dispatcher
 │   ├── base.py          # Abstract PropertyProvider interface
@@ -336,7 +335,7 @@ Heartbeat every 15s to survive Render's 30s proxy timeout.
 |--------|------|---------|
 | GET | `/health` | Health check (DB, ingestion freshness, MLflow) |
 | GET | `/debug/traces` | View recent MLflow traces |
-| GET | `/debug/llm` | Test LLM provider connectivity (Claude, Gemini, NVIDIA) |
+| GET | `/debug/llm` | Test LLM provider connectivity (Groq, NVIDIA, OpenAI/Codex OAuth, OpenRouter) |
 
 ### Property Providers (`property/`)
 
@@ -390,13 +389,13 @@ Returns `DensityAnalysis` with per-constraint breakdown + `governing_constraint`
 
 ### Retrieval Layer (`retrieval/`)
 
-**`llm.py` — 3-provider fallback chain with circuit breakers:**
+**`llm.py` — OpenAI-compatible provider chain with circuit breakers:**
 
 ```
-Claude Sonnet 4.6 (primary)
-  → Gemini 2.5 Flash (secondary)
-    → NVIDIA NIM Llama 3.3 70B (tertiary)
-      → Kimi K2.5 (quaternary)
+Groq (primary when GROQ_API_KEY is set)
+  → NVIDIA NIM (secondary when NVIDIA_API_KEY is set)
+    → OpenAI API key / access token / Codex OAuth
+      → OpenRouter fallback
 ```
 
 Circuit breaker per provider (Stripe pattern):
@@ -460,9 +459,11 @@ class Settings(BaseSettings):
     database_require_ssl: bool # Auto-detected from sslmode=require
 
     # LLM providers
-    anthropic_api_key: str
-    google_api_key: str
+    groq_api_key: str
     nvidia_api_key: str
+    openai_api_key: str
+    openai_access_token: str
+    openrouter_api_key: str
 
     # Geocoding
     geocodio_api_key: str
@@ -617,7 +618,7 @@ PIPELINE_CACHE_TTL = 1800   # SHA256(address) key
 
 **Core:**
 - `httpx>=0.27` — async HTTP
-- `anthropic>=0.42` — Claude API
+- `openai>=2.31.0` — OpenAI-compatible provider SDK (Groq, NVIDIA, OpenAI, OpenRouter)
 - `pydantic>=2.0` — validation
 - `sqlalchemy[asyncio]>=2.0` — ORM
 - `asyncpg>=0.29` — PostgreSQL async driver
@@ -635,8 +636,6 @@ PIPELINE_CACHE_TTL = 1800   # SHA256(address) key
 - `jinja2>=3.1` — document templates
 
 **Integrations:**
-- `google-genai>=1.0` — Gemini API
-- `google-cloud-firestore>=2.16` — cache fallback
 - `stripe>=11.0` — billing
 - `pyjwt>=2.11.0` — Clerk JWT verification
 
@@ -715,7 +714,7 @@ Address (user input)
   → Geocodio → lat/lng, county, municipality
     → County ArcGIS API → PropertyRecord (folio, lot_size, zoning_code)
       → pgvector hybrid search → 15 zoning ordinance chunks
-        → Claude Sonnet (tool use) → NumericZoningParams
+        → configured LLM provider (tool use) → NumericZoningParams
           → Deterministic calculator → DensityAnalysis (max_units, governing_constraint)
             → ArcGIS Hub comps query → CompAnalysis (median $/acre, ADV/unit)
               → Residual formula → LandProForma (max land price)
@@ -728,7 +727,7 @@ Address (user input)
 
 ### Circuit Breaker — Preventing Cost Explosions
 
-Inspired by Stripe's LLM failure isolation pattern. Each LLM provider gets an independent circuit breaker. If Claude is timing out at 2 AM, the system doesn't keep hammering it — it trips to Gemini, then NVIDIA NIM, with automatic recovery after the reset window.
+Inspired by Stripe's LLM failure isolation pattern. Each LLM provider gets an independent circuit breaker. If the primary provider is timing out at 2 AM, the system doesn't keep hammering it — the breaker trips and the next configured provider can take over, with automatic recovery after the reset window.
 
 ```
 Problem: Single LLM provider goes down → all requests fail
@@ -768,13 +767,13 @@ Result: Same address always produces identical max_units; each constraint is aud
 
 ### Multi-Provider Fallback Chain — Infrastructure Resilience
 
-Production LLM APIs have outages, rate limits, and degraded performance windows. By maintaining 4 providers in a fallback chain with circuit breakers, the system maintains availability even during individual provider incidents.
+Production LLM APIs have outages, rate limits, and degraded performance windows. By maintaining multiple OpenAI-compatible providers with circuit breakers, the system maintains availability even during individual provider incidents.
 
 ```
-Primary:    Claude Sonnet 4.6  (best tool-calling accuracy)
-Secondary:  Gemini 2.5 Flash   (fast, good tool use)
-Tertiary:   NVIDIA NIM Llama   (self-hosted option, no API dependency)
-Quaternary: Kimi K2.5          (final fallback)
+Primary:    Groq               (fast OpenAI-compatible mainline)
+Secondary:  NVIDIA NIM Llama   (current production provider)
+Tertiary:   OpenAI/Codex OAuth (local/dev or direct OpenAI-compatible auth)
+Fallback:   OpenRouter         (optional provider fallback)
 ```
 
 ---

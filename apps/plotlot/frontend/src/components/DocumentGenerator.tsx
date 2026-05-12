@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   generateDocument,
   previewDocument,
-  type GeneratedSpreadsheetResult,
   type DocumentPreviewData,
   type ZoningReportData,
 } from "@/lib/api";
@@ -131,7 +130,6 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<DocumentPreviewData | null>(null);
-  const [generatedSheet, setGeneratedSheet] = useState<GeneratedSpreadsheetResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Additional context fields for LOI/PSA
@@ -141,20 +139,14 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
 
   const selectedDocType = DOCUMENT_TYPES.find((d) => d.value === documentType);
   const needsPartyInfo = documentType === "psa" || documentType === "loi";
-  const supportsGoogleSheets = documentType === "proforma_spreadsheet";
 
   function getDefaultFormat(nextDocumentType: string): string {
-    return nextDocumentType === "proforma_spreadsheet" ? "google_sheets" : "docx";
-  }
-
-  function isGeneratedSpreadsheetResult(value: Blob | GeneratedSpreadsheetResult): value is GeneratedSpreadsheetResult {
-    return typeof value === "object" && value !== null && "spreadsheet_url" in value;
+    return nextDocumentType === "proforma_spreadsheet" ? "xlsx" : "docx";
   }
 
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
-    setGeneratedSheet(null);
     try {
       const ctx = buildContextFromReport(report);
       if (buyerName) ctx.buyer_name = buyerName;
@@ -168,19 +160,11 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
         output_format: outputFormat,
       });
 
-      if (isGeneratedSpreadsheetResult(result)) {
-        setGeneratedSheet(result);
-        if (typeof window !== "undefined") {
-          window.open(result.spreadsheet_url, "_blank", "noopener,noreferrer");
-        }
-        return;
-      }
-
       // Trigger download
       const url = URL.createObjectURL(result);
       const a = document.createElement("a");
       a.href = url;
-      const ext = outputFormat === "google_sheets" ? "url" : outputFormat;
+      const ext = outputFormat;
       const addr = (report.address || "property").split(",")[0].replace(/\s+/g, "_").slice(0, 30);
       a.download = `${documentType.toUpperCase()}_${addr}.${ext}`;
       document.body.appendChild(a);
@@ -238,7 +222,6 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
               setDocumentType(e.target.value);
               setOutputFormat(getDefaultFormat(e.target.value));
               setPreview(null);
-              setGeneratedSheet(null);
             }}
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
           >
@@ -261,7 +244,6 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
             onChange={(e) => {
               setDealType(e.target.value);
               setPreview(null);
-              setGeneratedSheet(null);
             }}
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
           >
@@ -273,31 +255,6 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
           </select>
         </div>
       </div>
-
-      {supportsGoogleSheets && (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="output-format" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
-              Output Format
-            </label>
-            <select
-              id="output-format"
-              value={outputFormat}
-              onChange={(e) => {
-                setOutputFormat(e.target.value);
-                setGeneratedSheet(null);
-              }}
-              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-            >
-              <option value="google_sheets">Google Sheets</option>
-              <option value="xlsx">Excel (.xlsx)</option>
-            </select>
-            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-              Google Sheets opens a collaborative pro forma in a new tab. Excel downloads a local spreadsheet.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Party info (LOI/PSA) */}
       {needsPartyInfo && (
@@ -362,9 +319,7 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
         >
           {generating
             ? "Generating..."
-            : outputFormat === "google_sheets"
-              ? "Open Google Sheet"
-              : `Download .${outputFormat || selectedDocType?.format || "docx"}`}
+            : `Download .${outputFormat || selectedDocType?.format || "docx"}`}
         </button>
       </div>
 
@@ -372,20 +327,6 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
       {error && (
         <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
           {error}
-        </div>
-      )}
-
-      {generatedSheet && (
-        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-          <div className="font-medium">Google Sheet created: {generatedSheet.title}</div>
-          <a
-            href={generatedSheet.spreadsheet_url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 inline-flex text-emerald-700 underline underline-offset-2 hover:text-emerald-900 dark:text-emerald-300"
-          >
-            Open spreadsheet
-          </a>
         </div>
       )}
 

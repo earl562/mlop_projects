@@ -18,7 +18,7 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 echo ""
 echo "============================================="
 echo "  PlotLot v2 — Phase 2 Setup"
-echo "  Claude Migration + Demo Reliability"
+echo "  Open LLM + Demo Reliability"
 echo "============================================="
 echo ""
 
@@ -27,23 +27,6 @@ echo ""
 info "Step 1: Checking API keys..."
 
 source "$ENV_FILE" 2>/dev/null || true
-
-if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    echo ""
-    warn "ANTHROPIC_API_KEY not set."
-    echo "  Get it from: https://console.anthropic.com/settings/keys"
-    echo "  (Your Max plan includes API credits)"
-    echo ""
-    read -rp "  Paste your Anthropic API key (sk-ant-...): " ANTHROPIC_API_KEY
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
-        sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY|" "$ENV_FILE"
-        ok "ANTHROPIC_API_KEY saved to .env"
-    else
-        warn "Skipped — Claude will not be available as primary LLM"
-    fi
-else
-    ok "ANTHROPIC_API_KEY already set (${#ANTHROPIC_API_KEY} chars)"
-fi
 
 if [ -z "${GROQ_API_KEY:-}" ]; then
     echo ""
@@ -56,7 +39,7 @@ if [ -z "${GROQ_API_KEY:-}" ]; then
         sed -i '' "s|^GROQ_API_KEY=.*|GROQ_API_KEY=$GROQ_API_KEY|" "$ENV_FILE"
         ok "GROQ_API_KEY saved to .env"
     else
-        warn "Skipped — Groq fallback will not be available"
+        warn "Skipped — Groq preferred LLM will not be available"
     fi
 else
     ok "GROQ_API_KEY already set (${#GROQ_API_KEY} chars)"
@@ -107,23 +90,6 @@ if [ -n "${SENTRY_DSN:-}" ]; then
         warn "Could not set NEXT_PUBLIC_SENTRY_DSN (may already exist)"
 fi
 
-# Google Maps key
-echo ""
-read -rp "  Do you have a Google Maps Static API key? (y/n): " HAS_MAPS
-if [ "$HAS_MAPS" = "y" ]; then
-    read -rp "  Paste your Google Maps key (AIza...): " GOOGLE_MAPS_KEY
-    if [ -n "$GOOGLE_MAPS_KEY" ]; then
-        echo "$GOOGLE_MAPS_KEY" | vercel env add NEXT_PUBLIC_GOOGLE_MAPS_KEY production --force 2>/dev/null && \
-            ok "NEXT_PUBLIC_GOOGLE_MAPS_KEY set on Vercel" || \
-            warn "Could not set key (may already exist)"
-    fi
-else
-    echo ""
-    warn "Skipped Google Maps. Get a key from:"
-    echo "  https://console.cloud.google.com → APIs → Maps Static API → Credentials"
-    echo "  Free tier: 28,000 loads/month"
-fi
-
 # ─── Step 3: Backend Deployment ──────────────────────────────────────────────
 
 echo ""
@@ -166,14 +132,25 @@ case "$DEPLOY_CHOICE" in
         info "Setting Railway env vars..."
         railway variables set \
             DATABASE_URL="${DATABASE_URL:-}" \
-            ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
             GROQ_API_KEY="${GROQ_API_KEY:-}" \
+            GROQ_BASE_URL="${GROQ_BASE_URL:-https://api.groq.com/openai/v1}" \
+            GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}" \
             NVIDIA_API_KEY="${NVIDIA_API_KEY:-}" \
+            NVIDIA_BASE_URL="${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}" \
+            NVIDIA_MODEL="${NVIDIA_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}" \
+            NVIDIA_FALLBACK_MODEL="${NVIDIA_FALLBACK_MODEL:-minimaxai/minimax-m2.5}" \
+            OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+            OPENAI_ACCESS_TOKEN="${OPENAI_ACCESS_TOKEN:-}" \
+            OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}" \
+            OPENAI_MODEL="${OPENAI_MODEL:-gpt-4.1}" \
+            OPENAI_REASONING_EFFORT="${OPENAI_REASONING_EFFORT:-medium}" \
             GEOCODIO_API_KEY="${GEOCODIO_API_KEY:-}" \
             HF_TOKEN="${HF_TOKEN:-}" \
             JINA_API_KEY="${JINA_API_KEY:-}" \
             SENTRY_DSN="${SENTRY_DSN:-}" \
             OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}" \
+            OPENROUTER_BASE_URL="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}" \
+            OPENROUTER_MODEL="${OPENROUTER_MODEL:-}" \
             PORT=8000 2>/dev/null
 
         ok "Environment variables set on Railway"
@@ -254,9 +231,10 @@ echo "  Setup Summary"
 echo "============================================="
 echo ""
 echo "  API Keys:"
-[ -n "${ANTHROPIC_API_KEY:-}" ] && ok "  Claude (primary LLM)" || warn "  Claude — NOT SET"
-[ -n "${GROQ_API_KEY:-}" ]      && ok "  Groq (secondary LLM)" || warn "  Groq — NOT SET"
-[ -n "${NVIDIA_API_KEY:-}" ]    && ok "  NVIDIA (tertiary LLM)" || warn "  NVIDIA — NOT SET"
+[ -n "${GROQ_API_KEY:-}" ]      && ok "  Groq (preferred LLM)" || warn "  Groq — NOT SET"
+[ -n "${NVIDIA_API_KEY:-}" ]    && ok "  NVIDIA (fallback/current production LLM)" || warn "  NVIDIA — NOT SET"
+[ -n "${OPENAI_API_KEY:-}${OPENAI_ACCESS_TOKEN:-}" ] && ok "  OpenAI/Codex-compatible auth" || warn "  OpenAI/Codex-compatible auth — NOT SET"
+[ -n "${OPENROUTER_API_KEY:-}" ] && ok "  OpenRouter (optional fallback)" || warn "  OpenRouter — NOT SET"
 [ -n "${SENTRY_DSN:-}" ]        && ok "  Sentry (error tracking)" || warn "  Sentry — NOT SET"
 echo ""
 echo "  Next steps:"

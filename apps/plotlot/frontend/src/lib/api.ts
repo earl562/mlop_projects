@@ -708,12 +708,6 @@ export interface DocumentPreviewData {
   clauses: DocumentPreviewClause[];
 }
 
-export interface GeneratedSpreadsheetResult {
-  spreadsheet_id: string;
-  spreadsheet_url: string;
-  title: string;
-}
-
 export async function listDocumentTemplates(): Promise<DocumentTemplateInfo[]> {
   const response = await fetch(`${API_BASE}/api/v1/documents/templates`);
   if (!response.ok) throw new Error("Failed to load document templates");
@@ -735,7 +729,7 @@ export async function previewDocument(params: DocumentGenerateParams): Promise<D
   return response.json();
 }
 
-export async function generateDocument(params: DocumentGenerateParams): Promise<Blob | GeneratedSpreadsheetResult> {
+export async function generateDocument(params: DocumentGenerateParams): Promise<Blob> {
   const response = await fetch(`${API_BASE}/api/v1/documents/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -745,11 +739,6 @@ export async function generateDocument(params: DocumentGenerateParams): Promise<
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Generation failed" }));
     throw new Error(extractErrorMessage(err, response.status));
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return response.json();
   }
 
   return response.blob();

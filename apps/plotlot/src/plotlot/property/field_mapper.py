@@ -4,7 +4,7 @@ Uses a two-phase approach:
 1. Heuristic keyword matching (fast, no LLM cost, confidence 0.7-0.95)
 2. LLM fallback for ambiguous fields (slower, but handles edge cases)
 
-Field mappings are cached in Firestore so each county is mapped only once.
+Field mappings are cached locally so each county is mapped only once.
 """
 
 from __future__ import annotations

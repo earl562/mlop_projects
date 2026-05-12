@@ -1,4 +1,4 @@
-"""Tests for the building render endpoint (AI architectural visualization)."""
+"""Tests for the building render endpoint (local architectural visualization)."""
 
 import base64
 from unittest.mock import patch
@@ -183,7 +183,7 @@ def test_cache_hit():
 
 
 # ---------------------------------------------------------------------------
-# Endpoint tests (mocked Gemini)
+# Endpoint tests
 # ---------------------------------------------------------------------------
 
 
@@ -196,23 +196,9 @@ def client():
     return TestClient(app)
 
 
-@patch("plotlot.api.render.settings")
-def test_render_no_api_key(mock_settings, client):
-    """Graceful 503 when GOOGLE_API_KEY is not set."""
-    mock_settings.google_api_key = ""
-    resp = client.post(
-        "/api/v1/render/building",
-        json=_make_request().model_dump(),
-    )
-    assert resp.status_code == 503
-    assert "GOOGLE_API_KEY" in resp.json()["detail"]
-
-
 @patch("plotlot.api.render.generate_building_image")
-@patch("plotlot.api.render.settings")
-def test_render_endpoint_returns_three_views(mock_settings, mock_gen, client):
+def test_render_endpoint_returns_three_views(mock_gen, client):
     """POST to endpoint returns 3 views (front, aerial, side)."""
-    mock_settings.google_api_key = "test-key"
     fake_b64 = base64.b64encode(b"fake-png").decode()
     mock_gen.return_value = fake_b64
 
@@ -236,10 +222,8 @@ def test_render_endpoint_returns_three_views(mock_settings, mock_gen, client):
 
 
 @patch("plotlot.api.render.generate_building_image")
-@patch("plotlot.api.render.settings")
-def test_render_endpoint_cache_hit(mock_settings, mock_gen, client):
-    """Second identical request returns cached=True without calling Gemini."""
-    mock_settings.google_api_key = "test-key"
+def test_render_endpoint_cache_hit(mock_gen, client):
+    """Second identical request returns cached=True without regenerating images."""
     fake_b64 = base64.b64encode(b"fake-png").decode()
     mock_gen.return_value = fake_b64
 
@@ -257,16 +241,14 @@ def test_render_endpoint_cache_hit(mock_settings, mock_gen, client):
     assert resp2.json()["cached"] is True
     assert len(resp2.json()["views"]) == 3
 
-    # Gemini should only be called 3 times (first request only)
+    # Images should only be generated for the first request.
     assert mock_gen.call_count == 3
     _cache.clear()
 
 
 @patch("plotlot.api.render.generate_building_image")
-@patch("plotlot.api.render.settings")
-def test_render_partial_failure(mock_settings, mock_gen, client):
+def test_render_partial_failure(mock_gen, client):
     """If one view fails, the others still return."""
-    mock_settings.google_api_key = "test-key"
     fake_b64 = base64.b64encode(b"fake-png").decode()
 
     call_count = 0

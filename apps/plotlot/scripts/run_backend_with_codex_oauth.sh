@@ -13,8 +13,9 @@ fi
 export PLOTLOT_USE_CODEX_OAUTH=1
 
 # If the monorepo root has a local .env (gitignored) with alternate provider
-# credentials (e.g., NVIDIA_API_KEY), load it so local runs don't hard-fail
-# when Codex OAuth is rate-limited. Existing exported vars still win.
+# credentials (for example GROQ_API_KEY or NVIDIA_API_KEY), load it so local
+# runs don't hard-fail when Codex OAuth is rate-limited. Existing exported vars
+# still win.
 MONOREPO_ENV_FILE="${PLOTLOT_ROOT}/../../.env"
 if [[ -f "${MONOREPO_ENV_FILE}" ]]; then
   while IFS= read -r line || [[ -n "${line:-}" ]]; do
@@ -51,8 +52,13 @@ if [[ "${CODEX_AUTH_FILE}" == "~"* ]]; then
 fi
 
 if [[ ! -f "${CODEX_AUTH_FILE}" ]]; then
-  echo "Codex OAuth token file not found. Run ./scripts/login_with_codex_oauth.sh first." >&2
-  exit 1
+  if [[ -n "${GROQ_API_KEY:-}${NVIDIA_API_KEY:-}${OPENAI_API_KEY:-}${OPENAI_ACCESS_TOKEN:-}${OPENROUTER_API_KEY:-}" ]]; then
+    echo "Codex OAuth token file not found; continuing with configured non-Codex LLM credentials." >&2
+    export PLOTLOT_USE_CODEX_OAUTH=0
+  else
+    echo "No LLM credentials found. Set GROQ_API_KEY, NVIDIA_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, OPENROUTER_API_KEY, or run ./scripts/login_with_codex_oauth.sh." >&2
+    exit 1
+  fi
 fi
 
 cd "${PLOTLOT_ROOT}"

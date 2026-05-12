@@ -322,6 +322,7 @@ async def test_chat_reports_actionable_error_when_llm_unavailable(client):
     assert resp.status_code == 200
     body = resp.text
     assert "no LLM credentials are configured" in body
+    assert "GROQ_API_KEY" in body
     assert "NVIDIA_API_KEY" in body
     assert "OPENAI_API_KEY" in body
     assert "OPENROUTER_API_KEY" in body
@@ -396,6 +397,51 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
     _, create_kwargs = mock_client.chat.completions.create.await_args
     assert create_kwargs["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     assert create_kwargs["messages"][0]["content"] == "/no_think"
+    assert "reasoning_effort" not in create_kwargs
+
+
+@pytest.mark.asyncio
+async def test_debug_llm_prefers_groq_over_nvidia_and_stale_openai(client):
+    """The debug endpoint should probe Groq before NVIDIA or stale OpenAI creds."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+    with (
+        patch("openai.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+        patch("plotlot.config.settings") as mock_settings,
+    ):
+        mock_settings.groq_api_key = "groq-key"
+        mock_settings.groq_base_url = "https://api.groq.com/openai/v1"
+        mock_settings.groq_model = "llama-3.3-70b-versatile"
+        mock_settings.nvidia_api_key = "nv-key"
+        mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
+        mock_settings.nvidia_model = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+        mock_settings.openai_api_key = ""
+        mock_settings.openai_access_token = "stale-openai-token"
+        mock_settings.openai_base_url = "https://api.openai.com/v1"
+        mock_settings.openai_model = "gpt-4.1"
+        mock_settings.openai_reasoning_effort = "medium"
+        mock_settings.openai_organization = ""
+        mock_settings.openai_project = ""
+        mock_settings.openrouter_api_key = ""
+
+        resp = await client.get("/debug/llm")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["providers"]["groq"]["status"] == "ok"
+    assert data["providers"]["groq"]["model"] == "llama-3.3-70b-versatile"
+    assert "nvidia" not in data["providers"]
+    assert "openai" not in data["providers"]
+    _, client_kwargs = async_openai_ctor.call_args
+    assert client_kwargs["api_key"] == "groq-key"
+    assert client_kwargs["base_url"] == "https://api.groq.com/openai/v1"
+    _, create_kwargs = mock_client.chat.completions.create.await_args
+    assert create_kwargs["model"] == "llama-3.3-70b-versatile"
+    assert create_kwargs["messages"] == [{"role": "user", "content": "Say 'ok' in one word."}]
     assert "reasoning_effort" not in create_kwargs
 
 
@@ -720,7 +766,7 @@ async def test_portfolio_not_found(client):
 
 
 # ---------------------------------------------------------------------------
-# Google Workspace tool tests
+# Local artifact tool tests
 # ---------------------------------------------------------------------------
 
 
@@ -755,12 +801,15 @@ async def test_chat_create_spreadsheet_tool(client, monkeypatch):
     }
     final_response = {"content": "Here's your spreadsheet!", "tool_calls": []}
 
-    from plotlot.retrieval.google_workspace import SpreadsheetResult
+    from plotlot.retrieval.local_artifacts import LocalArtifactResult
 
-    mock_result = SpreadsheetResult(
-        spreadsheet_id="abc123",
-        spreadsheet_url="https://docs.google.com/spreadsheets/d/abc123",
+    mock_result = LocalArtifactResult(
+        filename="test-lots.xlsx",
+        file_path="/tmp/test-lots.xlsx",
+        artifact_url="/api/v1/artifacts/test-lots.xlsx",
         title="Test Lots",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        size_bytes=1234,
     )
 
     with (
@@ -813,12 +862,15 @@ async def test_chat_create_document_tool(client, monkeypatch):
     }
     final_response = {"content": "Created your report!", "tool_calls": []}
 
-    from plotlot.retrieval.google_workspace import DocumentResult
+    from plotlot.retrieval.local_artifacts import LocalArtifactResult
 
-    mock_result = DocumentResult(
-        document_id="doc456",
-        document_url="https://docs.google.com/document/d/doc456/edit",
+    mock_result = LocalArtifactResult(
+        filename="zoning-report.docx",
+        file_path="/tmp/zoning-report.docx",
+        artifact_url="/api/v1/artifacts/zoning-report.docx",
         title="Zoning Report",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size_bytes=2048,
     )
 
     with (
@@ -916,7 +968,7 @@ async def test_chat_search_properties(client):
 
 @pytest.mark.asyncio
 async def test_chat_export_dataset(client, monkeypatch):
-    """Agent exports dataset to Google Sheets."""
+    """Agent exports dataset to a local spreadsheet."""
     from plotlot.api.chat import _sessions, settings
     from plotlot.retrieval.bulk_search import DatasetInfo
 
@@ -970,12 +1022,15 @@ async def test_chat_export_dataset(client, monkeypatch):
     }
     final_response = {"content": "Here's your spreadsheet!", "tool_calls": []}
 
-    from plotlot.retrieval.google_workspace import SpreadsheetResult
+    from plotlot.retrieval.local_artifacts import LocalArtifactResult
 
-    mock_result = SpreadsheetResult(
-        spreadsheet_id="exp789",
-        spreadsheet_url="https://docs.google.com/spreadsheets/d/exp789",
+    mock_result = LocalArtifactResult(
+        filename="my-export.xlsx",
+        file_path="/tmp/my-export.xlsx",
+        artifact_url="/api/v1/artifacts/my-export.xlsx",
         title="My Export",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        size_bytes=4096,
     )
 
     with (
@@ -995,4 +1050,4 @@ async def test_chat_export_dataset(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.text
     assert "tool_use" in body
-    assert "Exporting to Google Sheets" in body
+    assert "Exporting to spreadsheet" in body

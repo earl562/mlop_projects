@@ -87,12 +87,14 @@ class Settings(BaseSettings):
     # API keys
     geocodio_api_key: str = ""
     hf_token: str = ""
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "llama-3.3-70b-versatile"
     nvidia_api_key: str = ""
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     nvidia_fallback_model: str = "minimaxai/minimax-m2.5"
     anthropic_api_key: str = ""
-    google_api_key: str = ""
     openai_api_key: str = ""
     openai_access_token: str = ""  # OAuth-provided bearer token
     openai_base_url: str = "https://api.openai.com/v1"
@@ -135,12 +137,14 @@ class Settings(BaseSettings):
         for field in (
             "geocodio_api_key",
             "hf_token",
+            "groq_api_key",
+            "groq_base_url",
+            "groq_model",
             "nvidia_api_key",
             "nvidia_base_url",
             "nvidia_model",
             "nvidia_fallback_model",
             "anthropic_api_key",
-            "google_api_key",
             "openai_api_key",
             "openai_access_token",
             "jina_api_key",
@@ -191,19 +195,14 @@ class Settings(BaseSettings):
 
         return self
 
-    # Google Workspace (Sheets/Docs creation)
-    google_client_id: str = ""
-    google_client_secret: str = ""
-    google_refresh_token: str = ""
+    # Local artifact generation/cache paths
+    artifact_storage_dir: str = "data/artifacts"
+    property_cache_path: str = "data/cache/property_cache.json"
 
     # MLflow — uses MLFLOW_TRACKING_URI env var in production (Neon PostgreSQL),
     # falls back to local SQLite for development.
     mlflow_tracking_uri: str = "sqlite:///mlruns/mlflow.db"
     mlflow_experiment_name: str = "plotlot-rag"
-
-    # GCP / Firestore
-    gcp_project_id: str = ""
-    firestore_database: str = "(default)"
 
     # ArcGIS Hub
     arcgis_hub_api_url: str = "https://hub.arcgis.com/api/v3/datasets"

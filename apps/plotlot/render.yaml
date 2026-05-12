@@ -13,6 +13,12 @@ services:
         sync: false
       - key: HF_TOKEN
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
       - key: NVIDIA_API_KEY
         sync: false
       - key: NVIDIA_BASE_URL
@@ -21,6 +27,24 @@ services:
         value: nvidia/llama-3.3-nemotron-super-49b-v1.5
       - key: NVIDIA_FALLBACK_MODEL
         value: minimaxai/minimax-m2.5
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_ACCESS_TOKEN
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_MODEL
+        value: gpt-4.1
+      - key: OPENAI_REASONING_EFFORT
+        value: medium
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_HTTP_REFERER
+        value: https://mlopprojects.vercel.app
+      - key: OPENROUTER_APP_TITLE
+        value: PlotLot
       - key: JINA_API_KEY
         sync: false
       - key: CORS_ORIGINS

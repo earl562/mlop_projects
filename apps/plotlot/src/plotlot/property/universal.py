@@ -1,7 +1,7 @@
 """Universal PropertyProvider — dynamic ArcGIS dataset discovery for any US county.
 
 Replaces hardcoded per-county providers with a single provider that:
-1. Checks Firestore cache for previously discovered datasets + field mappings
+1. Checks the local cache for previously discovered datasets + field mappings
 2. If not cached: discovers datasets via ArcGIS Hub, maps fields, caches results
 3. Queries the discovered ArcGIS endpoint and maps response to PropertyRecord
 """
@@ -22,7 +22,7 @@ from plotlot.property.base import PropertyProvider
 from plotlot.property.field_mapper import ACRES_TO_SQFT, SQ_METERS_TO_SQFT, map_fields
 from plotlot.property.hub_discovery import discover_datasets
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
-from plotlot.storage.firestore import (
+from plotlot.storage.property_cache import (
     get_county_cache,
     get_field_mapping,
     save_county_cache,
@@ -47,7 +47,7 @@ class UniversalProvider(PropertyProvider):
         """Look up property data for any US county.
 
         Flow:
-        1. Check Firestore cache for county datasets + field mapping
+        1. Check local cache for county datasets + field mapping
         2. If not cached: discover via Hub, generate mapping, cache
         3. Query parcel dataset (address match → spatial fallback)
         4. Query zoning dataset (spatial)

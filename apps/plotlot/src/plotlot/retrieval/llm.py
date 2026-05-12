@@ -6,6 +6,14 @@ Supports three modes:
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
 Auth:
+  - Groq (OpenAI-compatible):
+      - GROQ_API_KEY
+      - GROQ_BASE_URL (defaults to https://api.groq.com/openai/v1)
+      - GROQ_MODEL (defaults to llama-3.3-70b-versatile)
+  - NVIDIA NIM (OpenAI-compatible):
+      - NVIDIA_API_KEY
+      - NVIDIA_BASE_URL
+      - NVIDIA_MODEL
   - Primary (OpenAI):
       - OPENAI_API_KEY for direct API-key auth
       - OPENAI_ACCESS_TOKEN for OAuth-backed bearer tokens supplied by the caller
@@ -28,7 +36,7 @@ from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitEr
 from plotlot.config import settings
 from plotlot.core.types import SearchResult, Setbacks, ZoningReport
 from plotlot.observability.tracing import log_metrics, start_span, trace
-from plotlot.oauth.openai_auth import get_valid_access_token, has_saved_tokens
+from plotlot.oauth.openai_auth import get_valid_access_token, has_saved_tokens, load_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,7 @@ DEFAULT_OPENAI_MODEL = "gpt-4.1"
 OPENAI_TIMEOUT_SECONDS = 60.0
 DEFAULT_OPENROUTER_MODEL = "openai/gpt-4.1"
 RATE_LIMIT_FALLBACK_OPENAI_MODEL = "gpt-4.1-mini"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
 # ---------------------------------------------------------------------------
@@ -240,49 +249,106 @@ def _convert_messages_for_anthropic(messages: list[dict]) -> tuple[str, list[dic
 
 
 # ---------------------------------------------------------------------------
-# OpenAI client helpers
+# OpenAI-compatible client helpers
 # ---------------------------------------------------------------------------
 
 
+def _configured(value: object) -> bool:
+    """Return True only for explicit non-empty string settings.
+
+    Several tests patch ``settings`` with ``MagicMock``; treating arbitrary objects
+    as truthy would silently select the wrong provider.
+    """
+
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _setting_str(name: str, default: str = "") -> str:
+    value = getattr(settings, name, default)
+    return value if isinstance(value, str) else default
+
+
+def _setting_bool(name: str, default: bool = False) -> bool:
+    value = getattr(settings, name, default)
+    return value if isinstance(value, bool) else default
+
+
 def _has_openai_credentials() -> bool:
-    """Whether PlotLot has any viable OpenAI auth path configured."""
-    if settings.openai_api_key or settings.openai_access_token:
+    """Whether PlotLot has any viable OpenAI-compatible auth path configured."""
+    if _configured(_setting_str("groq_api_key")):
         return True
-    if settings.use_codex_oauth:
+    if _configured(_setting_str("nvidia_api_key")):
+        return True
+    if _configured(_setting_str("openai_api_key")) or _configured(
+        _setting_str("openai_access_token")
+    ):
+        return True
+    if _setting_bool("use_codex_oauth"):
         from pathlib import Path
 
-        return has_saved_tokens(Path(settings.codex_auth_file).expanduser())
-    if settings.nvidia_api_key:
-        return True
+        auth_file = Path(_setting_str("codex_auth_file", "~/.codex/auth.json")).expanduser()
+        return has_saved_tokens(auth_file)
     return False
 
 
+def _using_groq_mainline() -> bool:
+    return _configured(_setting_str("groq_api_key"))
+
+
 def _using_nvidia_mainline() -> bool:
-    return bool(settings.nvidia_api_key)
+    return _configured(_setting_str("nvidia_api_key")) and not _using_groq_mainline()
+
+
+def _primary_provider_slug() -> str:
+    if _using_groq_mainline():
+        return "groq"
+    if _using_nvidia_mainline():
+        return "nvidia"
+    return "openai"
+
+
+def _primary_provider_label() -> str:
+    if _using_groq_mainline():
+        return "Groq"
+    if _using_nvidia_mainline():
+        return "NVIDIA"
+    return "OpenAI"
+
+
+def _primary_supports_openai_reasoning_effort() -> bool:
+    return not (_using_groq_mainline() or _using_nvidia_mainline())
 
 
 async def _get_codex_oauth_token() -> str:
     """Return a refreshable Codex OAuth access token when configured."""
-    if not settings.use_codex_oauth or not settings.openai_oauth_client_id:
-        return settings.openai_access_token
+    if not _setting_bool("use_codex_oauth"):
+        return _setting_str("openai_access_token")
 
     from pathlib import Path
 
+    auth_file = Path(_setting_str("codex_auth_file", "~/.codex/auth.json")).expanduser()
+    client_id = _setting_str("openai_oauth_client_id")
+    if not _configured(client_id):
+        tokens = load_tokens(auth_file)
+        return tokens.access if tokens else _setting_str("openai_access_token")
+
     return await get_valid_access_token(
-        client_id=settings.openai_oauth_client_id,
-        auth_file=Path(settings.codex_auth_file).expanduser(),
-        token_url=settings.openai_oauth_token_url,
+        client_id=client_id,
+        auth_file=auth_file,
+        token_url=_setting_str("openai_oauth_token_url"),
     )
 
 
 def _get_openai_model() -> str:
+    if _using_groq_mainline():
+        return _setting_str("groq_model") or DEFAULT_GROQ_MODEL
     if _using_nvidia_mainline():
-        return settings.nvidia_model or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    return settings.openai_model or DEFAULT_OPENAI_MODEL
+        return _setting_str("nvidia_model") or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    return _setting_str("openai_model") or DEFAULT_OPENAI_MODEL
 
 
 def _get_openrouter_token() -> str:
-    return settings.openrouter_api_key
+    return _setting_str("openrouter_api_key")
 
 
 def _get_openrouter_model() -> str:
@@ -291,10 +357,11 @@ def _get_openrouter_model() -> str:
     If OPENROUTER_MODEL isn't set, derive from OPENAI_MODEL (common local-dev setup).
     """
 
-    if settings.openrouter_model:
-        return settings.openrouter_model
+    openrouter_model = _setting_str("openrouter_model")
+    if openrouter_model:
+        return openrouter_model
 
-    openai_model = _get_openai_model()
+    openai_model = _setting_str("openai_model") or DEFAULT_OPENAI_MODEL
     # If the user already provided a provider/model slug, keep it.
     if "/" in openai_model:
         return openai_model
@@ -303,25 +370,32 @@ def _get_openrouter_model() -> str:
 
 async def _get_openai_client() -> AsyncOpenAI:
     api_key: Any
-    if _using_nvidia_mainline():
-        api_key = settings.nvidia_api_key
-    elif settings.openai_api_key:
-        api_key = settings.openai_api_key
-    elif settings.use_codex_oauth:
+    if _using_groq_mainline():
+        api_key = _setting_str("groq_api_key")
+    elif _using_nvidia_mainline():
+        api_key = _setting_str("nvidia_api_key")
+    elif _configured(_setting_str("openai_api_key")):
+        api_key = _setting_str("openai_api_key")
+    elif _setting_bool("use_codex_oauth"):
         # The OpenAI SDK supports an async api_key provider for OAuth refresh.
         api_key = _get_codex_oauth_token
     else:
-        api_key = settings.openai_access_token
+        api_key = _setting_str("openai_access_token")
 
     kwargs: dict[str, Any] = {"api_key": api_key, "timeout": OPENAI_TIMEOUT_SECONDS}
-    if _using_nvidia_mainline():
-        kwargs["base_url"] = settings.nvidia_base_url
-    elif settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    if settings.openai_organization and not _using_nvidia_mainline():
-        kwargs["organization"] = settings.openai_organization
-    if settings.openai_project and not _using_nvidia_mainline():
-        kwargs["project"] = settings.openai_project
+    if _using_groq_mainline():
+        kwargs["base_url"] = _setting_str("groq_base_url", "https://api.groq.com/openai/v1")
+    elif _using_nvidia_mainline():
+        kwargs["base_url"] = _setting_str("nvidia_base_url")
+    elif _configured(_setting_str("openai_base_url")):
+        kwargs["base_url"] = _setting_str("openai_base_url")
+    if (
+        _configured(_setting_str("openai_organization"))
+        and _primary_supports_openai_reasoning_effort()
+    ):
+        kwargs["organization"] = _setting_str("openai_organization")
+    if _configured(_setting_str("openai_project")) and _primary_supports_openai_reasoning_effort():
+        kwargs["project"] = _setting_str("openai_project")
     return AsyncOpenAI(**kwargs)
 
 
@@ -353,14 +427,14 @@ def _sanitize_primary_content(content: str | None) -> str:
 
 def _get_openrouter_client() -> AsyncOpenAI:
     headers: dict[str, str] = {}
-    if settings.openrouter_http_referer:
-        headers["HTTP-Referer"] = settings.openrouter_http_referer
-    if settings.openrouter_app_title:
-        headers["X-OpenRouter-Title"] = settings.openrouter_app_title
+    if _configured(_setting_str("openrouter_http_referer")):
+        headers["HTTP-Referer"] = _setting_str("openrouter_http_referer")
+    if _configured(_setting_str("openrouter_app_title")):
+        headers["X-OpenRouter-Title"] = _setting_str("openrouter_app_title")
 
     kwargs: dict = {
         "api_key": _get_openrouter_token(),
-        "base_url": settings.openrouter_base_url,
+        "base_url": _setting_str("openrouter_base_url", "https://openrouter.ai/api/v1"),
         "timeout": OPENAI_TIMEOUT_SECONDS,
         "default_headers": headers or None,
     }
@@ -419,7 +493,7 @@ async def _call_openai(
     temperature: float = 0.1,
     provider_name: str,
 ) -> dict | None:
-    """Call Chat Completions via the official OpenAI SDK."""
+    """Call Chat Completions via the official OpenAI SDK-compatible client."""
     if not _has_openai_credentials():
         return None
 
@@ -452,10 +526,10 @@ async def _call_openai(
                         "messages": cast(Any, prepared_messages),
                         "temperature": temperature,
                         "max_completion_tokens": max_completion_tokens,
-                        "parallel_tool_calls": False,
                     }
-                    if not _using_nvidia_mainline():
+                    if _primary_supports_openai_reasoning_effort():
                         kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
+                        kwargs["parallel_tool_calls"] = False
                     if tools:
                         kwargs["tools"] = tools
                         kwargs["tool_choice"] = "auto"
@@ -467,7 +541,7 @@ async def _call_openai(
                     tool_calls = _message_to_tool_calls(message)
                     content = _sanitize_primary_content(message.content)
                     prompt_tokens, completion_tokens = _log_usage(
-                        "nvidia" if _using_nvidia_mainline() else "openai",
+                        _primary_provider_slug(),
                         response.usage,
                     )
 
@@ -519,7 +593,7 @@ async def _call_openai(
     if primary_result and (primary_result.get("content") or primary_result.get("tool_calls")):
         return primary_result
 
-    if not _using_nvidia_mainline() and primary_model != RATE_LIMIT_FALLBACK_OPENAI_MODEL:
+    if _primary_supports_openai_reasoning_effort() and primary_model != RATE_LIMIT_FALLBACK_OPENAI_MODEL:
         recent_failure = get_recent_provider_failure(prefixes=(provider_name,))
         if recent_failure and recent_failure.error_type == "RateLimitError":
             fallback_model = RATE_LIMIT_FALLBACK_OPENAI_MODEL
@@ -626,7 +700,7 @@ async def _call_openrouter(
                 delay = BASE_DELAY * (2**attempt)
                 logger.warning(
                     "%s transient error %s (attempt %d/%d), retrying in %.1fs",
-                    provider_name,
+        provider_name,
                     type(exc).__name__,
                     attempt + 1,
                     MAX_RETRIES,
@@ -694,7 +768,7 @@ async def call_llm(
         tools=tools,
         max_completion_tokens=4000,
         temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        openai_provider_name=f"{_primary_provider_label()}/{_get_openai_model()}",
         openrouter_provider_name=f"OpenRouter/{_get_openrouter_model()}",
     )
 
@@ -724,11 +798,9 @@ async def call_llm_stream(messages: list[dict]):
                     if text:
                         yield text
 
-    # Primary: OpenAI
+    # Primary: Groq / NVIDIA / OpenAI-compatible mainline
     if _has_openai_credentials():
-        provider_name = (
-            f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}"
-        )
+        provider_name = f"{_primary_provider_label()}/{_get_openai_model()}"
         breaker = _get_breaker(provider_name)
         if breaker.allow_request():
             try:
@@ -740,7 +812,7 @@ async def call_llm_stream(messages: list[dict]):
                     "max_completion_tokens": 2000,
                     "stream": True,
                 }
-                if not _using_nvidia_mainline():
+                if _primary_supports_openai_reasoning_effort():
                     kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
                 stream = await client.chat.completions.create(**kwargs)
                 async for chunk in stream:
@@ -759,7 +831,7 @@ async def call_llm_stream(messages: list[dict]):
                 return
             except Exception as exc:
                 breaker.record_failure()
-                logger.error("OpenAI streaming failed: %s: %s", type(exc).__name__, exc)
+                logger.error("%s streaming failed: %s: %s", provider_name, type(exc).__name__, exc)
         else:
             logger.error("Circuit breaker OPEN for %s — skipping stream", provider_name)
 
@@ -900,7 +972,7 @@ async def analyze_zoning(
         response_format={"type": "json_object"},
         max_completion_tokens=2000,
         temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        openai_provider_name=f"{_primary_provider_label()}/{_get_openai_model()}",
         openrouter_provider_name=f"OpenRouter/{_get_openrouter_model()}",
     )
     if not result or not result.get("content"):

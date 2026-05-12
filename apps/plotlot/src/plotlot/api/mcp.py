@@ -176,11 +176,11 @@ async def invoke_tool(
         zoning_code = payload.input.get("zoning_code")
         if not municipality or not zoning_code:
             raise HTTPException(status_code=422, detail="municipality and zoning_code are required")
-        result = await extract_rules(
+        rules_result = await extract_rules(
             ExtractRulesRequest(municipality=municipality, zoning_code=zoning_code),
             session,
         )
-        return {"status": "success", "tool": payload.name, "result": result.model_dump()}
+        return {"status": "success", "tool": payload.name, "result": rules_result.model_dump()}
 
     if payload.name == "plotlot.discover_open_data_layers":
         county = payload.input.get("county")
@@ -234,10 +234,10 @@ async def invoke_tool(
 
         raw = await _execute_municode_live_search(str(municipality), str(query))
         try:
-            result = json.loads(raw)
+            municode_result = json.loads(raw)
         except json.JSONDecodeError:
-            result = {"status": "error", "message": raw}
+            municode_result = {"status": "error", "message": raw}
 
-        return {"status": "success", "tool": payload.name, "result": result}
+        return {"status": "success", "tool": payload.name, "result": municode_result}
 
     raise HTTPException(status_code=404, detail=f"Unsupported MCP tool: {payload.name}")

@@ -1,21 +1,21 @@
-"""Building render endpoint — AI-generated architectural visualizations.
+"""Building render endpoint — local architectural visualizations.
 
-Uses Google Gemini image generation to produce photorealistic renderings
-from structured zoning/floor plan data, replacing the broken Three.js viewer.
+Uses deterministic server-local PNG generation to produce schematic renderings
+from structured zoning/floor plan data, replacing hosted image-generation APIs.
 Generates three views: front, aerial 3D, and side.
 """
 
-import asyncio
 import base64
 import hashlib
 import logging
+import random
+import struct
 import time
+import zlib
 from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-
-from plotlot.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
@@ -257,37 +257,136 @@ def build_architectural_prompt(req: BuildingRenderRequest, view: str = "front") 
 
 
 # ---------------------------------------------------------------------------
-# Gemini image generation
+# Local PNG generation
 # ---------------------------------------------------------------------------
 
 
 async def generate_building_image(prompt: str) -> str:
-    """Call Gemini image generation API, return base64 PNG."""
-    from google import genai
+    """Generate a deterministic local PNG and return it as base64."""
 
-    client = genai.Client(api_key=settings.google_api_key)
-    try:
-        response = await client.aio.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-            ),
-        )
-    except Exception as e:
-        logger.error("Gemini image generation API error: %s: %s", type(e).__name__, e)
-        raise ValueError(f"Gemini API error: {type(e).__name__}: {e}") from e
+    return base64.b64encode(_render_local_png(prompt)).decode("utf-8")
 
-    # Extract image from response
-    if response.candidates and len(response.candidates) > 0:
-        content = response.candidates[0].content
-        if content is not None and hasattr(content, "parts") and content.parts:
-            for part in content.parts:  # type: ignore[union-attr]
-                if part.inline_data is not None and part.inline_data.data:
-                    data: bytes = part.inline_data.data
-                    return base64.b64encode(data).decode("utf-8")
 
-    raise ValueError("Gemini response contained no image data")
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(data))
+        + kind
+        + data
+        + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    )
+
+
+def _encode_png(width: int, height: int, pixels: bytearray) -> bytes:
+    rows = []
+    stride = width * 3
+    for y in range(height):
+        rows.append(b"\x00" + bytes(pixels[y * stride : (y + 1) * stride]))
+    raw = b"".join(rows)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + _png_chunk(b"IDAT", zlib.compress(raw, level=6))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
+def _set_pixel(pixels: bytearray, width: int, x: int, y: int, color: tuple[int, int, int]) -> None:
+    if x < 0 or y < 0 or x >= width:
+        return
+    idx = (y * width + x) * 3
+    if idx < 0 or idx + 2 >= len(pixels):
+        return
+    pixels[idx : idx + 3] = bytes(color)
+
+
+def _rect(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int],
+) -> None:
+    for y in range(max(0, y0), min(height, y1)):
+        row_start = (y * width + max(0, x0)) * 3
+        row_end = (y * width + min(width, x1)) * 3
+        pixels[row_start:row_end] = bytes(color) * max(0, min(width, x1) - max(0, x0))
+
+
+def _render_local_png(prompt: str) -> bytes:
+    """Render a simple schematic building concept as a PNG."""
+
+    width, height = 1024, 576
+    seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+    pixels = bytearray(width * height * 3)
+
+    # Sky/ground gradient.
+    for y in range(height):
+        if y < 380:
+            t = y / 380
+            color = (
+                int(246 - 70 * t),
+                int(222 - 45 * t),
+                int(170 + 35 * t),
+            )
+        else:
+            t = (y - 380) / max(height - 380, 1)
+            color = (
+                int(86 - 25 * t),
+                int(128 - 20 * t),
+                int(82 - 18 * t),
+            )
+        _rect(pixels, width, height, 0, y, width, y + 1, color)
+
+    # Lot pad and building mass.
+    _rect(pixels, width, height, 120, 390, 904, 500, (198, 181, 149))
+    bx0 = 250 + rng.randint(-40, 40)
+    bx1 = 780 + rng.randint(-35, 35)
+    by0 = 180 + rng.randint(-25, 20)
+    by1 = 398
+    facade = rng.choice([(232, 220, 198), (214, 205, 188), (226, 218, 204)])
+    shadow = (
+        max(0, facade[0] - 38),
+        max(0, facade[1] - 38),
+        max(0, facade[2] - 38),
+    )
+    trim = (86, 74, 63)
+    roof = rng.choice([(149, 79, 54), (84, 72, 62), (105, 87, 66)])
+
+    if "aerial" in prompt.lower():
+        _rect(pixels, width, height, bx0 - 35, by0 + 35, bx1 - 35, by1 + 25, shadow)
+        _rect(pixels, width, height, bx0, by0, bx1, by1, facade)
+        _rect(pixels, width, height, bx0 - 20, by0 - 22, bx1 + 20, by0 + 12, roof)
+        for offset in range(0, bx1 - bx0, 72):
+            _rect(pixels, width, height, bx0 + offset + 12, by0 + 42, bx0 + offset + 44, by1 - 30, (113, 137, 148))
+    else:
+        _rect(pixels, width, height, bx0, by0, bx1, by1, facade)
+        _rect(pixels, width, height, bx0 - 28, by0 - 30, bx1 + 28, by0, roof)
+        _rect(pixels, width, height, bx0, by1 - 15, bx1, by1, trim)
+        floors = 3 if "multifamily" in prompt.lower() or "3 stories" in prompt.lower() else 2
+        cols = 7 if bx1 - bx0 > 480 else 5
+        for floor in range(floors):
+            wy = by0 + 38 + floor * max(48, (by1 - by0 - 75) // floors)
+            for col in range(cols):
+                wx = bx0 + 36 + col * ((bx1 - bx0 - 72) // max(cols - 1, 1))
+                _rect(pixels, width, height, wx, wy, wx + 38, wy + 30, (89, 124, 142))
+                _rect(pixels, width, height, wx + 4, wy + 4, wx + 34, wy + 26, (158, 188, 199))
+        _rect(pixels, width, height, (bx0 + bx1) // 2 - 28, by1 - 84, (bx0 + bx1) // 2 + 28, by1, (85, 67, 52))
+
+    # Simple palms/landscaping.
+    for x in (165, 850, 210, 810):
+        trunk_top = 280 + rng.randint(-30, 20)
+        _rect(pixels, width, height, x, trunk_top, x + 10, 455, (112, 74, 45))
+        for dx, dy in ((-38, 0), (-24, -18), (0, -28), (24, -18), (38, 0)):
+            _rect(pixels, width, height, x + dx, trunk_top + dy, x + dx + 44, trunk_top + dy + 10, (47, 106, 66))
+
+    # Drive/walkway.
+    _rect(pixels, width, height, width // 2 - 45, by1, width // 2 + 45, height, (188, 184, 174))
+    _rect(pixels, width, height, 0, 505, width, height, (70, 70, 68))
+    return _encode_png(width, height, pixels)
 
 
 _VIEWS = ["front", "aerial", "side"]
@@ -353,12 +452,7 @@ def build_concept_prompt(req: ConceptRenderRequest) -> str:
 
 @router.post("/building", response_model=BuildingRenderResponse)
 async def render_building(request: BuildingRenderRequest) -> BuildingRenderResponse:
-    """Generate AI architectural renderings (front, aerial, side) from zoning parameters."""
-    if not settings.google_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Building rendering unavailable — GOOGLE_API_KEY not configured",
-        )
+    """Generate local architectural renderings (front, aerial, side) from zoning parameters."""
 
     key = _cache_key(request)
 
@@ -380,18 +474,13 @@ async def render_building(request: BuildingRenderRequest) -> BuildingRenderRespo
     prompts = {view: build_architectural_prompt(request, view) for view in _VIEWS}
 
     t0 = time.monotonic()
-    try:
-        # Generate all 3 views concurrently
-        results = await asyncio.gather(
-            *(generate_building_image(prompts[view]) for view in _VIEWS),
-            return_exceptions=True,
-        )
-    except Exception as e:
-        logger.error("Gemini image generation failed: %s", e)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Image generation failed: {type(e).__name__}: {e}",
-        ) from e
+    results: list[str | Exception] = []
+    for view in _VIEWS:
+        try:
+            results.append(await generate_building_image(prompts[view]))
+        except Exception as e:
+            logger.warning("Local view '%s' generation failed: %s", view, e)
+            results.append(e)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
     # Build response, skipping any individual failures
@@ -437,12 +526,6 @@ async def render_building(request: BuildingRenderRequest) -> BuildingRenderRespo
 @router.post("/concept", response_model=ConceptRenderResponse)
 async def render_concept(request: ConceptRenderRequest) -> ConceptRenderResponse:
     """Generate a development concept visualization for a completed build-out."""
-    if not settings.google_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Concept rendering unavailable — GOOGLE_API_KEY not configured",
-        )
-
     cache_key = hashlib.md5(
         f"{request.address}|{request.property_type}|{request.max_units}".encode()
     ).hexdigest()

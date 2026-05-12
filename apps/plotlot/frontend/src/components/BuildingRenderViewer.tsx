@@ -87,7 +87,7 @@ export default function BuildingRenderViewer({
       renderCache.current.set(cacheKey, data);
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate AI rendering");
+      setError(err instanceof Error ? err.message : "Failed to generate local rendering");
     } finally {
       setLoading(false);
     }
@@ -148,7 +148,7 @@ export default function BuildingRenderViewer({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-sm text-[var(--text-muted)]">Generating AI architectural views...</span>
+            <span className="text-sm text-[var(--text-muted)]">Generating local architectural views...</span>
           </div>
         </div>
       ) : error ? (
@@ -171,7 +171,7 @@ export default function BuildingRenderViewer({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`data:image/png;base64,${currentImage.image_base64}`}
-            alt={`AI-rendered ${VIEW_LABELS[currentImage.view] || currentImage.view} view of ${propType.replace(/_/g, " ")} building`}
+            alt={`Rendered ${VIEW_LABELS[currentImage.view] || currentImage.view} view of ${propType.replace(/_/g, " ")} building`}
             className="w-full object-cover"
           />
         </div>
@@ -183,7 +183,7 @@ export default function BuildingRenderViewer({
           {currentImage
             ? `${VIEW_LABELS[currentImage.view]}${result?.cached ? " (cached)" : ` — ${views.length} views in ${((result?.generation_time_ms || 0) / 1000).toFixed(1)}s`}`
             : loading
-              ? "Loading AI views..."
+              ? "Loading local views..."
               : ""}
         </span>
         <span>{stories} stories, {totalWidth.toFixed(0)} x {totalDepth.toFixed(0)} ft footprint</span>

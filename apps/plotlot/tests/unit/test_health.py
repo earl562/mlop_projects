@@ -153,6 +153,39 @@ class TestHealthEndpoint:
             result["capability_details"]["agent_chat_ready"]["reason"] == "llm_credentials_present"
         )
 
+    async def test_health_reports_agent_chat_ready_with_groq_only(self):
+        """Health should report chat readiness when Groq credentials exist."""
+        from plotlot.api.main import _runtime_health, health
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        _runtime_health["startup_mode"] = "healthy"
+        _runtime_health["startup_warnings"] = []
+        with (
+            patch("plotlot.api.main.get_session", return_value=mock_session),
+            patch("mlflow.search_experiments", return_value=[]),
+            patch("plotlot.api.main.settings") as mock_settings,
+        ):
+            mock_settings.database_url = (
+                "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+            )
+            mock_settings.database_require_ssl = False
+            mock_settings.groq_api_key = "groq-key"
+            mock_settings.nvidia_api_key = ""
+            mock_settings.openai_api_key = ""
+            mock_settings.openai_access_token = ""
+            mock_settings.openrouter_api_key = ""
+            mock_settings.use_codex_oauth = False
+            result = await health()
+
+        assert result["capabilities"]["agent_chat_ready"] is True
+        assert (
+            result["capability_details"]["agent_chat_ready"]["reason"] == "llm_credentials_present"
+        )
+
     async def test_health_reports_agent_chat_ready_with_saved_codex_oauth(self):
         """Health should treat saved Codex OAuth tokens as chat-ready."""
         from plotlot.api.main import _runtime_health, health

@@ -3,7 +3,7 @@
 The agent has:
 - Rich personality with passion for helping people build their communities
 - Tools: search_zoning_ordinance (local DB), web_search (Jina.ai),
-         create_spreadsheet (Google Sheets), create_document (Google Docs)
+         create_spreadsheet (.xlsx), create_document (.docx)
 - Conversation memory persisted in-memory (upgradeable to DB)
 - Full context from any active ZoningReport
 
@@ -34,7 +34,7 @@ from plotlot.retrieval.bulk_search import (
     describe_search,
     _safe_filter,
 )
-from plotlot.retrieval.google_workspace import create_document, create_spreadsheet
+from plotlot.retrieval.local_artifacts import create_document, create_spreadsheet
 from plotlot.retrieval.llm import call_llm, get_recent_provider_failure
 from plotlot.retrieval.search import hybrid_search
 from plotlot.storage.chat_store import (
@@ -86,7 +86,7 @@ TOOL_STATUS_MESSAGES = {
     "search_properties": "Searching property records...",
     "filter_dataset": "Filtering results...",
     "get_dataset_info": "Checking dataset...",
-    "export_dataset": "Exporting to Google Sheets...",
+    "export_dataset": "Exporting to spreadsheet...",
 }
 
 
@@ -190,21 +190,52 @@ _sessions = SessionStore()
 AGENT_SYSTEM_PROMPT = get_active_prompt("chat_agent")
 
 
+def _configured_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _settings_string(name: str, default: str = "") -> str:
+    value = getattr(settings, name, default)
+    return value if isinstance(value, str) else default
+
+
+def _settings_bool(name: str, default: bool = False) -> bool:
+    value = getattr(settings, name, default)
+    return value if isinstance(value, bool) else default
+
+
 def _llm_unavailable_detail() -> str:
-    using_nvidia = bool(settings.nvidia_api_key)
-    if not (
-        settings.openai_access_token
-        or settings.openai_api_key
-        or settings.nvidia_api_key
-        or settings.openrouter_api_key
-        or (
-            settings.use_codex_oauth
-            and has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+    using_groq = _configured_string(_settings_string("groq_api_key"))
+    using_nvidia = _configured_string(_settings_string("nvidia_api_key")) and not using_groq
+    has_credentials = (
+        any(
+            _configured_string(value)
+            for value in (
+                _settings_string("groq_api_key"),
+                _settings_string("nvidia_api_key"),
+                _settings_string("openai_access_token"),
+                _settings_string("openai_api_key"),
+                _settings_string("openrouter_api_key"),
+            )
         )
-    ):
+        or (
+            _settings_bool("use_codex_oauth")
+            and has_saved_tokens(
+                Path(_settings_string("codex_auth_file", "~/.codex/auth.json")).expanduser()
+            )
+        )
+    )
+    if not has_credentials:
         return (
             "Chat is temporarily unavailable because no LLM credentials are configured. "
-            "Set NVIDIA_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, OPENROUTER_API_KEY, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+            "Set GROQ_API_KEY, NVIDIA_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, "
+            "OPENROUTER_API_KEY, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+        )
+    if using_groq:
+        return (
+            "Chat is temporarily unavailable because the configured Groq model returned no "
+            "usable response. Verify GROQ_MODEL/GROQ_BASE_URL or try NVIDIA_API_KEY, "
+            "Codex OAuth, or OpenRouter fallback."
         )
     if using_nvidia:
         return (
@@ -212,12 +243,14 @@ def _llm_unavailable_detail() -> str:
             "returned no usable response. Verify the model slug or try the fallback model."
         )
 
-    recent_failure = get_recent_provider_failure(prefixes=("OpenAI/", "NVIDIA/", "OpenRouter/"))
+    recent_failure = get_recent_provider_failure(
+        prefixes=("Groq/", "OpenAI/", "NVIDIA/", "OpenRouter/")
+    )
     if recent_failure and recent_failure.error_type == "RateLimitError":
         return (
             "Chat is temporarily unavailable because the LLM provider is rate-limited. "
-            "Try again shortly, or configure an OpenRouter fallback (OPENROUTER_API_KEY), "
-            "or switch to a smaller OpenAI model (OPENAI_MODEL=gpt-4.1-mini)."
+            "Try again shortly, configure an OpenRouter fallback (OPENROUTER_API_KEY), "
+            "or switch to a smaller provider model."
         )
     if recent_failure and recent_failure.error_type in {"APITimeoutError", "APIConnectionError"}:
         return (
@@ -471,10 +504,10 @@ CHAT_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "create_spreadsheet",
             "description": (
-                "Create a Google Sheets spreadsheet with structured data. "
+                "Create a local .xlsx spreadsheet with structured data. "
                 "Use this when the user asks to put data into a spreadsheet, "
                 "export results, or create a table they can share or download. "
-                "Returns a shareable link to the new spreadsheet."
+                "Returns a download link to the generated workbook."
             ),
             "parameters": {
                 "type": "object",
@@ -506,10 +539,10 @@ CHAT_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "create_document",
             "description": (
-                "Create a Google Docs document with text content. "
+                "Create a local .docx document with text content. "
                 "Use this when the user asks for a written report, summary document, "
                 "analysis writeup, or any formatted text output they can share or download. "
-                "Returns a shareable link to the new document."
+                "Returns a download link to the generated document."
             ),
             "parameters": {
                 "type": "object",
@@ -716,7 +749,7 @@ CHAT_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "export_dataset",
             "description": (
-                "Export the current search results to a Google Spreadsheet. "
+                "Export the current search results to a local .xlsx spreadsheet. "
                 "Automatically formats all records with appropriate headers. "
                 "Use after search_properties or filter_dataset."
             ),
@@ -1040,9 +1073,13 @@ _DIRECT_TOOL_ARG_RE = re.compile(r"^\s*-\s*(?P<key>[a-zA-Z_][\w]*)\s*:\s*(?P<val
 def _parse_direct_tool_value(value: str) -> str | float | int | bool | None:
     stripped = value.strip().rstrip(",")
     try:
-        return json.loads(stripped)
+        parsed = json.loads(stripped)
     except json.JSONDecodeError:
         pass
+    else:
+        if isinstance(parsed, str | float | int | bool) or parsed is None:
+            return parsed
+        return stripped.strip("\"'")
 
     if re.fullmatch(r"-?\d+", stripped):
         return int(stripped)
@@ -1128,14 +1165,15 @@ def _direct_tool_fallback_summary(tool_name: str, args: dict[str, Any], result: 
         return "\n".join(lines)
 
     if tool_name == "search_municode_live" and isinstance(payload, dict):
-        results = payload.get("results") if isinstance(payload.get("results"), list) else []
+        raw_results = payload.get("results")
+        results: list[Any] = raw_results if isinstance(raw_results, list) else []
         lines = [
             f"I searched live Municode for {args.get('municipality', 'the jurisdiction')} using `{args.get('query', '')}`."
         ]
         for row in results[:3]:
             if isinstance(row, dict):
-                heading = row.get("heading") or "Matching section"
-                snippet = row.get("snippet") or ""
+                heading = str(row.get("heading") or "Matching section")
+                snippet = str(row.get("snippet") or "")
                 lines.append(f"- {heading}: {snippet[:220]}")
         if len(lines) == 1:
             lines.append("No matching section snippets were returned.")
@@ -1428,16 +1466,22 @@ async def _execute_web_search(query: str) -> str:
 
 
 async def _execute_create_spreadsheet(title: str, headers: list[str], rows: list[list[str]]) -> str:
-    """Create a Google Sheets spreadsheet with data."""
+    """Create a local .xlsx spreadsheet with data."""
     try:
         result = await create_spreadsheet(title, headers, rows)
         return json.dumps(
             {
                 "status": "success",
-                "spreadsheet_url": result.spreadsheet_url,
+                "artifact_url": result.artifact_url,
+                "filename": result.filename,
+                "content_type": result.content_type,
+                "size_bytes": result.size_bytes,
                 "title": result.title,
                 "row_count": len(rows),
-                "message": f"Created spreadsheet '{result.title}' with {len(rows)} rows",
+                "message": (
+                    f"Created spreadsheet '{result.title}' with {len(rows)} rows. "
+                    f"Download it at {result.artifact_url}"
+                ),
             }
         )
     except Exception as e:
@@ -1446,15 +1490,18 @@ async def _execute_create_spreadsheet(title: str, headers: list[str], rows: list
 
 
 async def _execute_create_document(title: str, content: str) -> str:
-    """Create a Google Docs document with content."""
+    """Create a local .docx document with content."""
     try:
         result = await create_document(title, content)
         return json.dumps(
             {
                 "status": "success",
-                "document_url": result.document_url,
+                "artifact_url": result.artifact_url,
+                "filename": result.filename,
+                "content_type": result.content_type,
+                "size_bytes": result.size_bytes,
                 "title": result.title,
-                "message": f"Created document '{result.title}'",
+                "message": f"Created document '{result.title}'. Download it at {result.artifact_url}",
             }
         )
     except Exception as e:
@@ -1525,25 +1572,8 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
     context = DealContext(**{k: v for k, v in ctx_data.items() if v})
 
     try:
-        from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
-
         registry = ClauseRegistry.from_directory()
         doc = assemble_document(config, context, registry)
-
-        if isinstance(doc, SheetsProFormaResult):
-            return json.dumps(
-                {
-                    "status": "success",
-                    "document_type": doc_type_str,
-                    "deal_type": deal_type_str,
-                    "spreadsheet_url": doc.spreadsheet_url,
-                    "title": doc.title,
-                    "message": (
-                        f"Created Google Sheets pro forma: {doc.title}. "
-                        f"View it here: {doc.spreadsheet_url}"
-                    ),
-                }
-            )
 
         # Store the generated doc bytes in session for download
         if session:
@@ -1711,7 +1741,7 @@ async def _execute_get_dataset_info(session_id: str) -> str:
 
 
 async def _execute_export_dataset(session_id: str, args: dict) -> str:
-    """Export the in-session dataset to a Google Spreadsheet."""
+    """Export the in-session dataset to a local .xlsx spreadsheet."""
     dataset = _sessions.get_dataset(session_id)
     if not dataset or not dataset.records:
         return json.dumps(
@@ -1729,10 +1759,16 @@ async def _execute_export_dataset(session_id: str, args: dict) -> str:
         return json.dumps(
             {
                 "status": "success",
-                "spreadsheet_url": result.spreadsheet_url,
+                "artifact_url": result.artifact_url,
+                "filename": result.filename,
+                "content_type": result.content_type,
+                "size_bytes": result.size_bytes,
                 "title": result.title,
                 "row_count": len(rows),
-                "message": f"Exported {len(rows)} properties to '{result.title}'",
+                "message": (
+                    f"Exported {len(rows)} properties to '{result.title}'. "
+                    f"Download it at {result.artifact_url}"
+                ),
             }
         )
     except Exception as e:

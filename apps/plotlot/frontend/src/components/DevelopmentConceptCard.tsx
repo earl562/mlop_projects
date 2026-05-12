@@ -95,7 +95,7 @@ export default function DevelopmentConceptCard({
                   Development Concept
                 </div>
                 <div className="text-xs text-[var(--text-muted)]">
-                  AI render of completed {maxUnits}-unit {typeLabel} · Nano Banana · ~10s
+                  Local concept of completed {maxUnits}-unit {typeLabel}
                 </div>
               </div>
             </div>
@@ -146,13 +146,13 @@ export default function DevelopmentConceptCard({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`data:image/png;base64,${imageBase64}`}
-                alt={`AI concept render of ${maxUnits}-unit ${typeLabel} at ${address}`}
+                alt={`Concept render of ${maxUnits}-unit ${typeLabel} at ${address}`}
                 className="h-auto w-full object-cover"
               />
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-4">
                 <p className="text-xs font-semibold text-white">{address}</p>
                 <p className="text-xs text-white/70">
-                  {maxUnits} units · {zoningDistrict} · AI concept · {municipality}
+                  {maxUnits} units · {zoningDistrict} · local concept · {municipality}
                 </p>
               </div>
             </div>

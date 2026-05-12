@@ -56,13 +56,17 @@ test.describe("Plotlot marketing and workspace surfaces", () => {
 
     await expect(page.getByRole("heading", { name: "Analyze any property in the US" })).toBeVisible();
     await expect(page.getByPlaceholder("Enter a property address...")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Lookup" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Agent" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "New analysis" })).toBeVisible();
+    await expect(page.getByText("Houston, TX")).toBeVisible();
+    await expect(page.getByText("Atlanta, GA")).toBeVisible();
+    await expect(page.getByText("Miami Gardens, FL")).toBeVisible();
     await expect(page.getByText("PlotLot analyzes zoning, density, comps & pro forma for any US property")).toBeVisible();
-    await expect(page.getByTestId("workspace-status-card")).toBeVisible();
-    await expect(page.getByTestId("workspace-plan-card")).toBeVisible();
-    await expect(page.getByTestId("workspace-evidence-card")).toBeVisible();
-    await expect(page.getByTestId("workspace-report-card")).toBeVisible();
+    await expect(page.getByTestId("workspace-status-card")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-plan-card")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-evidence-card")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-report-card")).toHaveCount(0);
   });
 
   test("primary nav anchors target the live landing-page sections", async ({ page }) => {

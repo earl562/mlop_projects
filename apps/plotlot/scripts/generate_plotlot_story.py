@@ -320,7 +320,7 @@ def build_document():
 
     add_subsection(doc, "Why Tool Calling Instead of JSON Output?")
 
-    add_body(doc, "Two reasons. First, tool calling gives you schema validation for free \u2014 if the model returns a string where a float should be, the framework catches it before my code ever sees it. Second, it's model-agnostic. I run Kimi K2.5 on NVIDIA NIM as primary, DeepSeek V3.2 as fallback. Both support the same tool calling interface.")
+    add_body(doc, "Two reasons. First, tool calling gives you schema validation for free \u2014 if the model returns a string where a float should be, the framework catches it before my code ever sees it. Second, it's model-agnostic. The app can run Groq, NVIDIA NIM, OpenAI/Codex OAuth, or OpenRouter behind the same OpenAI-compatible tool-calling interface.")
 
     add_subsection(doc, "The Calculator: Where Math Happens")
 

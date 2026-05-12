@@ -11,10 +11,6 @@ import logging
 import operator
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
 
 import jinja2
 
@@ -265,8 +261,7 @@ def assemble_document(
     """Assemble a complete file-based document from clauses.
 
     This is intentionally **synchronous** for docx/xlsx generation so CLI/tests
-    don't need an event loop. For Google Sheets output, use
-    ``assemble_document_async``.
+    don't need an event loop or hosted office-suite credentials.
     """
     if not context.generated_at:
         context.generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -281,31 +276,4 @@ def assemble_document(
         from plotlot.clauses.renderers.xlsx_renderer import render_xlsx
 
         return render_xlsx(rendered, config, context)
-    if config.output_format == "google_sheets":
-        raise ValueError(
-            "Unsupported output format: google_sheets (requires async). "
-            "Use assemble_document_async()."
-        )
     raise ValueError(f"Unsupported output format: {config.output_format}")
-
-
-async def assemble_document_async(
-    config: AssemblyConfig,
-    context: DealContext,
-    registry: ClauseRegistry,
-) -> GeneratedDocument | SheetsProFormaResult:
-    """Assemble a document from clauses with async support.
-
-    Supports ``google_sheets`` by awaiting the Sheets renderer; routes docx/xlsx
-    through ``assemble_document``.
-    """
-    if not context.generated_at:
-        context.generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    if config.output_format == "google_sheets":
-        rendered = assemble_clauses(config, context, registry)
-        from plotlot.clauses.renderers.sheets_renderer import render_google_sheets
-
-        return await render_google_sheets(rendered, config, context)
-
-    return assemble_document(config, context, registry)

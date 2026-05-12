@@ -12,14 +12,14 @@ import io
 import logging
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from plotlot.api.schemas import (
     DocumentGenerateRequest,
     DocumentPreviewResponse,
     DocumentTemplateInfo,
 )
-from plotlot.clauses.engine import assemble_clauses, assemble_document, assemble_document_async
+from plotlot.clauses.engine import assemble_clauses, assemble_document
 from plotlot.clauses.loader import ClauseRegistry
 from plotlot.clauses.schema import (
     AssemblyConfig,
@@ -293,23 +293,9 @@ async def generate_document(req: DocumentGenerateRequest):
     )
 
     try:
-        if output_format == "google_sheets":
-            doc = await assemble_document_async(config, context, registry)
-        else:
-            doc = assemble_document(config, context, registry)
+        doc = assemble_document(config, context, registry)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-
-    from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
-
-    if isinstance(doc, SheetsProFormaResult):
-        return JSONResponse(
-            content={
-                "spreadsheet_id": doc.spreadsheet_id,
-                "spreadsheet_url": doc.spreadsheet_url,
-                "title": doc.title,
-            }
-        )
 
     return StreamingResponse(
         io.BytesIO(doc.data),

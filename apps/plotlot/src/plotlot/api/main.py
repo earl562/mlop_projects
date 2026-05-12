@@ -11,7 +11,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlparse
 
 import uvicorn
@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from plotlot.api.auth import get_current_user
+from plotlot.api.artifacts import router as artifacts_router
 from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
 from plotlot.api.chat import router as chat_router
 from plotlot.api.geometry import router as geometry_router
@@ -49,6 +50,22 @@ _runtime_health: _RuntimeHealth = {
     "startup_mode": "starting",
     "startup_warnings": [],
 }
+
+
+def _configured_string(value: object) -> bool:
+    """Return true only for explicit non-empty string settings."""
+
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _settings_string(config: object, name: str, default: str = "") -> str:
+    value = getattr(config, name, default)
+    return value if isinstance(value, str) else default
+
+
+def _settings_bool(config: object, name: str, default: bool = False) -> bool:
+    value = getattr(config, name, default)
+    return value if isinstance(value, bool) else default
 
 
 @asynccontextmanager
@@ -191,6 +208,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(artifacts_router)
 app.include_router(billing_router)
 app.include_router(chat_router)
 app.include_router(portfolio_router)
@@ -208,7 +226,7 @@ app.include_router(documents_router)
 
 
 # ---------------------------------------------------------------------------
-# Address autocomplete (Geocodio-backed, replaces Google Places dependency)
+# Address autocomplete (Geocodio-backed)
 # ---------------------------------------------------------------------------
 
 
@@ -302,14 +320,24 @@ async def health():
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     database_ready = checks.get("database") == "ok"
-    agent_chat_ready = bool(
-        settings.openai_access_token
-        or settings.openai_api_key
-        or settings.nvidia_api_key
-        or settings.openrouter_api_key
+    agent_chat_ready = (
+        any(
+            _configured_string(value)
+            for value in (
+                _settings_string(settings, "groq_api_key"),
+                _settings_string(settings, "nvidia_api_key"),
+                _settings_string(settings, "openai_access_token"),
+                _settings_string(settings, "openai_api_key"),
+                _settings_string(settings, "openrouter_api_key"),
+            )
+        )
         or (
-            settings.use_codex_oauth
-            and has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+            _settings_bool(settings, "use_codex_oauth")
+            and has_saved_tokens(
+                Path(
+                    _settings_string(settings, "codex_auth_file", "~/.codex/auth.json")
+                ).expanduser()
+            )
         )
     )
     capability_details = {
@@ -396,29 +424,77 @@ async def debug_traces(limit: int = 10):
 
 @app.get("/debug/llm")
 async def debug_llm():
-    """LLM connectivity test for OpenAI (primary) + OpenRouter (fallback)."""
+    """LLM connectivity test for Groq/NVIDIA/OpenAI primary + OpenRouter fallback."""
     import time
     from openai import AsyncOpenAI
     from plotlot.config import settings as _s
 
     diag: dict = {"providers": {}}
 
-    using_nvidia = bool(_s.nvidia_api_key)
-    token = _s.nvidia_api_key if using_nvidia else (_s.openai_access_token or _s.openai_api_key)
+    groq_api_key = _settings_string(_s, "groq_api_key")
+    nvidia_api_key = _settings_string(_s, "nvidia_api_key")
+    openai_api_key = _settings_string(_s, "openai_api_key")
+    openai_access_token = _settings_string(_s, "openai_access_token")
+    openrouter_api_key = _settings_string(_s, "openrouter_api_key")
+
+    using_groq = _configured_string(groq_api_key)
+    using_nvidia = _configured_string(nvidia_api_key) and not using_groq
+    provider_key = "groq" if using_groq else ("nvidia" if using_nvidia else "openai")
+    token = (
+        groq_api_key
+        if using_groq
+        else (nvidia_api_key if using_nvidia else openai_access_token or openai_api_key)
+    )
+    if not token and not (using_groq or using_nvidia) and _settings_bool(_s, "use_codex_oauth"):
+        from plotlot.oauth.openai_auth import get_valid_access_token, load_tokens
+
+        auth_file = Path(
+            _settings_string(_s, "codex_auth_file", "~/.codex/auth.json")
+        ).expanduser()
+        client_id = _settings_string(_s, "openai_oauth_client_id")
+        if client_id:
+            token = await get_valid_access_token(
+                client_id=client_id,
+                auth_file=auth_file,
+                token_url=_settings_string(_s, "openai_oauth_token_url"),
+            )
+        else:
+            saved_tokens = load_tokens(auth_file)
+            token = saved_tokens.access if saved_tokens else ""
     if token:
         t0 = time.monotonic()
         try:
-            client_kwargs = {"api_key": token, "timeout": 15.0}
-            base_url = _s.nvidia_base_url if using_nvidia else _s.openai_base_url
+            client_kwargs: dict[str, Any] = {"api_key": token, "timeout": 15.0}
+            base_url = (
+                _settings_string(_s, "groq_base_url", "https://api.groq.com/openai/v1")
+                if using_groq
+                else (
+                    _settings_string(_s, "nvidia_base_url")
+                    if using_nvidia
+                    else _settings_string(_s, "openai_base_url")
+                )
+            )
             if base_url:
                 client_kwargs["base_url"] = base_url
-            if _s.openai_organization and not using_nvidia:
-                client_kwargs["organization"] = _s.openai_organization
-            if _s.openai_project and not using_nvidia:
-                client_kwargs["project"] = _s.openai_project
+            if not (using_groq or using_nvidia):
+                openai_organization = _settings_string(_s, "openai_organization")
+                openai_project = _settings_string(_s, "openai_project")
+                if openai_organization:
+                    client_kwargs["organization"] = openai_organization
+                if openai_project:
+                    client_kwargs["project"] = openai_project
             client = AsyncOpenAI(**client_kwargs)
+            model = (
+                _settings_string(_s, "groq_model", "llama-3.3-70b-versatile")
+                if using_groq
+                else (
+                    _settings_string(_s, "nvidia_model")
+                    if using_nvidia
+                    else (_settings_string(_s, "openai_model") or "gpt-4.1")
+                )
+            )
             kwargs = {
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": model,
                 "messages": (
                     [
                         {"role": "system", "content": "/no_think"},
@@ -430,50 +506,70 @@ async def debug_llm():
                 "max_completion_tokens": 8,
                 "temperature": 0,
             }
-            if not using_nvidia:
-                kwargs["reasoning_effort"] = _s.openai_reasoning_effort
+            if not (using_groq or using_nvidia):
+                kwargs["reasoning_effort"] = _settings_string(
+                    _s,
+                    "openai_reasoning_effort",
+                    "medium",
+                )
             resp = await client.chat.completions.create(**kwargs)
             elapsed = round(time.monotonic() - t0, 2)
             text = resp.choices[0].message.content or ""
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider_key] = {
                 "status": "ok",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": model,
                 "base_url": base_url,
                 "latency_s": elapsed,
                 "response": text[:100],
             }
         except Exception as e:
             elapsed = round(time.monotonic() - t0, 2)
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider_key] = {
                 "status": "error",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": (
+                    _settings_string(_s, "groq_model", "llama-3.3-70b-versatile")
+                    if using_groq
+                    else (
+                        _settings_string(_s, "nvidia_model")
+                        if using_nvidia
+                        else (_settings_string(_s, "openai_model") or "gpt-4.1")
+                    )
+                ),
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }
     else:
-        diag["providers"]["nvidia" if using_nvidia else "openai"] = {"status": "no_credentials"}
+        diag["providers"][provider_key] = {"status": "no_credentials"}
 
     # --- OpenRouter (fallback) ---
-    if _s.openrouter_api_key:
+    if openrouter_api_key:
         t0 = time.monotonic()
         try:
             headers: dict[str, str] = {}
-            if _s.openrouter_http_referer:
-                headers["HTTP-Referer"] = _s.openrouter_http_referer
-            if _s.openrouter_app_title:
-                headers["X-OpenRouter-Title"] = _s.openrouter_app_title
+            openrouter_http_referer = _settings_string(_s, "openrouter_http_referer")
+            openrouter_app_title = _settings_string(_s, "openrouter_app_title")
+            if openrouter_http_referer:
+                headers["HTTP-Referer"] = openrouter_http_referer
+            if openrouter_app_title:
+                headers["X-OpenRouter-Title"] = openrouter_app_title
 
             # If OPENROUTER_MODEL isn't set, derive from OPENAI_MODEL.
-            if _s.openrouter_model:
-                model = _s.openrouter_model
-            elif _s.openai_model and "/" not in _s.openai_model:
-                model = f"openai/{_s.openai_model}"
+            openrouter_model = _settings_string(_s, "openrouter_model")
+            openai_model = _settings_string(_s, "openai_model")
+            if openrouter_model:
+                model = openrouter_model
+            elif openai_model and "/" not in openai_model:
+                model = f"openai/{openai_model}"
             else:
-                model = _s.openai_model or "openai/gpt-4.1"
+                model = openai_model or "openai/gpt-4.1"
 
             client = AsyncOpenAI(
-                api_key=_s.openrouter_api_key,
-                base_url=_s.openrouter_base_url,
+                api_key=openrouter_api_key,
+                base_url=_settings_string(
+                    _s,
+                    "openrouter_base_url",
+                    "https://openrouter.ai/api/v1",
+                ),
                 timeout=15.0,
                 default_headers=headers or None,
             )
@@ -488,7 +584,11 @@ async def debug_llm():
             diag["providers"]["openrouter"] = {
                 "status": "ok",
                 "model": model,
-                "base_url": _s.openrouter_base_url,
+                "base_url": _settings_string(
+                    _s,
+                    "openrouter_base_url",
+                    "https://openrouter.ai/api/v1",
+                ),
                 "latency_s": elapsed,
                 "response": text[:100],
             }
@@ -496,7 +596,7 @@ async def debug_llm():
             elapsed = round(time.monotonic() - t0, 2)
             diag["providers"]["openrouter"] = {
                 "status": "error",
-                "model": _s.openrouter_model or "(derived)",
+                "model": _settings_string(_s, "openrouter_model") or "(derived)",
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }

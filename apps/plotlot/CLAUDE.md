@@ -22,7 +22,7 @@ PlotLot v2 is an AI-powered land deal intelligence platform. Core flow:
 | **Backend** | FastAPI + Python 3.12+ (async-first, Pydantic everywhere) |
 | **Database** | Neon PostgreSQL + pgvector (hybrid search, RRF fusion) |
 | **Frontend** | Next.js 16 + React 19 + Tailwind CSS 4 (Vercel) |
-| **LLM** | Claude Sonnet 4.6 → Gemini 2.5 Flash → NVIDIA Llama 3.3 70B → Kimi K2.5 |
+| **LLM** | Groq → NVIDIA NIM → OpenAI/Codex OAuth → OpenRouter fallback |
 | **Embeddings** | NVIDIA NIM (1024d) |
 | **Observability** | MLflow tracing → Neon PostgreSQL |
 | **Property Data** | ArcGIS Hub (universal) + hardcoded county providers |
@@ -106,12 +106,14 @@ uv run plotlot-ingest --municipality "City Name"            # Ingest
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | Neon PostgreSQL connection string |
-| `NVIDIA_API_KEY` | Yes | NVIDIA NIM API |
+| `GROQ_API_KEY` | Preferred | Groq OpenAI-compatible LLM API |
+| `NVIDIA_API_KEY` | Fallback | NVIDIA NIM API |
+| `OPENAI_API_KEY` / `OPENAI_ACCESS_TOKEN` | Fallback | OpenAI-compatible direct key or bearer token |
+| `PLOTLOT_USE_CODEX_OAUTH` | Local fallback | Use saved local Codex OAuth tokens |
+| `OPENROUTER_API_KEY` | Optional | OpenRouter fallback LLM provider |
 | `GEOCODIO_API_KEY` | Yes | Geocodio geocoding |
-| `GOOGLE_MAPS_API_KEY` | Yes | Google Maps (frontend) |
 | `NEXT_PUBLIC_API_URL` | Yes | Backend API URL |
 | `SENTRY_DSN` | No | Sentry error tracking |
-| `KIMI_API_KEY` | No | Kimi K2.5 fallback LLM |
 
 ## Deployment
 
@@ -137,7 +139,7 @@ uv run plotlot-ingest --municipality "City Name"            # Ingest
 3. Track everything in MLflow.
 4. Constraints beat capabilities.
 5. Every production failure → regression test.
-6. Use Claude Sonnet for email generation (global config).
+6. Use configured non-Google LLM providers for generated content.
 7. No `print()` in library code.
 8. Pydantic everywhere. No raw dicts across function boundaries.
 9. Async-first for I/O.

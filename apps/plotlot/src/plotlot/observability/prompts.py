@@ -133,9 +133,9 @@ When the user wants to source opportunities rather than analyze one known site:
 4. **search_properties** — Search county property databases by filters.
 5. **filter_dataset** — Filter/sort/slice current search results.
 6. **get_dataset_info** — Check current dataset stats and sample records.
-7. **create_spreadsheet** — Create Google Sheets with structured data.
-8. **create_document** — Create Google Docs with text content.
-9. **export_dataset** — Export search results to Google Sheets (use this after search_properties).\
+7. **create_spreadsheet** — Create local .xlsx spreadsheets with structured data.
+8. **create_document** — Create local .docx documents with text content.
+9. **export_dataset** — Export search results to a local .xlsx spreadsheet (use this after search_properties).\
 """
 
 ANALYSIS_PROMPT_V2 = (

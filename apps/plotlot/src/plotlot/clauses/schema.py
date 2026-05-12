@@ -271,7 +271,7 @@ class AssemblyConfig(BaseModel):
     state_code: str = "FL"
     output_format: str = Field(
         default="docx",
-        description="Output format: 'docx', 'pdf', 'xlsx', 'google_sheets'",
+        description="Output format: 'docx', 'pdf', 'xlsx'",
     )
     include_plotlot_branding: bool = True
     exclude_clause_ids: list[str] = Field(default_factory=list)

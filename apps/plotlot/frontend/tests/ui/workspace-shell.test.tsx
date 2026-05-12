@@ -150,14 +150,25 @@ beforeEach(() => {
 import WorkspacePage from "../../src/app/workspace/page";
 
 describe("Workspace shell", () => {
-  it("shows the workspace rail on first entry", () => {
+  it("shows the current address-first lookup welcome shell on first entry", () => {
     render(<WorkspacePage />);
 
     expect(screen.getByText("Analyze any property in the US")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-status-card")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-plan-card")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-evidence-card")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-report-card")).toBeInTheDocument();
-    expect(screen.getByText("Lookup workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("lookup-input")).toHaveAttribute(
+      "placeholder",
+      "Enter a property address...",
+    );
+    expect(screen.getByRole("button", { name: "Lookup" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agent" })).toBeInTheDocument();
+    expect(screen.getByTestId("send-button")).toBeDisabled();
+    expect(screen.getByTestId("mock-capability-chips")).toBeInTheDocument();
+    expect(
+      screen.getByText("PlotLot analyzes zoning, density, comps & pro forma for any US property"),
+    ).toBeInTheDocument();
+
+    expect(screen.queryByTestId("workspace-status-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-plan-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-evidence-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-report-card")).not.toBeInTheDocument();
   });
 });
