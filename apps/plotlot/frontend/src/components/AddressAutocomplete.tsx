@@ -136,7 +136,7 @@ export default function AddressAutocomplete({
         onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder-stone-400 outline-none"
+        className="w-full bg-transparent text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none sm:text-[17px]"
         autoComplete="off"
         aria-label={placeholder || "Enter an address"}
         data-testid="lookup-input"
@@ -144,10 +144,10 @@ export default function AddressAutocomplete({
       {/* Loading indicator */}
       {isSearching && !showDropdown && (
         <div
-          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
           data-testid="lookup-suggestions-loading"
         >
-          <div className="flex items-center gap-2 px-3 py-3 text-xs text-stone-500">
+          <div className="flex items-center gap-2 px-4 py-3.5 text-sm text-[var(--text-muted)]">
             <svg
               className="h-3.5 w-3.5 animate-spin"
               viewBox="0 0 24 24"
@@ -173,7 +173,7 @@ export default function AddressAutocomplete({
       )}
       {showDropdown && suggestions.length > 0 && (
         <div
-          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
           data-testid="lookup-suggestions"
         >
           {suggestions.map((s, index) => (
@@ -181,7 +181,7 @@ export default function AddressAutocomplete({
               key={s.id}
               onClick={() => handleSelect(s)}
               data-testid={`lookup-suggestion-${index}`}
-              className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors ${
+              className={`flex w-full items-center gap-3 px-4 py-3.5 text-left text-base transition-colors ${
                 index === selectedIndex
                   ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
                   : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]"
@@ -199,7 +199,7 @@ export default function AddressAutocomplete({
               </svg>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{s.mainText}</div>
-                <div className="truncate text-xs text-stone-500">
+                <div className="truncate text-sm text-[var(--text-muted)]">
                   {s.secondaryText}
                 </div>
               </div>

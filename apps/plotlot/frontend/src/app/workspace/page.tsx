@@ -6,16 +6,10 @@ import { staggerContainer, staggerItem, fadeUp, springGentle } from "@/lib/motio
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ZoningReport from "@/components/ZoningReport";
-import TabbedReport from "@/components/TabbedReport";
-import DealTypeSelector from "@/components/DealTypeSelector";
-import type { DealType } from "@/components/DealTypeSelector";
-import PipelineApproval from "@/components/PipelineApproval";
 import AnalysisStream from "@/components/AnalysisStream";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import ModeToggle from "@/components/ModeToggle";
 import type { AppMode } from "@/components/ModeToggle";
-import CapabilityChips from "@/components/CapabilityChips";
-import ToolCards from "@/components/ToolCards";
 import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import InputBar from "@/components/InputBar";
@@ -129,10 +123,7 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentReport, setCurrentReport] = useState<ZoningReportData | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  // Lookup mode: deal type flow
-  const [pendingAddress, setPendingAddress] = useState<string | null>(null);
-  const [selectedDealType, setSelectedDealType] = useState<DealType | null>(null);
-  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  // Lookup mode: direct address analysis
   const [docCanvasOpen, setDocCanvasOpen] = useState(false);
   const [contextualSuggestions, setContextualSuggestions] = useState<string[]>([]);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -215,9 +206,6 @@ export default function Home() {
 
   // Fix 3: Mode switch — clear lookup-mode state
   useEffect(() => {
-    setPendingAddress(null);
-    setSelectedDealType(null);
-    setAwaitingApproval(false);
     setContextualSuggestions([]);
   }, [mode]);
 
@@ -319,9 +307,6 @@ export default function Home() {
       setLocalSessionId(id);
       localSessionIdRef.current = id;
       setInput("");
-      setPendingAddress(null);
-      setSelectedDealType(null);
-      setAwaitingApproval(false);
       setIsProcessing(false);
     };
     window.addEventListener("plotlot:session-selected", handler);
@@ -359,7 +344,7 @@ export default function Home() {
         await streamAnalysis(
           {
             address,
-            dealType: selectedDealType || "land_deal",
+            dealType: "land_deal",
             skipSteps,
           },
           (status) => {
@@ -451,7 +436,7 @@ export default function Home() {
         });
       }
     },
-    [addMessage, updateMessage, selectedDealType, mode],
+    [addMessage, updateMessage, mode],
   );
 
   // Send a chat message
@@ -474,11 +459,10 @@ export default function Home() {
 
       addMessage({ role: "user", content: text.trim() });
 
-      // Lookup mode: address → deal type selector → pipeline
+      // Lookup mode: address → analysis pipeline
       if (mode === "lookup" && address) {
-        setPendingAddress(address);
-        setSelectedDealType(null);
         setCurrentReport(null);
+        await runAnalysis(address);
         setIsProcessing(false);
         return;
       }
@@ -694,38 +678,6 @@ export default function Home() {
 
   const hasReport = messages.some((m) => m.report);
 
-  // Handle deal type selection in lookup mode — show pipeline approval
-  const handleDealTypeSelect = useCallback(
-    (dealType: DealType) => {
-      if (!pendingAddress) return;
-      setSelectedDealType(dealType);
-      setAwaitingApproval(true);
-    },
-    [pendingAddress],
-  );
-
-  // Handle pipeline approval — run with selected skip steps
-  const handlePipelineApprove = useCallback(
-    async (skipSteps: string[]) => {
-      if (!pendingAddress) return;
-      const address = pendingAddress;
-      setAwaitingApproval(false);
-      setPendingAddress(null);
-      setIsProcessing(true);
-      try {
-        await runAnalysis(address, skipSteps);
-      } finally {
-        setIsProcessing(false);
-      }
-    },
-    [pendingAddress, runAnalysis],
-  );
-
-  const handlePipelineCancel = useCallback(() => {
-    setAwaitingApproval(false);
-    setSelectedDealType(null);
-  }, []);
-
   const handleNewAnalysis = useCallback(() => {
     setMessages([]);
     setCurrentReport(null);
@@ -733,9 +685,6 @@ export default function Home() {
     setLocalSessionId(null);
     localSessionIdRef.current = null;
     hasProcessedRef.current = false;
-    setPendingAddress(null);
-    setSelectedDealType(null);
-    setAwaitingApproval(false);
     setInput("");
     setIsProcessing(false);
     localStorage.removeItem("plotlot_backend_session");
@@ -770,7 +719,7 @@ export default function Home() {
               <div className="max-w-5xl">
                 <motion.div
                   variants={staggerItem}
-                  className="mb-4 text-sm tracking-wide text-[var(--text-muted)]"
+                  className="mb-4 text-base tracking-wide text-[var(--text-muted)]"
                 >
                   Hi there
                 </motion.div>
@@ -831,7 +780,7 @@ export default function Home() {
                     }}
                     placeholder="Ask about zoning, density, or property data..."
                     disabled={isProcessing}
-                    className="min-w-0 flex-1 resize-none bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                    className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none sm:text-[17px]"
                     data-testid="agent-input"
                   />
                 )}
@@ -856,38 +805,15 @@ export default function Home() {
                 </button>
               </div>
               {inputError && (
-                <p className="mt-2 px-1 text-xs text-red-500">{inputError}</p>
+                <p className="mt-2 px-1 text-sm text-red-500">{inputError}</p>
               )}
             </motion.form>
-
-            {/* Capability chips / Tool cards — z-0 so autocomplete dropdown from form above paints on top */}
-            <motion.div
-              {...fadeUp}
-              transition={{ ...springGentle, delay: 0.35 }}
-              className="relative z-0 min-h-[72px] w-full max-w-4xl self-center"
-            >
-              {mode === "lookup" ? (
-                <CapabilityChips mode={mode} onSelect={sendMessage} disabled={isProcessing} />
-              ) : (
-                <ToolCards
-                  onAnalyze={() => inputRef.current?.focus()}
-                  onGenerateDoc={() => setDocCanvasOpen(true)}
-                  onSendPrompt={sendMessage}
-                  disabled={isProcessing}
-                  hasReport={!!currentReport}
-                  county={currentReport?.county}
-                  municipality={currentReport?.municipality}
-                  lat={currentReport?.lat}
-                  lng={currentReport?.lng}
-                />
-              )}
-            </motion.div>
 
             {/* Footer */}
             <motion.p
               {...fadeUp}
               transition={{ ...springGentle, delay: 0.45 }}
-              className="mt-12 text-center text-xs text-[var(--text-muted)]"
+              className="mt-12 text-center text-sm text-[var(--text-muted)]"
             >
               PlotLot analyzes zoning, density, comps &amp; pro forma for any US property
             </motion.p>
@@ -906,7 +832,7 @@ export default function Home() {
         <button
           onClick={handleNewAnalysis}
           data-testid="new-analysis-button"
-          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
           style={{ boxShadow: "var(--shadow-nav)" }}
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -942,15 +868,11 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Embedded report — TabbedReport for lookup mode, ZoningReport for agent */}
+              {/* Embedded report */}
               {msg.report && (
                 <div className="space-y-3 animate-fade-up">
                   <ErrorBoundary>
-                    {selectedDealType ? (
-                      <TabbedReport report={msg.report} dealType={selectedDealType} />
-                    ) : (
-                      <ZoningReport report={msg.report} />
-                    )}
+                    <ZoningReport report={msg.report} />
                   </ErrorBoundary>
                   {msg.report.confidence_warning && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
@@ -1066,7 +988,7 @@ export default function Home() {
                             value={editingUserDraft}
                             onChange={(e) => setEditingUserDraft(e.target.value)}
                             rows={3}
-                            className="w-full resize-none bg-transparent text-sm leading-relaxed text-[var(--text-secondary)] focus:outline-none"
+                            className="w-full resize-none bg-transparent text-base leading-relaxed text-[var(--text-secondary)] focus:outline-none"
                             data-testid="user-edit-input"
                             autoFocus
                           />
@@ -1090,7 +1012,7 @@ export default function Home() {
                           </div>
                         </div>
                       ) : (
-                        <div className="group text-sm leading-relaxed text-[var(--text-secondary)]">
+                        <div className="group text-[15px] leading-relaxed text-[var(--text-secondary)] sm:text-base">
                           <div>{msg.content}</div>
                           {mode === "agent" && (
                             <div className="mt-1 flex justify-end gap-1.5 text-[10px] font-semibold text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
@@ -1131,7 +1053,7 @@ export default function Home() {
                         P
                       </div>
                       <div
-                        className="text-sm leading-relaxed text-[var(--text-secondary)] min-w-0"
+                        className="min-w-0 text-[15px] leading-relaxed text-[var(--text-secondary)] sm:text-base"
                         data-testid={
                           msg.errorType ||
                           msg.content.startsWith("Error:") ||
@@ -1268,26 +1190,6 @@ export default function Home() {
               )}
                 </div>
               ))}
-              {/* Deal type selector — appears when address entered in lookup mode */}
-              {pendingAddress && !selectedDealType && (
-                <div className="mx-auto max-w-xl px-3 py-4 sm:px-0">
-                  <DealTypeSelector onSelect={handleDealTypeSelect} disabled={isProcessing} />
-                </div>
-              )}
-
-              {/* Pipeline approval gate — appears after deal type selection */}
-              {pendingAddress && selectedDealType && awaitingApproval && (
-                <div className="mx-auto max-w-xl px-3 py-4 sm:px-0 animate-fade-up">
-                  <PipelineApproval
-                    address={pendingAddress}
-                    dealType={selectedDealType}
-                    onApprove={handlePipelineApprove}
-                    onCancel={handlePipelineCancel}
-                    disabled={isProcessing}
-                  />
-                </div>
-              )}
-
               <div ref={messagesEndRef} />
             </div>
           </div>
@@ -1324,7 +1226,7 @@ export default function Home() {
                 <button
                   key={s}
                   onClick={() => { setMode("agent"); sendMessage(s); }}
-                  className="min-h-[44px] rounded-full border border-amber-200 bg-amber-50/50 px-4 py-2 text-xs text-amber-700 transition-all hover:bg-amber-100 hover:-translate-y-0.5 active:scale-[0.98] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
+                  className="min-h-[44px] rounded-full border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm text-amber-700 transition-all hover:bg-amber-100 hover:-translate-y-0.5 active:scale-[0.98] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
                 >
                   {s}
                 </button>
@@ -1340,7 +1242,7 @@ export default function Home() {
                   key={s}
                   onClick={() => sendMessage(s)}
                   disabled={isProcessing}
-                  className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-xs text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:min-h-0 sm:py-1.5"
+                  className="min-h-[44px] rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40 sm:min-h-0 sm:py-1.5"
                 >
                   {s}
                 </button>
@@ -1348,23 +1250,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Live tool shortcuts — agent mode */}
-          {mode === "agent" && (
-            <div className="mx-auto mb-3 w-full max-w-3xl px-3 sm:px-0" data-testid="agent-live-tools">
-              <ToolCards
-                onAnalyze={() => inputRef.current?.focus()}
-                onGenerateDoc={() => setDocCanvasOpen(true)}
-                onSendPrompt={sendMessage}
-                disabled={isProcessing}
-                hasReport={!!currentReport}
-                county={currentReport?.county}
-                municipality={currentReport?.municipality}
-                lat={currentReport?.lat}
-                lng={currentReport?.lng}
-                visibleIds={["open_data_layers", "municode_live"]}
-              />
-            </div>
-          )}
 
           {/* Input bar — hidden in lookup mode after report is shown */}
           {!(mode === "lookup" && hasReport) && (
@@ -1383,7 +1268,7 @@ export default function Home() {
                     ? "Ask about this property's zoning..."
                     : "Ask about zoning, density, or property data..."
                 }
-                  disabled={isProcessing || !!pendingAddress || awaitingApproval}
+                  disabled={isProcessing}
                   isProcessing={isProcessing}
                   canStop={
                     mode === "agent" &&
@@ -1395,7 +1280,7 @@ export default function Home() {
                   onStop={stopGenerating}
                 />
               {inputError && (
-                <p className="mt-2 px-4 text-xs text-red-500">{inputError}</p>
+                <p className="mt-2 px-4 text-sm text-red-500">{inputError}</p>
               )}
             </div>
           )}

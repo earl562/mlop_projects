@@ -120,8 +120,9 @@ export async function switchToLookup(page: Page) {
 export async function runLookupFlow(
   page: Page,
   address: string,
-  dealType: "land" | "wholesale" | "creative-finance" | "hybrid" = "land",
+  _dealType: "land" | "wholesale" | "creative-finance" | "hybrid" = "land",
 ) {
+  void _dealType;
   const input = page.getByTestId("lookup-input");
   const sendButton = page.getByTestId("send-button");
 
@@ -142,15 +143,14 @@ export async function runLookupFlow(
   await expect(sendButton).toBeEnabled({ timeout: 10_000 });
   await sendButton.click();
 
-  await expect(page.getByTestId("deal-type-selector")).toBeVisible({
-    timeout: 10_000,
-  });
-  await page.getByTestId(`deal-type-${dealType}`).click();
-
-  await expect(page.getByTestId("pipeline-approval-card")).toBeVisible({
-    timeout: 5_000,
-  });
-  await page.getByTestId("pipeline-run-button").click();
+  await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
+  await expect(page.getByTestId("pipeline-approval-card")).toHaveCount(0);
+  await expect(
+    page
+      .getByTestId("pipeline-stepper")
+      .or(page.getByTestId("report-root"))
+      .or(page.getByTestId("report-error")),
+  ).toBeVisible({ timeout: 10_000 });
 }
 
 export async function waitForReport(page: Page) {

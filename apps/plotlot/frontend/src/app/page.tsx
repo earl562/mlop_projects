@@ -225,7 +225,7 @@ function Header() {
         </nav>
         <div className="coded-header-actions">
           <Link href="/sign-in">Log in</Link>
-          <Button href="/analyze">Analyze a Lot</Button>
+          <Button href="/workspace">Analyze a Lot</Button>
         </div>
       </div>
     </header>
@@ -260,7 +260,7 @@ export default function Home() {
             <h1>See What Fits<span>.</span></h1>
             <p>Understand zoning potential, parcel constraints, and development possibilities in minutes.</p>
             <div className="coded-actions">
-              <Button href="/analyze">Analyze a Lot</Button>
+              <Button href="/workspace">Analyze a Lot</Button>
               <Button href="#product" variant="secondary">View Demo</Button>
             </div>
             <div className="coded-trust-line">
@@ -382,7 +382,7 @@ export default function Home() {
             <SectionKicker>Product showcase</SectionKicker>
             <h2>A clearer view of the site.</h2>
             <p>From zoning and constraints to massing and compliance, everything lives in one place.</p>
-            <Button href="/analyze">Explore the Product</Button>
+            <Button href="/workspace">Explore the Product</Button>
           </div>
           <div className="product-visual">
             <div className="product-aerial-card">
@@ -489,7 +489,7 @@ export default function Home() {
             <SectionKicker number="8">Pricing & get started</SectionKicker>
             <h2>Start with one lot.</h2>
             <p>Plans built for every stage of land intelligence.</p>
-            <Button href="/analyze">Start analyzing</Button>
+            <Button href="/workspace">Start analyzing</Button>
             <Button href="/sign-up?intent=team" variant="quiet">Talk to our team</Button>
           </div>
           <div className="pricing-grid">

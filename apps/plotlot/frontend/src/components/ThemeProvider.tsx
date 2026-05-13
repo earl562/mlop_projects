@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
 
 type Theme = "light" | "dark";
 
@@ -21,20 +20,8 @@ export function useTheme() {
   return useContext(ThemeContext);
 }
 
-function isPublicRoute(pathname: string) {
-  return pathname === "/" || pathname === "/reference" || pathname === "/analyze";
-}
-
-function resolveInitialTheme(pathname: string): Theme {
-  if (typeof window === "undefined") return "light";
-  try {
-    const stored = localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark") return stored;
-  } catch {
-    // ignore storage errors
-  }
-
-  return isPublicRoute(pathname) ? "light" : "dark";
+function resolveInitialTheme(): Theme {
+  return "light";
 }
 
 function applyThemeClass(theme: Theme) {
@@ -43,24 +30,23 @@ function applyThemeClass(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname() ?? "/";
   // Keep the first render deterministic (matches server HTML); reconcile in an effect.
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
-    const initial = resolveInitialTheme(pathname);
+    const initial = resolveInitialTheme();
     applyThemeClass(initial);
     const frame = window.requestAnimationFrame(() => {
       setThemeState(initial);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [pathname]);
+  }, []);
 
-  const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    applyThemeClass(next);
+  const setTheme = useCallback(() => {
+    setThemeState("light");
+    applyThemeClass("light");
     try {
-      localStorage.setItem("theme", next);
+      localStorage.setItem("theme", "light");
     } catch {
       // ignore storage errors
     }

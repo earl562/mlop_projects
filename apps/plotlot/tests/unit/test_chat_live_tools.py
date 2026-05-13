@@ -127,6 +127,31 @@ def test_extract_direct_tool_request_parses_municode_card_prompt() -> None:
     )
 
 
+def test_extract_direct_tool_request_parses_natural_open_data_prompt() -> None:
+    parsed = _extract_direct_tool_request(
+        "Find open data parcel and zoning layers for Broward County near 25.9873, -80.2323"
+    )
+
+    assert parsed == (
+        "discover_open_data_layers",
+        {"county": "Broward", "state": "FL", "lat": 25.9873, "lng": -80.2323},
+    )
+
+
+def test_extract_direct_tool_request_parses_natural_municode_prompt() -> None:
+    parsed = _extract_direct_tool_request("Search Municode for Miramar, FL setbacks")
+
+    assert parsed == (
+        "search_municode_live",
+        {"municipality": "Miramar", "query": "setbacks"},
+    )
+
+
+def test_extract_direct_tool_request_ignores_incomplete_natural_tool_prompts() -> None:
+    assert _extract_direct_tool_request("Find open data parcel layers for Broward County") is None
+    assert _extract_direct_tool_request("Search Municode setbacks") is None
+
+
 @pytest.mark.asyncio
 async def test_execute_open_data_discovery_returns_serialized_datasets() -> None:
     with patch(
@@ -272,4 +297,62 @@ async def test_chat_direct_tool_prompt_executes_open_data_before_summary() -> No
     assert "I found Broward Parcels" in body
     execute_open_data.assert_awaited_once_with("Broward", "FL", 25.9873, -80.2323)
     assert mock_llm.await_count == 1
+    assert "tools" not in mock_llm.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_chat_natural_open_data_prompt_executes_requested_tool() -> None:
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
+
+    prompt = "Find open data parcel and zoning layers for Broward County near 25.9873, -80.2323"
+
+    with patch(
+        "plotlot.api.chat._execute_open_data_discovery",
+        new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "open_data"})),
+    ) as execute_open_data, patch(
+        "plotlot.api.chat.call_llm",
+        new=AsyncMock(return_value={"content": "I found the Broward Open Data layers.", "tool_calls": []}),
+    ) as mock_llm:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/chat",
+                json={"message": prompt, "session_id": "natural-open-data"},
+            )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "tool_use" in body
+    assert "discover_open_data_layers" in body
+    assert "I found the Broward Open Data layers" in body
+    execute_open_data.assert_awaited_once_with("Broward", "FL", 25.9873, -80.2323)
+    assert "tools" not in mock_llm.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_chat_natural_municode_prompt_executes_requested_tool() -> None:
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
+
+    prompt = "Search Municode for Miramar, FL setbacks"
+
+    with patch(
+        "plotlot.api.chat._execute_municode_live_search",
+        new=AsyncMock(return_value=json.dumps({"status": "success", "results": []})),
+    ) as execute_municode, patch(
+        "plotlot.api.chat.call_llm",
+        new=AsyncMock(return_value={"content": "I searched Miramar Municode setbacks.", "tool_calls": []}),
+    ) as mock_llm:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/chat",
+                json={"message": prompt, "session_id": "natural-municode"},
+            )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "tool_use" in body
+    assert "search_municode_live" in body
+    assert "I searched Miramar Municode setbacks" in body
+    execute_municode.assert_awaited_once_with("Miramar", "setbacks")
     assert "tools" not in mock_llm.await_args.kwargs

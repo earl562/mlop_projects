@@ -23,7 +23,7 @@ test.describe("Canonical cross-mode lane", () => {
     test.skip(!dbPreflight.healthy, dbPreflight.reason);
   });
 
-  test("pending lookup clears when switching modes", async ({ page }) => {
+  test("lookup starts analysis directly and keeps mode switches clean", async ({ page }) => {
     await gotoHome(page);
 
     const input = page.getByTestId("lookup-input");
@@ -32,13 +32,19 @@ test.describe("Canonical cross-mode lane", () => {
     await expect(input).toHaveValue("7940 Plantation Blvd, Miramar, FL 33023");
     await expect(page.getByTestId("send-button")).toBeEnabled();
     await page.getByTestId("send-button").click();
-    await expect(page.getByTestId("deal-type-selector")).toBeVisible();
+    await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
+    await expect(page.getByTestId("pipeline-approval-card")).toHaveCount(0);
+    await expect(page.getByTestId("pipeline-stepper").or(page.getByTestId("report-root"))).toBeVisible({
+      timeout: 15_000,
+    });
 
     await switchToAgent(page);
     await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
+    await expect(page.getByTestId("pipeline-approval-card")).toHaveCount(0);
 
     await switchToLookup(page);
     await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
+    await expect(page.getByTestId("pipeline-approval-card")).toHaveCount(0);
     await expect(page.getByTestId("lookup-input")).toBeVisible();
   });
 

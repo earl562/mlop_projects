@@ -41,6 +41,23 @@ test.describe("Plotlot marketing and workspace surfaces", () => {
     await expect(page.locator(".coded-hero-visual")).toBeVisible();
     await expect(page.locator(".hero-aerial-panel img")).toBeVisible();
     await expect(page.getByRole("img", { name: designReferenceAlts[0] })).toHaveCount(0);
+    const brokenImages = await page.evaluate(async () => {
+      const images = Array.from(document.images);
+      const checks = await Promise.all(
+        images.map(async (img) => {
+          const src = img.currentSrc || img.src;
+          const response = await fetch(src, { method: "HEAD" }).catch(() => null);
+          return {
+            alt: img.alt,
+            src,
+            ok: Boolean(response?.ok),
+            status: response?.status ?? 0,
+          };
+        }),
+      );
+      return checks.filter((row) => !row.ok);
+    });
+    expect(brokenImages).toEqual([]);
 
     const heading = page.getByRole("heading", { name: /See What Fits\./ });
     await expectCompactHero(heading);
@@ -59,9 +76,9 @@ test.describe("Plotlot marketing and workspace surfaces", () => {
     await expect(page.getByRole("button", { name: "Lookup" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Agent" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
-    await expect(page.getByText("Houston, TX")).toBeVisible();
-    await expect(page.getByText("Atlanta, GA")).toBeVisible();
-    await expect(page.getByText("Miami Gardens, FL")).toBeVisible();
+    await expect(page.getByText("Houston, TX")).toHaveCount(0);
+    await expect(page.getByText("Atlanta, GA")).toHaveCount(0);
+    await expect(page.getByText("Miami Gardens, FL")).toHaveCount(0);
     await expect(page.getByText("PlotLot analyzes zoning, density, comps & pro forma for any US property")).toBeVisible();
     await expect(page.getByTestId("workspace-status-card")).toHaveCount(0);
     await expect(page.getByTestId("workspace-plan-card")).toHaveCount(0);

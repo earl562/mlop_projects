@@ -71,7 +71,7 @@ export function Header() {
         </nav>
         <div className="header-actions">
           <Link href="/sign-in" className="login-link">Log in</Link>
-          <Button href="/analyze">Analyze a Lot</Button>
+          <Button href="/workspace">Analyze a Lot</Button>
         </div>
         <details className="mobile-menu">
           <summary aria-label="Open menu"><span /></summary>
@@ -80,7 +80,7 @@ export function Header() {
               <a key={item.label} href={item.href}>{item.label}</a>
             ))}
             <Link href="/sign-in">Log in</Link>
-            <Link href="/analyze">Analyze a Lot</Link>
+            <Link href="/workspace">Analyze a Lot</Link>
           </div>
         </details>
       </div>

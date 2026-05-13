@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import ChatHistory from "@/components/ChatHistory";
-import { useTheme } from "@/components/ThemeProvider";
 import type { ChatSession } from "@/lib/sessions";
 
 export type { ChatSession };
@@ -31,7 +30,6 @@ export default function Sidebar({
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-  const { resolved: theme, setTheme } = useTheme();
 
   /* Filter sessions by search term */
   const filtered = search.trim()
@@ -54,10 +52,6 @@ export default function Sidebar({
     },
     [onToggle, onNewChat]
   );
-
-  const handleToggleTheme = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [setTheme, theme]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -86,23 +80,14 @@ export default function Sidebar({
                       PlotLot
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[11px] tracking-[0.12em] text-[var(--text-muted)] uppercase">
+                  <p className="mt-0.5 text-xs tracking-[0.12em] text-[var(--text-muted)] uppercase">
                     AI zoning analysis
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleToggleTheme}
-                className="rounded-full border border-[var(--border-soft)] bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] text-[var(--text-muted)] shadow-[var(--shadow-subtle)] transition-colors hover:text-[var(--text-secondary)]"
-                aria-label="Toggle theme"
-                data-testid="theme-toggle"
-              >
-                {theme === "dark" ? "Dark" : "Light"}
-              </button>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <span className="rounded-full bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)]">
+              <span className="rounded-full bg-[var(--bg-primary)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">
                 104 municipalities
               </span>
             </div>
@@ -115,7 +100,7 @@ export default function Sidebar({
         <button
           type="button"
           onClick={onNewChat}
-          className="group flex w-full items-center justify-between rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[var(--brand-soft-border)]"
+          className="group flex w-full items-center justify-between rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-3 text-base font-medium text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[var(--brand-soft-border)]"
         >
           <span>New analysis</span>
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-1 group-hover:-translate-y-[1px]">
@@ -144,7 +129,7 @@ export default function Sidebar({
           placeholder="Search conversations..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm outline-none transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] focus:border-[var(--brand-soft-border)] focus:shadow-[var(--shadow-card)]"
+          className="w-full rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-3 text-base outline-none transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] focus:border-[var(--brand-soft-border)] focus:shadow-[var(--shadow-card)]"
           style={{
             color: "var(--text-primary)",
           }}
@@ -185,12 +170,12 @@ export default function Sidebar({
         <div className="flex items-center gap-2">
           <a
             href="/billing"
-            className="rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors hover:opacity-80"
+            className="rounded-full px-2 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
             style={{ background: "var(--bg-inset)", color: "var(--text-muted)" }}
           >
             Free
           </a>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="text-sm" style={{ color: "var(--text-muted)" }}>
             104 municipalities
           </span>
         </div>

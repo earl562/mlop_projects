@@ -40,7 +40,7 @@ export default function InputBar({
     <div className="mx-auto max-w-3xl">
       <form onSubmit={onSubmit}>
         <div
-          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-4 sm:py-3"
+          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-3.5"
           style={{ boxShadow: "var(--shadow-elevated)" }}
         >
           {mode === "lookup" ? (
@@ -70,7 +70,7 @@ export default function InputBar({
               }}
               placeholder={placeholder}
               disabled={disabled}
-              className="min-w-0 flex-1 resize-none bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+              className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none sm:text-[17px]"
               data-testid="agent-input"
             />
           )}

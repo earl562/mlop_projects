@@ -85,9 +85,9 @@ test.describe("Scenario 1: Welcome Screen", () => {
       page.getByRole("button", { name: "Send message" }),
     ).toBeDisabled();
 
-    // Capability chips (lookup mode)
-    for (const text of [/Houston, TX/, /Atlanta, GA/, /Miami Gardens, FL/]) {
-      await expect(page.getByRole("button", { name: text })).toBeVisible();
+    // Lookup mode is prompt-first; no preset address chips should be visible.
+    for (const text of ["Houston, TX", "Atlanta, GA", "Miami Gardens, FL"]) {
+      await expect(page.getByText(text)).toHaveCount(0);
     }
 
     // Footer
@@ -359,10 +359,10 @@ test.describe("Scenario 8: Save to Portfolio", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 9: Lookup Mode — Deal Type → Pipeline Approval → Tabbed Report
+// Scenario 9: Lookup Mode — Address → Direct Analysis
 // ---------------------------------------------------------------------------
 test.describe("Scenario 9: Lookup Mode Flow", () => {
-  test("full lookup flow with deal type and pipeline approval", async ({ page }) => {
+  test("full lookup flow starts analysis without deal type or pipeline approval gates", async ({ page }) => {
     await page.goto("/workspace");
 
     // Should start in lookup mode by default
@@ -373,31 +373,17 @@ test.describe("Scenario 9: Lookup Mode Flow", () => {
     await input.fill("7940 Plantation Blvd, Miramar, FL 33023");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    // Deal type selector should appear
-    await expect(page.getByText("Land Deal")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Wholesale")).toBeVisible();
-    await expect(page.getByText("Creative Finance")).toBeVisible();
-    await expect(page.getByText("Hybrid")).toBeVisible();
-
-    // Select "Land Deal"
-    await page.getByText("Land Deal").click();
-
-    // Pipeline approval gate should appear
-    await expect(page.getByText("Pipeline Plan")).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText("Zoning Search")).toBeVisible();
-    await expect(page.getByText("AI Analysis")).toBeVisible();
-    await expect(page.getByText("Density Calculation")).toBeVisible();
-    await expect(page.getByText("Comparable Sales")).toBeVisible();
-    await expect(page.getByText("Pro Forma")).toBeVisible();
-
-    // Click "Run Analysis"
-    await page.getByRole("button", { name: "Run Analysis" }).click();
+    await expect(page.getByText("Land Deal")).toHaveCount(0);
+    await expect(page.getByText("Wholesale")).toHaveCount(0);
+    await expect(page.getByText("Creative Finance")).toHaveCount(0);
+    await expect(page.getByText("Hybrid")).toHaveCount(0);
+    await expect(page.getByText("Pipeline Plan")).toHaveCount(0);
 
     // Pipeline should start
     await expect(page.getByText("Geocoding")).toBeVisible({ timeout: 30_000 });
 
-    // Wait for report to render (tabbed report)
-    await expect(page.getByRole("tab", { name: /Property/i }).or(page.getByText("RS5").first())).toBeVisible({
+    // Wait for report to render
+    await expect(page.getByText("RS5").first()).toBeVisible({
       timeout: 120_000,
     });
 
@@ -410,10 +396,10 @@ test.describe("Scenario 9: Lookup Mode Flow", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 10: Agent Mode — Tool Cards + Chat Flow
+// Scenario 10: Agent Mode — Prompt-Driven Tool Flow
 // ---------------------------------------------------------------------------
 test.describe("Scenario 10: Agent Mode Flow", () => {
-  test("agent mode shows tool cards and supports chat", async ({ page }) => {
+  test("agent mode hides tool cards and supports prompt-driven chat", async ({ page }) => {
     await page.goto("/workspace");
 
     // Switch to agent mode
@@ -424,16 +410,11 @@ test.describe("Scenario 10: Agent Mode Flow", () => {
       await modeToggle.click();
     }
 
-    // Tool cards should be visible in agent mode
-    await expect(page.getByText("Analyze Property")).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText("Generate LOI")).toBeVisible();
-    await expect(page.getByText("Search Comps")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /Search Properties/i }),
-    ).toBeVisible();
-
-    // "Generate LOI" should show "Analyze a property first" hint
-    await expect(page.getByText("Analyze a property first").first()).toBeVisible();
+    await expect(page.getByTestId("agent-input")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Analyze Property")).toHaveCount(0);
+    await expect(page.getByText("Generate LOI")).toHaveCount(0);
+    await expect(page.getByText("Search Comps")).toHaveCount(0);
+    await expect(page.getByText("Analyze a property first")).toHaveCount(0);
   });
 });
 
@@ -444,8 +425,9 @@ test.describe("Scenario 11: Mode Switching", () => {
   test("switching modes updates UI without state leaks", async ({ page }) => {
     await page.goto("/workspace");
 
-    // Start in lookup mode — should show address example chips
-    await expect(page.getByText("Houston, TX")).toBeVisible({ timeout: 5_000 });
+    // Start in lookup mode — address input is the primary action.
+    await expect(page.getByTestId("lookup-input")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Houston, TX")).toHaveCount(0);
 
     // Switch to agent mode
     const modeToggle = page.locator("[data-mode-toggle]").or(
@@ -455,8 +437,9 @@ test.describe("Scenario 11: Mode Switching", () => {
       await modeToggle.click();
     }
 
-    // Should now show tool cards instead of address chips
-    await expect(page.getByText("Analyze Property")).toBeVisible({ timeout: 5_000 });
+    // Agent mode should remain prompt-first, without visible tool cards.
+    await expect(page.getByTestId("agent-input")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Analyze Property")).toHaveCount(0);
 
     // Switch back to lookup mode
     const lookupToggle = page.locator("[data-mode-toggle]").or(
@@ -466,7 +449,8 @@ test.describe("Scenario 11: Mode Switching", () => {
       await lookupToggle.click();
     }
 
-    // Should show address chips again
-    await expect(page.getByText("Houston, TX")).toBeVisible({ timeout: 5_000 });
+    // Lookup mode should return to direct address entry, not suggestion/card boxes.
+    await expect(page.getByTestId("lookup-input")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Houston, TX")).toHaveCount(0);
   });
 });

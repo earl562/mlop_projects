@@ -1,0 +1,122 @@
+[
+  {
+    "file": "cap-massing.png",
+    "width": 400,
+    "height": 254
+  },
+  {
+    "file": "cap-parcel.png",
+    "width": 396,
+    "height": 295
+  },
+  {
+    "file": "cap-report.png",
+    "width": 351,
+    "height": 315
+  },
+  {
+    "file": "cap-review.png",
+    "width": 400,
+    "height": 295
+  },
+  {
+    "file": "cap-setbacks.png",
+    "width": 351,
+    "height": 254
+  },
+  {
+    "file": "cap-zoning.png",
+    "width": 396,
+    "height": 254
+  },
+  {
+    "file": "hero-aerial-clean.png",
+    "width": 449,
+    "height": 497
+  },
+  {
+    "file": "hero-massing-clean.png",
+    "width": 450,
+    "height": 350
+  },
+  {
+    "file": "hero-zoning-map.png",
+    "width": 355,
+    "height": 277
+  },
+  {
+    "file": "product-aerial-clean.png",
+    "width": 572,
+    "height": 520
+  },
+  {
+    "file": "product-massing-clean.png",
+    "width": 506,
+    "height": 335
+  },
+  {
+    "file": "stakeholder-architects.png",
+    "width": 280,
+    "height": 505
+  },
+  {
+    "file": "stakeholder-brokers.png",
+    "width": 280,
+    "height": 505
+  },
+  {
+    "file": "stakeholder-developers.png",
+    "width": 280,
+    "height": 505
+  },
+  {
+    "file": "stakeholder-municipal.png",
+    "width": 285,
+    "height": 505
+  },
+  {
+    "file": "testimonial-building.png",
+    "width": 523,
+    "height": 585
+  },
+  {
+    "file": "testimonial-parcel.png",
+    "width": 326,
+    "height": 313
+  },
+  {
+    "file": "trust-aerial-card.png",
+    "width": 353,
+    "height": 674
+  },
+  {
+    "file": "trust-massing-card.png",
+    "width": 174,
+    "height": 595
+  },
+  {
+    "file": "trust-zoning-card.png",
+    "width": 206,
+    "height": 630
+  },
+  {
+    "file": "workflow-massing.png",
+    "width": 251,
+    "height": 441
+  },
+  {
+    "file": "workflow-report.png",
+    "width": 289,
+    "height": 442
+  },
+  {
+    "file": "workflow-search.png",
+    "width": 269,
+    "height": 443
+  },
+  {
+    "file": "workflow-summary.png",
+    "width": 279,
+    "height": 443
+  }
+]

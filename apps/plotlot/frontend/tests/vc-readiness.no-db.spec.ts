@@ -16,10 +16,18 @@ test.describe("VC readiness no-db walkthrough", () => {
       fullPage: true,
     });
 
-    // Exercise the deal-type gate without requiring any backend dependencies.
+    // Exercise direct lookup analysis without requiring any backend dependencies.
     const address = "7940 Plantation Blvd, Miramar, FL 33023";
     const input = page.getByTestId("lookup-input");
     const sendButton = page.getByTestId("send-button");
+
+    // Stub the analysis SSE stream before submit because lookup now runs immediately.
+    await stubAnalyzeStream(page, {
+      statuses: [
+        { step: "geocoding", message: "Resolving address...", complete: false },
+        { step: "zoning", message: "Loading zoning context...", complete: false },
+      ],
+    });
 
     // Avoid hydration races: ensure the controlled value is set before submitting.
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -36,42 +44,20 @@ test.describe("VC readiness no-db walkthrough", () => {
     await expect(input).toHaveValue(address, { timeout: 10_000 });
     await expect(sendButton).toBeEnabled({ timeout: 10_000 });
     await sendButton.click();
-    await expect(page.getByTestId("deal-type-selector")).toBeVisible({ timeout: 10_000 });
-    await page.screenshot({
-      path: testInfo.outputPath("02-deal-type-gate.png"),
-      fullPage: true,
-    });
-
-    // Stub the analysis SSE stream so we can deterministically capture the pipeline UI.
-    await stubAnalyzeStream(page, {
-      statuses: [
-        { step: "geocoding", message: "Resolving address...", complete: false },
-        { step: "zoning", message: "Loading zoning context...", complete: false },
-      ],
-    });
-
-    await page.getByTestId("deal-type-land").click();
-    await expect(page.getByTestId("pipeline-approval-card")).toBeVisible({
-      timeout: 5_000,
-    });
-    await page.screenshot({
-      path: testInfo.outputPath("03-pipeline-approval.png"),
-      fullPage: true,
-    });
-
-    await page.getByTestId("pipeline-run-button").click();
+    await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
+    await expect(page.getByTestId("pipeline-approval-card")).toHaveCount(0);
     await expect(page.getByTestId("pipeline-stepper")).toBeVisible({
       timeout: 10_000,
     });
     await page.screenshot({
-      path: testInfo.outputPath("04-pipeline-running.png"),
+      path: testInfo.outputPath("02-pipeline-running.png"),
       fullPage: true,
     });
 
     await switchToAgent(page);
     await expect(page.getByTestId("agent-input")).toBeVisible();
     await page.screenshot({
-      path: testInfo.outputPath("05-agent-welcome.png"),
+      path: testInfo.outputPath("03-agent-welcome.png"),
       fullPage: true,
     });
 
@@ -80,7 +66,7 @@ test.describe("VC readiness no-db walkthrough", () => {
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("report-error")).toBeVisible({ timeout: 15_000 });
     await page.screenshot({
-      path: testInfo.outputPath("06-agent-error.png"),
+      path: testInfo.outputPath("04-agent-error.png"),
       fullPage: true,
     });
 
@@ -89,7 +75,7 @@ test.describe("VC readiness no-db walkthrough", () => {
     await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);
     await expect(page.getByTestId("lookup-input")).toBeVisible();
     await page.screenshot({
-      path: testInfo.outputPath("07-lookup-after-switch-back.png"),
+      path: testInfo.outputPath("05-lookup-after-switch-back.png"),
       fullPage: true,
     });
   });

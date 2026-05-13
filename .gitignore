@@ -56,6 +56,10 @@ apps/plotlot/frontend/IMAGE_TO_CODE_WORKFLOW.md
 apps/plotlot/frontend/public/plotlot-assets/
 apps/plotlot/frontend/public/plotlot-comps/
 apps/plotlot/frontend/public/plotlot-ref/
+!apps/plotlot/frontend/public/plotlot-assets/
+!apps/plotlot/frontend/public/plotlot-assets/**
+!apps/plotlot/frontend/public/plotlot-ref/
+!apps/plotlot/frontend/public/plotlot-ref/**
 
 # Local PlotLot scratch outputs
 /plotlot-*.png

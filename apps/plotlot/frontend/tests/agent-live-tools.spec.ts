@@ -59,7 +59,13 @@ test.describe("Agent live-tool seams (UI)", () => {
       });
     });
 
-    await page.getByTestId("tool-card-open_data_layers").click();
+    const agentInput = page.getByTestId("agent-input");
+    const sendButton = page.getByTestId("send-button");
+
+    await agentInput.fill(
+      "Find open data parcel and zoning layers for Broward County near 25.9873, -80.2323",
+    );
+    await sendButton.click();
     await expect(conversation.getByText("Used discover_open_data_layers")).toBeVisible({
       timeout: 15_000,
     });
@@ -73,10 +79,9 @@ test.describe("Agent live-tool seams (UI)", () => {
       fullPage: true,
     });
 
-    const liveTools = page.getByTestId("agent-live-tools");
-    const municodeButton = liveTools.getByTestId("tool-card-municode_live");
-    await expect(municodeButton).toBeEnabled({ timeout: 15_000 });
-    await municodeButton.click();
+    await expect(agentInput).toBeEnabled({ timeout: 15_000 });
+    await agentInput.fill("Search Municode for Miramar, FL setbacks");
+    await sendButton.click();
     await expect(conversation.getByText("Used search_municode_live")).toBeVisible({
       timeout: 15_000,
     });

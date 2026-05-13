@@ -1068,6 +1068,58 @@ def _get_tools_for_turn(
 
 _DIRECT_TOOL_RE = re.compile(r"Use the tool\s+`(?P<name>[a-z0-9_]+)`\s+with:", re.IGNORECASE)
 _DIRECT_TOOL_ARG_RE = re.compile(r"^\s*-\s*(?P<key>[a-zA-Z_][\w]*)\s*:\s*(?P<value>.+?)\s*$")
+_COUNTY_RE = re.compile(
+    r"\b(?P<county>miami[- ]dade|broward|palm beach)\s+county\b|\b(?P<county_short>miami[- ]dade|broward|palm beach)\b",
+    re.IGNORECASE,
+)
+_FL_COORD_RE = re.compile(
+    r"(?P<lat>2[4-9]\.\d+|30\.\d+)\s*,\s*(?P<lng>-8[0-7]\.\d+)",
+    re.IGNORECASE,
+)
+_MUNICIPALITY_RE = re.compile(
+    r"\b(?:in|for)\s+(?P<municipality>[A-Z][A-Za-z .'-]+?)(?:,?\s+FL|\s+Florida|\s+(?:for|about|setback|setbacks|zoning|height|density)|[?.!,]|$)",
+)
+
+
+def _normalize_county_name(value: str) -> str:
+    normalized = value.replace("_", " ").replace("-", " ").strip().lower()
+    if normalized == "miami dade":
+        return "Miami-Dade"
+    if normalized == "broward":
+        return "Broward"
+    if normalized == "palm beach":
+        return "Palm Beach"
+    return value.replace(" County", "").strip().title()
+
+
+def _extract_county(message: str) -> str | None:
+    match = _COUNTY_RE.search(message)
+    if not match:
+        return None
+    return _normalize_county_name(match.group("county") or match.group("county_short") or "")
+
+
+def _extract_fl_coords(message: str) -> tuple[float, float] | None:
+    match = _FL_COORD_RE.search(message)
+    if not match:
+        return None
+    return float(match.group("lat")), float(match.group("lng"))
+
+
+def _extract_municipality(message: str) -> str | None:
+    match = _MUNICIPALITY_RE.search(message)
+    if not match:
+        return None
+    municipality = match.group("municipality").strip(" ,.;:!?'")
+    return municipality or None
+
+
+def _extract_query_after_terms(message: str) -> str:
+    lowered = message.lower()
+    for marker in ("setbacks", "setback", "height", "density", "parking", "lot coverage", "far", "allowed use", "zoning"):
+        if marker in lowered:
+            return marker
+    return "zoning setbacks density height"
 
 
 def _parse_direct_tool_value(value: str) -> str | float | int | bool | None:
@@ -1089,45 +1141,72 @@ def _parse_direct_tool_value(value: str) -> str | float | int | bool | None:
 
 
 def _extract_direct_tool_request(message: str) -> tuple[str, dict[str, Any]] | None:
-    """Parse explicit frontend tool-card prompts into executable read-only tools."""
+    """Extract deterministic read-only tool requests from explicit or natural prompts."""
     match = _DIRECT_TOOL_RE.search(message)
-    if not match:
-        return None
-
-    tool_name = match.group("name")
-    if tool_name not in DIRECT_TOOL_REQUESTS:
-        return None
-
-    args: dict[str, Any] = {}
-    for line in message[match.end() :].splitlines():
-        arg_match = _DIRECT_TOOL_ARG_RE.match(line)
-        if not arg_match:
-            if args:
-                break
-            continue
-        args[arg_match.group("key")] = _parse_direct_tool_value(arg_match.group("value"))
-
-    if tool_name == "discover_open_data_layers":
-        county = str(args.get("county") or "").replace(" County", "").strip()
-        lat = args.get("lat")
-        lng = args.get("lng")
-        if not county or not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+    if match:
+        tool_name = match.group("name")
+        if tool_name not in DIRECT_TOOL_REQUESTS:
             return None
-        return (
-            tool_name,
-            {
-                "county": county,
-                "state": str(args.get("state") or "FL").strip() or "FL",
-                "lat": float(lat),
-                "lng": float(lng),
-            },
-        )
 
-    municipality = str(args.get("municipality") or "").strip()
-    query = str(args.get("query") or "").strip()
-    if not municipality or not query:
-        return None
-    return (tool_name, {"municipality": municipality, "query": query})
+        args: dict[str, Any] = {}
+        for line in message[match.end() :].splitlines():
+            arg_match = _DIRECT_TOOL_ARG_RE.match(line)
+            if not arg_match:
+                if args:
+                    break
+                continue
+            args[arg_match.group("key")] = _parse_direct_tool_value(arg_match.group("value"))
+
+        if tool_name == "discover_open_data_layers":
+            county = str(args.get("county") or "").replace(" County", "").strip()
+            lat = args.get("lat")
+            lng = args.get("lng")
+            if not county or not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+                return None
+            return (
+                tool_name,
+                {
+                    "county": _normalize_county_name(county),
+                    "state": str(args.get("state") or "FL").strip() or "FL",
+                    "lat": float(lat),
+                    "lng": float(lng),
+                },
+            )
+
+        municipality = str(args.get("municipality") or "").strip()
+        query = str(args.get("query") or "").strip()
+        if not municipality or not query:
+            return None
+        return (tool_name, {"municipality": municipality, "query": query})
+
+    lowered = message.lower()
+    asks_open_data = (
+        ("open data" in lowered or "arcgis" in lowered or "gis layer" in lowered or "gis layers" in lowered)
+        and ("parcel" in lowered or "zoning" in lowered or "layer" in lowered or "dataset" in lowered)
+    )
+    if asks_open_data:
+        county = _extract_county(message)
+        coords = _extract_fl_coords(message)
+        if county and coords:
+            lat, lng = coords
+            return (
+                "discover_open_data_layers",
+                {"county": county, "state": "FL", "lat": lat, "lng": lng},
+            )
+
+    asks_municode = "municode" in lowered and any(
+        keyword in lowered
+        for keyword in ("search", "look up", "lookup", "find", "section", "code", "setback", "zoning", "height", "density")
+    )
+    if asks_municode:
+        municipality = _extract_municipality(message)
+        if municipality:
+            return (
+                "search_municode_live",
+                {"municipality": municipality, "query": _extract_query_after_terms(message)},
+            )
+
+    return None
 
 
 def _tool_status_from_result(result: str) -> str:
@@ -1967,7 +2046,7 @@ async def chat(request: ChatRequest):
                         "step": "tool_request",
                         "thoughts": [
                             f"Running requested tool: {fn_name.replace('_', ' ')}",
-                            "Using the explicit tool arguments from the web client.",
+                            "Using tool arguments inferred from the prompt.",
                         ],
                     },
                 )

@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("framer-motion", async () => {
   const React = await import("react");
@@ -75,18 +75,6 @@ vi.mock("../../src/components/AddressAutocomplete", () => ({
   },
 }));
 
-vi.mock("../../src/components/CapabilityChips", () => ({
-  default: function MockCapabilityChips() {
-    return <div data-testid="mock-capability-chips">Capability chips</div>;
-  },
-}));
-
-vi.mock("../../src/components/ToolCards", () => ({
-  default: function MockToolCards() {
-    return <div data-testid="mock-tool-cards">Tool cards</div>;
-  },
-}));
-
 vi.mock("../../src/components/DocumentCanvas", () => ({
   default: function MockDocumentCanvas() {
     return <div data-testid="mock-document-canvas" />;
@@ -143,11 +131,17 @@ vi.mock("../../src/components/ZoningReport", () => ({
 }));
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   localStorage.clear();
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  cleanup();
+});
+
 import WorkspacePage from "../../src/app/workspace/page";
+import { streamAnalysis } from "../../src/lib/api";
 
 describe("Workspace shell", () => {
   it("shows the current address-first lookup welcome shell on first entry", () => {
@@ -161,7 +155,13 @@ describe("Workspace shell", () => {
     expect(screen.getByRole("button", { name: "Lookup" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agent" })).toBeInTheDocument();
     expect(screen.getByTestId("send-button")).toBeDisabled();
-    expect(screen.getByTestId("mock-capability-chips")).toBeInTheDocument();
+    expect(screen.queryByText("Analyze a Site")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open Data Layers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Municode Live")).not.toBeInTheDocument();
+    expect(screen.queryByText("Generate LOI")).not.toBeInTheDocument();
+    expect(screen.queryByText("Search Comps")).not.toBeInTheDocument();
+    expect(screen.queryByText("Run Pro Forma")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source Land Leads")).not.toBeInTheDocument();
     expect(
       screen.getByText("PlotLot analyzes zoning, density, comps & pro forma for any US property"),
     ).toBeInTheDocument();
@@ -170,5 +170,34 @@ describe("Workspace shell", () => {
     expect(screen.queryByTestId("workspace-plan-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("workspace-evidence-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("workspace-report-card")).not.toBeInTheDocument();
+  });
+
+  it("starts lookup analysis directly after an address without deal-type cards", async () => {
+    vi.mocked(streamAnalysis).mockResolvedValue(undefined);
+    render(<WorkspacePage />);
+
+    const address = "171 NE 209th Ter Miami FL";
+    fireEvent.change(screen.getByTestId("lookup-input"), {
+      target: { value: address },
+    });
+    fireEvent.click(screen.getByTestId("send-button"));
+
+    await waitFor(() => {
+      expect(streamAnalysis).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address,
+          dealType: "land_deal",
+        }),
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    expect(screen.queryByText("What type of deal are you evaluating?")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("deal-type-selector")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pipeline-approval-card")).not.toBeInTheDocument();
   });
 });
