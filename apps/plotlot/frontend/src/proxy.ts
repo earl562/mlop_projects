@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -9,20 +10,20 @@ const isPublicRoute = createRouteMatcher([
   "/api/fal/(.*)", // FAL AI proxy
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  // Skip Clerk entirely unless publishable + secret keys are configured.
-  if (
-    process.env.PLAYWRIGHT_TESTING === "1" ||
-    !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    !process.env.CLERK_SECRET_KEY
-  ) {
-    return;
-  }
+const hasClerkCredentials =
+  process.env.PLAYWRIGHT_TESTING !== "1" &&
+  Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) &&
+  Boolean(process.env.CLERK_SECRET_KEY);
 
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-});
+const authProxy = hasClerkCredentials
+  ? clerkMiddleware(async (auth, req) => {
+      if (!isPublicRoute(req)) {
+        await auth.protect();
+      }
+    })
+  : () => NextResponse.next();
+
+export default authProxy;
 
 export const config = {
   matcher: [
