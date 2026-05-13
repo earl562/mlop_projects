@@ -1,0 +1,13 @@
+id: loi.confidentiality_exclusivity
+category: legal_admin
+title: "Confidentiality & Exclusivity"
+document_types: [loi]
+order_weight: 700
+is_required: true
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  Non-Binding LOI. With the exception of the "Confidentiality" and "Exclusivity" provisions set forth below, the terms and conditions set forth in this LOI shall not be binding upon the parties hereto unless and until a formal Purchase and Sale Agreement ("PSA") has been executed by the parties.
+
+  Confidentiality. Purchaser covenants and agrees to retain in confidence, except as required by law, administrative order, or to enforce the terms of this LOI and the resulting PSA, all information, documents and data received from Seller pertaining to the Property.
+
+  Exclusivity. As Purchaser has expended and incurred and will be expending and incurring significant time, expense, and resources in preparing this LOI and the PSA, Seller covenants and agrees, that for a period of {{ context.feasibility_days }} days from the date this LOI is fully executed, Seller will not solicit, negotiate, or enter into any agreement with any other party for the sale, exchange, or other transfer of the Property.

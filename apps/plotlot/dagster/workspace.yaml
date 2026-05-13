@@ -1,0 +1,14 @@
+# workspace.yaml — Dagster's entrypoint configuration file
+# "dagster dev" reads this file to discover where your pipeline code lives
+# It tells Dagster: "load code from this Python package"
+
+load_from:
+  - python_package:
+      # Load from an installed Python package (not a file path)
+      # Dagster imports this package and reads its top-level `defs` variable
+      # The package must be installed first: cd apps/plotlot/dagster && pip install -e .
+      package_name: dagster_project
+      # Must match:
+      #   1. The directory name (dagster_project/)
+      #   2. The [project] name in pyproject.toml
+      #   3. What you import: from dagster_project import defs

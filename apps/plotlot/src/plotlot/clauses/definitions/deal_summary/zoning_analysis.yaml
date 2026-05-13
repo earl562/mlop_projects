@@ -1,0 +1,13 @@
+id: deal_summary.zoning_analysis
+category: property_definition
+title: "Zoning Analysis"
+document_types: [deal_summary]
+order_weight: 210
+is_required: true
+source: "PlotLot custom"
+content_template: |
+  Zoning District: {{ context.zoning_district or 'N/A' }}
+  Description: {{ context.zoning_description or 'N/A' }}
+  {% if context.allowed_uses %}Allowed Uses: {{ context.allowed_uses | join(', ') }}{% endif %}
+  Max Height: {{ context.max_height or 'N/A' }}
+  Max Density: {{ context.max_density or 'N/A' }}

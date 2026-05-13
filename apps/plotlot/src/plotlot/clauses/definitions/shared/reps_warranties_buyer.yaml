@@ -1,0 +1,12 @@
+id: shared.reps_warranties_buyer
+category: reps_warranties
+title: "Buyer's Representations and Warranties"
+document_types: [psa]
+order_weight: 500
+is_required: true
+source: "SubTo Purchase Contract Section 7"
+content_template: |
+  Buyer represents and warrants to Seller:
+  (a) Buyer has the legal capacity and authority to enter into and perform this Contract.
+  (b) There are no pending or threatened actions, suits, or proceedings that would materially affect Buyer's ability to perform hereunder.
+  (c) Buyer has conducted or will conduct its own independent investigation of the Property and is entering into this transaction based on its own analysis.

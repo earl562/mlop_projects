@@ -1,0 +1,30 @@
+id: psa.purchase_price_subject_to
+category: financial_terms
+title: "Purchase Price — Subject To Existing Loans"
+document_types: [psa]
+deal_types: [subject_to, wrap, hybrid]
+order_weight: 300
+is_required: true
+group_id: psa_financing
+condition_expr: "context.financing_type in ['subject_to', 'wrap', 'hybrid']"
+source: "SubTo Purchase Contract Sections 1.5, 1.14, 3.3"
+formatting:
+  heading_level: 2
+  style: table
+  columns: ["Component", "Amount"]
+content_template: |
+  Purchase Price | {{ context.purchase_price|currency if context.purchase_price > 0 else '[PURCHASE PRICE]' }}
+  Earnest Money Deposit | {{ context.earnest_money|currency if context.earnest_money > 0 else '[DEPOSIT]' }} — delivered to Escrow Agent within 3 days of Effective Date
+  Approximate Existing 1st Mortgage (Subject To) | {{ context.existing_mortgage_balance_1|currency }}
+  {% if context.existing_mortgage_balance_2 > 0 %}Approximate Existing 2nd Mortgage (Subject To) | {{ context.existing_mortgage_balance_2|currency }}{% endif %}
+  {% if context.seller_carryback_amount > 0 %}Seller Carryback Financing | {{ context.seller_carryback_amount|currency }}{% endif %}
+  {% if context.new_loan_amount > 0 %}New Loan to Buyer | {{ context.new_loan_amount|currency }}{% endif %}
+  Net to Seller | {{ context.net_to_seller|currency if context.net_to_seller > 0 else '[NET TO SELLER]' }}
+  Cash at COE | {{ context.cash_at_closing|currency if context.cash_at_closing > 0 else '[CASH AT COE]' }}
+
+  PURCHASE AND SALE OF PROPERTY. For the Purchase Price and in accordance with the terms and conditions set forth in this Contract, Seller agrees to sell, and Buyer agrees to purchase the Property identified herein.
+
+  The following liens and encumbrances will not be paid off through COE and the Property will be transferred to Buyer subject to the following:
+  Existing 1st Mortgage: {{ context.existing_mortgage_balance_1|currency }} (approximate)
+  {% if context.existing_mortgage_balance_2 > 0 %}Existing 2nd Mortgage: {{ context.existing_mortgage_balance_2|currency }} (approximate){% endif %}
+  (the "Existing Loan(s)")

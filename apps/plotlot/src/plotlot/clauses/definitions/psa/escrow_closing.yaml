@@ -1,0 +1,19 @@
+id: psa.escrow_closing
+category: closing
+title: "Escrow; COE; Closing Costs and Prorations"
+document_types: [psa]
+order_weight: 900
+is_required: true
+source: "SubTo Purchase Contract Section 9"
+content_template: |
+  Close of Escrow: {{ context.closing_days }} days after Effective Date.
+
+  Escrow Agent / Closing Attorney:
+  {{ context.escrow_agent_name or '[ESCROW AGENT]' }}
+  {{ context.escrow_agent_address or '[ADDRESS]' }}
+  Telephone: {{ context.escrow_agent_phone or '[PHONE]' }}
+  Email: {{ context.escrow_agent_email or '[EMAIL]' }}
+
+  Seller and Buyer engage Escrow Agent to act as the escrow agent for the closing of the transactions contemplated by this Contract. Title will be transferred by General Warranty Deed. All real property taxes, assessments, rents, and HOA dues shall be prorated as of COE.
+
+  Closing Costs: Escrow fees 50% by Buyer and 50% by Seller. Standard title policy paid by Seller.

@@ -1,0 +1,14 @@
+id: proforma.revenue
+category: financial_terms
+title: "Revenue Projections"
+document_types: [proforma_spreadsheet]
+order_weight: 300
+is_required: true
+source: "PlotLot Pro Forma"
+content_template: |
+  Gross Development Value (GDV) | {{ context.gross_development_value | currency }}
+  Max Land Price | {{ context.max_land_price | currency }}
+  After-Development Value / Unit | {{ context.adv_per_unit | currency }}
+formatting:
+  style: table
+  columns: ["Revenue Metric", "Value"]

@@ -1,0 +1,17 @@
+id: deal_summary.risk_factors
+category: risk_liability
+title: "Risk Factors & Considerations"
+document_types: [deal_summary]
+order_weight: 600
+is_required: true
+source: "PlotLot custom"
+formatting:
+  heading_level: 2
+  style: checklist
+content_template: |
+  Verify zoning classification with municipality planning department
+  Confirm lot dimensions via survey prior to development
+  Check for any deed restrictions, easements, or encumbrances
+  Review flood zone status and environmental conditions
+  Assess impact of local development moratoriums or pending code changes
+  {% if context.confidence == 'low' %}Note: Analysis confidence is LOW — verify all extracted parameters independently{% endif %}

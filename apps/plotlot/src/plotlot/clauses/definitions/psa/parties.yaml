@@ -1,0 +1,20 @@
+id: psa.parties
+category: party_identification
+title: "Parties"
+document_types: [psa]
+order_weight: 100
+is_required: true
+source: "SubTo Purchase Contract Section 1.9"
+content_template: |
+  Seller:
+  {{ context.seller_name or '[SELLER NAME]' }}
+  {{ context.seller_entity or '' }}
+  Address: {{ context.seller_address or '[SELLER ADDRESS]' }}
+  Telephone: {{ context.seller_phone or '[PHONE]' }}
+  Email: {{ context.seller_email or '[EMAIL]' }}
+
+  Buyer:
+  {{ context.buyer_name or '[BUYER NAME]' }}, {{ context.buyer_entity or 'a(n) _______ limited liability company' }} ("Buyer")
+  Address: {{ context.buyer_address or '[BUYER ADDRESS]' }}
+  Telephone: {{ context.buyer_phone or '[PHONE]' }}
+  Email: {{ context.buyer_email or '[EMAIL]' }}

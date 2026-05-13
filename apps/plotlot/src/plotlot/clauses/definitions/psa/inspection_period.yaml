@@ -1,0 +1,13 @@
+id: psa.inspection_period
+category: contingencies
+title: "Inspection of and Access to the Property"
+document_types: [psa]
+order_weight: 400
+is_required: true
+source: "SubTo Purchase Contract Section 5"
+content_template: |
+  Inspection Period: {{ context.inspection_days }} Days.
+
+  Buyer, in Buyer's sole and absolute discretion, may through written notice to Seller, cancel this Contract during the Inspection Period. During the Inspection Period, Buyer shall have access to the Property and the right to have any inspections performed on the Property that Buyer deems reasonably necessary, including but not limited to a general physical inspection, environmental assessment, pest inspection, survey, and review of all applicable governmental records and regulations.
+
+  INSTRUCTION TO RELEASE THE DEPOSIT UPON CANCELLATION DURING THE INSPECTION PERIOD. Seller hereby irrevocably instructs Escrow Agent to return the Deposit to Buyer, or to any person or entity designated by Buyer, immediately upon written notice from Buyer that Buyer has elected to cancel this Contract during the Inspection Period.

@@ -1,0 +1,19 @@
+id: loi.financing_seller_carryback
+category: financial_terms
+title: "Seller Carryback Financing Terms"
+document_types: [loi]
+deal_types: [seller_finance]
+order_weight: 320
+is_required: false
+group_id: financing_type
+condition_expr: "context.financing_type == 'seller_carryback'"
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  Seller carryback, but not subject to the Existing Loan, which shall be as follows:
+
+  Principal Amount: {{ context.seller_carryback_amount|currency if context.seller_carryback_amount > 0 else '[PRINCIPAL]' }}
+  Interest Rate: {{ context.seller_carryback_rate|pct if context.seller_carryback_rate > 0 else '[RATE]' }} per annum
+  Monthly Payment: {{ context.seller_carryback_payment|currency if context.seller_carryback_payment > 0 else '[PAYMENT]' }}
+  Maturity Date: {{ context.maturity_date or '[MATURITY DATE]' }}
+
+  Monthly Payment will be made to: Directly to Seller.

@@ -1,0 +1,15 @@
+id: shared.reps_warranties_seller
+category: reps_warranties
+title: "Seller's Representations and Warranties"
+document_types: [psa]
+order_weight: 510
+is_required: true
+source: "SubTo Purchase Contract Section 8"
+content_template: |
+  Seller represents and warrants to Buyer:
+  (a) Seller has good and marketable title to the Property, free and clear of all liens, encumbrances, and claims except as disclosed herein or accepted by Buyer.
+  (b) Seller has the legal capacity and authority to enter into and perform this Contract.
+  (c) There are no pending or threatened condemnation, annexation, or litigation proceedings affecting the Property.
+  (d) Seller has no knowledge of any environmental contamination, hazardous substances, or underground storage tanks on the Property.
+  (e) All information provided by Seller regarding the Property is true, accurate, and complete to the best of Seller's knowledge.
+  (f) During the term of this Contract, Seller shall not enter into any other agreements for the sale, lease, or encumbrance of the Property.

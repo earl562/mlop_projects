@@ -1,0 +1,18 @@
+id: proforma.summary
+category: property_definition
+title: "Project Summary"
+document_types: [proforma_spreadsheet]
+order_weight: 100
+is_required: true
+source: "PlotLot Pro Forma"
+content_template: |
+  Address | {{ context.property_address or '[ADDRESS]' }}
+  Municipality | {{ context.municipality or '[MUNICIPALITY]' }}
+  County | {{ context.county or '[COUNTY]' }}
+  Zoning District | {{ context.zoning_district or '[ZONING]' }}
+  Lot Size (sqft) | {{ context.lot_size_sqft | comma }}
+  Max Units | {{ context.max_units }}
+  Governing Constraint | {{ context.governing_constraint or '[CONSTRAINT]' }}
+formatting:
+  style: table
+  columns: ["Parameter", "Value"]

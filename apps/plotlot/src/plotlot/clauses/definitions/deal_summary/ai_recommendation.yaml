@@ -1,0 +1,14 @@
+id: deal_summary.ai_recommendation
+category: closing
+title: "AI Summary"
+document_types: [deal_summary]
+order_weight: 900
+is_required: false
+condition_expr: "context.summary != ''"
+source: "PlotLot custom"
+content_template: |
+  {{ context.summary }}
+
+  {% if context.sources %}Sources:
+  {% for source in context.sources %}- {{ source }}
+  {% endfor %}{% endif %}

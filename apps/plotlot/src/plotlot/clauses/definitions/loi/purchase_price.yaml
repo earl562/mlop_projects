@@ -1,0 +1,18 @@
+id: loi.purchase_price
+category: financial_terms
+title: "Purchase Price"
+document_types: [loi]
+order_weight: 300
+is_required: true
+source: "SubTo Multi Letter of Intent"
+formatting:
+  heading_level: 3
+  style: table
+  columns: ["Component", "Amount"]
+content_template: |
+  Purchase Price | {{ context.purchase_price|currency if context.purchase_price > 0 else '[PURCHASE PRICE]' }}
+  Earnest Money | {{ context.earnest_money|currency if context.earnest_money > 0 else '[EARNEST MONEY]' }} to be deposited with Escrow Agent within 3 business days of the PSA effective date
+  {% if context.financing_type in ['subject_to', 'wrap', 'hybrid'] %}Subject To Existing 1st Mortgage | {{ context.existing_mortgage_balance_1|currency }} (approximate){% endif %}
+  {% if context.financing_type in ['seller_finance', 'wrap', 'hybrid'] %}Seller Carryback Financing | {{ context.seller_carryback_amount|currency }}{% endif %}
+  {% if context.new_loan_amount > 0 %}New Loan to Purchaser | {{ context.new_loan_amount|currency }}{% endif %}
+  Cash at Closing | {{ context.cash_at_closing|currency if context.cash_at_closing > 0 else '[CASH AT CLOSING]' }}

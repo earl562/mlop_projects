@@ -1,0 +1,21 @@
+id: psa.cancellation_notice
+category: legal_admin
+title: "Notice of Cancellation"
+document_types: [psa]
+order_weight: 750
+is_required: true
+source: "SubTo Purchase Contract — Notice of Cancellation"
+content_template: |
+  This transaction involves important and complex legal consequences. You should consult with a lawyer before signing this contract.
+
+  You may cancel this contract for the sale of your house without any penalty or obligation at any time before three (3) business days following the Effective Date.
+
+  NOTICE OF CANCELLATION
+
+  To cancel this transaction, personally deliver a signed and dated copy of this Notice of Cancellation, or send via certified mail to:
+  {{ context.buyer_name or '[BUYER NAME]' }}
+  {{ context.buyer_address or '[BUYER ADDRESS]' }}
+
+  I hereby cancel this transaction.
+
+  SELLER: ________________________________________  Date: ___________________

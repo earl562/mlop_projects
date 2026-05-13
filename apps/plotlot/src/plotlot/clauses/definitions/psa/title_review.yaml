@@ -1,0 +1,11 @@
+id: psa.title_review
+category: contingencies
+title: "Status of Title"
+document_types: [psa]
+order_weight: 410
+is_required: true
+source: "SubTo Purchase Contract Section 4"
+content_template: |
+  As soon as practical following the Effective Date, Escrow Agent shall cause a current commitment for an ALTA Owner's Policy of Title Insurance (the "Commitment") to be issued and delivered to the parties for examination. Buyer shall have {{ context.inspection_days }} days from receipt of the Commitment to approve or disapprove any exceptions therein.
+
+  If Buyer disapproves any exceptions, Seller shall have 10 business days to cure said exceptions. If Seller is unable or unwilling to cure such exceptions within the cure period, Buyer may terminate this Contract and the Deposit shall be returned to Buyer.

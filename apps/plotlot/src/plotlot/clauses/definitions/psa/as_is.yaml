@@ -1,0 +1,9 @@
+id: psa.as_is
+category: risk_liability
+title: "As-Is Purchase; Existing Condition as of COE"
+document_types: [psa]
+order_weight: 600
+is_required: true
+source: "SubTo Purchase Contract Section 8"
+content_template: |
+  Buyer is purchasing the Property "AS IS" and in the condition existing as of the Effective Date. The Property shall be delivered to Buyer at COE in substantially the same condition as of the Effective Date, ordinary wear and tear, casualty, and condemnation excepted. Seller makes no warranty or representation regarding the condition of the Property.

@@ -1,0 +1,179 @@
+# schema.yml — dbt data quality tests for all models
+# Tests run automatically after every "dbt run" when you run "dbt test"
+# A failing test prints the SQL that found the violation — copy it to investigate in psql
+# Tests block CI/CD if integrated into GitHub Actions (recommended for production)
+
+version: 2  # dbt schema file format version
+
+models:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGING LAYER TESTS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: stg_analyses
+    description: >
+      Typed unpacking of report_cache.report_json.
+      The "modeling around upstream deficiencies" model — converts a JSON blob into typed columns.
+      One row per active cached analysis (WHERE expires_at > NOW()).
+    columns:
+
+      - name: address
+        description: "Raw user-input address — not normalized, used for display only."
+        tests:
+          - not_null
+          # Every cached report must have an address.
+          # This failing would indicate a production bug in the FastAPI pipeline
+          # (the pipeline should never cache a report without recording the address).
+
+      - name: address_normalized
+        description: "Lowercase, punctuation-stripped cache key — the entity resolution field."
+        tests:
+          - unique
+          # No two rows should share a normalized key.
+          # Enforced by a UNIQUE constraint in the OLTP table (storage/models.py).
+          # Testing it here catches any bugs in the normalization logic.
+          - not_null
+          # Can't have a cache entry without a lookup key — would break cache hits.
+
+      - name: confidence_level
+        description: "LLM extraction confidence: high/medium/low."
+        tests:
+          - accepted_values:
+              values: ['high', 'medium', 'low']
+          # Guard against typos or new values appearing without being handled downstream.
+          # If the FastAPI code adds a new confidence level (e.g., 'very_high'),
+          # this test will fail immediately, prompting us to update the model.
+          - not_null
+          # Every analysis should have a confidence assessment from the LLM.
+
+      - name: municipality
+        description: "City or unincorporated area name — must be present on every analysis."
+        tests:
+          - not_null
+          # An analysis without a municipality is meaningless for all downstream grouping.
+          # This failing would indicate a geocoding or property lookup failure that
+          # somehow still resulted in a cached report (should not happen).
+
+      - name: max_units
+        description: "Calculated max dwelling units — the pipeline's primary output."
+        tests:
+          - not_null
+          # If max_units is null, the density calculation failed silently.
+          # This test catches that before it reaches the API response.
+
+  - name: stg_coverage
+    description: "One row per municipality — aggregated chunk counts and freshness metrics."
+    columns:
+
+      - name: municipality
+        description: "Municipality name — GROUP BY key, must be unique in this aggregate view."
+        tests:
+          - unique
+          # stg_coverage aggregates to one row per municipality.
+          # A non-unique municipality would mean duplicate rows slipped through the GROUP BY,
+          # which would double-count chunks and invalidate all coverage metrics.
+          - not_null
+          # Can't have coverage data without knowing which municipality it belongs to.
+
+      - name: chunk_count
+        description: "Total ordinance chunks for this municipality."
+        tests:
+          - not_null
+          # COUNT(*) should always return a non-null integer.
+          # If null appears, something is deeply wrong with the GROUP BY aggregation.
+
+  - name: stg_subscriptions
+    description: "User billing data with computed is_pro and is_at_quota flags."
+    columns:
+
+      - name: user_id
+        description: "Clerk UUID — primary key, unique per user."
+        tests:
+          - unique
+          # user_subscriptions is a one-row-per-user table (PK in OLTP).
+          # A duplicate user_id here would cause fan-out in the int_user_activity JOIN,
+          # inflating all aggregates (saved_deals, avg_deal_max_units, etc.).
+          - not_null
+
+      - name: plan
+        description: "Billing plan tier: 'free' or 'pro'."
+        tests:
+          - accepted_values:
+              values: ['free', 'pro']
+          # Mirrors the test in sources.yml — belt-and-suspenders.
+          # If a new plan tier is added (e.g., 'enterprise'), this catches it immediately.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MART LAYER TESTS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: mart_coverage
+    description: >
+      Municipality coverage dashboard — queried by /admin/data-quality API endpoint.
+      One row per municipality. is_stale and is_gap drive Dagster ingestion decisions.
+    columns:
+
+      - name: municipality
+        description: "Municipality name — the primary key of this mart."
+        tests:
+          - unique
+          # Final mart must have exactly one row per municipality.
+          # Duplicates would cause the API to return multiple rows for the same city,
+          # breaking the dashboard's municipality-indexed display.
+          - not_null
+
+      - name: coverage_tier
+        description: "Coverage richness: 'rich', 'adequate', or 'sparse'."
+        tests:
+          - accepted_values:
+              values: ['rich', 'adequate', 'sparse']
+          # Guard against logic changes in int_pipeline_health's CASE WHEN
+          # that might produce unexpected coverage_tier values.
+
+      - name: is_stale
+        description: "True if data is older than 30 days — triggers Dagster re-ingestion."
+        tests:
+          - not_null
+          # A null is_stale would cause Dagster's WHERE is_stale = true query to silently
+          # skip that municipality (NULL != true in SQL), preventing re-ingestion.
+
+      - name: is_gap
+        description: "True if municipality has zero chunks indexed."
+        tests:
+          - not_null
+          # Same issue as is_stale — null would silently skip gap-filling ingestion.
+
+  - name: mart_quality
+    description: >
+      Daily pipeline quality trend — powers the 30-day confidence chart.
+      One row per (analysis_date, municipality) pair.
+    columns:
+
+      - name: analysis_date
+        description: "Day-truncated timestamp of analyses in this row."
+        tests:
+          - not_null
+          # DATE_TRUNC should never return null unless created_at is null,
+          # which stg_analyses should prevent (not_null test on address catches most of these).
+
+      - name: avg_confidence_score
+        description: "Daily quality signal: 0.0 to 1.0."
+        # No uniqueness test here — (date, municipality) combination is the key,
+        # and dbt doesn't natively test composite uniqueness without dbt_utils.
+        # Could add: dbt_utils.unique_combination_of_columns if dbt_utils is installed.
+
+  - name: mart_usage
+    description: >
+      Plan-tier user analytics — two rows: one for 'free', one for 'pro'.
+    columns:
+
+      - name: plan
+        description: "Plan tier — should have exactly 2 rows."
+        tests:
+          - unique
+          # mart_usage groups by plan — should produce exactly one row per plan.
+          # A duplicate 'free' or 'pro' row would mean the GROUP BY failed.
+          - not_null
+          - accepted_values:
+              values: ['free', 'pro']

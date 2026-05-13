@@ -1,0 +1,20 @@
+id: loi.financing_mirror
+category: financial_terms
+title: "Seller/Wrap Financing Terms — Mirror Existing Loan"
+document_types: [loi]
+deal_types: [subject_to, wrap]
+order_weight: 320
+is_required: false
+group_id: financing_type
+condition_expr: "context.financing_type == 'subject_to'"
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  All seller/wrap financing will be evidenced by a promissory note and secured by a mortgage or deed of trust against the Property, which will contain the following substantive terms:
+
+  Mirror Existing Loan as to the principal balance, interest rate, monthly payments, maturity date, and late charge.
+
+  Monthly Payment will be made to: Directly to the lender of the Existing Loan.
+
+  Existing Loan Balance: {{ context.existing_mortgage_balance_1|currency }}
+  Existing Monthly Payment: {{ context.existing_mortgage_payment|currency if context.existing_mortgage_payment > 0 else '[MONTHLY PAYMENT]' }}
+  Existing Interest Rate: {{ context.existing_mortgage_rate|pct if context.existing_mortgage_rate > 0 else '[RATE]' }}

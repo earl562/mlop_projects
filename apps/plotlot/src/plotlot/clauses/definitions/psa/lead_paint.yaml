@@ -1,0 +1,12 @@
+id: psa.lead_paint
+category: risk_liability
+title: "Lead-Based Paint Disclosure"
+document_types: [psa]
+order_weight: 610
+is_required: false
+condition_expr: "context.year_built < 1978"
+source: "SubTo Purchase Contract Section 6"
+content_template: |
+  If the home on the Property was built before 1978, Seller shall notify Buyer of any known lead-based paint ("LBP") or LBP hazards on the Property and provide Buyer with any available reports or records regarding the presence of LBP on the Property.
+
+  Buyer shall have 10 days from receipt of Seller's disclosure to conduct a risk assessment or inspection for the presence of LBP or LBP hazards.

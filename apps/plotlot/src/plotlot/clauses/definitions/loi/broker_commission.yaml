@@ -1,0 +1,20 @@
+id: loi.broker_commission
+category: financial_terms
+title: "Brokers / Commission"
+document_types: [loi]
+order_weight: 350
+is_required: false
+condition_expr: "context.seller_broker_name != ''"
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  Seller is and will be represented by the following real estate broker:
+  {{ context.seller_broker_name or '[SELLER BROKER]' }}
+  Phone: {{ context.seller_broker_phone or '[PHONE]' }}
+  Email: {{ context.seller_broker_email or '[EMAIL]' }}
+
+  {% if context.buyer_broker_name %}Purchaser is and will be represented by the following real estate broker:
+  {{ context.buyer_broker_name }}
+  Phone: {{ context.buyer_broker_phone or '[PHONE]' }}
+  Email: {{ context.buyer_broker_email or '[EMAIL]' }}{% endif %}
+
+  {% if context.commission_pct > 0 %}Commission: Seller will pay {{ context.commission_pct|pct }} of the Purchase Price at Closing.{% endif %}

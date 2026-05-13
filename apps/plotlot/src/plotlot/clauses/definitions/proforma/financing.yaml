@@ -1,0 +1,15 @@
+id: proforma.financing
+category: financial_terms
+title: "Financing Structure"
+document_types: [proforma_spreadsheet]
+order_weight: 400
+is_required: true
+source: "PlotLot Pro Forma"
+content_template: |
+  Purchase Price | {{ context.purchase_price | currency }}
+  Earnest Money | {{ context.earnest_money | currency }}
+  Down Payment | {{ context.down_payment | currency }}
+  Cash at Closing | {{ context.cash_at_closing | currency }}
+formatting:
+  style: table
+  columns: ["Financing Detail", "Value"]
