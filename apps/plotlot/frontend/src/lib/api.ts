@@ -201,6 +201,48 @@ export interface SourceRefData {
   score: number;
 }
 
+export interface DossierLotFactsData {
+  lot_size_sqft: number | null;
+  lot_dimensions: string;
+  lot_width_ft: number | null;
+  lot_depth_ft: number | null;
+}
+
+export interface DossierDimensionalStandardsData {
+  setbacks: SetbacksData;
+  max_height: string;
+  max_density: string;
+  floor_area_ratio: string;
+  lot_coverage: string;
+  min_lot_size: string;
+  parking_requirements: string;
+}
+
+export interface DossierEvidenceRefData {
+  kind: string;
+  label: string;
+  source: string;
+  preview: string;
+  confidence: string;
+}
+
+export interface ActivePropertyDossierData {
+  resolved_address: string;
+  parcel_id: string;
+  municipality: string;
+  county: string;
+  state: string;
+  zoning_district: string;
+  zoning_description: string;
+  lot_facts: DossierLotFactsData;
+  dimensional_standards: DossierDimensionalStandardsData;
+  max_units: number | null;
+  governing_constraint: string;
+  evidence_refs: DossierEvidenceRefData[];
+  confidence: string;
+  freshness_timestamp: string;
+}
+
 export interface ZoningReportData {
   address: string;
   formatted_address: string;
@@ -231,6 +273,7 @@ export interface ZoningReportData {
   source_refs?: SourceRefData[];
   confidence_warning?: string;
   suggested_next_steps?: string[];
+  active_dossier?: ActivePropertyDossierData | null;
 }
 
 export interface RuntimeCapabilityDetail {

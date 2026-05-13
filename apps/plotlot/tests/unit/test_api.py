@@ -132,6 +132,11 @@ async def test_analyze_success(client):
     assert data["zoning_district"] == "R-1"
     assert data["density_analysis"]["max_units"] == 1
     assert data["confidence"] == "high"
+    assert data["active_dossier"]["resolved_address"] == report.formatted_address
+    assert data["active_dossier"]["parcel_id"] == "3422120000010"
+    assert data["active_dossier"]["max_units"] == 1
+    assert data["active_dossier"]["governing_constraint"] == "density"
+    assert data["active_dossier"]["evidence_refs"][-1]["kind"] == "property_record"
 
 
 @pytest.mark.asyncio
@@ -474,10 +479,49 @@ async def test_chat_with_report_context(client):
         "summary": report.summary,
         "sources": report.sources,
         "confidence": report.confidence,
+        "active_dossier": {
+            "resolved_address": report.formatted_address,
+            "parcel_id": report.property_record.folio,
+            "municipality": report.municipality,
+            "county": report.county,
+            "state": "FL",
+            "zoning_district": report.zoning_district,
+            "zoning_description": report.zoning_description,
+            "lot_facts": {
+                "lot_size_sqft": report.property_record.lot_size_sqft,
+                "lot_dimensions": report.property_record.lot_dimensions,
+                "lot_width_ft": None,
+                "lot_depth_ft": None,
+            },
+            "dimensional_standards": {
+                "setbacks": {"front": "25 ft", "side": "7.5 ft", "rear": "25 ft"},
+                "max_height": report.max_height,
+                "max_density": report.max_density,
+                "floor_area_ratio": report.floor_area_ratio,
+                "lot_coverage": report.lot_coverage,
+                "min_lot_size": report.min_lot_size,
+                "parking_requirements": report.parking_requirements,
+            },
+            "max_units": report.density_analysis.max_units,
+            "governing_constraint": report.density_analysis.governing_constraint,
+            "evidence_refs": [
+                {
+                    "kind": "source",
+                    "label": report.sources[0],
+                    "source": report.sources[0],
+                    "preview": "",
+                    "confidence": report.confidence,
+                }
+            ],
+            "confidence": report.confidence,
+            "freshness_timestamp": "2026-05-13T00:00:00+00:00",
+        },
     }
 
     mock_response = {"content": "Based on the R-1 zoning...", "tool_calls": []}
-    with patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=mock_response):
+    with patch(
+        "plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=mock_response
+    ) as call_llm:
         resp = await client.post(
             "/api/v1/chat",
             json={
@@ -490,6 +534,10 @@ async def test_chat_with_report_context(client):
             },
         )
     assert resp.status_code == 200
+    messages = call_llm.await_args.args[0]
+    assert "## Active Property Dossier" in messages[0]["content"]
+    assert "- Parcel/Folio: 3422120000010" in messages[0]["content"]
+    assert "- Max Units: 1 (governing: density)" in messages[0]["content"]
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,13 @@ from fastapi.responses import StreamingResponse
 
 from plotlot.api.billing import check_analysis_limit
 from plotlot.api.cache import cache_report, get_cached_report
-from plotlot.api.schemas import AnalyzeRequest, ErrorResponse, ZoningReportResponse
+from plotlot.api.schemas import (
+    ActivePropertyDossierResponse,
+    AnalyzeRequest,
+    ErrorResponse,
+    ZoningReportResponse,
+)
+from plotlot.pipeline.dossier import build_active_property_dossier
 from plotlot.pipeline.lookup import lookup_address
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
@@ -52,6 +58,17 @@ def _apply_confidence_metadata(response: ZoningReportResponse) -> None:
         response.suggested_next_steps = [
             "Confirm density and setback values with the municipality",
         ]
+
+
+def _report_response(report: object | dict) -> ZoningReportResponse:
+    """Normalize any report payload and attach the Active Property Dossier."""
+    payload = report if isinstance(report, dict) else asdict(report)
+    response = ZoningReportResponse(**payload)
+    _apply_confidence_metadata(response)
+    response.active_dossier = ActivePropertyDossierResponse(
+        **build_active_property_dossier(response)
+    )
+    return response
 
 
 def _describe_pipeline_error(exc: Exception) -> tuple[str, str]:
@@ -107,9 +124,7 @@ async def analyze(request: AnalyzeRequest, _: None = Depends(check_analysis_limi
             detail=f"Could not geocode address: {request.address}",
         )
 
-    response = ZoningReportResponse(**asdict(report))
-    _apply_confidence_metadata(response)
-    return response
+    return _report_response(report)
 
 
 def _sse_event(event: str, data: dict) -> str:
@@ -177,7 +192,7 @@ async def analyze_stream(request: AnalyzeRequest):
                             "message": "Using cached analysis",
                         },
                     )
-                    yield _sse_event("result", cached)
+                    yield _sse_event("result", _report_response(cached).model_dump())
                     return
             except Exception as exc:
                 logger.warning("Cache lookup failed (proceeding without): %s", exc)
@@ -530,7 +545,7 @@ async def analyze_stream(request: AnalyzeRequest):
                 )
 
             # Final result
-            report_dict = asdict(report)
+            report_dict = _report_response(report).model_dump()
             yield _sse_event("result", report_dict)
 
             # Contextual suggestions based on deal type

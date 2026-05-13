@@ -161,9 +161,16 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sf-pro-text);
-  font-feature-settings: "numr";
+  font-feature-settings: normal;
   letter-spacing: var(--tracking-body);
   transition: background-color 200ms ease, color 200ms ease;
+}
+
+input,
+textarea {
+  font-feature-settings: normal;
+  font-variant-numeric: normal;
+  letter-spacing: 0;
 }
 
 /* Apple-style precision surface; no global decorative texture. */
@@ -289,7 +296,7 @@ html.dark body::before {
 }
 .font-display {
   font-family: var(--font-sf-pro-display);
-  font-feature-settings: "numr";
+  font-feature-settings: normal;
 }
 .apple-product-stage {
   box-shadow: var(--shadow-xl);

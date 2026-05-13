@@ -261,17 +261,56 @@ def _llm_unavailable_detail() -> str:
     return "Chat is temporarily unavailable because the LLM returned an empty response."
 
 
+def _ctx_get(obj: Any, key: str, default: Any = "") -> Any:
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def _build_report_context(report) -> str:
     """Summarize the ZoningReport for the agent's context."""
     if not report:
         return ""
 
-    parts = [
-        "\n\n## Active Property Analysis",
-        f"- Address: {report.formatted_address}",
-        f"- Municipality: {report.municipality}, {report.county} County",
-        f"- Zoning: {report.zoning_district} — {report.zoning_description}",
-    ]
+    dossier = _ctx_get(report, "active_dossier", None)
+    if dossier:
+        lot_facts = _ctx_get(dossier, "lot_facts", {})
+        parts = [
+            "\n\n## Active Property Dossier",
+            f"- Resolved Address: {_ctx_get(dossier, 'resolved_address')}",
+            f"- Parcel/Folio: {_ctx_get(dossier, 'parcel_id') or 'unknown'}",
+            (
+                f"- Jurisdiction: {_ctx_get(dossier, 'municipality')}, "
+                f"{_ctx_get(dossier, 'county')} County, {_ctx_get(dossier, 'state')}"
+            ),
+            (
+                f"- Zoning: {_ctx_get(dossier, 'zoning_district')} — "
+                f"{_ctx_get(dossier, 'zoning_description')}"
+            ),
+            f"- Lot Size: {_ctx_get(lot_facts, 'lot_size_sqft') or 'unknown'} sqft",
+        ]
+        max_units = _ctx_get(dossier, "max_units", None)
+        if max_units is not None:
+            parts.append(
+                f"- Max Units: {max_units} "
+                f"(governing: {_ctx_get(dossier, 'governing_constraint') or 'unknown'})"
+            )
+        parts.append(f"- Confidence: {_ctx_get(dossier, 'confidence')}")
+        evidence_refs = _ctx_get(dossier, "evidence_refs", []) or []
+        if evidence_refs:
+            labels = [_ctx_get(ref, "label", "") for ref in evidence_refs[:5]]
+            parts.append(f"- Evidence Refs: {'; '.join(label for label in labels if label)}")
+        if _ctx_get(dossier, "freshness_timestamp"):
+            parts.append(f"- Freshness: {_ctx_get(dossier, 'freshness_timestamp')}")
+    else:
+        parts = [
+            "\n\n## Active Property Analysis",
+            f"- Address: {report.formatted_address}",
+            f"- Municipality: {report.municipality}, {report.county} County",
+            f"- Zoning: {report.zoning_district} — {report.zoning_description}",
+        ]
 
     if report.setbacks:
         parts.append(

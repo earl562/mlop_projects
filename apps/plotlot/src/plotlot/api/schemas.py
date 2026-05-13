@@ -114,6 +114,52 @@ class SourceRefResponse(BaseModel):
     score: float = 0.0
 
 
+class DossierLotFactsResponse(BaseModel):
+    lot_size_sqft: float | None = None
+    lot_dimensions: str = ""
+    lot_width_ft: float | None = None
+    lot_depth_ft: float | None = None
+
+
+class DossierDimensionalStandardsResponse(BaseModel):
+    setbacks: SetbacksResponse = SetbacksResponse()
+    max_height: str = ""
+    max_density: str = ""
+    floor_area_ratio: str = ""
+    lot_coverage: str = ""
+    min_lot_size: str = ""
+    parking_requirements: str = ""
+
+
+class DossierEvidenceRefResponse(BaseModel):
+    kind: str = ""
+    label: str = ""
+    source: str = ""
+    preview: str = ""
+    confidence: str = ""
+
+
+class ActivePropertyDossierResponse(BaseModel):
+    """Canonical one-truth property dossier projected from a ZoningReport."""
+
+    resolved_address: str = ""
+    parcel_id: str = ""
+    municipality: str = ""
+    county: str = ""
+    state: str = ""
+    zoning_district: str = ""
+    zoning_description: str = ""
+    lot_facts: DossierLotFactsResponse = DossierLotFactsResponse()
+    dimensional_standards: DossierDimensionalStandardsResponse = (
+        DossierDimensionalStandardsResponse()
+    )
+    max_units: int | None = None
+    governing_constraint: str = ""
+    evidence_refs: list[DossierEvidenceRefResponse] = []
+    confidence: str = "unknown"
+    freshness_timestamp: str = ""
+
+
 class ZoningReportResponse(BaseModel):
     """Full zoning analysis response."""
 
@@ -155,6 +201,9 @@ class ZoningReportResponse(BaseModel):
     # Progressive autonomy metadata (Klarna confidence-gated pattern)
     confidence_warning: str = ""
     suggested_next_steps: list[str] = []
+
+    # Artifact-first projection used to ground Lookup and Agent on one truth object
+    active_dossier: ActivePropertyDossierResponse | None = None
 
 
 # ---------------------------------------------------------------------------
