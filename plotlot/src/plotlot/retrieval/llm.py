@@ -262,13 +262,13 @@ def _get_openrouter_model() -> str:
     return f"openai/{openai_model}" if openai_model else DEFAULT_OPENROUTER_MODEL
 
 
-def _get_openai_client() -> AsyncOpenAI:
+async def _get_openai_client() -> AsyncOpenAI:
     if _using_nvidia_mainline():
         api_key: str | Any = settings.nvidia_api_key
     elif settings.openai_api_key:
         api_key: str | Any = settings.openai_api_key
     elif settings.use_codex_oauth:
-        api_key = _get_codex_oauth_token
+        api_key = await _get_codex_oauth_token()
     else:
         api_key = settings.openai_access_token
 
@@ -407,7 +407,7 @@ async def _call_openai(
 
             for attempt in range(MAX_RETRIES):
                 try:
-                    client = _get_openai_client()
+                    client = await _get_openai_client()
                     kwargs: dict = {
                         "model": cast(Any, model),
                         "messages": cast(Any, prepared_messages),
@@ -674,7 +674,7 @@ async def call_llm_stream(messages: list[dict]):
         breaker = _get_breaker(provider_name)
         if breaker.allow_request():
             try:
-                client = _get_openai_client()
+                client = await _get_openai_client()
                 kwargs: dict[str, Any] = {
                     "model": cast(Any, _get_openai_model()),
                     "messages": cast(Any, clean_messages),

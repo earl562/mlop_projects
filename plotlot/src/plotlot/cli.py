@@ -216,8 +216,8 @@ def ingest_main() -> None:
     if not args or args[0] == "--help":
         print("Usage: plotlot-ingest [--all | --discover | --state XX | --resume ID | <key>]")
         print(f"  Fallback keys: {', '.join(MUNICODE_CONFIGS)}")
-        print("  --all              Ingest all discovered municipalities (FL, NC, TX, GA, SC)")
-        print("  --state FL         Ingest only one state (FL, NC, TX, GA, SC)")
+        print("  --all              Ingest all discovered municipalities (FL, NC, TX, GA, SC, CA)")
+        print("  --state FL         Ingest only one state (FL, NC, TX, GA, SC, CA)")
         print("  --resume BATCH_ID  Resume a previously interrupted batch")
         print("  --discover         Run discovery across all 5 states and print results")
         print("  <key>              Ingest a single municipality by key")
@@ -226,6 +226,7 @@ def ingest_main() -> None:
     if args[0] == "--discover":
         _run_discover()
     elif args[0] in ("--all", "--state", "--resume"):
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
         from plotlot.pipeline.ingest import ingest_all
 
         state_filter = None
@@ -243,13 +244,11 @@ def ingest_main() -> None:
             else:
                 i += 1
 
-        results = asyncio.run(ingest_all(state_filter=state_filter, resume_batch=resume_batch))
-
-        # Summary grouped by state
-        by_state: dict[str, list[tuple[str, int]]] = {}
-        for key, count in sorted(results.items()):
-            # Infer state from key (configs not available here, just show flat)
-            by_state.setdefault("all", []).append((key, count))
+        try:
+            results = asyncio.run(ingest_all(state_filter=state_filter, resume_batch=resume_batch))
+        except NvidiaCreditsExhaustedError as e:
+            _print_credits_exhausted(str(e))
+            sys.exit(2)
 
         print("\nIngestion results:")
         for key, count in sorted(results.items()):
@@ -261,11 +260,31 @@ def ingest_main() -> None:
         failed = sum(1 for v in results.values() if v == 0)
         print(f"\nTotal: {total} chunks | {succeeded} succeeded | {failed} failed")
     else:
-        key = args[0]
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
         from plotlot.pipeline.ingest import ingest_municipality
 
-        count = asyncio.run(ingest_municipality(key))
+        key = args[0]
+        try:
+            count = asyncio.run(ingest_municipality(key))
+        except NvidiaCreditsExhaustedError as e:
+            _print_credits_exhausted(str(e))
+            sys.exit(2)
         print(f"\nIngested {count} chunks for {key}")
+
+
+def _print_credits_exhausted(detail: str) -> None:
+    print("\n" + "=" * 60)
+    print("  ⛔  NVIDIA NIM CREDITS EXHAUSTED — INGESTION STOPPED")
+    print("=" * 60)
+    print(f"\n  {detail}\n")
+    print("  Progress so far has been saved via checkpoints.")
+    print("  Your options:\n")
+    print("  1. Upgrade NVIDIA NIM ($0.06 / 1M tokens — ~$0.50 for all NorCal):")
+    print("     https://build.nvidia.com\n")
+    print("  2. Swap key in .env once upgraded, then resume:")
+    print("     plotlot-ingest --resume <batch_id>  (or re-run --all)")
+    print("\n  Already-indexed municipalities are serving live traffic.")
+    print("=" * 60 + "\n")
 
 
 def _run_discover() -> None:

@@ -555,93 +555,105 @@ _NAME_MAP: dict[str, str] = {
 }
 
 # CA Northern California high-development metros by county.
-# Covers Bay Area (Santa Clara, SF, Alameda, San Mateo, Contra Costa)
-# and Sacramento metro — markets with highest multifamily development pressure.
+# Priority order based on LAND DEAL ACTIVITY for PlotLot's core use case
+# (land acquisition pricing for residential development), NOT permit volume:
+#
+#   1. sacramento    — Eliminated SFR zoning (FAR-limited = PlotLot's exact calc).
+#                      $583M traded in 2025, Waegell (6,916 units), fastest-growing CA metro.
+#   2. contra_costa  — Concord Naval Weapons Station (15,600 units, master dev being finalized).
+#                      Antioch/Pittsburg lead East Bay rent growth. Low land costs = high deal vol.
+#   3. alameda       — Fremont 13,000-unit RHNA mandate, Milpitas 60du/acre TOD, Hayward corridor.
+#   4. santa_clara   — San Jose RHNA pressure + city incentive programs. High land cost = fewer
+#                      individual deals but still strong developer community.
+#   5. san_mateo     — Redwood City infill hub, East Palo Alto accessible land.
+#   6. san_francisco — Last: scarce land, deals are institutional-scale ($15M+), not PlotLot's user.
+#
+# Within each county, cities are ordered by individual land deal activity.
 NORCAL_METROS: dict[str, list[str]] = {
+    "sacramento": [
+        "Sacramento",      # eliminated SFR zoning — every R-1 lot is now a dev site
+        "Elk Grove",       # fastest-growing NorCal city (176K), $84M dev pipeline
+        "Rancho Cordova",  # Waegell property 6,916 units, Rio Del Oro — massive land deals
+        "Roseville",       # fast-growing suburb, active new construction
+        "Rocklin",         # same growth corridor as Roseville
+        "West Sacramento", # infill-focused, across from downtown
+        "Citrus Heights",
+        "Folsom",
+        "Davis",
+        "Woodland",
+        "Lincoln",
+    ],
+    "contra_costa": [
+        "Concord",         # Naval Weapons Station 15,600 units, BART TOD, master dev being finalized
+        "Antioch",         # DeNova Homes active, Somersville 702 units, leads East Bay rent growth
+        "Pittsburg",       # same submarket as Antioch, BART access, low land costs
+        "Richmond",        # large underutilized sites, strong RHNA obligation
+        "Brentwood",       # fast-growing outer East Bay, active residential dev
+        "San Ramon",
+        "Walnut Creek",
+        "Pleasant Hill",
+        "Martinez",
+        "El Cerrito",
+        "Hercules",
+        "Pinole",
+        "Orinda",
+        "Lafayette",
+        "Moraga",
+    ],
+    "alameda": [
+        "Fremont",         # 13,000-unit RHNA obligation, zoning reform Jan 2024
+        "Hayward",         # Mission Blvd corridor priority dev area
+        "San Leandro",     # two neighborhood projects recently approved
+        "Oakland",         # infill pipeline active, 8-story approvals
+        "Union City",      # BART corridor, accessible land
+        "Newark",
+        "Dublin",          # fast-growing BART corridor
+        "Emeryville",      # 1,815 units recently approved
+        "Pleasanton",
+        "Livermore",
+        "Berkeley",
+        "Alameda",
+        "Albany",
+        "Piedmont",
+    ],
     "santa_clara": [
-        "San Jose",
+        "San Jose",        # RHNA pressure, city multifamily incentive programs
+        "Milpitas",        # BART corridor, 60du/acre in Town Center zone
+        "Santa Clara",     # 1,700-unit project near Levi's Stadium
         "Sunnyvale",
-        "Santa Clara",
         "Mountain View",
-        "Palo Alto",
-        "Cupertino",
-        "Los Altos",
+        "Cupertino",       # Vallco Mall 2,600 units resuming
         "Campbell",
-        "Milpitas",
+        "Los Altos",
         "Gilroy",
         "Morgan Hill",
         "Los Altos Hills",
         "Monte Sereno",
         "Saratoga",
         "Los Gatos",
-    ],
-    "san_francisco": [
-        "San Francisco",
-    ],
-    "alameda": [
-        "Oakland",
-        "Berkeley",
-        "Fremont",
-        "Hayward",
-        "Alameda",
-        "Albany",
-        "Emeryville",
-        "Newark",
-        "Piedmont",
-        "San Leandro",
-        "Union City",
-        "Dublin",
-        "Livermore",
-        "Pleasanton",
+        "Palo Alto",       # very high land cost — institutional deals, lower PlotLot relevance
     ],
     "san_mateo": [
-        "Redwood City",
+        "Redwood City",    # Peninsula infill hub
+        "East Palo Alto",  # most accessible land in county, genuine missing-middle market
+        "South San Francisco",
         "San Mateo",
         "Daly City",
-        "South San Francisco",
-        "Burlingame",
         "Foster City",
-        "Menlo Park",
+        "Burlingame",
         "San Bruno",
         "Millbrae",
         "Belmont",
         "San Carlos",
         "Half Moon Bay",
-        "Atherton",
-        "East Palo Alto",
+        "Menlo Park",
+        "Hillsborough",
+        "Atherton",        # ultra-high land cost, minimal deal activity for PlotLot users
         "Portola Valley",
         "Woodside",
-        "Hillsborough",
     ],
-    "contra_costa": [
-        "Concord",
-        "Richmond",
-        "Walnut Creek",
-        "Antioch",
-        "Pittsburg",
-        "Brentwood",
-        "San Ramon",
-        "Pleasant Hill",
-        "Martinez",
-        "Hercules",
-        "El Cerrito",
-        "Pinole",
-        "Orinda",
-        "Lafayette",
-        "Moraga",
-    ],
-    "sacramento": [
-        "Sacramento",
-        "Elk Grove",
-        "Folsom",
-        "Citrus Heights",
-        "Rancho Cordova",
-        "Roseville",
-        "Rocklin",
-        "Lincoln",
-        "Davis",
-        "Woodland",
-        "West Sacramento",
+    "san_francisco": [
+        "San Francisco",   # last: scarce land, institutional-scale deals, lowest PlotLot relevance
     ],
 }
 

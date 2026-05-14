@@ -11,6 +11,7 @@ import logging
 import httpx
 
 from plotlot.config import settings
+from plotlot.core.errors import NvidiaCreditsExhaustedError
 from plotlot.observability.tracing import start_span
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ async def _embed_batch(
             return [item["embedding"] for item in data["data"]]
 
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 402:
+                raise NvidiaCreditsExhaustedError() from e
             if e.response.status_code == 429 or e.response.status_code >= 500:
                 delay = BASE_DELAY * (2**attempt)
                 logger.warning(
@@ -83,6 +86,8 @@ async def _embed_batch(
         },
         headers=headers,
     )
+    if resp.status_code == 402:
+        raise NvidiaCreditsExhaustedError()
     resp.raise_for_status()
     data = resp.json()
     return [item["embedding"] for item in data["data"]]
