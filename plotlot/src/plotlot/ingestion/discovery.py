@@ -538,6 +538,111 @@ _NAME_MAP: dict[str, str] = {
     "North Myrtle Beach": "North Myrtle Beach",
     "Hilton Head Island": "Hilton Head Island",
     "North Augusta": "North Augusta",
+    # CA NorCal aliases — Municode often uses "City of X" which pass-2 handles,
+    # but some clients have unusual names worth mapping explicitly.
+    "East Palo Alto": "East Palo Alto",
+    "Mountain View": "Mountain View",
+    "Los Altos Hills": "Los Altos Hills",
+    "Portola Valley": "Portola Valley",
+    "Woodside": "Woodside",
+    "Atherton": "Atherton",
+    "San Ramon": "San Ramon",
+    "Walnut Creek": "Walnut Creek",
+    "Pleasant Hill": "Pleasant Hill",
+    "El Cerrito": "El Cerrito",
+    "Elk Grove": "Elk Grove",
+    "Citrus Heights": "Citrus Heights",
+}
+
+# CA Northern California high-development metros by county.
+# Covers Bay Area (Santa Clara, SF, Alameda, San Mateo, Contra Costa)
+# and Sacramento metro — markets with highest multifamily development pressure.
+NORCAL_METROS: dict[str, list[str]] = {
+    "santa_clara": [
+        "San Jose",
+        "Sunnyvale",
+        "Santa Clara",
+        "Mountain View",
+        "Palo Alto",
+        "Cupertino",
+        "Los Altos",
+        "Campbell",
+        "Milpitas",
+        "Gilroy",
+        "Morgan Hill",
+        "Los Altos Hills",
+        "Monte Sereno",
+        "Saratoga",
+        "Los Gatos",
+    ],
+    "san_francisco": [
+        "San Francisco",
+    ],
+    "alameda": [
+        "Oakland",
+        "Berkeley",
+        "Fremont",
+        "Hayward",
+        "Alameda",
+        "Albany",
+        "Emeryville",
+        "Newark",
+        "Piedmont",
+        "San Leandro",
+        "Union City",
+        "Dublin",
+        "Livermore",
+        "Pleasanton",
+    ],
+    "san_mateo": [
+        "Redwood City",
+        "San Mateo",
+        "Daly City",
+        "South San Francisco",
+        "Burlingame",
+        "Foster City",
+        "Menlo Park",
+        "San Bruno",
+        "Millbrae",
+        "Belmont",
+        "San Carlos",
+        "Half Moon Bay",
+        "Atherton",
+        "East Palo Alto",
+        "Portola Valley",
+        "Woodside",
+        "Hillsborough",
+    ],
+    "contra_costa": [
+        "Concord",
+        "Richmond",
+        "Walnut Creek",
+        "Antioch",
+        "Pittsburg",
+        "Brentwood",
+        "San Ramon",
+        "Pleasant Hill",
+        "Martinez",
+        "Hercules",
+        "El Cerrito",
+        "Pinole",
+        "Orinda",
+        "Lafayette",
+        "Moraga",
+    ],
+    "sacramento": [
+        "Sacramento",
+        "Elk Grove",
+        "Folsom",
+        "Citrus Heights",
+        "Rancho Cordova",
+        "Roseville",
+        "Rocklin",
+        "Lincoln",
+        "Davis",
+        "Woodland",
+        "West Sacramento",
+    ],
 }
 
 # Module-level cache
@@ -633,6 +738,10 @@ GEORGIA_METROS_KEYS: set[str] = {
 
 SOUTH_CAROLINA_METROS_KEYS: set[str] = {
     _make_key(name) for names in SOUTH_CAROLINA_METROS.values() for name in names
+}
+
+NORCAL_METROS_KEYS: set[str] = {
+    _make_key(name) for names in NORCAL_METROS.values() for name in names
 }
 
 
@@ -1035,12 +1144,17 @@ async def discover_sc(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
     return await _discover_state("SC", SOUTH_CAROLINA_METROS, max_concurrent)
 
 
+async def discover_ca(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
+    """Discover NorCal municipalities with zoning data on Municode."""
+    return await _discover_state("CA", NORCAL_METROS, max_concurrent)
+
+
 async def get_all_municode_configs(
     force_refresh: bool = False,
 ) -> dict[str, MunicodeConfig]:
-    """Get FL + NC + TX + GA + SC Municode configs, using cached discovery results.
+    """Get FL + NC + TX + GA + SC + CA Municode configs, using cached discovery results.
 
-    Runs all 5 state discoveries in parallel, merges results, and applies
+    Runs all 6 state discoveries in parallel, merges results, and applies
     fallback configs for FL and NC (other states use discovery-only).
     """
     global _cached_configs
@@ -1057,15 +1171,16 @@ async def get_all_municode_configs(
                 _cached_configs = disk_configs
                 return _cached_configs
 
-        logger.info("Running combined FL + NC + TX + GA + SC Municode auto-discovery...")
+        logger.info("Running combined FL + NC + TX + GA + SC + CA Municode auto-discovery...")
         configs: dict[str, MunicodeConfig] = {}
         try:
-            fl_configs, nc_configs, tx_configs, ga_configs, sc_configs = await asyncio.gather(
+            fl_configs, nc_configs, tx_configs, ga_configs, sc_configs, ca_configs = await asyncio.gather(
                 discover_all(),
                 discover_nc(),
                 discover_tx(),
                 discover_ga(),
                 discover_sc(),
+                discover_ca(),
                 return_exceptions=False,
             )
             configs.update(fl_configs)
@@ -1073,6 +1188,7 @@ async def get_all_municode_configs(
             configs.update(tx_configs)
             configs.update(ga_configs)
             configs.update(sc_configs)
+            configs.update(ca_configs)
         except Exception as e:
             logger.error("Combined discovery failed, returning fallback configs: %s", e)
             from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
@@ -1096,7 +1212,7 @@ async def get_all_municode_configs(
 
         _cached_configs = configs
         _write_disk_cache(configs)
-        logger.info("Cached %d municipality configs across 5 states", len(_cached_configs))
+        logger.info("Cached %d municipality configs across 6 states", len(_cached_configs))
         return _cached_configs
 
 
@@ -1108,6 +1224,6 @@ async def get_municode_configs(
     On first call, runs full discovery against the Library API.
     Subsequent calls return the cached result.
 
-    Now includes both FL and NC municipalities.
+    Now includes FL, NC, TX, GA, SC, and CA (NorCal) municipalities.
     """
     return await get_all_municode_configs(force_refresh=force_refresh)
