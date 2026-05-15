@@ -15,6 +15,12 @@ BANNED_DIR_PREFIXES = (
     "plotlot/tests/screenshots/",
 )
 
+# Static product assets in Next.js public/ directories are intentionally tracked.
+ALLOWED_DIR_PREFIXES = (
+    "plotlot/frontend/public/",
+    "apps/plotlot/frontend/public/",
+)
+
 BANNED_MEDIA_SUFFIXES = {
     ".png",
     ".jpg",
@@ -43,6 +49,9 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
             for prefix in BANNED_DIR_PREFIXES
         ):
             violations.append((normalized, "generated-artifact-directory"))
+            continue
+
+        if any(normalized.startswith(prefix) for prefix in ALLOWED_DIR_PREFIXES):
             continue
 
         suffix = PurePosixPath(normalized).suffix.lower()
