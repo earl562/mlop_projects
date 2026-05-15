@@ -8,7 +8,6 @@ Covers:
 - SiteScorecard fields populated by run_datacenter_pipeline (mocked I/O)
 """
 
-from dataclasses import asdict
 from unittest.mock import AsyncMock, patch
 
 import pytest

@@ -16,7 +16,6 @@ Steps:
 import asyncio
 import json
 import logging
-from dataclasses import asdict
 
 import httpx
 
@@ -241,9 +240,9 @@ async def fetch_flood_signal(lat: float, lng: float) -> InfraSignal:
                     display_zone = f"{fld_zone}" + (f" ({zone_subty})" if zone_subty else "")
 
                     if fld_zone == "X":
-                        summary = f"FEMA Flood Zone X — minimal flood hazard. No NFIP insurance required. Optimal for critical infrastructure."
+                        summary = "FEMA Flood Zone X — minimal flood hazard. No NFIP insurance required. Optimal for critical infrastructure."
                     elif zone_key == "X500":
-                        summary = f"FEMA Flood Zone X (0.2% annual chance). Low risk, but above-grade electrical rooms recommended."
+                        summary = "FEMA Flood Zone X (0.2% annual chance). Low risk, but above-grade electrical rooms recommended."
                     elif fld_zone in ("AE", "A"):
                         summary = f"FEMA Flood Zone {fld_zone} — 100-year floodplain. Critical infrastructure typically disqualified. Significant elevation required."
                     else:

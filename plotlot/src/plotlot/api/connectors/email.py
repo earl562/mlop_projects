@@ -15,7 +15,6 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

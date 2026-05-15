@@ -8,8 +8,7 @@ These tests verify that the cache functions accept and use analysis_type
 as a second dimension of the cache key.
 """
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

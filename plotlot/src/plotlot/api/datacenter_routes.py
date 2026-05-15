@@ -340,7 +340,7 @@ async def analyze_datacenter(request: AnalyzeRequest):
 
             yield _sse_event("done", scorecard_dict)
 
-        except Exception as exc:
+        except Exception:
             logger.exception("Data center pipeline error for %s", request.address)
             yield _sse_event("error", {
                 "detail": "Data center analysis failed. Please try again.",

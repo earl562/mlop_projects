@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for pgvector storage."""
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase
 

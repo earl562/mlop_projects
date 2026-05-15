@@ -182,7 +182,7 @@ def main():
         print("\nDone! Your .env is configured.")
         print("Restart the backend to pick up the new credentials.")
     else:
-        print(f"\nManually add to .env:")
+        print("\nManually add to .env:")
         print(f"GOOGLE_CLIENT_ID={OAUTH_CLIENT_ID}")
         print(f"GOOGLE_CLIENT_SECRET={OAUTH_CLIENT_SECRET}")
         print(f"GOOGLE_REFRESH_TOKEN={refresh_token}")
