@@ -38,6 +38,8 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
     "mypy>=1.10",
+    "mlflow>=2.16",
+    "psycopg2-binary>=2.9",
 ]
 mlflow = ["mlflow>=2.16", "psycopg2-binary>=2.9"]
 eval = [

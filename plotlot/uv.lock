@@ -1980,7 +1980,9 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "mlflow" },
     { name = "mypy" },
+    { name = "psycopg2-binary" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -2009,11 +2011,13 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", marker = "extra == 'eval'", specifier = ">=4.21" },
+    { name = "mlflow", marker = "extra == 'dev'", specifier = ">=2.16" },
     { name = "mlflow", marker = "extra == 'mlflow'", specifier = ">=2.16" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "openai", specifier = ">=2.31.0" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pgvector", specifier = ">=0.3" },
+    { name = "psycopg2-binary", marker = "extra == 'dev'", specifier = ">=2.9" },
     { name = "psycopg2-binary", marker = "extra == 'mlflow'", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
