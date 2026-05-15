@@ -1051,6 +1051,13 @@ export default function Home() {
             </div>
           )}
 
+          {/* Mode toggle standalone — visible in lookup mode after report so user can switch to agent */}
+          {mode === "lookup" && hasReport && (
+            <div className="flex justify-center pt-1">
+              <ModeToggle mode={mode} onChange={setMode} />
+            </div>
+          )}
+
         </div>
       </div>
 
