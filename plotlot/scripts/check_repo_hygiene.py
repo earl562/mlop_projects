@@ -60,7 +60,10 @@ def main() -> int:
 
     print("Repository hygiene check failed.", file=sys.stderr)
     print("", file=sys.stderr)
-    print("The following tracked files violate the no-media / no-generated-artifacts policy:", file=sys.stderr)
+    print(
+        "The following tracked files violate the no-media / no-generated-artifacts policy:",
+        file=sys.stderr,
+    )
     for path, reason in violations:
         print(f"- {path} [{reason}]", file=sys.stderr)
 

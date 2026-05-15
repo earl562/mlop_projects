@@ -29,39 +29,179 @@ from dataclasses import dataclass, field
 
 TEST_CASES: list[dict] = [
     # Sacramento county (discovered: Citrus Heights, Lincoln, Rocklin)
-    {"municipality": "Citrus Heights", "county": "Sacramento", "address": "6360 Fountain Square Dr, Citrus Heights, CA 95621", "zone_query": "residential zone height setback density"},
-    {"municipality": "Lincoln", "county": "Sacramento", "address": "600 6th St, Lincoln, CA 95648", "zone_query": "residential zone setback density lot coverage"},
-    {"municipality": "Rocklin", "county": "Sacramento", "address": "3970 Rocklin Rd, Rocklin, CA 95677", "zone_query": "residential density setback height FAR"},
+    {
+        "municipality": "Citrus Heights",
+        "county": "Sacramento",
+        "address": "6360 Fountain Square Dr, Citrus Heights, CA 95621",
+        "zone_query": "residential zone height setback density",
+    },
+    {
+        "municipality": "Lincoln",
+        "county": "Sacramento",
+        "address": "600 6th St, Lincoln, CA 95648",
+        "zone_query": "residential zone setback density lot coverage",
+    },
+    {
+        "municipality": "Rocklin",
+        "county": "Sacramento",
+        "address": "3970 Rocklin Rd, Rocklin, CA 95677",
+        "zone_query": "residential density setback height FAR",
+    },
     # Contra Costa county (discovered: El Cerrito, Lafayette, Moraga, Orinda, Richmond)
-    {"municipality": "El Cerrito", "county": "Contra Costa", "address": "10890 San Pablo Ave, El Cerrito, CA 94530", "zone_query": "residential zone height setback density"},
-    {"municipality": "Lafayette", "county": "Contra Costa", "address": "3675 Mt Diablo Blvd, Lafayette, CA 94549", "zone_query": "residential zone setback density lot coverage"},
-    {"municipality": "Moraga", "county": "Contra Costa", "address": "329 Rheem Blvd, Moraga, CA 94556", "zone_query": "residential density height setback"},
-    {"municipality": "Orinda", "county": "Contra Costa", "address": "22 Orinda Way, Orinda, CA 94563", "zone_query": "residential zone setback lot size density"},
-    {"municipality": "Richmond", "county": "Contra Costa", "address": "450 Civic Center Plaza, Richmond, CA 94804", "zone_query": "residential zone density height setback"},
+    {
+        "municipality": "El Cerrito",
+        "county": "Contra Costa",
+        "address": "10890 San Pablo Ave, El Cerrito, CA 94530",
+        "zone_query": "residential zone height setback density",
+    },
+    {
+        "municipality": "Lafayette",
+        "county": "Contra Costa",
+        "address": "3675 Mt Diablo Blvd, Lafayette, CA 94549",
+        "zone_query": "residential zone setback density lot coverage",
+    },
+    {
+        "municipality": "Moraga",
+        "county": "Contra Costa",
+        "address": "329 Rheem Blvd, Moraga, CA 94556",
+        "zone_query": "residential density height setback",
+    },
+    {
+        "municipality": "Orinda",
+        "county": "Contra Costa",
+        "address": "22 Orinda Way, Orinda, CA 94563",
+        "zone_query": "residential zone setback lot size density",
+    },
+    {
+        "municipality": "Richmond",
+        "county": "Contra Costa",
+        "address": "450 Civic Center Plaza, Richmond, CA 94804",
+        "zone_query": "residential zone density height setback",
+    },
     # Alameda county (discovered: Alameda city, Hayward, Newark, Oakland)
-    {"municipality": "Alameda", "county": "Alameda", "address": "2263 Santa Clara Ave, Alameda, CA 94501", "zone_query": "residential zone height setback density"},
-    {"municipality": "Hayward", "county": "Alameda", "address": "777 B St, Hayward, CA 94541", "zone_query": "residential zone height setback density"},
-    {"municipality": "Newark", "county": "Alameda", "address": "37101 Newark Blvd, Newark, CA 94560", "zone_query": "residential density setback height lot coverage"},
-    {"municipality": "Oakland", "county": "Alameda", "address": "250 Frank H Ogawa Plaza, Oakland, CA 94612", "zone_query": "residential zone density setback height RM"},
+    {
+        "municipality": "Alameda",
+        "county": "Alameda",
+        "address": "2263 Santa Clara Ave, Alameda, CA 94501",
+        "zone_query": "residential zone height setback density",
+    },
+    {
+        "municipality": "Hayward",
+        "county": "Alameda",
+        "address": "777 B St, Hayward, CA 94541",
+        "zone_query": "residential zone height setback density",
+    },
+    {
+        "municipality": "Newark",
+        "county": "Alameda",
+        "address": "37101 Newark Blvd, Newark, CA 94560",
+        "zone_query": "residential density setback height lot coverage",
+    },
+    {
+        "municipality": "Oakland",
+        "county": "Alameda",
+        "address": "250 Frank H Ogawa Plaza, Oakland, CA 94612",
+        "zone_query": "residential zone density setback height RM",
+    },
     # Santa Clara county (9 cities)
-    {"municipality": "San Jose", "county": "Santa Clara", "address": "200 E Santa Clara St, San Jose, CA 95113", "zone_query": "residential zone density setback height"},
-    {"municipality": "Milpitas", "county": "Santa Clara", "address": "455 E Calaveras Blvd, Milpitas, CA 95035", "zone_query": "residential density setback height lot coverage"},
-    {"municipality": "Mountain View", "county": "Santa Clara", "address": "500 Castro St, Mountain View, CA 94041", "zone_query": "residential zone height setback density"},
-    {"municipality": "Campbell", "county": "Santa Clara", "address": "70 N First St, Campbell, CA 95008", "zone_query": "residential density setback height FAR"},
-    {"municipality": "Los Altos", "county": "Santa Clara", "address": "1 N San Antonio Rd, Los Altos, CA 94022", "zone_query": "residential setback height lot coverage density"},
-    {"municipality": "Morgan Hill", "county": "Santa Clara", "address": "17575 Peak Ave, Morgan Hill, CA 95037", "zone_query": "residential zone density setback"},
-    {"municipality": "Monte Sereno", "county": "Santa Clara", "address": "18041 Saratoga Los Gatos Rd, Monte Sereno, CA 95030", "zone_query": "residential setback lot size height density"},
-    {"municipality": "Saratoga", "county": "Santa Clara", "address": "13777 Fruitvale Ave, Saratoga, CA 95070", "zone_query": "residential height setback lot coverage"},
-    {"municipality": "Los Gatos", "county": "Santa Clara", "address": "110 E Main Ave, Los Gatos, CA 95030", "zone_query": "residential zone setback density height"},
+    {
+        "municipality": "San Jose",
+        "county": "Santa Clara",
+        "address": "200 E Santa Clara St, San Jose, CA 95113",
+        "zone_query": "residential zone density setback height",
+    },
+    {
+        "municipality": "Milpitas",
+        "county": "Santa Clara",
+        "address": "455 E Calaveras Blvd, Milpitas, CA 95035",
+        "zone_query": "residential density setback height lot coverage",
+    },
+    {
+        "municipality": "Mountain View",
+        "county": "Santa Clara",
+        "address": "500 Castro St, Mountain View, CA 94041",
+        "zone_query": "residential zone height setback density",
+    },
+    {
+        "municipality": "Campbell",
+        "county": "Santa Clara",
+        "address": "70 N First St, Campbell, CA 95008",
+        "zone_query": "residential density setback height FAR",
+    },
+    {
+        "municipality": "Los Altos",
+        "county": "Santa Clara",
+        "address": "1 N San Antonio Rd, Los Altos, CA 94022",
+        "zone_query": "residential setback height lot coverage density",
+    },
+    {
+        "municipality": "Morgan Hill",
+        "county": "Santa Clara",
+        "address": "17575 Peak Ave, Morgan Hill, CA 95037",
+        "zone_query": "residential zone density setback",
+    },
+    {
+        "municipality": "Monte Sereno",
+        "county": "Santa Clara",
+        "address": "18041 Saratoga Los Gatos Rd, Monte Sereno, CA 95030",
+        "zone_query": "residential setback lot size height density",
+    },
+    {
+        "municipality": "Saratoga",
+        "county": "Santa Clara",
+        "address": "13777 Fruitvale Ave, Saratoga, CA 95070",
+        "zone_query": "residential height setback lot coverage",
+    },
+    {
+        "municipality": "Los Gatos",
+        "county": "Santa Clara",
+        "address": "110 E Main Ave, Los Gatos, CA 95030",
+        "zone_query": "residential zone setback density height",
+    },
     # San Mateo county (discovered: East Palo Alto, Daly City, Hillsborough, Portola Valley, Woodside + suspects)
-    {"municipality": "East Palo Alto", "county": "San Mateo", "address": "2415 University Ave, East Palo Alto, CA 94303", "zone_query": "residential zone density height setback"},
-    {"municipality": "Daly City", "county": "San Mateo", "address": "333 90th St, Daly City, CA 94015", "zone_query": "residential zone setback density height"},
-    {"municipality": "Hillsborough", "county": "San Mateo", "address": "1600 Floribunda Ave, Hillsborough, CA 94010", "zone_query": "residential setback lot size height density"},
-    {"municipality": "Portola Valley", "county": "San Mateo", "address": "765 Portola Rd, Portola Valley, CA 94028", "zone_query": "residential setback lot size density height"},
-    {"municipality": "Woodside", "county": "San Mateo", "address": "2955 Woodside Rd, Woodside, CA 94062", "zone_query": "residential zone setback lot size density"},
+    {
+        "municipality": "East Palo Alto",
+        "county": "San Mateo",
+        "address": "2415 University Ave, East Palo Alto, CA 94303",
+        "zone_query": "residential zone density height setback",
+    },
+    {
+        "municipality": "Daly City",
+        "county": "San Mateo",
+        "address": "333 90th St, Daly City, CA 94015",
+        "zone_query": "residential zone setback density height",
+    },
+    {
+        "municipality": "Hillsborough",
+        "county": "San Mateo",
+        "address": "1600 Floribunda Ave, Hillsborough, CA 94010",
+        "zone_query": "residential setback lot size height density",
+    },
+    {
+        "municipality": "Portola Valley",
+        "county": "San Mateo",
+        "address": "765 Portola Rd, Portola Valley, CA 94028",
+        "zone_query": "residential setback lot size density height",
+    },
+    {
+        "municipality": "Woodside",
+        "county": "San Mateo",
+        "address": "2955 Woodside Rd, Woodside, CA 94062",
+        "zone_query": "residential zone setback lot size density",
+    },
     # Suspects — low chunk counts, likely wrong Municode product
-    {"municipality": "Redwood City", "county": "San Mateo", "address": "1017 Middlefield Rd, Redwood City, CA 94063", "zone_query": "residential zone density setback height"},
-    {"municipality": "Belmont", "county": "San Mateo", "address": "1 Twin Pines Ln, Belmont, CA 94002", "zone_query": "residential zone height setback density"},
+    {
+        "municipality": "Redwood City",
+        "county": "San Mateo",
+        "address": "1017 Middlefield Rd, Redwood City, CA 94063",
+        "zone_query": "residential zone density setback height",
+    },
+    {
+        "municipality": "Belmont",
+        "county": "San Mateo",
+        "address": "1 Twin Pines Ln, Belmont, CA 94002",
+        "zone_query": "residential zone height setback density",
+    },
 ]
 
 MIN_CHUNKS = 100  # below this → flag as suspect
@@ -157,7 +297,10 @@ def _print_result(r: VerifyResult, quick: bool) -> None:
     status = "PASS" if r.passed(quick) else ("SUSPECT" if r.suspect else "FAIL")
     icon = {"PASS": "✓", "SUSPECT": "⚠", "FAIL": "✗"}[status]
     chunks_warn = " ⚠ LOW" if r.suspect else ""
-    print(f"  {icon} {r.municipality:<20} db={r.db_chunks:>5}{chunks_warn}  hits={r.search_hits}", end="")
+    print(
+        f"  {icon} {r.municipality:<20} db={r.db_chunks:>5}{chunks_warn}  hits={r.search_hits}",
+        end="",
+    )
     if not quick:
         print(f"  params={r.params_extracted}", end="")
     print(f"  ({r.elapsed_s:.1f}s)")
@@ -171,9 +314,15 @@ def _print_result(r: VerifyResult, quick: bool) -> None:
 async def main(county_filter: str | None, quick: bool) -> None:
     cases = TEST_CASES
     if county_filter:
-        cases = [tc for tc in TEST_CASES if tc["county"].lower().replace(" ", "_") == county_filter.lower().replace(" ", "_")]
+        cases = [
+            tc
+            for tc in TEST_CASES
+            if tc["county"].lower().replace(" ", "_") == county_filter.lower().replace(" ", "_")
+        ]
         if not cases:
-            print(f"No test cases for county '{county_filter}'. Available: {sorted({tc['county'] for tc in TEST_CASES})}")
+            print(
+                f"No test cases for county '{county_filter}'. Available: {sorted({tc['county'] for tc in TEST_CASES})}"
+            )
             sys.exit(1)
 
     mode = "quick (retrieval only)" if quick else "full (retrieval + LLM extraction)"
@@ -206,7 +355,9 @@ async def main(county_filter: str | None, quick: bool) -> None:
     failed = sum(1 for r in all_results if r.error)
 
     print(f"\n{'=' * 62}")
-    print(f"  Results: {passed}/{len(all_results)} passed  |  {suspects} suspect (low chunks)  |  {failed} errors")
+    print(
+        f"  Results: {passed}/{len(all_results)} passed  |  {suspects} suspect (low chunks)  |  {failed} errors"
+    )
     if suspects:
         print("\n  Suspect municipalities (likely wrong Municode product):")
         for r in all_results:
@@ -220,10 +371,12 @@ async def list_db() -> None:
     from sqlalchemy import text
 
     session = await get_session()
-    rows = await session.execute(text(
-        "SELECT municipality, state, COUNT(*) as chunks "
-        "FROM ordinance_chunks GROUP BY municipality, state ORDER BY state, municipality"
-    ))
+    rows = await session.execute(
+        text(
+            "SELECT municipality, state, COUNT(*) as chunks "
+            "FROM ordinance_chunks GROUP BY municipality, state ORDER BY state, municipality"
+        )
+    )
     results = rows.fetchall()
     await session.close()
 
