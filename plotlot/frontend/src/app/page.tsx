@@ -732,14 +732,24 @@ export default function Home() {
   }
 
   // ─── Conversation State ───────────────────────────────────────────────
+  const conversationAddress =
+    currentReport?.formatted_address ??
+    messages.find((m) => m.role === "user" && m.content)?.content ??
+    null;
+
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
-      {/* New Analysis button — fixed top-right */}
-      <div className="fixed right-4 top-5 z-40 sm:right-6">
+      {/* Conversation header — address breadcrumb + New Analysis button */}
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
+        {conversationAddress ? (
+          <p className="min-w-0 truncate text-xs text-[var(--text-muted)]">{conversationAddress}</p>
+        ) : (
+          <span />
+        )}
         <button
           onClick={handleNewAnalysis}
           data-testid="new-analysis-button"
-          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+          className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
           style={{ boxShadow: "var(--shadow-nav)" }}
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
