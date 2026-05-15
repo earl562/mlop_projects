@@ -35,11 +35,11 @@ logger = logging.getLogger(__name__)
 
 _FLOOD_ZONE_SCORES: dict[str, tuple[float, str]] = {
     # FEMA flood zone → (score, rating)
-    "X": (1.0, "Excellent"),        # Minimal flood hazard
-    "X500": (0.85, "Good"),         # 0.2% annual chance
-    "AE": (0.35, "Poor"),           # 1% annual chance, base flood elevation
-    "A": (0.3, "Poor"),             # 1% annual chance, no BFE
-    "VE": (0.1, "Poor"),            # Coastal high hazard
+    "X": (1.0, "Excellent"),  # Minimal flood hazard
+    "X500": (0.85, "Good"),  # 0.2% annual chance
+    "AE": (0.35, "Poor"),  # 1% annual chance, base flood elevation
+    "A": (0.3, "Poor"),  # 1% annual chance, no BFE
+    "VE": (0.1, "Poor"),  # Coastal high hazard
     "V": (0.1, "Poor"),
     "AO": (0.4, "Fair"),
     "AH": (0.4, "Fair"),
@@ -144,7 +144,8 @@ async def fetch_fiber_signal(lat: float, lng: float) -> InfraSignal:
                 providers = data.get("availability", [])
                 # Filter to fiber (technology_code 50 = fiber to premises)
                 fiber_providers = [
-                    p for p in providers
+                    p
+                    for p in providers
                     if p.get("technology_code") in (50, 70)  # 50=FTTH, 70=cable
                 ]
                 if not providers and not fiber_providers:
@@ -159,7 +160,9 @@ async def fetch_fiber_signal(lat: float, lng: float) -> InfraSignal:
                         confidence="medium",
                     )
 
-                max_down = max((p.get("max_advertised_download_speed", 0) for p in providers), default=0)
+                max_down = max(
+                    (p.get("max_advertised_download_speed", 0) for p in providers), default=0
+                )
                 fiber_count = len(fiber_providers)
 
                 if fiber_count >= 2 and max_down >= 1000:
@@ -292,7 +295,7 @@ async def fetch_seismic_signal(lat: float, lng: float) -> InfraSignal:
                     "latitude": lat,
                     "longitude": lng,
                     "riskCategory": "IV",  # Critical facilities = Risk Category IV
-                    "siteClass": "D",       # Default stiff soil
+                    "siteClass": "D",  # Default stiff soil
                     "title": "datacenter",
                 },
             )
@@ -439,9 +442,7 @@ async def extract_datacenter_params(
     # Build context from retrieved chunks
     context_parts = []
     for r in results[:12]:  # cap at 12 chunks ~= 6K tokens
-        context_parts.append(
-            f"[{r.section} — {r.section_title}]\n{r.chunk_text}"
-        )
+        context_parts.append(f"[{r.section} — {r.section_title}]\n{r.chunk_text}")
     context = "\n\n---\n\n".join(context_parts)
 
     user_msg = (
@@ -523,9 +524,7 @@ def compute_composite_score(
     if zoning.score == 0.0:
         return 0.0, "Disqualified"
 
-    weighted_sum = sum(
-        _SIGNAL_WEIGHTS[name] * sig.score for name, sig in signals.items()
-    )
+    weighted_sum = sum(_SIGNAL_WEIGHTS[name] * sig.score for name, sig in signals.items())
 
     if weighted_sum >= 0.85:
         rating = "Excellent"
@@ -564,7 +563,9 @@ async def generate_site_summary(
     try:
         from plotlot.retrieval.llm import _call_llm_with_fallback  # type: ignore[attr-defined]
 
-        user_msg = f"Site address: {address}\n\nScorecard data:\n{json.dumps(scorecard_dict, indent=2)}"
+        user_msg = (
+            f"Site address: {address}\n\nScorecard data:\n{json.dumps(scorecard_dict, indent=2)}"
+        )
 
         result = await _call_llm_with_fallback(
             messages=[
@@ -637,11 +638,31 @@ async def run_datacenter_pipeline(
         "composite_score": composite_score,
         "composite_rating": composite_rating,
         "signals": {
-            "power": {"score": power_signal.score, "rating": power_signal.rating, "summary": power_signal.summary},
-            "fiber": {"score": fiber_signal.score, "rating": fiber_signal.rating, "summary": fiber_signal.summary},
-            "flood": {"score": flood_signal.score, "rating": flood_signal.rating, "summary": flood_signal.summary},
-            "seismic": {"score": seismic_signal.score, "rating": seismic_signal.rating, "summary": seismic_signal.summary},
-            "zoning": {"score": zoning_signal.score, "rating": zoning_signal.rating, "summary": zoning_signal.summary},
+            "power": {
+                "score": power_signal.score,
+                "rating": power_signal.rating,
+                "summary": power_signal.summary,
+            },
+            "fiber": {
+                "score": fiber_signal.score,
+                "rating": fiber_signal.rating,
+                "summary": fiber_signal.summary,
+            },
+            "flood": {
+                "score": flood_signal.score,
+                "rating": flood_signal.rating,
+                "summary": flood_signal.summary,
+            },
+            "seismic": {
+                "score": seismic_signal.score,
+                "rating": seismic_signal.rating,
+                "summary": seismic_signal.summary,
+            },
+            "zoning": {
+                "score": zoning_signal.score,
+                "rating": zoning_signal.rating,
+                "summary": zoning_signal.summary,
+            },
         },
     }
 
@@ -677,7 +698,10 @@ async def run_datacenter_pipeline(
         deal_breakers=deal_breakers,
         strengths=strengths,
         sources=list(set(sources)),
-        confidence="high" if all(
-            s.confidence == "high" for s in [power_signal, fiber_signal, flood_signal, seismic_signal, zoning_signal]
-        ) else "medium",
+        confidence="high"
+        if all(
+            s.confidence == "high"
+            for s in [power_signal, fiber_signal, flood_signal, seismic_signal, zoning_signal]
+        )
+        else "medium",
     )

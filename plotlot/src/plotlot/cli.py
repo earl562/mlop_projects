@@ -69,7 +69,9 @@ def _print_credit_summary(
     print(f"  Credits remaining (est.) : {remaining:,}")
     print()
     if remaining > 0:
-        print(f"  At ~{avg_chunks_per_muni:.0f} chunks/municipality ({calls_per_muni:.1f} calls each):")
+        print(
+            f"  At ~{avg_chunks_per_muni:.0f} chunks/municipality ({calls_per_muni:.1f} calls each):"
+        )
         print(f"  Estimated municipalities left: ~{munis_remaining_est}")
         print()
         print("  Next county commands:")
@@ -290,17 +292,29 @@ def ingest_main() -> None:
 
     args = sys.argv[1:]
     if not args or args[0] == "--help":
-        print("Usage: plotlot-ingest [--all | --discover | --state XX [--county YY | --counties Y1 Y2 ...] | --resume ID | <key>]")
+        print(
+            "Usage: plotlot-ingest [--all | --discover | --state XX [--county YY | --counties Y1 Y2 ...] | --resume ID | <key>]"
+        )
         print(f"  Fallback keys: {', '.join(MUNICODE_CONFIGS)}")
-        print("  --all                                  Ingest all discovered municipalities (FL, NC, TX, GA, SC, CA)")
+        print(
+            "  --all                                  Ingest all discovered municipalities (FL, NC, TX, GA, SC, CA)"
+        )
         print("  --state FL                             Ingest only one state")
-        print("  --state CA --county sacramento         Ingest one county (manual county-by-county mode)")
-        print("  --state CA --counties c1 c2 c3         Ingest multiple counties in order, stop on credit exhaustion")
+        print(
+            "  --state CA --county sacramento         Ingest one county (manual county-by-county mode)"
+        )
+        print(
+            "  --state CA --counties c1 c2 c3         Ingest multiple counties in order, stop on credit exhaustion"
+        )
         print("  --resume BATCH_ID                      Resume a previously interrupted batch")
-        print("  --discover                             Run discovery across all states and print results")
+        print(
+            "  --discover                             Run discovery across all states and print results"
+        )
         print("  <key>                                  Ingest a single municipality by key")
         print()
-        print("  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco")
+        print(
+            "  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco"
+        )
         sys.exit(0 if "--help" in args else 1)
 
     # Parse all flags upfront
@@ -339,7 +353,9 @@ def ingest_main() -> None:
         from plotlot.pipeline.ingest import ingest_county
 
         if not state_filter:
-            print("Error: --counties requires --state. Example: --state CA --counties san_mateo san_francisco")
+            print(
+                "Error: --counties requires --state. Example: --state CA --counties san_mateo san_francisco"
+            )
             sys.exit(1)
 
         prior_calls = _load_cumulative_credits()
@@ -359,7 +375,9 @@ def ingest_main() -> None:
                 _save_cumulative_credits(prior_calls + calls_this_run)
                 prior_calls += calls_this_run
                 _print_credits_exhausted(str(e))
-                print(f"\n  Completed {counties_filter.index(county)} of {len(counties_filter)} counties before exhaustion.")
+                print(
+                    f"\n  Completed {counties_filter.index(county)} of {len(counties_filter)} counties before exhaustion."
+                )
                 sys.exit(2)
 
             calls_this_run = get_api_calls()

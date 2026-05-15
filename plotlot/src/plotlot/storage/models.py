@@ -122,7 +122,9 @@ class ReportCache(Base):
     id = Column(Integer, primary_key=True)
     address = Column(String, nullable=False, index=True)
     address_normalized = Column(String, nullable=False)  # lowercase, stripped
-    analysis_type = Column(String(50), nullable=False, default="residential")  # residential|datacenter
+    analysis_type = Column(
+        String(50), nullable=False, default="residential"
+    )  # residential|datacenter
     report_json = Column(JSON, nullable=False)  # full report as dict
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False)  # TTL

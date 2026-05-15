@@ -365,7 +365,9 @@ class TestConnectorEndpoints:
             daily_send_count=_DAILY_SESSION_CAP,
         )
         fake_db.credentials[SESSION_ID] = cred
-        monkeypatch.setattr(email_connector._send_rate_limiter, "check", AsyncMock(return_value=None))
+        monkeypatch.setattr(
+            email_connector._send_rate_limiter, "check", AsyncMock(return_value=None)
+        )
 
         response = connector_client.post(
             "/api/v1/connectors/email/send",

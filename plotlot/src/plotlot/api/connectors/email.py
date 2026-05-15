@@ -172,9 +172,7 @@ def _reset_daily_count_if_needed(cred: ConnectorCredential) -> ConnectorCredenti
     return cred
 
 
-async def _get_credential(
-    session_id: str, db: AsyncSession
-) -> ConnectorCredential | None:
+async def _get_credential(session_id: str, db: AsyncSession) -> ConnectorCredential | None:
     result = await db.execute(
         select(ConnectorCredential).where(ConnectorCredential.session_id == session_id)
     )
@@ -194,9 +192,7 @@ async def _send_smtp(
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     from_header = (
-        f"{cred.from_name} <{cred.smtp_username}>"
-        if cred.from_name
-        else cred.smtp_username
+        f"{cred.from_name} <{cred.smtp_username}>" if cred.from_name else cred.smtp_username
     )
     msg["From"] = from_header
     msg["To"] = f"{to_name} <{to_email}>" if to_name else to_email

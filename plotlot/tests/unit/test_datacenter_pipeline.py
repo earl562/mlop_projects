@@ -122,10 +122,10 @@ class TestCompositeScore:
         # power=0.25, fiber=0.20, flood=0.25, seismic=0.10, zoning=0.20
         score, _ = compute_composite_score(
             _signal("power_grid", 1.0),  # 0.25
-            _signal("fiber", 1.0),       # 0.20
+            _signal("fiber", 1.0),  # 0.20
             _signal("flood_zone", 0.0),  # 0.00
-            _signal("seismic", 1.0),     # 0.10
-            _signal("zoning", 1.0),      # 0.20
+            _signal("seismic", 1.0),  # 0.10
+            _signal("zoning", 1.0),  # 0.20
         )
         expected = 0.25 + 0.20 + 0.00 + 0.10 + 0.20
         assert abs(score - expected) < 0.001
@@ -206,37 +206,85 @@ async def test_run_datacenter_pipeline_returns_scorecard():
     )
 
     good_signal = InfraSignal(
-        name="power_grid", label="Grid Access", score=0.9, rating="Excellent",
-        summary="Good grid access.", raw_value="FPL — $0.10/kWh",
-        source="NREL", confidence="high",
+        name="power_grid",
+        label="Grid Access",
+        score=0.9,
+        rating="Excellent",
+        summary="Good grid access.",
+        raw_value="FPL — $0.10/kWh",
+        source="NREL",
+        confidence="high",
     )
 
     with (
-        patch("plotlot.pipeline.datacenter.fetch_power_signal", new_callable=AsyncMock, return_value=good_signal),
-        patch("plotlot.pipeline.datacenter.fetch_fiber_signal", new_callable=AsyncMock, return_value=InfraSignal(
-            name="fiber", label="Fiber", score=0.8, rating="Good",
-            summary="1 fiber provider.", raw_value="1 provider", source="FCC", confidence="high",
-        )),
-        patch("plotlot.pipeline.datacenter.fetch_flood_signal", new_callable=AsyncMock, return_value=InfraSignal(
-            name="flood_zone", label="Flood Zone", score=1.0, rating="Excellent",
-            summary="Zone X.", raw_value="X", source="FEMA", confidence="high",
-        )),
-        patch("plotlot.pipeline.datacenter.fetch_seismic_signal", new_callable=AsyncMock, return_value=InfraSignal(
-            name="seismic", label="Seismic", score=0.95, rating="Excellent",
-            summary="Very low.", raw_value="Ss=0.05g", source="USGS", confidence="high",
-        )),
-        patch("plotlot.pipeline.datacenter.extract_datacenter_params", new_callable=AsyncMock, return_value=DataCenterParams(
-            zoning_code="I-1",
-            is_industrial_permitted=True,
-            conditional_use_required=False,
-        )),
-        patch("plotlot.pipeline.datacenter.generate_site_summary", new_callable=AsyncMock, return_value=(
-            "Excellent site for data center development.",
-            [],
-            ["Zone X flood protection", "As-of-right industrial zoning"],
-        )),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_power_signal",
+            new_callable=AsyncMock,
+            return_value=good_signal,
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_fiber_signal",
+            new_callable=AsyncMock,
+            return_value=InfraSignal(
+                name="fiber",
+                label="Fiber",
+                score=0.8,
+                rating="Good",
+                summary="1 fiber provider.",
+                raw_value="1 provider",
+                source="FCC",
+                confidence="high",
+            ),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_flood_signal",
+            new_callable=AsyncMock,
+            return_value=InfraSignal(
+                name="flood_zone",
+                label="Flood Zone",
+                score=1.0,
+                rating="Excellent",
+                summary="Zone X.",
+                raw_value="X",
+                source="FEMA",
+                confidence="high",
+            ),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_seismic_signal",
+            new_callable=AsyncMock,
+            return_value=InfraSignal(
+                name="seismic",
+                label="Seismic",
+                score=0.95,
+                rating="Excellent",
+                summary="Very low.",
+                raw_value="Ss=0.05g",
+                source="USGS",
+                confidence="high",
+            ),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.extract_datacenter_params",
+            new_callable=AsyncMock,
+            return_value=DataCenterParams(
+                zoning_code="I-1",
+                is_industrial_permitted=True,
+                conditional_use_required=False,
+            ),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.generate_site_summary",
+            new_callable=AsyncMock,
+            return_value=(
+                "Excellent site for data center development.",
+                [],
+                ["Zone X flood protection", "As-of-right industrial zoning"],
+            ),
+        ),
     ):
         from plotlot.pipeline.datacenter import run_datacenter_pipeline
+
         result = await run_datacenter_pipeline(
             address="1000 Industrial Blvd, Miami Gardens, FL",
             property_record=mock_prop,
@@ -271,19 +319,46 @@ async def test_run_datacenter_pipeline_disqualified_on_bad_zoning():
     )
 
     with (
-        patch("plotlot.pipeline.datacenter.fetch_power_signal", new_callable=AsyncMock, return_value=_signal("power_grid", 0.9)),
-        patch("plotlot.pipeline.datacenter.fetch_fiber_signal", new_callable=AsyncMock, return_value=_signal("fiber", 0.9)),
-        patch("plotlot.pipeline.datacenter.fetch_flood_signal", new_callable=AsyncMock, return_value=_signal("flood_zone", 1.0)),
-        patch("plotlot.pipeline.datacenter.fetch_seismic_signal", new_callable=AsyncMock, return_value=_signal("seismic", 0.95)),
-        patch("plotlot.pipeline.datacenter.extract_datacenter_params", new_callable=AsyncMock, return_value=DataCenterParams(
-            zoning_code="R-1",
-            is_industrial_permitted=False,  # Residential zone — not permitted
-        )),
-        patch("plotlot.pipeline.datacenter.generate_site_summary", new_callable=AsyncMock, return_value=(
-            "Site disqualified — residential zone.", ["Not permitted in R-1"], [],
-        )),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_power_signal",
+            new_callable=AsyncMock,
+            return_value=_signal("power_grid", 0.9),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_fiber_signal",
+            new_callable=AsyncMock,
+            return_value=_signal("fiber", 0.9),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_flood_signal",
+            new_callable=AsyncMock,
+            return_value=_signal("flood_zone", 1.0),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.fetch_seismic_signal",
+            new_callable=AsyncMock,
+            return_value=_signal("seismic", 0.95),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.extract_datacenter_params",
+            new_callable=AsyncMock,
+            return_value=DataCenterParams(
+                zoning_code="R-1",
+                is_industrial_permitted=False,  # Residential zone — not permitted
+            ),
+        ),
+        patch(
+            "plotlot.pipeline.datacenter.generate_site_summary",
+            new_callable=AsyncMock,
+            return_value=(
+                "Site disqualified — residential zone.",
+                ["Not permitted in R-1"],
+                [],
+            ),
+        ),
     ):
         from plotlot.pipeline.datacenter import run_datacenter_pipeline
+
         result = await run_datacenter_pipeline(
             address="123 Main St, Miami Gardens, FL",
             property_record=mock_prop,

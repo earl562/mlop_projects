@@ -32,6 +32,8 @@ def reset_api_calls() -> None:
     """Reset the call counter (useful for testing)."""
     global _api_calls_this_run
     _api_calls_this_run = 0
+
+
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/embeddings"
 EMBEDDING_DIM = 1024
 BATCH_SIZE = 32

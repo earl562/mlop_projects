@@ -350,8 +350,7 @@ async def ingest_county(state_abbr: str, county_key: str) -> dict[str, int]:
         return s.lower().replace(" ", "_").replace("-", "_")
 
     county_configs = {
-        k: v for k, v in state_configs.items()
-        if _normalize(v.county) == _normalize(county_key)
+        k: v for k, v in state_configs.items() if _normalize(v.county) == _normalize(county_key)
     }
 
     if not county_configs:
@@ -402,6 +401,7 @@ async def ingest_county(state_abbr: str, county_key: str) -> dict[str, int]:
             )
             # Re-raise credits exhaustion so caller can print the banner
             from plotlot.core.errors import NvidiaCreditsExhaustedError
+
             if isinstance(e, NvidiaCreditsExhaustedError):
                 raise
 

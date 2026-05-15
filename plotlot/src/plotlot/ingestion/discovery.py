@@ -571,12 +571,12 @@ _NAME_MAP: dict[str, str] = {
 # Within each county, cities are ordered by individual land deal activity.
 NORCAL_METROS: dict[str, list[str]] = {
     "sacramento": [
-        "Sacramento",      # eliminated SFR zoning — every R-1 lot is now a dev site
-        "Elk Grove",       # fastest-growing NorCal city (176K), $84M dev pipeline
+        "Sacramento",  # eliminated SFR zoning — every R-1 lot is now a dev site
+        "Elk Grove",  # fastest-growing NorCal city (176K), $84M dev pipeline
         "Rancho Cordova",  # Waegell property 6,916 units, Rio Del Oro — massive land deals
-        "Roseville",       # fast-growing suburb, active new construction
-        "Rocklin",         # same growth corridor as Roseville
-        "West Sacramento", # infill-focused, across from downtown
+        "Roseville",  # fast-growing suburb, active new construction
+        "Rocklin",  # same growth corridor as Roseville
+        "West Sacramento",  # infill-focused, across from downtown
         "Citrus Heights",
         "Folsom",
         "Davis",
@@ -584,11 +584,11 @@ NORCAL_METROS: dict[str, list[str]] = {
         "Lincoln",
     ],
     "contra_costa": [
-        "Concord",         # Naval Weapons Station 15,600 units, BART TOD, master dev being finalized
-        "Antioch",         # DeNova Homes active, Somersville 702 units, leads East Bay rent growth
-        "Pittsburg",       # same submarket as Antioch, BART access, low land costs
-        "Richmond",        # large underutilized sites, strong RHNA obligation
-        "Brentwood",       # fast-growing outer East Bay, active residential dev
+        "Concord",  # Naval Weapons Station 15,600 units, BART TOD, master dev being finalized
+        "Antioch",  # DeNova Homes active, Somersville 702 units, leads East Bay rent growth
+        "Pittsburg",  # same submarket as Antioch, BART access, low land costs
+        "Richmond",  # large underutilized sites, strong RHNA obligation
+        "Brentwood",  # fast-growing outer East Bay, active residential dev
         "San Ramon",
         "Walnut Creek",
         "Pleasant Hill",
@@ -601,14 +601,14 @@ NORCAL_METROS: dict[str, list[str]] = {
         "Moraga",
     ],
     "alameda": [
-        "Fremont",         # 13,000-unit RHNA obligation, zoning reform Jan 2024
-        "Hayward",         # Mission Blvd corridor priority dev area
-        "San Leandro",     # two neighborhood projects recently approved
-        "Oakland",         # infill pipeline active, 8-story approvals
-        "Union City",      # BART corridor, accessible land
+        "Fremont",  # 13,000-unit RHNA obligation, zoning reform Jan 2024
+        "Hayward",  # Mission Blvd corridor priority dev area
+        "San Leandro",  # two neighborhood projects recently approved
+        "Oakland",  # infill pipeline active, 8-story approvals
+        "Union City",  # BART corridor, accessible land
         "Newark",
-        "Dublin",          # fast-growing BART corridor
-        "Emeryville",      # 1,815 units recently approved
+        "Dublin",  # fast-growing BART corridor
+        "Emeryville",  # 1,815 units recently approved
         "Pleasanton",
         "Livermore",
         "Berkeley",
@@ -617,12 +617,12 @@ NORCAL_METROS: dict[str, list[str]] = {
         "Piedmont",
     ],
     "santa_clara": [
-        "San Jose",        # RHNA pressure, city multifamily incentive programs
-        "Milpitas",        # BART corridor, 60du/acre in Town Center zone
-        "Santa Clara",     # 1,700-unit project near Levi's Stadium
+        "San Jose",  # RHNA pressure, city multifamily incentive programs
+        "Milpitas",  # BART corridor, 60du/acre in Town Center zone
+        "Santa Clara",  # 1,700-unit project near Levi's Stadium
         "Sunnyvale",
         "Mountain View",
-        "Cupertino",       # Vallco Mall 2,600 units resuming
+        "Cupertino",  # Vallco Mall 2,600 units resuming
         "Campbell",
         "Los Altos",
         "Gilroy",
@@ -631,10 +631,10 @@ NORCAL_METROS: dict[str, list[str]] = {
         "Monte Sereno",
         "Saratoga",
         "Los Gatos",
-        "Palo Alto",       # very high land cost — institutional deals, lower PlotLot relevance
+        "Palo Alto",  # very high land cost — institutional deals, lower PlotLot relevance
     ],
     "san_mateo": [
-        "Redwood City",    # Peninsula infill hub
+        "Redwood City",  # Peninsula infill hub
         "East Palo Alto",  # most accessible land in county, genuine missing-middle market
         "South San Francisco",
         "San Mateo",
@@ -648,12 +648,12 @@ NORCAL_METROS: dict[str, list[str]] = {
         "Half Moon Bay",
         "Menlo Park",
         "Hillsborough",
-        "Atherton",        # ultra-high land cost, minimal deal activity for PlotLot users
+        "Atherton",  # ultra-high land cost, minimal deal activity for PlotLot users
         "Portola Valley",
         "Woodside",
     ],
     "san_francisco": [
-        "San Francisco",   # last: scarce land, institutional-scale deals, lowest PlotLot relevance
+        "San Francisco",  # last: scarce land, institutional-scale deals, lowest PlotLot relevance
     ],
 }
 
@@ -1189,7 +1189,14 @@ async def get_all_municode_configs(
         logger.info("Running combined FL + NC + TX + GA + SC + CA Municode auto-discovery...")
         configs: dict[str, MunicodeConfig] = {}
         try:
-            fl_configs, nc_configs, tx_configs, ga_configs, sc_configs, ca_configs = await asyncio.gather(
+            (
+                fl_configs,
+                nc_configs,
+                tx_configs,
+                ga_configs,
+                sc_configs,
+                ca_configs,
+            ) = await asyncio.gather(
                 discover_all(),
                 discover_nc(),
                 discover_tx(),

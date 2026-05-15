@@ -153,6 +153,7 @@ class TestDiscoverCA:
     @pytest.mark.asyncio
     async def test_discover_ca_excludes_non_target_cities(self):
         """Los Angeles is not in NORCAL_METROS — should not appear in results."""
+
         async def mock_get(url, params=None, headers=None):
             request = httpx.Request("GET", url)
             if "Clients/stateAbbr" in url:

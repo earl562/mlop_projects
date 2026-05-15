@@ -14,15 +14,18 @@ import pytest
 class TestEmbedderCallCounter:
     def setup_method(self):
         from plotlot.ingestion import embedder
+
         embedder._api_calls_this_run = 0
 
     def test_initial_count_is_zero(self):
         from plotlot.ingestion.embedder import get_api_calls
+
         assert get_api_calls() == 0
 
     def test_reset_clears_counter(self):
         from plotlot.ingestion import embedder
         from plotlot.ingestion.embedder import get_api_calls, reset_api_calls
+
         embedder._api_calls_this_run = 42
         reset_api_calls()
         assert get_api_calls() == 0
@@ -97,6 +100,7 @@ class TestEmbedderCallCounter:
 class TestCreditPersistence:
     def test_load_returns_zero_when_no_file(self, tmp_path):
         from plotlot import cli
+
         original = cli._CREDITS_FILE
         cli._CREDITS_FILE = tmp_path / "nvidia_credits_used.json"
         try:
@@ -106,6 +110,7 @@ class TestCreditPersistence:
 
     def test_save_and_load_roundtrip(self, tmp_path):
         from plotlot import cli
+
         original = cli._CREDITS_FILE
         cli._CREDITS_FILE = tmp_path / "nvidia_credits_used.json"
         try:
@@ -116,6 +121,7 @@ class TestCreditPersistence:
 
     def test_save_increments_accumulate(self, tmp_path):
         from plotlot import cli
+
         original = cli._CREDITS_FILE
         cli._CREDITS_FILE = tmp_path / "nvidia_credits_used.json"
         try:
@@ -127,6 +133,7 @@ class TestCreditPersistence:
 
     def test_load_handles_corrupt_file(self, tmp_path):
         from plotlot import cli
+
         original = cli._CREDITS_FILE
         cli._CREDITS_FILE = tmp_path / "nvidia_credits_used.json"
         cli._CREDITS_FILE.write_text("not valid json")
@@ -181,11 +188,14 @@ class TestIngestCounty:
             ingested_keys.append(key)
             return 100
 
-        with patch(
-            "plotlot.ingestion.discovery.get_municode_configs",
-            new_callable=AsyncMock,
-            return_value=configs,
-        ), patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest):
+        with (
+            patch(
+                "plotlot.ingestion.discovery.get_municode_configs",
+                new_callable=AsyncMock,
+                return_value=configs,
+            ),
+            patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest),
+        ):
             results = await ingest_county("CA", "sacramento")
 
         assert "sacramento_ca" in ingested_keys
@@ -204,11 +214,14 @@ class TestIngestCounty:
         async def mock_ingest(key: str) -> int:
             return 200
 
-        with patch(
-            "plotlot.ingestion.discovery.get_municode_configs",
-            new_callable=AsyncMock,
-            return_value={"concord_ca": cc_config},
-        ), patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest):
+        with (
+            patch(
+                "plotlot.ingestion.discovery.get_municode_configs",
+                new_callable=AsyncMock,
+                return_value={"concord_ca": cc_config},
+            ),
+            patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest),
+        ):
             results = await ingest_county("CA", "contra_costa")
 
         assert results["concord_ca"] == 200
@@ -225,11 +238,14 @@ class TestIngestCounty:
         async def mock_ingest(key: str) -> int:
             raise NvidiaCreditsExhaustedError()
 
-        with patch(
-            "plotlot.ingestion.discovery.get_municode_configs",
-            new_callable=AsyncMock,
-            return_value={"sacramento_ca": sac_config},
-        ), patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest):
+        with (
+            patch(
+                "plotlot.ingestion.discovery.get_municode_configs",
+                new_callable=AsyncMock,
+                return_value={"sacramento_ca": sac_config},
+            ),
+            patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest),
+        ):
             with pytest.raises(NvidiaCreditsExhaustedError):
                 await ingest_county("CA", "sacramento")
 
@@ -254,11 +270,14 @@ class TestIngestCounty:
                 raise RuntimeError("scrape failed")
             return 150
 
-        with patch(
-            "plotlot.ingestion.discovery.get_municode_configs",
-            new_callable=AsyncMock,
-            return_value=configs,
-        ), patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest):
+        with (
+            patch(
+                "plotlot.ingestion.discovery.get_municode_configs",
+                new_callable=AsyncMock,
+                return_value=configs,
+            ),
+            patch("plotlot.pipeline.ingest.ingest_municipality", side_effect=mock_ingest),
+        ):
             results = await ingest_county("CA", "sacramento")
 
         assert call_count == 2

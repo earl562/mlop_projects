@@ -135,8 +135,7 @@ async def _get_chunk_counts() -> dict[str, int]:
             select(
                 OrdinanceChunk.municipality,
                 func.count().label("chunks"),
-            )
-            .group_by(OrdinanceChunk.municipality)
+            ).group_by(OrdinanceChunk.municipality)
         )
         return {row.municipality.lower(): row.chunks for row in result.fetchall()}
     finally:
@@ -174,7 +173,9 @@ def _data_age_days(completed_at: datetime | None) -> int | None:
     if completed_at is None:
         return None
     now = datetime.now(timezone.utc)
-    aware = completed_at.replace(tzinfo=timezone.utc) if completed_at.tzinfo is None else completed_at
+    aware = (
+        completed_at.replace(tzinfo=timezone.utc) if completed_at.tzinfo is None else completed_at
+    )
     return (now - aware).days
 
 
@@ -477,10 +478,7 @@ async def get_coverage() -> CoverageResponse:
                 & (IngestionCheckpoint.completed_at == subq.c.latest),
             )
         )
-        checkpoints = {
-            row.municipality_key: row
-            for row in checkpoint_result.scalars().all()
-        }
+        checkpoints = {row.municipality_key: row for row in checkpoint_result.scalars().all()}
     finally:
         await session.close()
 
