@@ -80,7 +80,9 @@ class TestCountyConfig:
             "folio_fields",
         }
         for county, cfg in _COUNTY_CONFIG.items():
-            assert required <= set(cfg.keys()), f"Missing keys for {county}: {required - set(cfg.keys())}"
+            assert required <= set(cfg.keys()), (
+                f"Missing keys for {county}: {required - set(cfg.keys())}"
+            )
 
     def test_parcel_urls_are_non_empty(self):
         for county, cfg in _COUNTY_CONFIG.items():
@@ -88,7 +90,9 @@ class TestCountyConfig:
 
     def test_zoning_fields_are_lists(self):
         for county, cfg in _COUNTY_CONFIG.items():
-            assert isinstance(cfg["zoning_fields"], list), f"zoning_fields should be a list for {county}"
+            assert isinstance(cfg["zoning_fields"], list), (
+                f"zoning_fields should be a list for {county}"
+            )
             assert len(cfg["zoning_fields"]) >= 1
 
 
@@ -180,9 +184,7 @@ class TestAddressFallback:
 
     @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
     @patch("plotlot.property.california.httpx.AsyncClient")
-    async def test_spatial_fails_address_succeeds(
-        self, mock_client_cls, mock_spatial, provider
-    ):
+    async def test_spatial_fails_address_succeeds(self, mock_client_cls, mock_spatial, provider):
         mock_spatial.return_value = []  # spatial returns nothing
 
         feature = _make_feature(_parcel_attrs())
@@ -291,7 +293,9 @@ class TestLotAreaConversion:
 class TestUniversalFallback:
     @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
     @patch("plotlot.property.california.httpx.AsyncClient")
-    @patch("plotlot.property.california.CaliforniaProvider._universal_fallback", new_callable=AsyncMock)
+    @patch(
+        "plotlot.property.california.CaliforniaProvider._universal_fallback", new_callable=AsyncMock
+    )
     async def test_falls_back_when_all_county_endpoints_fail(
         self, mock_fallback, mock_client_cls, mock_spatial
     ):
@@ -319,7 +323,9 @@ class TestUniversalFallback:
         mock_fallback.assert_awaited_once()
         assert record is None
 
-    @patch("plotlot.property.california.CaliforniaProvider._universal_fallback", new_callable=AsyncMock)
+    @patch(
+        "plotlot.property.california.CaliforniaProvider._universal_fallback", new_callable=AsyncMock
+    )
     async def test_unknown_county_uses_universal_fallback(self, mock_fallback):
         mock_fallback.return_value = None
 

@@ -53,16 +53,10 @@ logger = logging.getLogger(__name__)
 _COUNTY_CONFIG: dict[str, dict] = {
     "santa clara": {
         # Santa Clara County Assessor GIS parcel layer
-        "parcel_url": (
-            "https://gis.sccgov.org/arcgis/rest/services"
-            "/OpenData/Parcels/MapServer/0"
-        ),
+        "parcel_url": ("https://gis.sccgov.org/arcgis/rest/services/OpenData/Parcels/MapServer/0"),
         # City zoning is managed by individual municipalities in SCC;
         # use the county planning zoning overlay for a consolidated view.
-        "zoning_url": (
-            "https://gis.sccgov.org/arcgis/rest/services"
-            "/OpenData/Zoning/MapServer/0"
-        ),
+        "zoning_url": ("https://gis.sccgov.org/arcgis/rest/services/OpenData/Zoning/MapServer/0"),
         "address_field": "SITE_ADDR",
         "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "ZONING_CODE", "USE_CODE", "LU_CODE"],
         "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "USE_DESCR", "LU_DESC"],
@@ -73,8 +67,7 @@ _COUNTY_CONFIG: dict[str, dict] = {
     "alameda": {
         # Alameda County GIS parcel service
         "parcel_url": (
-            "https://gis.acgov.org/arcgis/rest/services"
-            "/PropertyInformation/MapServer/0"
+            "https://gis.acgov.org/arcgis/rest/services/PropertyInformation/MapServer/0"
         ),
         "zoning_url": "",
         "address_field": "SITE_ADDR",
@@ -100,10 +93,7 @@ _COUNTY_CONFIG: dict[str, dict] = {
     },
     "san mateo": {
         # San Mateo County GIS parcel service
-        "parcel_url": (
-            "https://gis.smcgov.org/arcgis/rest/services"
-            "/OpenData/Parcels/MapServer/0"
-        ),
+        "parcel_url": ("https://gis.smcgov.org/arcgis/rest/services/OpenData/Parcels/MapServer/0"),
         "zoning_url": "",
         "address_field": "SITE_ADDR",
         "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "USE_CODE"],
@@ -184,9 +174,7 @@ class CaliforniaProvider(PropertyProvider):
         # --- 2. Zoning spatial query (if the parcel layer lacks zoning) ---
         if not record.zoning_code and config.get("zoning_url") and lat and lng:
             zoning_url = config["zoning_url"] + "/query"
-            zoning_code, zoning_desc = await self._spatial_zoning(
-                zoning_url, lat, lng, config
-            )
+            zoning_code, zoning_desc = await self._spatial_zoning(zoning_url, lat, lng, config)
             if zoning_code:
                 record.zoning_code = zoning_code
                 record.zoning_description = zoning_desc
@@ -308,9 +296,7 @@ class CaliforniaProvider(PropertyProvider):
             else:
                 lot_sqft = raw_lot
 
-        owner = str(
-            attrs.get("OWNER") or attrs.get("OWNER_NAME") or attrs.get("TAXPAYER") or ""
-        )
+        owner = str(attrs.get("OWNER") or attrs.get("OWNER_NAME") or attrs.get("TAXPAYER") or "")
         municipality = str(
             attrs.get("CITY")
             or attrs.get("MUNICIPALITY")
@@ -320,10 +306,7 @@ class CaliforniaProvider(PropertyProvider):
         )
         year_built = int(
             safe_float(
-                attrs.get("YEAR_BUILT")
-                or attrs.get("YR_BUILT")
-                or attrs.get("YEAR_BLT")
-                or 0
+                attrs.get("YEAR_BUILT") or attrs.get("YR_BUILT") or attrs.get("YEAR_BLT") or 0
             )
         )
         assessed = safe_float(
@@ -333,10 +316,7 @@ class CaliforniaProvider(PropertyProvider):
             or 0
         )
         building_sqft = safe_float(
-            attrs.get("BUILDING_SQFT")
-            or attrs.get("BLDG_SQFT")
-            or attrs.get("LIVING_SQFT")
-            or 0
+            attrs.get("BUILDING_SQFT") or attrs.get("BLDG_SQFT") or attrs.get("LIVING_SQFT") or 0
         )
 
         # Extract parcel geometry rings if present
