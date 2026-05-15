@@ -1,0 +1,110 @@
+# sources.yml — declares which tables already exist in the database
+# These are PlotLot's production OLTP tables that the FastAPI backend writes to
+# dbt does NOT own these tables — it reads from them and builds analytics on top
+# Reference them in SQL with: {{ source('plotlot', 'table_name') }}
+
+version: 2  # dbt schema file format version — always 2
+
+sources:
+  - name: plotlot                      # Logical source name — used in {{ source('plotlot', ...) }} calls
+    schema: public                     # The PostgreSQL schema these tables live in
+                                       # SQLAlchemy creates them in "public" by default
+    description: >
+      PlotLot production OLTP tables in Neon PostgreSQL.
+      Written by the FastAPI backend (apps/plotlot/src/plotlot/storage/models.py).
+      Read here for analytics — never modified by dbt.
+
+    tables:
+      # ─────────────────────────────────────────────────────────────────────────
+      # TABLE 1: report_cache
+      # FastAPI writes here when a pipeline run completes successfully.
+      # The entire ZoningReport is stored as a JSON blob in report_json.
+      # This is the "upstream deficiency" — stg_analyses unpacks it into typed columns.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: report_cache
+        description: >
+          Cached LLM pipeline results, one row per unique address.
+          report_json stores the entire ZoningReport as an opaque JSON blob.
+          24h TTL (expires_at). hit_count tracks cache efficiency.
+          stg_analyses unpacks report_json into 15 typed, queryable columns.
+        columns:
+          - name: address_normalized
+            description: >
+              Lowercase, punctuation-stripped cache key.
+              Ensures "123 Main St" and "123 main st." hit the same cache entry.
+              This is the entity resolution key for the report_cache table.
+            tests:
+              - unique     # Only one cached report per normalized address (UNIQUE constraint in OLTP)
+              - not_null   # Every cache entry must have a key — null would break lookups
+
+          - name: report_json
+            description: >
+              Full ZoningReport serialized as JSON. Contains nested objects:
+              density_analysis, property_record, numeric_params, pro_forma, comp_analysis.
+              stg_analyses extracts the useful fields using PostgreSQL ->> operator.
+
+          - name: expires_at
+            description: "Cache TTL — set to created_at + 24h. stg_analyses filters WHERE expires_at > NOW()."
+
+          - name: hit_count
+            description: "Number of times this cached result has been served. High hit_count = pipeline cost savings."
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # TABLE 2: ordinance_chunks
+      # One row per ~500-token chunk of a zoning ordinance.
+      # Includes a 1024d pgvector embedding and a TSVECTOR for full-text search.
+      # stg_coverage aggregates these by municipality to get coverage metrics.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: ordinance_chunks
+        description: >
+          Zoning ordinance text with pgvector 1024d embeddings.
+          One row per ~500-token chunk scraped from Municode.
+          Used for hybrid retrieval (cosine similarity + BM25 + RRF fusion).
+          stg_coverage aggregates by municipality to show data freshness and coverage depth.
+        columns:
+          - name: municipality
+            description: "City or county name. e.g. 'Miami Gardens', 'Boca Raton'. GROUP BY key in stg_coverage."
+          - name: scraped_at
+            description: "When this chunk was scraped from Municode. Used for freshness checks in mart_coverage."
+          - name: section
+            description: "Zoning code section (e.g. 'Section 33-274'). COUNT(DISTINCT section) = coverage breadth."
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # TABLE 3: portfolio_entries
+      # User-saved property analyses. Same report_json structure as report_cache.
+      # stg_portfolio unpacks it for user deal analytics.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: portfolio_entries
+        description: >
+          User-saved property analyses from the PlotLot portfolio feature.
+          report_json has the same nested structure as report_cache.report_json.
+          user_id is a Clerk UUID — the "household matching" key that links to user_subscriptions.
+        columns:
+          - name: user_id
+            description: "Clerk user UUID. Foreign key to user_subscriptions.user_id (the PK there)."
+          - name: report_json
+            description: "Full ZoningReport JSON — same structure as report_cache.report_json."
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # TABLE 4: user_subscriptions
+      # One row per Clerk user. Tracks plan tier and monthly usage quota.
+      # Already normalized — no JSON unpacking needed. stg_subscriptions adds computed flags.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: user_subscriptions
+        description: >
+          Clerk user_id + Stripe billing plan + monthly analysis quota.
+          One row per user. Clean OLTP data — no JSON blobs.
+          stg_subscriptions adds is_pro and is_at_quota computed boolean flags.
+        columns:
+          - name: user_id
+            description: "Clerk UUID — primary key. Links to portfolio_entries.user_id."
+            tests:
+              - unique    # One subscription per user (PK in OLTP)
+              - not_null
+          - name: plan
+            description: "'free' or 'pro'. Determines quota behavior and feature access."
+            tests:
+              - accepted_values:   # Guard against unexpected plan values
+                  values: ['free', 'pro']
+          - name: analyses_used
+            description: "Count of pipeline runs this billing period. Enforced cap: 5 for free, unlimited for pro."

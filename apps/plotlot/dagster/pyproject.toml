@@ -1,0 +1,51 @@
+# pyproject.toml — makes plotlot/dagster/dagster_project/ an installable Python package
+# Required so Dagster can import dagster_project as a module
+# Install with: cd apps/plotlot/dagster && pip install -e .
+# The -e flag = "editable install" — code changes take effect without reinstalling
+
+[build-system]
+requires = ["setuptools"]
+# Use setuptools to build the package (standard Python build tool)
+# Alternative: hatchling, flit — but setuptools is the most widely supported
+build-backend = "setuptools.backends.legacy:build"
+# Legacy build backend = simple projects without special build hooks
+# "Legacy" here just means "standard setuptools" — not deprecated
+
+[project]
+name = "plotlot-dagster"
+# Package name as it appears in `pip list` and `pip install plotlot-dagster`
+# Hyphenated to match Python package naming conventions
+version = "0.1.0"
+# Semantic versioning — 0.x.x = pre-production, increment as the project matures
+
+dependencies = [
+    "dagster>=1.8",
+    # Dagster core: asset graph, sensors, schedules, jobs, Definitions container
+    # @asset, @sensor, ScheduleDefinition, define_asset_job all come from here
+
+    "dagster-dbt>=0.24",
+    # dbt integration for Dagster: @dbt_assets decorator, DbtCliResource
+    # Turns every dbt model into a Dagster asset automatically via manifest.json
+    # Note: version numbers for dagster-* packages are offset from dagster core
+    # dagster 1.8 = dagster-dbt 0.24 (the minor version matches)
+
+    "dagster-webserver>=1.8",
+    # The browser UI at http://localhost:3000
+    # Shows: asset graph, run history, sensors, schedules, metadata
+    # NOT required for production (you can run dagster without the UI)
+    # Required locally for demo purposes
+
+    "dagster-postgres>=0.24",
+    # PostgresResource for direct SQL queries inside Python assets
+    # Used by municipality_freshness_asset to query mart_coverage
+    # Manages connection lifecycle for you (no manual asyncpg connection handling needed)
+
+    "httpx>=0.27",
+    # Async HTTP client — used to call PlotLot's /admin/ingest API
+    # Same library the FastAPI backend uses — consistent tooling
+    # Not aiohttp (different API surface) — httpx is the PlotLot standard (see CLAUDE.md)
+
+    "asyncpg>=0.29",
+    # PostgreSQL async driver — used to query Neon directly inside assets
+    # Same driver the FastAPI backend uses — consistent connection handling
+]

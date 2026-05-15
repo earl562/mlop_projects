@@ -1,0 +1,18 @@
+id: loi.property_identification
+category: property_definition
+title: "Property"
+document_types: [loi]
+order_weight: 200
+is_required: true
+source: "SubTo Multi Letter of Intent"
+formatting:
+  heading_level: 3
+  style: table
+  columns: ["Term", "Value"]
+content_template: |
+  Property Address | {{ context.property_address or '[PROPERTY ADDRESS]' }}
+  APN/Folio | {{ context.apn or '[APN]' }}
+  Legal Description | {{ context.legal_description or 'To be provided by Escrow Agent' }}
+  Lot Size | {{ context.lot_size_sqft|comma }} sqft
+  Zoning District | {{ context.zoning_district or 'N/A' }}
+  Municipality | {{ context.municipality or 'N/A' }}, {{ context.county or '' }} County

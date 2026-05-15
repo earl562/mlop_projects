@@ -1,0 +1,9 @@
+id: psa.assignment
+category: legal_admin
+title: "Assignment"
+document_types: [psa]
+order_weight: 710
+is_required: true
+source: "SubTo Purchase Contract Section 14.3"
+content_template: |
+  Buyer may assign this Contract or any of its rights hereunder to any person, partnership, corporation or other entity without notice to Seller. Seller's consent to such assignment is not required and shall not be unreasonably withheld.

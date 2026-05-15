@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useMapsLibrary } from "@vis.gl/react-google-maps";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -35,18 +34,6 @@ export default function AddressAutocomplete({
   const [isSearching, setIsSearching] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const serviceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
-
-  // Load Places library via @vis.gl/react-google-maps hook
-  const places = useMapsLibrary("places");
-
-  // Initialize AutocompleteService when Places library is ready
-  useEffect(() => {
-    if (!places) return;
-    serviceRef.current = new places.AutocompleteService();
-    sessionTokenRef.current = new places.AutocompleteSessionToken();
-  }, [places]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -59,7 +46,6 @@ export default function AddressAutocomplete({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Geocodio fallback when Google Places is unavailable
   const fetchGeocodioSuggestions = useCallback(async (query: string) => {
     try {
       const resp = await fetch(
@@ -89,63 +75,6 @@ export default function AddressAutocomplete({
       }
 
       setIsSearching(true);
-
-      // Try Google Places first (with 2s timeout — callback may never fire if API not activated)
-      if (serviceRef.current && sessionTokenRef.current) {
-        let responded = false;
-        const timeout = setTimeout(() => {
-          if (!responded) {
-            responded = true;
-            // Google didn't respond — fallback to Geocodio
-            fetchGeocodioSuggestions(query).then((results) => {
-              setSuggestions(results);
-              setShowDropdown(results.length > 0);
-              setSelectedIndex(-1);
-              setIsSearching(false);
-            });
-          }
-        }, 2000);
-
-        serviceRef.current.getPlacePredictions(
-          {
-            input: query,
-            types: ["address"],
-            componentRestrictions: { country: "us" },
-            sessionToken: sessionTokenRef.current,
-          },
-          (predictions, status) => {
-            if (responded) return; // Timeout already fired
-            responded = true;
-            clearTimeout(timeout);
-            setIsSearching(false);
-            if (
-              status === google.maps.places.PlacesServiceStatus.OK &&
-              predictions &&
-              predictions.length > 0
-            ) {
-              const results: Suggestion[] = predictions.map((p) => ({
-                id: p.place_id,
-                mainText: p.structured_formatting.main_text,
-                secondaryText: p.structured_formatting.secondary_text,
-                fullText: p.description,
-              }));
-              setSuggestions(results);
-              setShowDropdown(true);
-              setSelectedIndex(-1);
-              return;
-            }
-            // Google returned error status — fall through to Geocodio
-            fetchGeocodioSuggestions(query).then((results) => {
-              setSuggestions(results);
-              setShowDropdown(results.length > 0);
-              setSelectedIndex(-1);
-            });
-          },
-        );
-        return;
-      }
-
-      // No Google Places available — use Geocodio
       const results = await fetchGeocodioSuggestions(query);
       setSuggestions(results);
       setShowDropdown(results.length > 0);
@@ -168,10 +97,6 @@ export default function AddressAutocomplete({
     onChange(suggestion.fullText);
     setSuggestions([]);
     setShowDropdown(false);
-    // Reset session token after selection (Google billing optimization)
-    if (places) {
-      sessionTokenRef.current = new places.AutocompleteSessionToken();
-    }
     onSelect(suggestion.fullText);
   };
 
@@ -280,12 +205,6 @@ export default function AddressAutocomplete({
               </div>
             </button>
           ))}
-          {/* Google attribution (required by TOS when using Places API) */}
-          {places && (
-            <div className="flex justify-end border-t border-[var(--border)] px-3 py-1.5">
-              <span className="text-[9px] text-stone-400">Powered by Google</span>
-            </div>
-          )}
         </div>
       )}
     </div>

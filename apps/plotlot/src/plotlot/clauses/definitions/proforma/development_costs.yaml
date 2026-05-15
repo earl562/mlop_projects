@@ -1,0 +1,15 @@
+id: proforma.development_costs
+category: financial_terms
+title: "Development Costs"
+document_types: [proforma_spreadsheet]
+order_weight: 200
+is_required: true
+source: "PlotLot Pro Forma"
+content_template: |
+  Land Acquisition | {{ (context.purchase_price or context.estimated_land_value) | currency }}
+  Hard Costs (Construction) | {{ context.hard_costs | currency }}
+  Soft Costs | {{ context.soft_costs | currency }}
+  Cost per Door | {{ context.cost_per_door | currency }}
+formatting:
+  style: table
+  columns: ["Cost Category", "Amount"]

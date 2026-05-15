@@ -1,0 +1,75 @@
+[project]
+name = "plotlot"
+version = "2.0.0"
+description = "AI-powered zoning analysis for South Florida real estate"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "anthropic>=0.42",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "pgvector>=0.3",
+    "beautifulsoup4>=4.12",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "alembic>=1.18.4",
+    "pyjwt>=2.11.0",
+    "cryptography>=42.0",
+    "stripe>=11.0",
+    "shapely>=2.0",
+    "reportlab>=4.0",
+    "sentry-sdk[fastapi]>=2.0",
+    "python-docx>=1.1",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+    "openai>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+mlflow = ["mlflow>=2.16", "psycopg2-binary>=2.9"]
+eval = [
+    "jsonschema>=4.21",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+plotlot = "plotlot.cli:main"
+plotlot-ingest = "plotlot.cli:ingest_main"
+plotlot-search = "plotlot.cli:search_main"
+plotlot-api = "plotlot.api.main:run"
+plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "eval: evaluation tests against golden dataset",
+    "e2e: end-to-end pipeline regression tests",
+    "integration: tests requiring live external services (DB, APIs, LLM)",
+    "live: tests that hit real external APIs (ArcGIS Hub, county endpoints)",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

@@ -1,0 +1,21 @@
+id: loi.header
+category: party_identification
+title: ""
+document_types: [loi]
+order_weight: 100
+is_required: true
+source: "SubTo Multi Letter of Intent"
+formatting:
+  heading_level: 3
+  style: normal
+content_template: |
+  VIA EMAIL TO:
+  {{ context.seller_name or '[SELLER NAME]' }}
+  {{ context.seller_address or '[SELLER ADDRESS]' }}
+  Email: {{ context.seller_email or '[SELLER EMAIL]' }}
+
+  Re: Letter of Intent ("LOI") for the Purchase of: {{ context.property_address or '[PROPERTY ADDRESS]' }} (the "Property")
+
+  Dear {{ context.seller_name or '[SELLER NAME]' }}:
+
+  The Purchaser (defined below) is pleased to submit for your review and consideration its non-binding proposal to purchase the Property on the following terms and conditions:

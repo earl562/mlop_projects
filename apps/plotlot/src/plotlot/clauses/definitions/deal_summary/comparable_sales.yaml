@@ -1,0 +1,17 @@
+id: deal_summary.comparable_sales
+category: financial_terms
+title: "Comparable Sales"
+document_types: [deal_summary]
+order_weight: 300
+is_required: false
+condition_expr: "context.median_price_per_acre > 0"
+source: "PlotLot custom"
+formatting:
+  heading_level: 2
+  style: table
+  columns: ["Metric", "Value"]
+content_template: |
+  Median Price/Acre | {{ context.median_price_per_acre|currency }}
+  Estimated Land Value | {{ context.estimated_land_value|currency }}
+  Comps Found | {{ context.comp_count }}
+  Comp Confidence | {{ (context.comp_confidence * 100)|pct }}

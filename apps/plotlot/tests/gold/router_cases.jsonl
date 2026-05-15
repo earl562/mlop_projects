@@ -1,0 +1,3 @@
+{"input":"Can I build 12 units at 123 Main St?","expected_skill":"zoning_research"}
+{"input":"Find 100 acre sites for a data center","expected_skill":"site_selection"}
+{"input":"Draft a follow-up email to the seller","expected_skill":"outreach_ops"}

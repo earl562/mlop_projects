@@ -1,0 +1,15 @@
+id: loi.feasibility_period
+category: contingencies
+title: "Feasibility Period & Contingencies"
+document_types: [loi]
+order_weight: 400
+is_required: true
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  Feasibility Period: {{ context.feasibility_days }} days from the PSA effective date. Seller shall provide Purchaser, its agents, representatives, inspectors, surveyors, engineers, and contractors with access to the Property during the Feasibility Period for the purpose of conducting inspections, surveys, environmental assessments, and other due diligence.
+
+  Closing Date: Closing shall occur {{ context.closing_days }} days following the expiration of the Feasibility Period.
+
+  {% if context.financing_contingency %}Financing Contingency: Yes — Purchaser shall have until {{ context.financing_contingency_days or 30 }} days prior to the Closing Date to secure final and unconditional funding approval from a third-party lender.{% endif %}
+
+  {% if context.appraisal_contingency %}Appraisal Contingency: Yes — Purchaser's obligation to purchase the Property will be contingent upon an appraisal of the Property acceptable to Purchaser's lender for the full Purchase Price.{% endif %}

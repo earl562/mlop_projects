@@ -1,0 +1,15 @@
+id: proforma.comps
+category: property_definition
+title: "Comparable Sales"
+document_types: [proforma_spreadsheet]
+order_weight: 600
+is_required: false
+condition_expr: "context.median_price_per_acre > 0"
+source: "PlotLot Comparable Sales Analysis"
+content_template: |
+  Median Price per Acre | {{ context.median_price_per_acre | currency }}
+  Estimated Land Value | {{ context.estimated_land_value | currency }}
+  Comparable Sales Count | {{ context.comp_count }}
+formatting:
+  style: table
+  columns: ["Comp Metric", "Value"]

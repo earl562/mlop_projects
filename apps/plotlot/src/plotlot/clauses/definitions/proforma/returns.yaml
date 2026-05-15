@@ -1,0 +1,15 @@
+id: proforma.returns
+category: financial_terms
+title: "Returns Analysis"
+document_types: [proforma_spreadsheet]
+order_weight: 500
+is_required: true
+source: "PlotLot Pro Forma"
+condition_expr: "context.gross_development_value > 0"
+content_template: |
+  Gross Development Value | {{ context.gross_development_value | currency }}
+  Max Land Price | {{ context.max_land_price | currency }}
+  Cost per Door | {{ context.cost_per_door | currency }}
+formatting:
+  style: table
+  columns: ["Return Metric", "Value"]

@@ -24,4 +24,4 @@ services:
       - key: JINA_API_KEY
         sync: false
       - key: CORS_ORIGINS
-        value: '["https://mlopprojects.vercel.app","http://localhost:3000"]'
+        value: '["https://mlopprojects.vercel.app","https://plotlot-v2.vercel.app","http://localhost:3000"]'

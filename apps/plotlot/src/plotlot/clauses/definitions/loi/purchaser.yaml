@@ -1,0 +1,12 @@
+id: loi.purchaser
+category: party_identification
+title: "Purchaser"
+document_types: [loi]
+order_weight: 110
+is_required: true
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  Purchaser: {{ context.buyer_name or '[PURCHASER NAME]' }}, {{ context.buyer_entity or '[ENTITY]' }} and/or affiliated nominee/assignee.
+  Address: {{ context.buyer_address or '[PURCHASER ADDRESS]' }}
+  Phone: {{ context.buyer_phone or '[PHONE]' }}
+  Email: {{ context.buyer_email or '[EMAIL]' }}

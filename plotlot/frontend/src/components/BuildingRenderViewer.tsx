@@ -117,18 +117,19 @@ export default function BuildingRenderViewer({
       <div className="flex flex-wrap gap-2">
         {views.length > 0
           ? views.map((v) => (
-              <button key={v.view} onClick={() => setActiveView(v.view)} className={tabClass(v.view)}>
+              <button type="button" key={v.view} onClick={() => setActiveView(v.view)} className={tabClass(v.view)}>
                 {VIEW_LABELS[v.view] || v.view}
               </button>
             ))
           : ["front", "aerial", "side"].map((v) => (
               <button
+                type="button"
                 key={v}
                 disabled={loading}
                 className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60"
               >
                 {loading && (
-                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <svg aria-hidden="true" className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
@@ -143,7 +144,7 @@ export default function BuildingRenderViewer({
       {loading ? (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)]">
           <div className="flex flex-col items-center gap-3">
-            <svg className="h-6 w-6 animate-spin text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none">
+            <svg aria-hidden="true" className="h-6 w-6 animate-spin text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
@@ -152,11 +153,12 @@ export default function BuildingRenderViewer({
         </div>
       ) : error ? (
         <div className="flex h-[300px] flex-col items-center justify-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)]">
-          <svg className="h-8 w-8 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <svg aria-hidden="true" className="h-8 w-8 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V5.25a1.5 1.5 0 00-1.5-1.5H3.75a1.5 1.5 0 00-1.5 1.5v14.25a1.5 1.5 0 001.5 1.5z" />
           </svg>
           <p className="text-sm text-[var(--text-muted)]">{error}</p>
           <button
+            type="button"
             onClick={fetchRender}
             className="rounded-full border border-[var(--border)] px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)] active:scale-[0.98]"
           >

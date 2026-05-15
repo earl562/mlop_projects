@@ -1,0 +1,25 @@
+id: loi.seller_disclosure
+category: reps_warranties
+title: "Seller's Disclosure"
+document_types: [loi]
+order_weight: 500
+is_required: true
+source: "SubTo Multi Letter of Intent"
+formatting:
+  heading_level: 3
+  style: checklist
+content_template: |
+  Seller shall deliver (or cause to be delivered) the following information and copies of the following documents to Purchaser within {{ context.due_diligence_days }} days of the PSA effective date:
+  Preliminary Title Report covering the Property ("Title Report") issued by Escrow Agent
+  Copies of all soil reports, geological reports, and hazardous material reports in Seller's possession
+  Copies of all architectural and design plans, drawings, permits, and other governmental approvals
+  All construction and development cost information
+  Copies of any existing ALTA Surveys of the Property in Seller's possession
+  Copies of current real property tax bills, including any pending appeal information
+  Complete copy of all leases for or related to the Property
+  Year-end operating statements for the last two fiscal years
+  Current rent roll
+  Last 12 months of utility bills
+  Schedule of security deposits
+  Insurance loss runs for the past five years
+  Copies of contracts or agreements relating to the Property

@@ -1,0 +1,9 @@
+id: shared.plotlot_footer
+category: signatures
+title: "PlotLot Disclosure"
+document_types: [loi, psa, deal_summary]
+order_weight: 1050
+is_required: false
+source: "PlotLot Platform"
+content_template: |
+  This document was prepared with assistance from PlotLot, an AI-powered land deal intelligence platform. Property analysis data, zoning calculations, comparable sales, and pro forma estimates are provided for informational purposes only and should be independently verified. PlotLot does not provide legal, financial, or investment advice. Consult qualified professionals before making real estate investment decisions.

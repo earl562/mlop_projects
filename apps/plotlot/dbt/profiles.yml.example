@@ -1,0 +1,29 @@
+# profiles.yml.example — commit this file to the repo as a template
+# The REAL profiles.yml lives at ~/.dbt/profiles.yml (never committed — contains secrets)
+# Teammates copy this file to ~/.dbt/profiles.yml and fill in their Neon credentials
+
+plotlot_dbt:           # This key must match "profile:" in dbt_project.yml exactly
+  target: dev          # Which output block to use by default when running dbt locally
+
+  outputs:
+    dev:
+      type: postgres             # Adapter type — tells dbt to use the dbt-postgres package
+      host: YOUR_NEON_HOST       # Neon hostname from dashboard → Connection Details
+                                 # Format: ep-<name>.<region>.aws.neon.tech
+      user: YOUR_NEON_USER       # Neon database username (usually same as your Neon project name)
+      password: YOUR_NEON_PASSWORD  # Neon database password (copy from dashboard)
+      database: YOUR_NEON_DB     # Neon database name (usually "neondb")
+      schema: plotlot_dbt        # dbt creates this schema in your Neon database
+                                 # Keeps analytics tables separate from PlotLot's "public" schema
+                                 # Production tables (ordinance_chunks etc.) stay in "public"
+      port: 5432                 # Standard PostgreSQL port
+      sslmode: require           # Neon requires SSL — this tells dbt to encrypt the connection
+      threads: 4                 # How many dbt models run in parallel (safe for Neon free tier)
+                                 # Increase to 8 on paid tier for faster runs
+
+    # prod output (optional — for running against production data with write access)
+    # prod:
+    #   type: postgres
+    #   host: YOUR_NEON_HOST
+    #   user: YOUR_NEON_PROD_USER
+    #   ... same structure, different credentials
