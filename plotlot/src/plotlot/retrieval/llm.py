@@ -266,7 +266,7 @@ async def _get_openai_client() -> AsyncOpenAI:
     if _using_nvidia_mainline():
         api_key: str | Any = settings.nvidia_api_key
     elif settings.openai_api_key:
-        api_key: str | Any = settings.openai_api_key
+        api_key = settings.openai_api_key
     elif settings.use_codex_oauth:
         api_key = await _get_codex_oauth_token()
     else:
