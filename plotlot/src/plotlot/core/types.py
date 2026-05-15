@@ -266,6 +266,27 @@ NC_MUNICODE_CONFIGS = _NC_FALLBACK_CONFIGS
 
 
 # ---------------------------------------------------------------------------
+# CA static overrides — municipalities where auto-discovery picks the wrong
+# product (e.g. Oakland has a separate "Planning Code" product that must be
+# used instead of its "Code of Ordinances").
+# ---------------------------------------------------------------------------
+
+_CA_OVERRIDES: dict[str, MunicodeConfig] = {
+    "oakland_ca": MunicodeConfig(
+        municipality="Oakland",
+        county="Alameda",
+        client_id=3637,
+        product_id=16490,
+        job_id=481576,
+        zoning_node_id="",  # chapters are root-level siblings; empty string → no nodeId param
+        state="CA",
+    ),
+}
+
+CA_OVERRIDES = _CA_OVERRIDES
+
+
+# ---------------------------------------------------------------------------
 # Property record from county Property Appraiser
 # ---------------------------------------------------------------------------
 

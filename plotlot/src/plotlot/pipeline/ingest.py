@@ -325,6 +325,98 @@ async def ingest_municipality(key: str) -> int:
             await session.close()
 
 
+async def ingest_county(state_abbr: str, county_key: str) -> dict[str, int]:
+    """Ingest all municipalities within a single county.
+
+    Designed for manual county-by-county ingestion workflow. Municipalities
+    are processed sequentially (not in parallel) so the operator can monitor
+    progress and interrupt cleanly between municipalities.
+
+    Args:
+        state_abbr: State abbreviation, e.g. "CA".
+        county_key: County key matching the NORCAL_METROS dict, e.g. "sacramento".
+
+    Returns:
+        Dict of {municipality_key: chunks_stored} for the county.
+    """
+    from plotlot.ingestion.discovery import get_municode_configs
+
+    # Discover all available configs then filter to state + county
+    all_configs = await get_municode_configs()
+    state_configs = {k: v for k, v in all_configs.items() if v.state == state_abbr.upper()}
+
+    # Normalize county key: "contra_costa" matches "Contra Costa"
+    def _normalize(s: str) -> str:
+        return s.lower().replace(" ", "_").replace("-", "_")
+
+    county_configs = {
+        k: v for k, v in state_configs.items()
+        if _normalize(v.county) == _normalize(county_key)
+    }
+
+    if not county_configs:
+        available = sorted({_normalize(v.county) for v in state_configs.values()})
+        raise ValueError(
+            f"No municipalities found for county {county_key!r} in {state_abbr}. "
+            f"Available counties: {available}"
+        )
+
+    county_name = next(iter(county_configs.values())).county
+    logger.info(
+        "County ingestion: %s — %d municipalities",
+        county_name,
+        len(county_configs),
+    )
+
+    results: dict[str, int] = {}
+    succeeded = 0
+    failed = 0
+
+    for i, (key, config) in enumerate(county_configs.items(), 1):
+        logger.info(
+            "[%d/%d] Starting %s",
+            i,
+            len(county_configs),
+            config.municipality,
+        )
+        try:
+            count = await ingest_municipality(key)
+            results[key] = count
+            succeeded += 1
+            logger.info(
+                "[%d/%d] %-30s %4d chunks",
+                i,
+                len(county_configs),
+                config.municipality,
+                count,
+            )
+        except Exception as e:
+            failed += 1
+            results[key] = 0
+            logger.error(
+                "[%d/%d] %-30s FAILED: %s",
+                i,
+                len(county_configs),
+                config.municipality,
+                e,
+            )
+            # Re-raise credits exhaustion so caller can print the banner
+            from plotlot.core.errors import NvidiaCreditsExhaustedError
+            if isinstance(e, NvidiaCreditsExhaustedError):
+                raise
+
+    total = sum(results.values())
+    logger.info(
+        "County %s complete: %d chunks across %d municipalities (%d succeeded, %d failed)",
+        county_name,
+        total,
+        len(county_configs),
+        succeeded,
+        failed,
+    )
+    return results
+
+
 async def _checkpoint_mark(
     session: AsyncSession, batch_id: str, key: str, status: str, **kwargs
 ) -> None:

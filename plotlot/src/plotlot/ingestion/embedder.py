@@ -17,6 +17,21 @@ from plotlot.observability.tracing import start_span
 logger = logging.getLogger(__name__)
 
 MODEL_ID = "nvidia/nv-embedqa-e5-v5"
+
+# Module-level counter — tracks API calls across the current process lifetime.
+# Each call to _embed_batch = 1 NVIDIA NIM API credit (32-chunk batch).
+_api_calls_this_run: int = 0
+
+
+def get_api_calls() -> int:
+    """Return the number of NVIDIA embedding API calls made this process."""
+    return _api_calls_this_run
+
+
+def reset_api_calls() -> None:
+    """Reset the call counter (useful for testing)."""
+    global _api_calls_this_run
+    _api_calls_this_run = 0
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/embeddings"
 EMBEDDING_DIM = 1024
 BATCH_SIZE = 32
@@ -32,6 +47,7 @@ async def _embed_batch(
     input_type: str,
 ) -> list[list[float]]:
     """Embed a single batch with exponential backoff."""
+    global _api_calls_this_run
     for attempt in range(MAX_RETRIES):
         try:
             resp = await client.post(
@@ -47,6 +63,7 @@ async def _embed_batch(
             )
             resp.raise_for_status()
             data = resp.json()
+            _api_calls_this_run += 1
             return [item["embedding"] for item in data["data"]]
 
         except httpx.HTTPStatusError as e:
@@ -90,6 +107,7 @@ async def _embed_batch(
         raise NvidiaCreditsExhaustedError()
     resp.raise_for_status()
     data = resp.json()
+    _api_calls_this_run += 1
     return [item["embedding"] for item in data["data"]]
 
 

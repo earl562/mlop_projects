@@ -1180,6 +1180,9 @@ async def get_all_municode_configs(
         if not force_refresh:
             disk_configs = _read_disk_cache()
             if disk_configs:
+                from plotlot.core.types import _CA_OVERRIDES
+
+                disk_configs.update(_CA_OVERRIDES)
                 _cached_configs = disk_configs
                 return _cached_configs
 
@@ -1203,24 +1206,27 @@ async def get_all_municode_configs(
             configs.update(ca_configs)
         except Exception as e:
             logger.error("Combined discovery failed, returning fallback configs: %s", e)
-            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
-            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
+            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS, **_CA_OVERRIDES}
             return _cached_configs
 
         if not configs:
             logger.warning("Discovery returned 0 results, using fallback configs")
-            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
-            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
+            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS, **_CA_OVERRIDES}
             return _cached_configs
 
         # Merge in fallback configs for any municipalities not discovered
-        from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+        from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
             if key not in configs:
                 configs[key] = fallback
+
+        # CA overrides always win — they correct wrong products from auto-discovery
+        configs.update(_CA_OVERRIDES)
 
         _cached_configs = configs
         _write_disk_cache(configs)
