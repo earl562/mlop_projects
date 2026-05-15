@@ -422,7 +422,13 @@ async def draft_email(
             detail=f"Draft generation failed: {exc}",
         ) from exc
 
-    raw = response.content[0].text.strip()
+    first_block = response.content[0]
+    if not hasattr(first_block, "text"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Draft generation returned unexpected content block type",
+        )
+    raw = first_block.text.strip()
 
     # Strip markdown code fences if model wrapped JSON
     if raw.startswith("```"):
