@@ -415,7 +415,7 @@ class TestAssembleClauses:
 
 
 class TestAssembleDocument:
-    def test_generates_docx(self, tmp_path):
+    async def test_generates_docx(self, tmp_path):
         registry = _build_test_registry(tmp_path)
         config = AssemblyConfig(
             document_type=DocumentType.loi,
@@ -426,7 +426,7 @@ class TestAssembleDocument:
             buyer_name="Earl Perry",
             purchase_price=500_000,
         )
-        doc = assemble_document(config, ctx, registry)
+        doc = await assemble_document(config, ctx, registry)
         assert doc.filename.startswith("LOI_")
         assert doc.filename.endswith(".docx")
         assert doc.content_type.endswith("wordprocessingml.document")
@@ -434,15 +434,14 @@ class TestAssembleDocument:
         assert doc.data[:2] == b"PK"
         assert len(doc.data) > 100
 
-    def test_unsupported_format_raises(self, tmp_path):
+    async def test_unsupported_format_raises(self, tmp_path):
+        import pytest
+
         registry = _build_test_registry(tmp_path)
         config = AssemblyConfig(
             document_type=DocumentType.loi,
             output_format="pdf",
         )
         ctx = DealContext()
-        try:
-            assemble_document(config, ctx, registry)
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "Unsupported" in str(e)
+        with pytest.raises(ValueError, match="Unsupported"):
+            await assemble_document(config, ctx, registry)

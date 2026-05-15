@@ -199,6 +199,17 @@ async def analyze_stream(request: AnalyzeRequest):
                 if done:
                     try:
                         prop_record = prop_task.result()
+                    except OSError as e:
+                        # Connection refused / network unreachable — backend is down
+                        logger.warning("Property lookup failed: %s", e)
+                        yield _sse_event(
+                            "error",
+                            {
+                                "detail": "data backend is offline",
+                                "error_type": "backend_unavailable",
+                            },
+                        )
+                        return
                     except Exception as e:
                         logger.warning("Property lookup failed: %s", e)
                     break

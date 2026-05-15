@@ -268,7 +268,14 @@ async def _get_openai_client() -> AsyncOpenAI:
     elif settings.openai_api_key:
         api_key = settings.openai_api_key
     elif settings.use_codex_oauth:
-        api_key = await _get_codex_oauth_token()
+        # Pre-fetch the token and wrap in a callable so AsyncOpenAI can refresh it.
+        _initial_token = await _get_codex_oauth_token()
+        _token_cache: dict[str, str] = {"token": _initial_token}
+
+        def _oauth_token_provider() -> str:
+            return _token_cache["token"]
+
+        api_key = _oauth_token_provider
     else:
         api_key = settings.openai_access_token
 
