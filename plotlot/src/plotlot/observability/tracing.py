@@ -18,6 +18,7 @@ Usage (replaces `import mlflow` in all modules):
 """
 
 import functools
+import inspect
 import logging
 import socket
 import sys
@@ -31,10 +32,12 @@ try:
 
     mlflow = _mlflow
     _HAS_MLFLOW = True
+    _MLFLOW_ENABLED = False
     logger.debug("MLflow available — tracing enabled")
 except ImportError:
     mlflow = None  # type: ignore[assignment]
     _HAS_MLFLOW = False
+    _MLFLOW_ENABLED = False
     logger.debug("MLflow not installed — tracing disabled")
 
 
@@ -45,23 +48,43 @@ except ImportError:
 
 def trace(name: str | None = None, **kwargs):
     """Decorator: wraps function with MLflow trace if available."""
-    if _HAS_MLFLOW:
-        return _mlflow.trace(name=name, **kwargs) if name else _mlflow.trace(**kwargs)
+    def decorator(fn):
+        traced_fn = None
+        if _HAS_MLFLOW:
+            try:
+                traced_fn = (
+                    _mlflow.trace(name=name, **kwargs)(fn)
+                    if name
+                    else _mlflow.trace(**kwargs)(fn)
+                )
+            except Exception as exc:
+                logger.debug("MLflow trace wrapper unavailable — using passthrough: %s", exc)
 
-    def passthrough(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kw):
+            global _MLFLOW_ENABLED
+            if traced_fn is not None and _MLFLOW_ENABLED:
+                try:
+                    return traced_fn(*args, **kw)
+                except Exception as exc:
+                    logger.warning("MLflow trace failed; disabling tracing: %s", exc)
+                    _MLFLOW_ENABLED = False
             return fn(*args, **kw)
 
         @functools.wraps(fn)
         async def async_wrapper(*args, **kw):
+            global _MLFLOW_ENABLED
+            if traced_fn is not None and _MLFLOW_ENABLED:
+                try:
+                    return await traced_fn(*args, **kw)
+                except Exception as exc:
+                    logger.warning("MLflow trace failed; disabling tracing: %s", exc)
+                    _MLFLOW_ENABLED = False
             return await fn(*args, **kw)
 
-        import asyncio
+        return async_wrapper if inspect.iscoroutinefunction(fn) else wrapper
 
-        return async_wrapper if asyncio.iscoroutinefunction(fn) else wrapper
-
-    return passthrough
+    return decorator
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +95,8 @@ def trace(name: str | None = None, **kwargs):
 @contextmanager
 def start_span(name: str = "span", **kwargs):
     """Context manager: MLflow span if available, otherwise no-op."""
-    if not _HAS_MLFLOW:
+    global _MLFLOW_ENABLED
+    if not (_HAS_MLFLOW and _MLFLOW_ENABLED):
         yield _NoOpSpan()
         return
 
@@ -81,7 +105,8 @@ def start_span(name: str = "span", **kwargs):
         span_cm = _mlflow.start_span(name=name, **kwargs)
         span = span_cm.__enter__()
     except Exception as exc:
-        logger.debug("MLflow start_span unavailable — continuing without span: %s", exc)
+        logger.warning("MLflow start_span unavailable; disabling tracing: %s", exc)
+        _MLFLOW_ENABLED = False
         yield _NoOpSpan()
         return
 
@@ -100,7 +125,8 @@ def start_run(**kwargs):
     blocks all subsequent requests when a previous run leaked (e.g., the
     streaming endpoint crashed mid-analysis).
     """
-    if not _HAS_MLFLOW:
+    global _MLFLOW_ENABLED
+    if not (_HAS_MLFLOW and _MLFLOW_ENABLED):
         yield None
         return
 
@@ -116,7 +142,8 @@ def start_run(**kwargs):
         run_cm = _mlflow.start_run(**kwargs)
         run = run_cm.__enter__()
     except Exception as exc:
-        logger.warning("MLflow start_run unavailable — continuing without run: %s", exc)
+        logger.warning("MLflow start_run unavailable; disabling tracing: %s", exc)
+        _MLFLOW_ENABLED = False
         yield None
         return
 
@@ -132,7 +159,7 @@ def start_run(**kwargs):
 
 
 def log_params(params: dict) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_params(params)
         except Exception:
@@ -140,7 +167,7 @@ def log_params(params: dict) -> None:
 
 
 def log_metrics(metrics: dict, step: int | None = None) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_metrics(metrics, step=step)
         except Exception:
@@ -148,7 +175,7 @@ def log_metrics(metrics: dict, step: int | None = None) -> None:
 
 
 def log_metric(key: str, value: float, step: int | None = None) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_metric(key, value, step=step)
         except Exception:
@@ -156,7 +183,7 @@ def log_metric(key: str, value: float, step: int | None = None) -> None:
 
 
 def log_dict(data: dict, artifact_file: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_dict(data, artifact_file)
         except Exception:
@@ -164,7 +191,7 @@ def log_dict(data: dict, artifact_file: str) -> None:
 
 
 def log_text(text: str, artifact_file: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_text(text, artifact_file)
         except Exception:
@@ -172,7 +199,7 @@ def log_text(text: str, artifact_file: str) -> None:
 
 
 def log_artifact(path: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.log_artifact(path)
         except Exception:
@@ -180,7 +207,7 @@ def log_artifact(path: str) -> None:
 
 
 def set_tag(key: str, value: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         try:
             _mlflow.set_tag(key, value)
         except Exception:
@@ -188,17 +215,17 @@ def set_tag(key: str, value: str) -> None:
 
 
 def set_tracking_uri(uri: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         _mlflow.set_tracking_uri(uri)
 
 
 def set_experiment(name: str) -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         _mlflow.set_experiment(name)
 
 
 def enable_async_logging() -> None:
-    if _HAS_MLFLOW:
+    if _HAS_MLFLOW and _MLFLOW_ENABLED:
         _mlflow.config.enable_async_logging()
 
 
@@ -209,6 +236,7 @@ def configure_mlflow(
     enable_async_logging: bool = True,
 ) -> bool:
     """Configure MLflow, failing open when the tracking backend is unavailable."""
+    global _MLFLOW_ENABLED
     if not _HAS_MLFLOW:
         return False
 
@@ -218,6 +246,7 @@ def configure_mlflow(
             with socket.create_connection((parsed.hostname, parsed.port), timeout=1.0):
                 pass
         except OSError:
+            _MLFLOW_ENABLED = False
             return False
 
     try:
@@ -225,8 +254,10 @@ def configure_mlflow(
         _mlflow.set_experiment(experiment_name)
         if enable_async_logging:
             _mlflow.config.enable_async_logging()
+        _MLFLOW_ENABLED = True
         return True
     except Exception:
+        _MLFLOW_ENABLED = False
         return False
 
 
