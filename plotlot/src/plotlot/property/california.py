@@ -52,69 +52,86 @@ logger = logging.getLogger(__name__)
 
 _COUNTY_CONFIG: dict[str, dict] = {
     "santa clara": {
-        # Santa Clara County Assessor GIS parcel layer
-        "parcel_url": ("https://gis.sccgov.org/arcgis/rest/services/OpenData/Parcels/MapServer/0"),
-        # City zoning is managed by individual municipalities in SCC;
-        # use the county planning zoning overlay for a consolidated view.
-        "zoning_url": ("https://gis.sccgov.org/arcgis/rest/services/OpenData/Zoning/MapServer/0"),
-        "address_field": "SITE_ADDR",
-        "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "ZONING_CODE", "USE_CODE", "LU_CODE"],
-        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "USE_DESCR", "LU_DESC"],
-        "lot_fields": ["SHAPE_Area", "LOT_AREA_SQFT", "SHAPE__Area", "PARCEL_AREA"],
-        "lot_unit": "sqft",
-        "folio_fields": ["APN", "PARCEL_NO", "PARCEL_NUM", "PARCEL_ID", "ASSESSOR_PARCEL"],
+        # City of Santa Clara Regional Open Data — covers all SCC municipalities.
+        # Verified 2026-05: https://map.santaclaraca.gov/maps/rest/services/OPENDATA/RegionalBaseOpenData/MapServer/7
+        # Fields confirmed: APN, ZONGDSGN (zoning), ACREAGE, YEARBUILT, PARCITY, PARZIP5
+        # No street address field in this layer — spatial query only.
+        "parcel_url": (
+            "https://map.santaclaraca.gov/maps/rest/services"
+            "/OPENDATA/RegionalBaseOpenData/MapServer/7"
+        ),
+        "zoning_url": "",
+        "address_field": "",  # layer has no address field; spatial query used exclusively
+        "zoning_fields": ["ZONGDSGN", "ZONE", "ZONING", "ZONE_CODE"],
+        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "SPPLAN"],
+        "lot_fields": ["ACREAGE", "Shape__Area", "SHAPE_Area"],
+        "lot_unit": "acres",
+        "folio_fields": ["APN", "APNMAPS"],
     },
     "alameda": {
-        # Alameda County GIS parcel service
+        # Alameda County Assessor parcel boundaries — ArcGIS Online hosted.
+        # Verified 2026-05: https://services5.arcgis.com/ROBnTHSNjoZ2Wm1P/arcgis/rest/services/Parcels/FeatureServer/0
+        # Fields confirmed: APN, SitusAddress, SitusStreetNumber, SitusStreetName,
+        #   SitusCity, SitusZip, UseCode, Land, Imps, TotalNetValue, Shape__Area
         "parcel_url": (
-            "https://gis.acgov.org/arcgis/rest/services/PropertyInformation/MapServer/0"
+            "https://services5.arcgis.com/ROBnTHSNjoZ2Wm1P/arcgis/rest/services"
+            "/Parcels/FeatureServer/0"
         ),
         "zoning_url": "",
-        "address_field": "SITE_ADDR",
-        "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "USE_CODE", "LU_CODE"],
-        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "LU_DESC"],
-        "lot_fields": ["SHAPE_Area", "LOT_AREA", "PARCEL_AREA", "SHAPE__Area"],
+        "address_field": "SitusAddress",
+        "zoning_fields": ["UseCode", "ZONE", "ZONING", "ZONE_CODE"],
+        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME"],
+        "lot_fields": ["Shape__Area", "Shape_Area", "SHAPE_Area"],
         "lot_unit": "sqft",
-        "folio_fields": ["APN", "PARCEL_NO", "OBJECTID"],
+        "folio_fields": ["APN", "APN_SORT"],
     },
     "contra costa": {
-        # Contra Costa County open data parcel service
+        # Contra Costa County parcel service — ArcGIS Online hosted.
+        # Verified 2026-05: https://services2.arcgis.com/1ufANJSTSqs8jV0y/arcgis/rest/services/Parcel/FeatureServer/0
+        # Fields confirmed: PIDPLAIN, PID, Site_Addre, Address, City, State, ZIP,
+        #   Owner, AC (acreage), Shape__Area
         "parcel_url": (
-            "https://opendata.contracostaenviz.org/server/rest/services"
-            "/OpenData/CCC_Parcels/MapServer/0"
+            "https://services2.arcgis.com/1ufANJSTSqs8jV0y/arcgis/rest/services"
+            "/Parcel/FeatureServer/0"
         ),
         "zoning_url": "",
-        "address_field": "SITE_ADDR",
+        "address_field": "Site_Addre",
         "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "LAND_USE"],
         "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME"],
-        "lot_fields": ["SHAPE_Area", "LOT_AREA", "PARCEL_AREA", "SHAPE__Area"],
-        "lot_unit": "sqft",
-        "folio_fields": ["APN", "PARCEL_NUM", "PARCEL_NO"],
+        "lot_fields": ["AC", "Shape__Area", "SHAPE_Area"],
+        "lot_unit": "acres",  # AC field is acreage
+        "folio_fields": ["PIDPLAIN", "PID"],
     },
     "san mateo": {
-        # San Mateo County GIS parcel service
-        "parcel_url": ("https://gis.smcgov.org/arcgis/rest/services/OpenData/Parcels/MapServer/0"),
-        "zoning_url": "",
-        "address_field": "SITE_ADDR",
-        "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "USE_CODE"],
-        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME"],
-        "lot_fields": ["SHAPE_Area", "LOT_AREA", "PARCEL_AREA", "SHAPE__Area"],
-        "lot_unit": "sqft",
-        "folio_fields": ["APN", "PARCEL_NUM", "PARCEL_NO"],
-    },
-    "sacramento": {
-        # Sacramento County Assessor parcel data via ArcGIS Online
+        # San Mateo County Planning — Active Parcels layer.
+        # Verified 2026-05: https://gis.smcgov.org/maps/rest/services/PLANNING/COUNTY_PARCELS/MapServer/0
+        # Fields confirmed: APN, SITUS_ADDR, SITUS_CITY, LANDAREA, Shape
         "parcel_url": (
-            "https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services"
-            "/Sacramento_County_Parcels/FeatureServer/0"
+            "https://gis.smcgov.org/maps/rest/services/PLANNING/COUNTY_PARCELS/MapServer/0"
         ),
         "zoning_url": "",
-        "address_field": "SITUS_ADDRESS",
-        "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "LAND_USE_CODE"],
-        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "LAND_USE_DESC"],
-        "lot_fields": ["SHAPE_Area", "PARCEL_SQFT", "LOT_AREA", "SHAPE__Area"],
+        "address_field": "SITUS_ADDR",
+        "zoning_fields": ["ZONE", "ZONING", "ZONE_CODE", "USE_CODE"],
+        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME"],
+        "lot_fields": ["LANDAREA", "Shape__Area", "SHAPE_Area"],
         "lot_unit": "sqft",
-        "folio_fields": ["APN", "PARCEL_NUM", "PARCEL_NUMBER", "ASSESSOR_PARCEL_NUMBER"],
+        "folio_fields": ["APN"],
+    },
+    "sacramento": {
+        # Sacramento County GIS — ALL Parcels layer 22.
+        # Verified 2026-05: https://mapservices.gis.saccounty.net/arcgis/rest/services/PARCELS/MapServer/22
+        # Fields confirmed: PARCEL_NUMBER, ZONE_ (zoning!), LANDUSE, LOTSIZE,
+        #   SITUS_ADD1, STREET_NBR, STREET_NAME, CITY, NAME (owner)
+        "parcel_url": (
+            "https://mapservices.gis.saccounty.net/arcgis/rest/services/PARCELS/MapServer/22"
+        ),
+        "zoning_url": "",
+        "address_field": "SITUS_ADD1",
+        "zoning_fields": ["ZONE_", "LANDUSE", "ZONE", "ZONING"],
+        "desc_fields": ["LANDUSE", "ZONE_DESC", "ZONING_DESC"],
+        "lot_fields": ["LOTSIZE", "Shape__Area", "SHAPE_Area"],
+        "lot_unit": "sqft",
+        "folio_fields": ["PARCEL_NUMBER", "APN10", "APN"],
     },
 }
 
@@ -212,6 +229,9 @@ class CaliforniaProvider(PropertyProvider):
     ) -> PropertyRecord | None:
         """Address LIKE query against the parcel layer."""
         addr_field = config["address_field"]
+        if not addr_field:
+            # Layer has no address field (e.g. Santa Clara regional layer) — skip.
+            return None
         normalized = normalize_address(address)
         # Try full normalized address first, then house-number + first street token
         where_clauses = [
@@ -276,7 +296,8 @@ class CaliforniaProvider(PropertyProvider):
         attrs = feature.get("attributes", {})
 
         folio = self._first_value(attrs, config["folio_fields"])
-        address_val = str(attrs.get(config["address_field"]) or "")
+        addr_field = config["address_field"]
+        address_val = str(attrs.get(addr_field) or "") if addr_field else ""
         zoning_code, zoning_desc = self._extract_zoning(attrs, config)
 
         raw_lot = safe_float(self._first_value(attrs, config["lot_fields"]))
@@ -296,21 +317,37 @@ class CaliforniaProvider(PropertyProvider):
             else:
                 lot_sqft = raw_lot
 
-        owner = str(attrs.get("OWNER") or attrs.get("OWNER_NAME") or attrs.get("TAXPAYER") or "")
+        # Owner — field names vary by county (confirmed from schema probes)
+        owner = str(
+            attrs.get("OWNER")  # Sacramento, Contra Costa
+            or attrs.get("Owner")  # Contra Costa alternate
+            or attrs.get("NAME")  # Sacramento alternate
+            or attrs.get("OWNER_NAME")
+            or attrs.get("TAXPAYER")
+            or ""
+        )
+        # Municipality — field names vary by county
         municipality = str(
-            attrs.get("CITY")
+            attrs.get("PARCITY")  # Santa Clara regional layer
+            or attrs.get("SitusCity")  # Alameda
+            or attrs.get("SITUS_CITY")  # San Mateo
+            or attrs.get("City")  # Contra Costa
+            or attrs.get("CITY")  # Sacramento
             or attrs.get("MUNICIPALITY")
-            or attrs.get("JURIS")
-            or attrs.get("SITE_CITY")
             or ""
         )
         year_built = int(
             safe_float(
-                attrs.get("YEAR_BUILT") or attrs.get("YR_BUILT") or attrs.get("YEAR_BLT") or 0
+                attrs.get("YEARBUILT")  # Santa Clara regional layer
+                or attrs.get("YEAR_BUILT")
+                or attrs.get("YR_BUILT")
+                or 0
             )
         )
         assessed = safe_float(
-            attrs.get("ASSESSED_VALUE")
+            attrs.get("TotalNetValue")  # Alameda
+            or attrs.get("Land")  # Alameda land value fallback
+            or attrs.get("ASSESSED_VALUE")
             or attrs.get("ASSESSED_VAL")
             or attrs.get("TOTAL_VALUE")
             or 0

@@ -742,7 +742,7 @@ export default function Home() {
       {/* Conversation header — address breadcrumb + New Analysis button */}
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
         {conversationAddress ? (
-          <p className="min-w-0 truncate text-xs text-[var(--text-muted)]">{conversationAddress}</p>
+          <p className="flex-1 min-w-0 truncate text-xs text-[var(--text-muted)] pr-4">{conversationAddress}</p>
         ) : (
           <span />
         )}
