@@ -590,6 +590,7 @@ export default function Home() {
     setIsProcessing(false);
     localStorage.removeItem("plotlot_backend_session");
     localStorage.removeItem("plotlot_last_session");
+    window.dispatchEvent(new CustomEvent("plotlot:clear-active-session"));
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
@@ -741,24 +742,27 @@ export default function Home() {
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
       {/* Conversation header — centered address + right-aligned New Analysis button */}
       <div className="relative shrink-0 flex items-center border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
-        {conversationAddress && (
-          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-32">
-            <p className="max-w-sm truncate text-xs text-[var(--text-muted)] sm:max-w-md">{conversationAddress}</p>
-          </div>
-        )}
-        <div className="ml-auto">
-          <button
-            onClick={handleNewAnalysis}
-            data-testid="new-analysis-button"
-            className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
-            style={{ boxShadow: "var(--shadow-nav)" }}
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-            </svg>
-            New analysis
-          </button>
+        {/* Invisible spacer on the left to balance the button on the right */}
+        <div className="invisible flex items-center gap-2 px-3 py-1.5 text-xs font-medium" aria-hidden>
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+          </svg>
+          New analysis
         </div>
+        {conversationAddress && (
+          <p className="flex-1 truncate text-center text-xs text-[var(--text-muted)] px-2">{conversationAddress}</p>
+        )}
+        <button
+          onClick={handleNewAnalysis}
+          data-testid="new-analysis-button"
+          className="shrink-0 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+          style={{ boxShadow: "var(--shadow-nav)" }}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+          </svg>
+          New analysis
+        </button>
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto pb-52">

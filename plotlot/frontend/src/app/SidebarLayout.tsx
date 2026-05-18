@@ -71,6 +71,13 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("plotlot:sessions-changed", handler);
   }, []);
 
+  // Clear active highlight when New Analysis is started from within the conversation
+  useEffect(() => {
+    const handler = () => setActiveSessionId(null);
+    window.addEventListener("plotlot:clear-active-session", handler);
+    return () => window.removeEventListener("plotlot:clear-active-session", handler);
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar
