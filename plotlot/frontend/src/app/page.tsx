@@ -740,14 +740,13 @@ export default function Home() {
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
       {/* Conversation header — centered address + right-aligned New Analysis button */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
-        <span />
-        {conversationAddress ? (
-          <p className="truncate text-center text-xs text-[var(--text-muted)]">{conversationAddress}</p>
-        ) : (
-          <span />
+      <div className="relative shrink-0 flex items-center border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
+        {conversationAddress && (
+          <div className="pointer-events-none absolute inset-x-0 flex justify-center px-32">
+            <p className="max-w-sm truncate text-xs text-[var(--text-muted)] sm:max-w-md">{conversationAddress}</p>
+          </div>
         )}
-        <div className="flex justify-end">
+        <div className="ml-auto">
           <button
             onClick={handleNewAnalysis}
             data-testid="new-analysis-button"

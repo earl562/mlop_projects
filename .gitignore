@@ -83,3 +83,6 @@ docs/research/_tmp-*
 
 # Python typing cache
 .mypy_cache/
+
+#Handoff
+HANDOFF.md

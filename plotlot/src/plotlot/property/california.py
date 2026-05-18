@@ -200,6 +200,15 @@ class CaliforniaProvider(PropertyProvider):
         if record is None:
             logger.info(
                 "CaliforniaProvider: county endpoint returned nothing for %s (%s); "
+                "trying statewide layer",
+                address,
+                county,
+            )
+            record = await self._statewide_parcel(address, county, lat=lat, lng=lng)
+
+        if record is None:
+            logger.info(
+                "CaliforniaProvider: statewide layer returned nothing for %s (%s); "
                 "trying UniversalProvider",
                 address,
                 county,
