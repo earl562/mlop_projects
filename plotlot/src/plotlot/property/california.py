@@ -1,18 +1,20 @@
-"""California county PropertyProvider.
+"""California PropertyProvider — county-specific + statewide fallback.
 
-Supports ArcGIS-based property lookups for five California counties:
-- Sacramento (Citrus Heights, Lincoln, Rocklin)
-- Contra Costa (El Cerrito, Lafayette, Moraga, Orinda, Richmond)
-- Alameda (Alameda city, Hayward, Newark, Oakland)
-- Santa Clara (Campbell, Los Altos, Los Gatos, Milpitas, Monte Sereno,
-               Morgan Hill, Mountain View, San Jose, Saratoga)
-- San Mateo (Daly City, East Palo Alto, Hillsborough, Portola Valley, Woodside)
+Lookup hierarchy for any California address:
+  1. County-specific ArcGIS endpoint (five counties with verified configs below)
+  2. CA statewide parcel layer (all 58 counties; returns APN, address, lot area)
+  3. UniversalProvider (ArcGIS Hub discovery + Firestore cache)
 
-Strategy per county:
-1. Spatial parcel query (lat/lng point-in-polygon → parcel attributes)
-2. Address-based parcel query (fallback when spatial returns nothing)
-3. Separate zoning spatial query if the parcel layer lacks a zoning field
-4. UniversalProvider fallback if all county-specific attempts fail
+This means any CA county we ingest ordinances for — Marin, Sonoma, SF, Santa Cruz,
+etc. — gets property lookup automatically via the statewide layer without a new config.
+
+County-specific configs exist where the statewide layer doesn't return a zoning code
+or has known coverage gaps (Sacramento):
+- Sacramento, Contra Costa, Alameda, Santa Clara, San Mateo
+
+Zoning is almost never available at the county assessor/parcel level. For municipalities
+where we've ingested ordinances, the ordinance search pipeline resolves zoning from the
+retrieved chunks — an empty zoning_code on the PropertyRecord is expected and handled.
 
 UniversalProvider fallback is imported lazily to avoid a circular init
 (universal.py depends on Firestore; we only pay that cost on fallback).
@@ -52,18 +54,21 @@ logger = logging.getLogger(__name__)
 
 _COUNTY_CONFIG: dict[str, dict] = {
     "santa clara": {
-        # City of Santa Clara Regional Open Data — covers all SCC municipalities.
+        # Santa Clara County Regional Open Data — county-wide parcel layer covering all
+        # SCC municipalities (Mountain View, San Jose, Sunnyvale, Campbell, etc.).
         # Verified 2026-05: https://map.santaclaraca.gov/maps/rest/services/OPENDATA/RegionalBaseOpenData/MapServer/7
-        # Fields confirmed: APN, ZONGDSGN (zoning), ACREAGE, YEARBUILT, PARCITY, PARZIP5
-        # No street address field in this layer — spatial query only.
+        # Fields confirmed: APN, ZONGDSGN (zoning designation), ACREAGE, PARCITY, YEARBUILT
+        # Layer is in CA State Plane Zone III (feet); spatial_query sends inSR=4326 so the
+        # server reprojects our WGS84 lat/lng before doing the polygon intersection.
+        # No street address field in this layer — spatial query is the primary strategy.
         "parcel_url": (
             "https://map.santaclaraca.gov/maps/rest/services"
             "/OPENDATA/RegionalBaseOpenData/MapServer/7"
         ),
         "zoning_url": "",
-        "address_field": "",  # layer has no address field; spatial query used exclusively
-        "zoning_fields": ["ZONGDSGN", "ZONE", "ZONING", "ZONE_CODE"],
-        "desc_fields": ["ZONE_DESC", "ZONING_DESC", "ZONE_NAME", "SPPLAN"],
+        "address_field": "",  # no address field; spatial query used exclusively
+        "zoning_fields": ["ZONGDSGN", "GPLANCRT", "ZONE", "ZONING"],
+        "desc_fields": ["SPPLAN", "ZONE_DESC", "ZONING_DESC"],
         "lot_fields": ["ACREAGE", "Shape__Area", "SHAPE_Area"],
         "lot_unit": "acres",
         "folio_fields": ["APN", "APNMAPS"],
@@ -138,6 +143,20 @@ _COUNTY_CONFIG: dict[str, dict] = {
 # sq meters → sq ft conversion (used when lot_unit = "sqm")
 _SQM_TO_SQFT = 10.7639
 
+# ---------------------------------------------------------------------------
+# CA statewide parcel layer (fallback for counties without a specific config)
+#
+# Maintained by the CA Strategic Growth Council / ICE; covers all 58 counties.
+# Fields: PARCEL_APN, SITE_ADDR, SITE_CITY, Shape__Area (sq meters, EPSG:3310)
+# Verified 2026-05: point-in-polygon works with inSR=4326 for Bay Area counties.
+# Coverage gaps exist for some inland counties (Sacramento) — county configs
+# handle those cases; this layer fills the gap for any county not yet configured.
+# ---------------------------------------------------------------------------
+_CA_STATEWIDE_PARCEL_URL = (
+    "https://services2.arcgis.com/zr3KAIbsRSUyARHG/arcgis/rest/services"
+    "/CA_State_Parcels/FeatureServer/0/query"
+)
+
 
 class CaliforniaProvider(PropertyProvider):
     """PropertyProvider for the five CA counties with ingested ordinance data.
@@ -160,7 +179,12 @@ class CaliforniaProvider(PropertyProvider):
         config = _COUNTY_CONFIG.get(county_key)
 
         if config is None:
-            logger.warning("CaliforniaProvider: no config for county %r", county)
+            logger.info(
+                "CaliforniaProvider: no county config for %r — trying statewide layer", county
+            )
+            record = await self._statewide_parcel(address, county, lat=lat, lng=lng)
+            if record is not None:
+                return record
             return await self._universal_fallback(address, county, lat=lat, lng=lng, state=state)
 
         # --- 1. Try county-specific ArcGIS endpoints ---
@@ -212,7 +236,8 @@ class CaliforniaProvider(PropertyProvider):
     ) -> PropertyRecord | None:
         """Point-in-polygon spatial query to retrieve the parcel under lat/lng."""
         try:
-            features = await spatial_query(url, lat, lng)
+            out_fields = config.get("spatial_out_fields", "*")
+            features = await spatial_query(url, lat, lng, out_fields=out_fields)
             if not features:
                 return None
             return self._parse_feature(features[0], config, county)
@@ -297,7 +322,17 @@ class CaliforniaProvider(PropertyProvider):
 
         folio = self._first_value(attrs, config["folio_fields"])
         addr_field = config["address_field"]
-        address_val = str(attrs.get(addr_field) or "") if addr_field else ""
+        # Build composite address from SITUS_* fields when no single address field exists
+        if not addr_field and attrs.get("SITUS_HOUSE_NUMBER"):
+            parts = [
+                str(attrs.get("SITUS_HOUSE_NUMBER") or "").strip(),
+                str(attrs.get("SITUS_STREET_DIRECTION") or "").strip(),
+                str(attrs.get("SITUS_STREET_NAME") or "").strip(),
+                str(attrs.get("SITUS_STREET_TYPE") or "").strip(),
+            ]
+            address_val = " ".join(p for p in parts if p)
+        else:
+            address_val = str(attrs.get(addr_field) or "") if addr_field else ""
         zoning_code, zoning_desc = self._extract_zoning(attrs, config)
 
         raw_lot = safe_float(self._first_value(attrs, config["lot_fields"]))
@@ -328,7 +363,8 @@ class CaliforniaProvider(PropertyProvider):
         )
         # Municipality — field names vary by county
         municipality = str(
-            attrs.get("PARCITY")  # Santa Clara regional layer
+            attrs.get("SITUS_CITY_NAME")  # Mountain View parcel service
+            or attrs.get("PARCITY")  # Santa Clara regional layer
             or attrs.get("SitusCity")  # Alameda
             or attrs.get("SITUS_CITY")  # San Mateo
             or attrs.get("City")  # Contra Costa
@@ -408,6 +444,98 @@ class CaliforniaProvider(PropertyProvider):
                 break
 
         return code, desc
+
+    async def _statewide_parcel(
+        self,
+        address: str,
+        county: str,
+        *,
+        lat: float | None,
+        lng: float | None,
+    ) -> PropertyRecord | None:
+        """Query the CA statewide parcel layer (all 58 counties).
+
+        Fields returned: PARCEL_APN, SITE_ADDR, SITE_CITY, Shape__Area (sq meters).
+        Spatial query requires lat/lng; address fallback uses SITE_ADDR LIKE.
+        """
+        out_fields = "PARCEL_APN,SITE_ADDR,SITE_CITY,Shape__Area"
+
+        # --- spatial first ---
+        if lat is not None and lng is not None:
+            try:
+                features = await spatial_query(
+                    _CA_STATEWIDE_PARCEL_URL, lat, lng, out_fields=out_fields
+                )
+                if features:
+                    return self._parse_statewide_feature(features[0], county)
+            except Exception as exc:
+                logger.debug("CaliforniaProvider statewide spatial failed: %s", exc)
+
+        # --- address LIKE fallback ---
+        normalized = normalize_address(address)
+        tokens = normalized.split()
+        where_clauses = [f"UPPER(SITE_ADDR) LIKE '%{normalized}%'"]
+        if len(tokens) >= 2:
+            short = " ".join(tokens[:2])
+            where_clauses.append(f"UPPER(SITE_ADDR) LIKE '%{short}%'")
+
+        params_base = {
+            "outFields": out_fields,
+            "returnGeometry": "false",
+            "f": "json",
+            "resultRecordCount": "5",
+        }
+        for where in where_clauses:
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.get(
+                        _CA_STATEWIDE_PARCEL_URL, params={**params_base, "where": where}
+                    )
+                    resp.raise_for_status()
+                    features = resp.json().get("features", [])
+                if features:
+                    return self._parse_statewide_feature(features[0], county)
+            except Exception as exc:
+                logger.debug(
+                    "CaliforniaProvider statewide address query failed (%s): %s",
+                    where[:80],
+                    exc,
+                )
+
+        logger.info(
+            "CaliforniaProvider: statewide layer returned nothing for %s (%s)", address, county
+        )
+        return None
+
+    @staticmethod
+    def _parse_statewide_feature(feature: dict, county: str) -> PropertyRecord:
+        """Convert a CA statewide parcel feature to PropertyRecord.
+
+        Shape__Area is in sq meters (EPSG:3310 Albers Equal Area).
+        Zoning is not available from this layer — left empty for ordinance search.
+        """
+        attrs = feature.get("attributes", {})
+        folio = str(attrs.get("PARCEL_APN") or "")
+        address_val = str(attrs.get("SITE_ADDR") or "")
+        municipality = str(attrs.get("SITE_CITY") or "")
+        raw_area = safe_float(attrs.get("Shape__Area"))
+        lot_sqft = raw_area * _SQM_TO_SQFT if raw_area > 0 else 0.0
+
+        geom = feature.get("geometry") or {}
+        feat_lat: float | None = geom.get("y")
+        feat_lng: float | None = geom.get("x")
+
+        return PropertyRecord(
+            folio=folio,
+            address=address_val,
+            municipality=municipality,
+            county=county.title(),
+            zoning_code="",  # not available; ordinance search resolves zoning
+            zoning_description="",
+            lot_size_sqft=lot_sqft,
+            lat=feat_lat,
+            lng=feat_lng,
+        )
 
     @staticmethod
     async def _universal_fallback(

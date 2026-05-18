@@ -40,14 +40,16 @@ def _santa_clara_attrs(
     city: str = "Mountain View",
     year_built: int = 1985,
 ) -> dict:
-    """Santa Clara regional layer fields (verified schema)."""
+    """Santa Clara County Regional Open Data layer fields (verified schema 2026-05).
+
+    County-wide coverage; ZONGDSGN carries the zoning designation.
+    """
     return {
         "APN": apn,
         "ZONGDSGN": zoning,
         "ACREAGE": acreage,
         "PARCITY": city,
         "YEARBUILT": year_built,
-        "PARZIP5": "94041",
     }
 
 
@@ -160,13 +162,16 @@ class TestCountyConfig:
             assert isinstance(cfg["zoning_fields"], list), (
                 f"zoning_fields should be a list for {county}"
             )
-            assert len(cfg["zoning_fields"]) >= 1
+            assert len(cfg["zoning_fields"]) >= 1, (
+                f"zoning_fields should have at least one candidate for {county}"
+            )
 
     def test_santa_clara_has_no_address_field(self):
         """Santa Clara regional layer has no address field — spatial only."""
         assert _COUNTY_CONFIG["santa clara"]["address_field"] == ""
 
     def test_santa_clara_uses_acres(self):
+        """SCC regional layer ACREAGE field is in acres."""
         assert _COUNTY_CONFIG["santa clara"]["lot_unit"] == "acres"
 
     def test_contra_costa_uses_acres(self):
@@ -192,7 +197,7 @@ class TestSpatialQuery:
 
     @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
     async def test_santa_clara_spatial_returns_record(self, mock_spatial, provider):
-        """Santa Clara: ZONGDSGN zoning field, ACREAGE lot (acres → sqft)."""
+        """Santa Clara county-wide layer: ZONGDSGN zoning, ACREAGE lot (acres → sqft), PARCITY city."""
         feature = _make_feature(_santa_clara_attrs(acreage=0.15))
         mock_spatial.return_value = [feature]
 
@@ -402,10 +407,10 @@ class TestZoningExtraction:
         assert desc == ""
 
     def test_santa_clara_zongdsgn_field(self):
-        """ZONGDSGN is the primary zoning field for Santa Clara."""
+        """ZONGDSGN is the primary zoning field for the SCC county-wide layer."""
         provider = self._provider()
         config = _COUNTY_CONFIG["santa clara"]
-        attrs = {"ZONGDSGN": "R1E2", "ZONE": "ignored"}
+        attrs = {"ZONGDSGN": "R1E2", "GPLANCRT": "ignored"}
         code, _ = provider._extract_zoning(attrs, config)
         assert code == "R1E2"
 
@@ -470,6 +475,115 @@ class TestLotAreaConversion:
         record = await provider.lookup("addr", "Sacramento", lat=38.5, lng=-121.4)
         assert record is not None
         assert record.lot_size_sqft == 0.0
+
+
+# ---------------------------------------------------------------------------
+# CA statewide parcel layer (counties without a specific config)
+# ---------------------------------------------------------------------------
+
+
+class TestStatewideParcel:
+    """CaliforniaProvider falls back to CA_State_Parcels FeatureServer for unknown counties."""
+
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    async def test_statewide_spatial_returns_record(self, mock_spatial):
+        """Unknown county → statewide layer spatial query → PropertyRecord."""
+        feature = {
+            "attributes": {
+                "PARCEL_APN": "15810032",
+                "SITE_ADDR": "500 CASTRO ST",
+                "SITE_CITY": "MOUNTAIN VIEW",
+                "Shape__Area": 30953.64,  # sq meters
+            },
+            "geometry": {},
+        }
+        mock_spatial.return_value = [feature]
+
+        provider = CaliforniaProvider()
+        record = await provider.lookup(
+            "500 Castro St, Mountain View, CA",
+            "Marin",  # no county config → statewide
+            lat=37.3894,
+            lng=-122.0819,
+        )
+
+        assert record is not None
+        assert record.folio == "15810032"
+        assert record.address == "500 CASTRO ST"
+        assert record.municipality == "MOUNTAIN VIEW"
+        assert record.county == "Marin"
+        assert record.zoning_code == ""  # expected — ordinance search resolves zoning
+        # 30953.64 sqm × 10.7639 ≈ 333 226 sqft — just verify conversion happened
+        assert record.lot_size_sqft == pytest.approx(30953.64 * 10.7639, rel=0.01)
+
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    @patch("plotlot.property.california.httpx.AsyncClient")
+    async def test_statewide_address_fallback_when_no_lat_lng(self, mock_client_cls, mock_spatial):
+        """Without lat/lng, statewide layer tries SITE_ADDR LIKE query."""
+        feature = {
+            "attributes": {
+                "PARCEL_APN": "999-001-001",
+                "SITE_ADDR": "100 MAIN ST",
+                "SITE_CITY": "NOVATO",
+                "Shape__Area": 500.0,
+            },
+            "geometry": {},
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"features": [feature]}
+        mock_response.raise_for_status = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_cls.return_value = mock_client
+
+        provider = CaliforniaProvider()
+        record = await provider.lookup("100 Main St, Novato, CA", "Marin", lat=None, lng=None)
+
+        assert record is not None
+        assert record.folio == "999-001-001"
+        assert record.municipality == "NOVATO"
+
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    @patch("plotlot.property.california.httpx.AsyncClient")
+    @patch(
+        "plotlot.property.california.CaliforniaProvider._universal_fallback",
+        new_callable=AsyncMock,
+    )
+    async def test_statewide_miss_falls_to_universal(self, mock_ufb, mock_client_cls, mock_spatial):
+        """Statewide returns nothing → UniversalProvider is called."""
+        mock_spatial.return_value = []
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"features": []}
+        mock_response.raise_for_status = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_cls.return_value = mock_client
+        mock_ufb.return_value = None
+
+        provider = CaliforniaProvider()
+        record = await provider.lookup("100 Main St, Novato, CA", "Marin", lat=37.1, lng=-122.5)
+
+        mock_ufb.assert_awaited_once()
+        assert record is None
+
+    def test_parse_statewide_sqm_conversion(self):
+        """Shape__Area in sq meters is correctly converted to sq ft."""
+        provider = CaliforniaProvider()
+        feature = {
+            "attributes": {
+                "PARCEL_APN": "001",
+                "SITE_ADDR": "1 TEST ST",
+                "SITE_CITY": "TESTVILLE",
+                "Shape__Area": 1000.0,  # 1000 sqm
+            },
+            "geometry": {},
+        }
+        record = provider._parse_statewide_feature(feature, "Marin")
+        assert record.lot_size_sqft == pytest.approx(1000.0 * 10.7639, rel=0.01)
 
 
 # ---------------------------------------------------------------------------

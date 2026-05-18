@@ -739,24 +739,27 @@ export default function Home() {
 
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
-      {/* Conversation header — address breadcrumb + New Analysis button */}
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
+      {/* Conversation header — centered address + right-aligned New Analysis button */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-[var(--border-soft)] px-4 py-2.5 sm:px-6">
+        <span />
         {conversationAddress ? (
-          <p className="flex-1 min-w-0 truncate text-xs text-[var(--text-muted)] pr-4">{conversationAddress}</p>
+          <p className="truncate text-center text-xs text-[var(--text-muted)]">{conversationAddress}</p>
         ) : (
           <span />
         )}
-        <button
-          onClick={handleNewAnalysis}
-          data-testid="new-analysis-button"
-          className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
-          style={{ boxShadow: "var(--shadow-nav)" }}
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-          </svg>
-          New analysis
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={handleNewAnalysis}
+            data-testid="new-analysis-button"
+            className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+            style={{ boxShadow: "var(--shadow-nav)" }}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+            </svg>
+            New analysis
+          </button>
+        </div>
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto pb-52">
