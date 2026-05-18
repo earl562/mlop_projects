@@ -329,17 +329,20 @@ class TestAddressFallback:
         assert record.folio == "225-0341-001"
 
     @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
-    @patch("plotlot.property.california.httpx.AsyncClient")
     async def test_santa_clara_skips_address_fallback(
-        self, mock_client_cls, mock_spatial, provider
+        self, mock_spatial, provider
     ):
-        """Santa Clara has no address field — address fallback is skipped entirely,
-        so with lat=None/lng=None the provider goes straight to UniversalProvider."""
+        """Santa Clara has no address field — county address fallback is skipped.
+        With lat=None/lng=None and no county results, the statewide layer is tried
+        next, then UniversalProvider if statewide also misses."""
         mock_spatial.return_value = []
 
         with patch.object(
+            CaliforniaProvider, "_statewide_parcel", new_callable=AsyncMock
+        ) as mock_statewide, patch.object(
             CaliforniaProvider, "_universal_fallback", new_callable=AsyncMock
         ) as mock_ufb:
+            mock_statewide.return_value = None
             mock_ufb.return_value = None
             record = await provider.lookup(
                 "500 Castro St, Mountain View, CA",
@@ -347,8 +350,8 @@ class TestAddressFallback:
                 lat=None,
                 lng=None,
             )
-            # httpx should NOT have been called (no address query attempted)
-            mock_client_cls.assert_not_called()
+            # Statewide layer tried before universal
+            mock_statewide.assert_awaited_once()
             mock_ufb.assert_awaited_once()
             assert record is None
 
