@@ -80,7 +80,7 @@ jobs:
           enable-cache: true
           python-version: "3.12"
           working-directory: plotlot
-      - run: uv sync --frozen --extra dev --extra eval
+      - run: uv sync --frozen --extra dev --extra eval --extra mlflow
       - run: uv run python -m pytest tests/unit/ -v --tb=short
 
   frontend-quality:
@@ -176,7 +176,7 @@ jobs:
           enable-cache: true
           python-version: "3.12"
           working-directory: plotlot
-      - run: uv sync --frozen --extra dev --extra eval
+      - run: uv sync --frozen --extra dev --extra eval --extra mlflow
         working-directory: plotlot
       - run: uv run uvicorn plotlot.api.main:app --host 127.0.0.1 --port 8000 > /tmp/plotlot-api.log 2>&1 &
         working-directory: plotlot

@@ -18,7 +18,7 @@ Runs PlotLot's deterministic local TDD success gate.
 
 Options:
   --install        Sync/install existing project toolchains before verification.
-                   Runs: uv sync --extra dev, npm install, npx playwright install chromium.
+                   Runs: uv sync --extra dev --extra eval --extra mlflow, npm install, npx playwright install chromium.
   --skip-backend   Skip backend hygiene/lint/unit checks.
   --skip-frontend  Skip all frontend checks.
   --skip-browser   Skip Playwright browser checks.
@@ -126,7 +126,7 @@ fi
 
 if [[ "$RUN_INSTALL" -eq 1 ]]; then
   log "Syncing existing backend toolchain"
-  run uv sync --extra dev
+  run uv sync --extra dev --extra eval --extra mlflow
 
   log "Installing existing frontend dependencies"
   (cd frontend && run npm install)

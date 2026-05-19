@@ -1,7 +1,7 @@
 .PHONY: install install-local-tools auth-readiness auth-bootstrap live-agent-e2e mutation test verify-local verify-local-no-browser lint fmt discover ingest db-up db-down clean
 
 install:  ## Install all dependencies (including dev)
-	uv sync --extra dev
+	uv sync --extra dev --extra eval --extra mlflow
 
 install-local-tools:  ## Sync backend/frontend deps and Playwright browser for local verification
 	bash scripts/verify_local_success.sh --install --skip-backend --skip-frontend
