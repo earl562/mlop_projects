@@ -10,6 +10,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: MLFLOW_TRACKING_URI
+        sync: false
       - key: GEOCODIO_API_KEY
         sync: false
       - key: HF_TOKEN

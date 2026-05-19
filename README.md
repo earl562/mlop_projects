@@ -144,6 +144,10 @@ The repository is set up around three quality lanes:
 
 Generated screenshots, Playwright reports, and other large test artifacts are intentionally excluded from git. They should live in ignored local directories or GitHub Actions artifacts instead of repository history.
 
+Production note:
+
+- Keep `MLFLOW_TRACKING_URI` separate from the app `DATABASE_URL` in Render/Neon. Sharing the same Postgres database causes MLflow schema drift to show up as a degraded runtime warning even when the app itself is healthy.
+
 ## Branch Workflow
 
 PlotLot should use separate development branches for ongoing work and reserve `main` for verified PR promotions.

@@ -78,6 +78,28 @@ def test_inspect_render_service_flags_root_and_health_mismatch():
     assert "render_health_mismatch" in codes
 
 
+def test_inspect_render_env_var_drift_warns_when_mlflow_shares_app_database():
+    findings = deploy_doctor.inspect_render_env_var_drift(
+        {
+            "DATABASE_URL": "postgresql+asyncpg://user:pw@ep-test.neon.tech/neondb?sslmode=require",
+            "MLFLOW_TRACKING_URI": "postgresql://user:pw@ep-test.neon.tech/neondb?sslmode=require",
+        }
+    )
+
+    assert [finding.code for finding in findings] == ["render_shared_mlflow_database"]
+
+
+def test_inspect_render_env_var_drift_ignores_separate_tracking_database():
+    findings = deploy_doctor.inspect_render_env_var_drift(
+        {
+            "DATABASE_URL": "postgresql+asyncpg://user:pw@ep-app.neon.tech/appdb?sslmode=require",
+            "MLFLOW_TRACKING_URI": "postgresql://user:pw@ep-mlflow.neon.tech/mlflowdb?sslmode=require",
+        }
+    )
+
+    assert findings == []
+
+
 def test_remove_stale_vercel_links_deletes_only_known_paths(tmp_path: Path):
     stale = tmp_path / "frontend" / ".vercel"
     stale.mkdir(parents=True)

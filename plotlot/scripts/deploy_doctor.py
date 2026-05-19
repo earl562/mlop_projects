@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 EXPECTED_RENDER_ROOT = "plotlot"
 EXPECTED_RENDER_DOCKERFILE = "./Dockerfile"
@@ -117,6 +118,54 @@ def normalize_render_service(record: dict) -> dict:
     return record.get("service", record)
 
 
+def parse_render_cli_api_key() -> str | None:
+    config_path = Path.home() / ".render" / "cli.yaml"
+    if not config_path.exists():
+        return None
+
+    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("key:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def database_identity(raw_url: str | None) -> tuple[str | None, str | None]:
+    if not raw_url:
+        return (None, None)
+
+    normalized = raw_url
+    if normalized.startswith("postgresql+asyncpg://"):
+        normalized = normalized.replace("postgresql+asyncpg://", "postgresql://", 1)
+    elif normalized.startswith("postgres://"):
+        normalized = normalized.replace("postgres://", "postgresql://", 1)
+
+    parsed = urlparse(normalized)
+    host = parsed.hostname
+    database = parsed.path.lstrip("/") or None
+    return (host, database)
+
+
+def inspect_render_env_var_drift(env_vars: dict[str, str]) -> list[Finding]:
+    findings: list[Finding] = []
+    database_url = env_vars.get("DATABASE_URL")
+    mlflow_url = env_vars.get("MLFLOW_TRACKING_URI")
+
+    db_host, db_name = database_identity(database_url)
+    mlflow_host, mlflow_name = database_identity(mlflow_url)
+
+    if database_url and mlflow_url and db_host and db_name and (db_host, db_name) == (mlflow_host, mlflow_name):
+        findings.append(
+            Finding(
+                "warning",
+                "render_shared_mlflow_database",
+                "Render MLFLOW_TRACKING_URI points at the same database as DATABASE_URL; keep MLflow on a dedicated tracking DB or local sqlite to avoid schema/version conflicts.",
+            )
+        )
+
+    return findings
+
+
 def inspect_render_service(service: dict) -> list[Finding]:
     findings: list[Finding] = []
     service = normalize_render_service(service)
@@ -186,6 +235,43 @@ def fetch_render_service(service_name: str) -> tuple[dict | None, Finding | None
         "render_service_missing",
         f"Could not find a Render service named {service_name!r} in the active workspace.",
     )
+
+
+def fetch_render_env_vars(service_id: str) -> tuple[dict[str, str] | None, Finding | None]:
+    api_key = parse_render_cli_api_key()
+    if not api_key:
+        return None, Finding(
+            "warning",
+            "render_cli_key_missing",
+            "Render CLI API key is unavailable; skipping live Render env-var inspection.",
+        )
+
+    cmd = [
+        "python3",
+        "-c",
+        (
+            "import json, sys, urllib.request; "
+            "service_id, api_key = sys.argv[1], sys.argv[2]; "
+            "req = urllib.request.Request("
+            "f'https://api.render.com/v1/services/{service_id}/env-vars', "
+            "headers={'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'}"
+            "); "
+            "data = json.load(urllib.request.urlopen(req, timeout=20)); "
+            "print(json.dumps({item['envVar']['key']: item['envVar']['value'] for item in data}))"
+        ),
+        service_id,
+        api_key,
+    ]
+    try:
+        output = run_capture(cmd)
+    except subprocess.CalledProcessError as exc:
+        return None, Finding(
+            "warning",
+            "render_env_fetch_failed",
+            f"Render env-var inspection failed: {exc.stderr.strip() or exc.stdout.strip() or exc}",
+        )
+
+    return json.loads(output), None
 
 
 def current_branch(root: Path) -> str:
@@ -262,6 +348,12 @@ def main() -> int:
         findings.append(render_warning)
     elif render_service is not None:
         findings.extend(inspect_render_service(render_service))
+        service = normalize_render_service(render_service)
+        env_vars, env_warning = fetch_render_env_vars(service["id"])
+        if env_warning is not None:
+            findings.append(env_warning)
+        elif env_vars is not None:
+            findings.extend(inspect_render_env_var_drift(env_vars))
 
     if removed:
         print("Removed stale local Vercel link directories:")
