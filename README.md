@@ -147,6 +147,7 @@ Generated screenshots, Playwright reports, and other large test artifacts are in
 Production note:
 
 - Keep `MLFLOW_TRACKING_URI` separate from the app `DATABASE_URL` in Render/Neon. Sharing the same Postgres database causes MLflow schema drift to show up as a degraded runtime warning even when the app itself is healthy.
+- Use [plotlot/docs/runbooks/render-mlflow-tracking.md](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot/docs/runbooks/render-mlflow-tracking.md) when deciding whether to move MLflow off the shared DB or run an explicit production migration.
 
 ## Branch Workflow
 

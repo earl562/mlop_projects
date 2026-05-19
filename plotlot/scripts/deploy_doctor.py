@@ -159,7 +159,7 @@ def inspect_render_env_var_drift(env_vars: dict[str, str]) -> list[Finding]:
             Finding(
                 "warning",
                 "render_shared_mlflow_database",
-                "Render MLFLOW_TRACKING_URI points at the same database as DATABASE_URL; keep MLflow on a dedicated tracking DB or local sqlite to avoid schema/version conflicts.",
+                "Render MLFLOW_TRACKING_URI points at the same database as DATABASE_URL; keep MLflow on a dedicated tracking DB or local sqlite to avoid schema/version conflicts. See plotlot/docs/runbooks/render-mlflow-tracking.md.",
             )
         )
 
