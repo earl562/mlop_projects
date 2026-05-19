@@ -17,8 +17,8 @@ interface ToolCardDef {
 const TOOL_CARDS: ToolCardDef[] = [
   {
     id: "analyze",
-    label: "Analyze a Site",
-    description: "Screen one property for zoning, density, comps & pricing",
+    label: "Analyze Property",
+    description: "Enter an address for zoning, density & pro forma",
     icon: "M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z",
     action: "analyze",
   },
@@ -51,11 +51,11 @@ const TOOL_CARDS: ToolCardDef[] = [
   },
   {
     id: "search_properties",
-    label: "Source Land Leads",
-    description: "Find vacant lots and land opportunities by market criteria",
+    label: "Search Properties",
+    description: "Find vacant lots or properties by criteria",
     icon: "M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z",
     action: "send_prompt",
-    prompt: "Help me source vacant lots in Miami-Dade County for residential development",
+    prompt: "Find vacant lots in Miami-Dade County",
   },
 ];
 

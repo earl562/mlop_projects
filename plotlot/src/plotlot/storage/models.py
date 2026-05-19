@@ -1,5 +1,9 @@
 """SQLAlchemy ORM models for pgvector storage."""
 
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector

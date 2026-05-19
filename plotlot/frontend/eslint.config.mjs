@@ -2,19 +2,23 @@ import { FlatCompat } from "@eslint/eslintrc";
 import { fileURLToPath } from "url";
 import path from "path";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    "playwright-report/**",
-    "test-results/**",
-  ]),
-]);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const compat = new FlatCompat({ baseDirectory: __dirname });
+
+const eslintConfig = [
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    ignores: [
+      ".next/**",
+      "out/**",
+      "build/**",
+      "next-env.d.ts",
+      "playwright-report/**",
+      "test-results/**",
+    ],
+  },
+];
 
 export default eslintConfig;

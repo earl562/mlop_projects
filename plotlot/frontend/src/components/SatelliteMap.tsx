@@ -17,6 +17,8 @@ interface SatelliteMapProps {
   parcelGeometry?: number[][] | null;
 }
 
+const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
+
 function StaticFallback({ lat, lng, address }: SatelliteMapProps) {
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);

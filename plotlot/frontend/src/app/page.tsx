@@ -16,6 +16,7 @@ import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import InputBar from "@/components/InputBar";
 import ThinkingIndicator from "@/components/ThinkingIndicator";
+import ZoningReport from "@/components/ZoningReport";
 import {
   AnalysisError,
   PipelineStatus,
@@ -196,7 +197,6 @@ export default function Home() {
       });
       queueMicrotask(() => setCurrentReport(restoredReport));
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring persisted session state on first mount
     setMessages(normalizeMessageIds(restored));
     setLocalSessionId(lastId);
     localSessionIdRef.current = lastId;

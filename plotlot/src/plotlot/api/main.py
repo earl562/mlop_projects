@@ -206,6 +206,7 @@ app.include_router(evidence_router)
 app.include_router(mcp_router)
 app.include_router(portfolio_router)
 app.include_router(geometry_router)
+app.include_router(ordinance_router)
 app.include_router(render_router)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)

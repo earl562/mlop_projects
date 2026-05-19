@@ -16,10 +16,11 @@ import PropertyIntelligence from "./PropertyIntelligence";
 import { useToast } from "./Toast";
 import ErrorBoundary from "./ErrorBoundary";
 import {
-  getCoverageLevel, CoverageBadge, ConfidenceBadge, CopyButton,
-  DataRow, UsesList, parseNumericFt, estimateLotDimensions,
-  ComparableSalesSection, ProFormaSection,
+  estimateLotDimensions,
+  ComparableSalesSection,
+  ProFormaSection,
 } from "./ReportShared";
+import type { SourceRefData } from "@/lib/api";
 
 type ReportTab = "property" | "zoning" | "analysis" | "deal";
 

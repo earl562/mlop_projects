@@ -7,6 +7,7 @@ import PortfolioPanel from "@/components/PortfolioPanel";
 import ProjectTree from "@/components/ProjectTree";
 import WorkspaceSelector from "@/components/WorkspaceSelector";
 import NewProjectModal from "@/components/NewProjectModal";
+import ChatHistory from "@/components/ChatHistory";
 import type { ChatSession } from "@/lib/sessions";
 import type { AppMode } from "@/components/ModeToggle";
 
@@ -24,7 +25,6 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
-  onSelectAnalysis?: (analysis: SavedAnalysis) => void;
 }
 
 type NavItem = {
@@ -52,7 +52,6 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
-  onSelectAnalysis,
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();

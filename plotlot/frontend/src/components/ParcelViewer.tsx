@@ -18,6 +18,10 @@ interface ParcelViewerProps {
   report: ZoningReportData;
 }
 
+const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
+
+type ViewTab = "street" | "parcel";
+
 function formatCurrency(value: number | null | undefined): string {
   if (!value) return "";
   return `$${value.toLocaleString()}`;

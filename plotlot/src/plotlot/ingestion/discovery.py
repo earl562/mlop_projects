@@ -1347,8 +1347,8 @@ async def get_all_municode_configs(
     """Get known Municode configs, using cached discovery results.
 
     Runs metro municipal discovery plus county-government authority discovery
-    for FL, NC, and CA. Same-name authorities across states are preserved with
-    state-prefixed aliases so callers can resolve by name + state.
+    for FL, NC, TX, GA, SC, and CA. Same-name authorities across states are
+    preserved with state-prefixed aliases so callers can resolve by name + state.
     """
     global _cached_configs
 
@@ -1368,7 +1368,7 @@ async def get_all_municode_configs(
                 return _cached_configs
 
         logger.info(
-            "Running combined municipal + FL/NC/CA county Municode auto-discovery..."
+            "Running combined municipal + FL/NC/TX/GA/SC/CA county Municode auto-discovery..."
         )
         configs: dict[str, MunicodeConfig] = {}
         try:
@@ -1378,6 +1378,7 @@ async def get_all_municode_configs(
                 tx_configs,
                 ga_configs,
                 sc_configs,
+                ca_configs,
                 fl_county_configs,
                 nc_county_configs,
                 ca_county_configs,
@@ -1387,6 +1388,7 @@ async def get_all_municode_configs(
                 discover_tx(),
                 discover_ga(),
                 discover_sc(),
+                discover_ca(),
                 discover_county_authorities("FL"),
                 discover_county_authorities("NC"),
                 discover_county_authorities("CA"),
@@ -1398,6 +1400,7 @@ async def get_all_municode_configs(
                 tx_configs,
                 ga_configs,
                 sc_configs,
+                ca_configs,
                 fl_county_configs,
                 nc_county_configs,
                 ca_county_configs,

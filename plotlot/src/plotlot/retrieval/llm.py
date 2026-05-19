@@ -264,14 +264,7 @@ def _get_openai_client() -> AsyncOpenAI:
     elif settings.openai_api_key:
         api_key: str | Any = settings.openai_api_key
     elif settings.use_codex_oauth:
-        # Pre-fetch the token and wrap in a callable so AsyncOpenAI can refresh it.
-        _initial_token = await _get_codex_oauth_token()
-        _token_cache: dict[str, str] = {"token": _initial_token}
-
-        def _oauth_token_provider() -> str:
-            return _token_cache["token"]
-
-        api_key = _oauth_token_provider
+        api_key = _get_codex_oauth_token
     else:
         api_key = settings.openai_access_token
 
@@ -529,8 +522,11 @@ async def _call_groq(
                     # Avoid OpenAI-only parameters unless we know the upstream supports them.
                     "parallel_tool_calls": False,
                 }
-            )
-            retries_used = 0
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                if response_format:
+                    kwargs["response_format"] = response_format
 
                 response = await client.chat.completions.create(**kwargs)
                 message = response.choices[0].message
@@ -545,83 +541,34 @@ async def _call_groq(
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                     }
-                    if not _using_nvidia_mainline():
-                        kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
-                    if tools:
-                        kwargs["tools"] = tools
-                        kwargs["tool_choice"] = "auto"
-                    if response_format:
-                        kwargs["response_format"] = response_format
+                )
 
-                    response = await client.chat.completions.create(**kwargs)
-                    message = response.choices[0].message
-                    tool_calls = _message_to_tool_calls(message)
-                    content = _sanitize_primary_content(message.content)
-                    prompt_tokens, completion_tokens = _log_usage(
-                        "nvidia" if _using_nvidia_mainline() else "openai",
-                        response.usage,
-                    )
+                breaker.record_success()
+                return {
+                    "content": message.content or "",
+                    "tool_calls": tool_calls,
+                }
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+                retries_used += 1
+                delay = BASE_DELAY * (2**attempt)
+                logger.warning(
+                    "%s transient error %s (attempt %d/%d), retrying in %.1fs",
+                    provider_name,
+                    type(exc).__name__,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                logger.error("%s failed: %s: %s", provider_name, type(exc).__name__, exc)
+                breaker.record_failure()
+                span.set_outputs({"error": f"{type(exc).__name__}: {exc}", "retries": retries_used})
+                return None
 
-                    span.set_outputs(
-                        {
-                            "has_content": bool(content),
-                            "has_tool_calls": bool(tool_calls),
-                            "retries": retries_used,
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                        }
-                    )
-
-                    breaker.record_success()
-                    return {
-                        "content": content,
-                        "tool_calls": tool_calls,
-                    }
-                except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
-                    retries_used += 1
-                    delay = BASE_DELAY * (2**attempt)
-                    logger.warning(
-                        "%s transient error %s (attempt %d/%d), retrying in %.1fs",
-                        active_provider_name,
-                        type(exc).__name__,
-                        attempt + 1,
-                        MAX_RETRIES,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                except Exception as exc:
-                    logger.error("%s failed: %s: %s", active_provider_name, type(exc).__name__, exc)
-                    breaker.record_failure()
-                    span.set_outputs(
-                        {"error": f"{type(exc).__name__}: {exc}", "retries": retries_used}
-                    )
-                    return None
-
-            breaker.record_failure()
-            span.set_outputs({"error": "retry_exhausted", "retries": retries_used})
-            return None
-
-    primary_model = _get_openai_model()
-    primary_result = await _call_model(primary_model, provider_name)
-    if primary_result and (primary_result.get("content") or primary_result.get("tool_calls")):
-        return primary_result
-
-    if _using_nvidia_mainline() and settings.nvidia_fallback_model:
-        fallback_model = settings.nvidia_fallback_model
-        if fallback_model != primary_model:
-            logger.warning(
-                "Primary NVIDIA model %s returned no usable response; retrying %s",
-                primary_model,
-                fallback_model,
-            )
-            fallback_result = await _call_model(fallback_model, f"NVIDIA/{fallback_model}")
-            if fallback_result and (
-                fallback_result.get("content") or fallback_result.get("tool_calls")
-            ):
-                return fallback_result
-
-    return primary_result
-
+        breaker.record_failure()
+        span.set_outputs({"error": "retry_exhausted", "retries": retries_used})
+        return None
 
 async def _call_openrouter(
     messages: list[dict],
