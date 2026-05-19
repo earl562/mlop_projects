@@ -40,6 +40,9 @@ async def test_list_tools_returns_contracts(client):
     names = {t["name"] for t in data}
     assert "geocode_address" in names
     assert "search_municode_live" in names
+    assert "create_document" in names
+    assert "create_spreadsheet" in names
+    assert "export_dataset" in names
 
 
 @pytest.mark.asyncio
@@ -288,7 +291,7 @@ async def test_tools_call_draft_email_is_allowed_and_persists_document_artifact(
 
 
 @pytest.mark.asyncio
-async def test_tools_call_gmail_send_draft_is_unavailable_until_implemented(client):
+async def test_tools_call_gmail_send_draft_requires_approval_before_connector_execution(client):
     from plotlot.storage.models import ApprovalRequest
 
     fake_session = FakeSession()
@@ -300,12 +303,17 @@ async def test_tools_call_gmail_send_draft_is_unavailable_until_implemented(clie
                 "arguments": {"draft_id": "draft_email_123"},
                 "workspace_id": "ws_test",
                 "run_id": "run_test_send_1",
+                "live_network_allowed": True,
             },
         )
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "unavailable"
+    assert data["status"] == "pending_approval"
+    assert data["decision"]["approval_required"] is True
+    assert data["decision"]["approval_id"] == "apr_run_test_send_1_gmail_send_draft"
 
     approvals = [obj for obj in fake_session.added if isinstance(obj, ApprovalRequest)]
-    assert len(approvals) == 0
+    assert len(approvals) == 1
+    assert approvals[0].action_name == "gmail_send_draft"
+    assert fake_session.committed is True

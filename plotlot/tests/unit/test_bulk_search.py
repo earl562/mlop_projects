@@ -20,6 +20,7 @@ from plotlot.retrieval.bulk_search import (
     _normalize_record,
     _safe_filter,
 )
+from plotlot.property.models import DatasetInfo, FieldMapping
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +417,104 @@ class TestBulkPropertySearch:
                 PropertySearchParams(county="Miami-Dade", max_results=2000)
             )
         assert len(results) == 10
+
+    @pytest.mark.asyncio
+    async def test_dynamic_county_uses_hub_discovery_for_non_static_county(self):
+        """Non-hardcoded counties search a discovered ArcGIS parcel layer."""
+        dataset = DatasetInfo(
+            dataset_id="wake-parcels",
+            name="Wake Parcels",
+            url="https://example.test/arcgis/rest/services/WakeParcels/FeatureServer",
+            layer_id=0,
+            dataset_type="parcels",
+            county="Wake",
+            state="NC",
+            fields=["PARCEL_NUMBER", "SITEADR1", "SITECITY", "OWNER", "Acres", "TOTAMT"],
+        )
+        mapping = FieldMapping(
+            county_key="wake",
+            mappings={
+                "PARCEL_NUMBER": "folio",
+                "SITEADR1": "address",
+                "SITECITY": "municipality",
+                "OWNER": "owner",
+                "Acres": "lot_size_sqft",
+                "TOTAMT": "assessed_value",
+            },
+            unit_conversions={"Acres": "acres_to_sqft"},
+            confidence=0.82,
+        )
+        mock_features = [
+            {
+                "attributes": {
+                    "PARCEL_NUMBER": "1703-01-2345",
+                    "SITEADR1": "222 W HARGETT ST",
+                    "SITECITY": "RALEIGH",
+                    "OWNER": "WAKE COUNTY",
+                    "Acres": 0.5,
+                    "TOTAMT": 125000,
+                },
+                "geometry": {"x": -78.6418, "y": 35.7789},
+            }
+        ]
+
+        async def fake_discover(*args, **kwargs):  # noqa: ANN002, ANN003
+            assert args[:4] == (35.7789, -78.6418, "Wake", "NC")
+            assert kwargs["validate_coverage"] is True
+            assert kwargs["place_hint"] == "Raleigh"
+            return dataset, None
+
+        with (
+            patch("plotlot.property.hub_discovery.discover_datasets", side_effect=fake_discover),
+            patch(
+                "plotlot.property.field_mapper.map_fields",
+                new_callable=AsyncMock,
+                return_value=mapping,
+            ),
+            patch(
+                "plotlot.retrieval.bulk_search._query_arcgis",
+                new_callable=AsyncMock,
+                return_value=mock_features,
+            ) as query_mock,
+        ):
+            results = await bulk_property_search(
+                PropertySearchParams(
+                    county="Wake",
+                    state="NC",
+                    lat=35.7789,
+                    lng=-78.6418,
+                    city="Raleigh",
+                    min_lot_size_sqft=10000,
+                    max_results=5,
+                )
+            )
+
+        assert results == [
+            {
+                "folio": "1703-01-2345",
+                "address": "222 W HARGETT ST",
+                "city": "RALEIGH",
+                "county": "Wake",
+                "owner": "WAKE COUNTY",
+                "land_use_code": "",
+                "lot_size_sqft": 21780.0,
+                "year_built": 0,
+                "assessed_value": 125000.0,
+                "last_sale_price": 0.0,
+                "last_sale_date": "",
+                "lat": 35.7789,
+                "lng": -78.6418,
+            }
+        ]
+        called_where = query_mock.await_args.kwargs["where"]
+        assert "UPPER(SITECITY) LIKE '%RALEIGH%'" in called_where
+        assert "Acres>=0.2296" in called_where
+
+    @pytest.mark.asyncio
+    async def test_dynamic_county_requires_state(self):
+        """State disambiguates dynamic county discovery."""
+        with pytest.raises(ValueError, match="state is required"):
+            await bulk_property_search(PropertySearchParams(county="Wake"))
 
 
 # ---------------------------------------------------------------------------

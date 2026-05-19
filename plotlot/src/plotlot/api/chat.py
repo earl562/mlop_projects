@@ -88,7 +88,9 @@ async def _persist_pending_approval(
                 Workspace(
                     id=context.workspace_id,
                     name="Default Workspace",
-                    owner_user_id=context.actor_user_id if context.actor_user_id != "anonymous" else None,
+                    owner_user_id=context.actor_user_id
+                    if context.actor_user_id != "anonymous"
+                    else None,
                 )
             )
             await session.flush()
@@ -164,6 +166,7 @@ async def _validated_approved_ids(
         return set()
     finally:
         await session.close()
+
 
 # ---------------------------------------------------------------------------
 # Session management — bounded memory store with LRU eviction
@@ -417,8 +420,11 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                     },
                     "county": {
                         "type": "string",
-                        "enum": ["Miami-Dade", "Broward", "Palm Beach"],
                         "description": "County from geocode result",
+                    },
+                    "state": {
+                        "type": "string",
+                        "description": "Two-letter state code from geocode result",
                     },
                     "lat": {
                         "type": "number",
@@ -671,8 +677,19 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "county": {
                         "type": "string",
-                        "enum": ["Miami-Dade", "Broward", "Palm Beach"],
                         "description": "County to search in (required)",
+                    },
+                    "state": {
+                        "type": "string",
+                        "description": "Two-letter state code. Required for counties outside the built-in South Florida providers.",
+                    },
+                    "lat": {
+                        "type": "number",
+                        "description": "Optional latitude to validate discovered county datasets by coverage.",
+                    },
+                    "lng": {
+                        "type": "number",
+                        "description": "Optional longitude to validate discovered county datasets by coverage.",
                     },
                     "land_use_type": {
                         "type": "string",
@@ -1085,10 +1102,11 @@ async def _execute_geocode(address: str, session_id: str = "") -> str:
                     "status": "success",
                     "municipality": result["municipality"],
                     "county": result["county"],
+                    "state": result.get("state"),
                     "formatted_address": result["formatted_address"],
                     "lat": result.get("lat"),
                     "lng": result.get("lng"),
-                    "next_step": "Now call lookup_property_info with this address, county, lat, lng to get the zoning code",
+                    "next_step": "Now call lookup_property_info with this address, county, state, lat, lng to get the zoning code",
                 }
             )
         return json.dumps({"status": "not_found", "message": f"Could not geocode: {address}"})
@@ -1097,7 +1115,12 @@ async def _execute_geocode(address: str, session_id: str = "") -> str:
 
 
 async def _execute_lookup_property(
-    address: str, county: str, lat: float, lng: float, session_id: str = ""
+    address: str,
+    county: str,
+    lat: float,
+    lng: float,
+    session_id: str = "",
+    state: str = "",
 ) -> str:
     """Look up property info from county Property Appraiser ArcGIS APIs."""
     from plotlot.retrieval.property import lookup_property
@@ -1110,9 +1133,11 @@ async def _execute_lookup_property(
         if precise_lat and precise_lng:
             lat = precise_lat
             lng = precise_lng
+        if not state:
+            state = str(geo.get("state") or "")
 
     try:
-        record = await lookup_property(address, county, lat=lat, lng=lng)
+        record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
         if record:
             result = {
                 "status": "success",
@@ -1202,7 +1227,9 @@ async def _execute_municode_live_search(municipality: str, query: str) -> str:
         configs = await get_municode_configs()
         config = configs.get(municipality.lower().replace("-", "_").replace(" ", "_"))
         if not config:
-            candidates = [cfg for cfg in configs.values() if cfg.municipality.lower() == municipality.lower()]
+            candidates = [
+                cfg for cfg in configs.values() if cfg.municipality.lower() == municipality.lower()
+            ]
             config = candidates[0] if candidates else None
         if not config:
             return json.dumps(
@@ -1509,6 +1536,9 @@ async def _execute_search_properties(session_id: str, args: dict) -> str:
 
         params = PropertySearchParams(
             county=args["county"],
+            state=args.get("state"),
+            lat=args.get("lat"),
+            lng=args.get("lng"),
             land_use_type=args.get("land_use_type"),
             city=args.get("city"),
             max_sale_date=max_sale_date,
@@ -1688,6 +1718,7 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
             args.get("lat", 0.0),
             args.get("lng", 0.0),
             session_id=session_id,
+            state=args.get("state", ""),
         )
     elif name == "search_zoning_ordinance":
         return await _execute_zoning_search(
@@ -1932,7 +1963,9 @@ async def chat(request: ChatRequest, http_request: Request):
                         policy=ToolPolicy(internal_write_tools=frozenset({"generate_document"}))
                     )
                     if contract is None:
-                        decision = policy_engine.authorize(tool_name="gateway.execute", context=context)
+                        decision = policy_engine.authorize(
+                            tool_name="gateway.execute", context=context
+                        )
                     else:
                         decision = policy_engine.authorize(tool_name=fn_name, context=context)
 

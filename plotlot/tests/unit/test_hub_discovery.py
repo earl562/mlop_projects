@@ -87,7 +87,8 @@ class TestDiscoverDatasets:
             hub_response,  # 1. Hub search for parcels
             layers_response,  # 2. _find_best_layer (service root ?f=json)
             fields_response,  # 3. Layer fields fetch (/0?f=json)
-            {"data": []},  # 4. Hub search for zoning (no results)
+            {"features": [{"attributes": {"FOLIO": "1"}}]},  # 4. Coverage validation
+            {"data": []},  # 5. Hub search for zoning (no results)
         ]
 
         async def mock_get(*args, **kwargs):

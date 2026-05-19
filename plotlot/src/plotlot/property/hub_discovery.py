@@ -65,6 +65,9 @@ async def discover_datasets(
     lng: float,
     county: str,
     state: str,
+    *,
+    validate_coverage: bool = True,
+    place_hint: str | None = None,
 ) -> tuple[DatasetInfo | None, DatasetInfo | None]:
     """Discover parcel + zoning datasets for a county via ArcGIS Hub.
 
@@ -77,8 +80,24 @@ async def discover_datasets(
     Returns:
         Tuple of (parcels_dataset, zoning_dataset). Either may be None.
     """
-    parcels = await _search_hub(lat, lng, county, state, dataset_type="parcels")
-    zoning = await _search_hub(lat, lng, county, state, dataset_type="zoning")
+    parcels = await _search_hub(
+        lat,
+        lng,
+        county,
+        state,
+        dataset_type="parcels",
+        validate_coverage=validate_coverage,
+        place_hint=place_hint,
+    )
+    zoning = await _search_hub(
+        lat,
+        lng,
+        county,
+        state,
+        dataset_type="zoning",
+        validate_coverage=validate_coverage,
+        place_hint=place_hint,
+    )
     return parcels, zoning
 
 
@@ -88,9 +107,16 @@ async def _search_hub(
     county: str,
     state: str,
     dataset_type: str,
+    *,
+    validate_coverage: bool = True,
+    place_hint: str | None = None,
 ) -> DatasetInfo | None:
     """Search Hub for a specific dataset type and return the best match."""
-    search_term = f"{dataset_type} {county} {state}"
+    place = f" {place_hint}" if place_hint else ""
+    if dataset_type == "parcels":
+        search_term = f"property parcels {county} {state}{place}"
+    else:
+        search_term = f"zoning {county} {state}{place}"
 
     # Hub v3 API does not support filter[bbox]. Use filter[tags] for relevance
     # and rely on the search query + dataset scoring for spatial matching.
@@ -138,7 +164,27 @@ async def _search_hub(
         if not fields:
             continue
 
-        score = _score_dataset(fields, dataset_name, dataset_type, dataset_url)
+        metadata_text = " ".join(
+            str(value or "")
+            for value in [
+                dataset_name,
+                attrs.get("orgName", ""),
+                attrs.get("snippet", ""),
+                attrs.get("description", ""),
+                attrs.get("tags", ""),
+                dataset_url,
+            ]
+        )
+        score = _score_dataset(
+            fields,
+            dataset_name,
+            dataset_type,
+            dataset_url,
+            jurisdiction_text=metadata_text,
+            county=county,
+            state=state,
+            place_hint=place_hint,
+        )
         candidate = DatasetInfo(
             dataset_id=dataset_id,
             name=dataset_name,
@@ -154,6 +200,17 @@ async def _search_hub(
 
     # Sort highest score first, then validate each candidate has data at the target location
     scored.sort(key=lambda t: t[0], reverse=True)
+    if scored and not validate_coverage:
+        candidate = scored[0][1]
+        logger.info(
+            "Discovered %s dataset for %s, %s without coverage validation: %s",
+            dataset_type,
+            county,
+            state,
+            candidate.name,
+        )
+        return candidate
+
     for score, candidate in scored:
         if await _has_coverage(candidate, lat, lng):
             logger.info(
@@ -174,9 +231,17 @@ async def _search_hub(
         )
 
     if scored:
+        if validate_coverage:
+            logger.warning(
+                "No %s dataset passed coverage validation for %s, %s",
+                dataset_type,
+                county,
+                state,
+            )
+            return None
         fallback = scored[0][1]
         logger.warning(
-            "No %s dataset passed coverage validation for %s, %s; using top-scored fallback %s",
+            "Using unvalidated top-scored %s fallback for %s, %s: %s",
             dataset_type,
             county,
             state,
@@ -268,6 +333,11 @@ def _score_dataset(
     name: str,
     dataset_type: str,
     url: str = "",
+    *,
+    jurisdiction_text: str = "",
+    county: str = "",
+    state: str = "",
+    place_hint: str | None = None,
 ) -> float:
     """Score how well a dataset matches expected parcel/zoning fields.
 
@@ -281,6 +351,19 @@ def _score_dataset(
     score = 0.0
     upper_fields = {f.upper() for f in fields}
     name_lower = name.lower()
+    jurisdiction_lower = jurisdiction_text.lower()
+    county_lower = county.lower().strip()
+    state_lower = state.lower().strip()
+    place_lower = (place_hint or "").lower().strip()
+
+    if county_lower and f"{county_lower} county" in jurisdiction_lower:
+        score += 8.0
+    elif county_lower and county_lower in jurisdiction_lower:
+        score += 5.0
+    if place_lower and place_lower in jurisdiction_lower:
+        score += 4.0
+    if state_lower and state_lower in jurisdiction_lower:
+        score += 1.0
 
     # Sub-area penalty — any hit disqualifies the dataset vs. county-wide ones.
     # Avoid penalizing legitimate zoning datasets named "Zoning Districts".

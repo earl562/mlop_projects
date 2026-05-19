@@ -39,6 +39,7 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             "properties": {
                 "address": {"type": "string", "minLength": 3},
                 "county": {"type": "string", "minLength": 3},
+                "state": {"type": "string", "minLength": 2, "maxLength": 2},
                 "lat": {"type": "number"},
                 "lng": {"type": "number"},
             },
@@ -168,6 +169,78 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
         },
         budget_cents=25,
     ),
+    "discover_municode_authorities": ToolContract(
+        name="discover_municode_authorities",
+        description="Discover Municode zoning authorities for a county/state.",
+        risk_class=ToolRiskClass.EXPENSIVE_READ,
+        input_schema={
+            "type": "object",
+            "properties": {
+                "county": {"type": "string", "minLength": 2},
+                "state": {"type": "string", "minLength": 2, "maxLength": 2},
+            },
+            "required": ["county", "state"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "results": {"type": "array"},
+                "evidence": {"type": "array"},
+            },
+        },
+        budget_cents=25,
+    ),
+    "discover_code_authorities": ToolContract(
+        name="discover_code_authorities",
+        description=(
+            "Discover county ordinance/code providers across Municode, eCode360, "
+            "American Legal, Code Publishing, Open Legal Codes, and official county pages."
+        ),
+        risk_class=ToolRiskClass.EXPENSIVE_READ,
+        input_schema={
+            "type": "object",
+            "properties": {
+                "county": {"type": "string", "minLength": 2},
+                "state": {"type": "string", "minLength": 2, "maxLength": 2},
+                "include_web_fallback": {"type": "boolean"},
+            },
+            "required": ["county", "state"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "results": {"type": "array"},
+                "evidence": {"type": "array"},
+            },
+        },
+        budget_cents=25,
+    ),
+    "search_code_authority_live": ToolContract(
+        name="search_code_authority_live",
+        description="Search a discovered Open Legal Codes jurisdiction for ordinance text.",
+        risk_class=ToolRiskClass.EXPENSIVE_READ,
+        input_schema={
+            "type": "object",
+            "properties": {
+                "jurisdiction_id": {"type": "string", "minLength": 2},
+                "query": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+            },
+            "required": ["jurisdiction_id", "query"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "results": {"type": "array"},
+                "evidence": {"type": "array"},
+                "message": {"type": "string"},
+            },
+        },
+        budget_cents=25,
+    ),
     "web_search": ToolContract(
         name="web_search",
         description="Last-resort web search for sources not present in local data.",
@@ -178,9 +251,42 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
     ),
     "search_properties": ToolContract(
         name="search_properties",
-        description="Bulk property search across county datasets.",
+        description="Bulk property search across static and dynamically discovered county datasets.",
         risk_class=ToolRiskClass.EXPENSIVE_READ,
-        input_schema={"type": "object"},
+        input_schema={
+            "type": "object",
+            "properties": {
+                "county": {"type": "string", "minLength": 2},
+                "state": {"type": "string", "minLength": 2, "maxLength": 2},
+                "lat": {"type": "number"},
+                "lng": {"type": "number"},
+                "city": {"type": "string"},
+                "land_use_type": {
+                    "type": "string",
+                    "enum": [
+                        "vacant_residential",
+                        "vacant_commercial",
+                        "single_family",
+                        "multifamily",
+                        "commercial",
+                        "industrial",
+                        "agricultural",
+                    ],
+                },
+                "min_lot_size_sqft": {"type": "number"},
+                "max_lot_size_sqft": {"type": "number"},
+                "min_sale_price": {"type": "number"},
+                "max_sale_price": {"type": "number"},
+                "min_assessed_value": {"type": "number"},
+                "max_assessed_value": {"type": "number"},
+                "year_built_before": {"type": "integer"},
+                "year_built_after": {"type": "integer"},
+                "owner_name_contains": {"type": "string"},
+                "ownership_min_years": {"type": "integer", "minimum": 0},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 2000},
+            },
+            "required": ["county"],
+        },
         output_schema={"type": "object"},
         budget_cents=50,
     ),

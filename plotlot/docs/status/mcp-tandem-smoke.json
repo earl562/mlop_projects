@@ -1,0 +1,304 @@
+{
+  "completed_at": "2026-05-16T21:03:28.113628+00:00",
+  "county_count": 1,
+  "duration_seconds": 18.02,
+  "property_search": "when-open-data",
+  "results": [
+    {
+      "county": {
+        "county": "Miami-Dade",
+        "county_label": "Miami-Dade County",
+        "geoid": "12086",
+        "lat": 25.616009,
+        "lng": -80.50375,
+        "state": "FL",
+        "state_fips": "12"
+      },
+      "municode_authorities": {
+        "message": "Found 32 Municode zoning authorities for Miami-Dade, FL",
+        "result_count": 32,
+        "sample": {
+          "evidence": [],
+          "message": "Found 32 Municode zoning authorities for Miami-Dade, FL",
+          "results": [
+            {
+              "client_id": 1117,
+              "county": "miami_dade",
+              "job_id": 480479,
+              "municipality": "Aventura",
+              "product_id": 13153,
+              "state": "FL",
+              "zoning_node_id": "PTIICOOR_CH34PLZO"
+            },
+            {
+              "client_id": 10212,
+              "county": "miami_dade",
+              "job_id": 480943,
+              "municipality": "Bal Harbour",
+              "product_id": 10384,
+              "state": "FL",
+              "zoning_node_id": "PTIICOOR_CH21ZO"
+            },
+            {
+              "client_id": 8073,
+              "county": "miami_dade",
+              "job_id": 473905,
+              "municipality": "Bay Harbor Islands",
+              "product_id": 14065,
+              "state": "FL",
+              "zoning_node_id": "PTIICOOR_CH23ZOPL"
+            }
+          ],
+          "status": "success"
+        },
+        "tool_status": "success",
+        "transport_status": "ok"
+      },
+      "municode_searches": [
+        {
+          "message": null,
+          "result_count": 0,
+          "sample": {
+            "evidence": [],
+            "results": [],
+            "status": "success"
+          },
+          "tool_status": "success",
+          "transport_status": "ok"
+        },
+        {
+          "message": null,
+          "result_count": 2,
+          "sample": {
+            "evidence": [
+              {
+                "analysis_id": null,
+                "analysis_run_id": null,
+                "citation": {
+                  "jurisdiction": "Aventura, FL",
+                  "legal_caveat": "Online ordinance text may not be the official or most current copy; verify with the municipality or official clerk before taking legal, entitlement, or acquisition action.",
+                  "path": [
+                    "DIVISION 2. - VARIANCES",
+                    "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition."
+                  ],
+                  "publisher": "Municode/CivicPlus",
+                  "raw_source_hash": "b86a1d30e0d22cad5b3ed81079646342b8de2e084bbe99142df136677cc7acc8",
+                  "retrieved_at": "2026-05-16T21:03:28.035081Z",
+                  "source_type": "ordinance",
+                  "title": "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.",
+                  "url": "https://api.municode.com/codescontent?nodeId=PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-123STLOSILAUSMAILREGOAC"
+                },
+                "claim_key": "ordinance.section",
+                "confidence": "medium",
+                "id": "5b9e3f40-88b4-4c13-9ef4-265cc624b628",
+                "payload": {
+                  "heading": "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.",
+                  "path": [
+                    "DIVISION 2. - VARIANCES"
+                  ],
+                  "section_id": "PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-123STLOSILAUSMAILREGOAC",
+                  "snippet": "<div class=\"chunk-title\">Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.</div><div class=\"chunk-content\">             <p class=\"p0\">                In the event that an acquiring authority acquires private property for a public transportation"
+                },
+                "project_id": "mcp_tandem_coverage",
+                "retrieved_at": "2026-05-16T21:03:28.103737Z",
+                "site_id": null,
+                "source_type": "ordinance",
+                "tool_name": "search_municode_live",
+                "tool_run_id": null,
+                "workspace_id": "mcp_tandem_coverage"
+              }
+            ],
+            "results": [
+              {
+                "citation": {
+                  "jurisdiction": "Aventura, FL",
+                  "legal_caveat": "Online ordinance text may not be the official or most current copy; verify with the municipality or official clerk before taking legal, entitlement, or acquisition action.",
+                  "path": [
+                    "DIVISION 2. - VARIANCES",
+                    "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition."
+                  ],
+                  "publisher": "Municode/CivicPlus",
+                  "raw_source_hash": "b86a1d30e0d22cad5b3ed81079646342b8de2e084bbe99142df136677cc7acc8",
+                  "retrieved_at": "2026-05-16T21:03:28.035081Z",
+                  "source_type": "ordinance",
+                  "title": "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.",
+                  "url": "https://api.municode.com/codescontent?nodeId=PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-123STLOSILAUSMAILREGOAC"
+                },
+                "evidence_id": "5b9e3f40-88b4-4c13-9ef4-265cc624b628",
+                "heading": "Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.",
+                "path": [
+                  "DIVISION 2. - VARIANCES"
+                ],
+                "section_id": "PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-123STLOSILAUSMAILREGOAC",
+                "snippet": "<div class=\"chunk-title\">Sec. 34-123. - Structures, lot size and land use made illegal as a result of governmental acquisition.</div><div class=\"chunk-content\">             <p class=\"p0\">                In the event that an acquiring authority acquires private property for a public transportation"
+              },
+              {
+                "citation": {
+                  "jurisdiction": "Aventura, FL",
+                  "legal_caveat": "Online ordinance text may not be the official or most current copy; verify with the municipality or official clerk before taking legal, entitlement, or acquisition action.",
+                  "path": [
+                    "DIVISION 2. - VARIANCES",
+                    "Sec. 34-127. - Status of lots, parcels, structures or uses after granting of a variance."
+                  ],
+                  "publisher": "Municode/CivicPlus",
+                  "raw_source_hash": "3cb67608ef6eaf305bae3a290c4062f1dc040839bc52c19d262bf80c3d02f091",
+                  "retrieved_at": "2026-05-16T21:03:28.103011Z",
+                  "source_type": "ordinance",
+                  "title": "Sec. 34-127. - Status of lots, parcels, structures or uses after granting of a variance.",
+                  "url": "https://api.municode.com/codescontent?nodeId=PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-127STLOPASTUSAFGRVA"
+                },
+                "evidence_id": "c049edc0-14c5-457e-b191-2a7465b64134",
+                "heading": "Sec. 34-127. - Status of lots, parcels, structures or uses after granting of a variance.",
+                "path": [
+                  "DIVISION 2. - VARIANCES"
+                ],
+                "section_id": "PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-127STLOPASTUSAFGRVA",
+                "snippet": "<div class=\"chunk-title\">Sec. 34-127. - Status of lots, parcels, structures or uses after granting of a variance.</div><div class=\"chunk-content\">             <p class=\"p0\">                The granting of a variance pursuant to <a href=\"\" data-chunk-id=\"PTIICOOR_CH34PLZO_ARTIVZO_DIV2VA_S34-126STGRDE"
+              }
+            ],
+            "status": "success"
+          },
+          "tool_status": "success",
+          "transport_status": "ok"
+        },
+        {
+          "message": null,
+          "result_count": 0,
+          "sample": {
+            "evidence": [],
+            "results": [],
+            "status": "success"
+          },
+          "tool_status": "success",
+          "transport_status": "ok"
+        }
+      ],
+      "open_data": {
+        "message": null,
+        "result_count": 1,
+        "sample": {
+          "evidence": [
+            {
+              "analysis_id": null,
+              "analysis_run_id": null,
+              "citation": {
+                "jurisdiction": "Miami-Dade, FL",
+                "legal_caveat": null,
+                "path": [],
+                "publisher": null,
+                "raw_source_hash": "eba5b048019d3e5cd92638024e5c75d3e0cd0c8a138aef5a2463ffe0cd21ab06",
+                "retrieved_at": "2026-05-16T21:03:26.715615Z",
+                "source_type": "arcgis_layer",
+                "title": "Miami Dade Zoning WFL1",
+                "url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer/1"
+              },
+              "claim_key": "open_data.layer",
+              "confidence": "medium",
+              "id": "43af4680-06e4-4c59-af09-0265a15615db",
+              "payload": {
+                "id": "f6777eb0eea4413ab979544596b5d66e",
+                "layer_id": 1,
+                "layer_type": "zoning",
+                "service_url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer",
+                "source_url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer",
+                "title": "Miami Dade Zoning WFL1"
+              },
+              "project_id": "mcp_tandem_coverage",
+              "retrieved_at": "2026-05-16T21:03:26.718028Z",
+              "site_id": null,
+              "source_type": "arcgis_layer",
+              "tool_name": "discover_open_data_layers",
+              "tool_run_id": null,
+              "workspace_id": "mcp_tandem_coverage"
+            }
+          ],
+          "results": [
+            {
+              "citation": {
+                "jurisdiction": "Miami-Dade, FL",
+                "legal_caveat": null,
+                "path": [],
+                "publisher": null,
+                "raw_source_hash": "eba5b048019d3e5cd92638024e5c75d3e0cd0c8a138aef5a2463ffe0cd21ab06",
+                "retrieved_at": "2026-05-16T21:03:26.715615Z",
+                "source_type": "arcgis_layer",
+                "title": "Miami Dade Zoning WFL1",
+                "url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer/1"
+              },
+              "evidence_id": "43af4680-06e4-4c59-af09-0265a15615db",
+              "field_mapping_confidence": "medium",
+              "id": "f6777eb0eea4413ab979544596b5d66e",
+              "layer_id": 1,
+              "layer_type": "zoning",
+              "publisher": null,
+              "service_url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer",
+              "source_url": "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Miami_Dade_Zoning_WFL1/FeatureServer",
+              "title": "Miami Dade Zoning WFL1",
+              "update_frequency": null
+            }
+          ],
+          "status": "success"
+        },
+        "tool_status": "success",
+        "transport_status": "ok"
+      },
+      "property_search": {
+        "message": "Found 1 properties. Use filter_dataset or export_dataset with the same run_id.",
+        "result_count": 1,
+        "sample": {
+          "dataset_key": "mcp_tandem_fl_12086_9a3a42ea_property",
+          "message": "Found 1 properties. Use filter_dataset or export_dataset with the same run_id.",
+          "sample": [
+            {
+              "address": "16 SE 2 ST",
+              "assessed_value": 0.0,
+              "city": "Miami",
+              "county": "Miami-Dade",
+              "folio": "0101000000020",
+              "land_use_code": "2865",
+              "last_sale_date": "20210623",
+              "last_sale_price": 46000000.0,
+              "lat": 2970899.294700004,
+              "lng": -8927038.479199996,
+              "lot_size_sqft": 60198.0,
+              "owner": "16 SE 2ND STREET DOWNTOWN",
+              "year_built": 0
+            }
+          ],
+          "stats": {
+            "count": 1,
+            "last_sale_price": {
+              "avg": 46000000.0,
+              "max": 46000000.0,
+              "min": 46000000.0
+            },
+            "lot_size_sqft": {
+              "avg": 60198.0,
+              "max": 60198.0,
+              "min": 60198.0
+            },
+            "unique_cities": [
+              "Miami"
+            ],
+            "unique_land_use_codes": [
+              "2865"
+            ]
+          },
+          "status": "success",
+          "total_results": 1
+        },
+        "tool_status": "success",
+        "transport_status": "ok"
+      },
+      "tandem_status": "ok"
+    }
+  ],
+  "schema_version": 1,
+  "started_at": "2026-05-16T21:03:10.089449+00:00",
+  "states": [
+    "FL"
+  ],
+  "summary": {
+    "ok": 1
+  }
+}

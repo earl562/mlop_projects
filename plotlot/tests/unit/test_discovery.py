@@ -1,5 +1,6 @@
 """Tests for Municode auto-discovery module."""
 
+from contextlib import ExitStack, contextmanager
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -8,13 +9,17 @@ import pytest
 from plotlot.core.types import MunicodeConfig
 from plotlot.ingestion.discovery import (
     SOUTH_FLORIDA_MUNICIPALITIES,
+    _county_key_from_client_name,
     _make_key,
     _match_client,
     _normalize,
     _search_toc_for_zoning,
     clear_cache,
+    discover_county_authorities,
     discover_all,
     get_municode_configs,
+    normalize_county_key,
+    resolve_municode_config,
 )
 
 
@@ -41,6 +46,41 @@ class TestMakeKey:
 
     def test_village_suffix(self):
         assert _make_key("Indian Creek Village") == "indian_creek_village"
+
+
+class TestCountyAuthorityHelpers:
+    def test_normalize_county_key_removes_county_suffix(self):
+        assert normalize_county_key("Miami-Dade County") == "miami_dade"
+        assert normalize_county_key("St. Johns") == "st_johns"
+
+    def test_county_key_from_client_name_filters_non_county_agencies(self):
+        assert _county_key_from_client_name("Wake County") == "wake"
+        assert _county_key_from_client_name("San Benito County Water District") is None
+        assert _county_key_from_client_name("Children's Trust of Alachua County") is None
+
+    def test_resolve_municode_config_prefers_requested_state(self):
+        fl_orange = MunicodeConfig(
+            municipality="Orange County",
+            county="orange",
+            client_id=1,
+            product_id=2,
+            job_id=3,
+            zoning_node_id="FL_ORANGE",
+            state="FL",
+        )
+        ca_orange = MunicodeConfig(
+            municipality="Orange County",
+            county="orange",
+            client_id=4,
+            product_id=5,
+            job_id=6,
+            zoning_node_id="CA_ORANGE",
+            state="CA",
+        )
+        configs = {"orange_county": fl_orange, "ca_orange_county": ca_orange}
+
+        assert resolve_municode_config(configs, "Orange County", state="CA") is ca_orange
+        assert resolve_municode_config(configs, "Orange County", state="FL") is fl_orange
 
 
 class TestNormalize:
@@ -166,6 +206,29 @@ def _mock_zoning_children():
     ]
 
 
+def _offline_combined_discovery_patches():
+    return (
+        patch("plotlot.ingestion.discovery.discover_nc", new=AsyncMock(return_value={})),
+        patch("plotlot.ingestion.discovery.discover_tx", new=AsyncMock(return_value={})),
+        patch("plotlot.ingestion.discovery.discover_ga", new=AsyncMock(return_value={})),
+        patch("plotlot.ingestion.discovery.discover_sc", new=AsyncMock(return_value={})),
+        patch(
+            "plotlot.ingestion.discovery.discover_county_authorities",
+            new=AsyncMock(return_value={}),
+        ),
+        patch("plotlot.ingestion.discovery._read_disk_cache", return_value=None),
+        patch("plotlot.ingestion.discovery._write_disk_cache", return_value=None),
+    )
+
+
+@contextmanager
+def _offline_combined_discovery():
+    with ExitStack() as stack:
+        for patcher in _offline_combined_discovery_patches():
+            stack.enter_context(patcher)
+        yield
+
+
 class TestDiscoverAll:
     @pytest.mark.asyncio
     async def test_discover_single_municipality(self):
@@ -218,6 +281,47 @@ class TestDiscoverAll:
         assert configs == {}
 
 
+class TestDiscoverCountyAuthorities:
+    @pytest.mark.asyncio
+    async def test_discovers_exact_county_clients_only(self):
+        async def mock_get(url, params=None, headers=None):
+            request = httpx.Request("GET", url)
+
+            if "Clients/stateAbbr" in url:
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"ClientID": 100, "ClientName": "Wake County"},
+                        {"ClientID": 200, "ClientName": "Cleveland County Water District, NC"},
+                    ],
+                    request=request,
+                )
+            if "Products/clientId" in url:
+                return httpx.Response(200, json=_mock_products(100), request=request)
+            if "Jobs/latest" in url:
+                return httpx.Response(200, json=_mock_job(), request=request)
+            if "codesToc/children" in url:
+                if params and "nodeId" in (params or {}):
+                    return httpx.Response(200, json=_mock_zoning_children(), request=request)
+                return httpx.Response(200, json=_mock_root_toc(), request=request)
+
+            return httpx.Response(404, request=request)
+
+        with patch("plotlot.ingestion.discovery.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.get = mock_get
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_client
+
+            configs = await discover_county_authorities("NC", county="Wake")
+
+        assert list(configs) == ["wake_county"]
+        assert configs["wake_county"].municipality == "Wake County"
+        assert configs["wake_county"].county == "wake"
+        assert configs["wake_county"].state == "NC"
+
+
 class TestGetMunicodeConfigs:
     @pytest.mark.asyncio
     async def test_caches_results(self):
@@ -236,7 +340,10 @@ class TestGetMunicodeConfigs:
                 )
             }
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             result1 = await get_municode_configs()
             result2 = await get_municode_configs()
 
@@ -261,7 +368,10 @@ class TestGetMunicodeConfigs:
                 )
             }
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             await get_municode_configs()
             await get_municode_configs(force_refresh=True)
 
@@ -272,7 +382,10 @@ class TestGetMunicodeConfigs:
         async def mock_discover(*args, **kwargs):
             raise ConnectionError("API down")
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             configs = await get_municode_configs()
 
         assert "miami_dade" in configs
@@ -283,7 +396,10 @@ class TestGetMunicodeConfigs:
         async def mock_discover(*args, **kwargs):
             return {}
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             configs = await get_municode_configs()
 
         assert "miami_dade" in configs
@@ -303,7 +419,10 @@ class TestGetMunicodeConfigs:
                 )
             }
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             configs = await get_municode_configs()
 
         assert "coral_gables" in configs
@@ -329,7 +448,10 @@ class TestClearCache:
                 )
             }
 
-        with patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover):
+        with (
+            _offline_combined_discovery(),
+            patch("plotlot.ingestion.discovery.discover_all", side_effect=mock_discover),
+        ):
             await get_municode_configs()
             clear_cache()
             await get_municode_configs()

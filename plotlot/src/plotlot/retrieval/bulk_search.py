@@ -14,6 +14,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from plotlot.retrieval.property import (
     MDC_PROPERTY_URL,
@@ -208,6 +209,9 @@ class PropertySearchParams:
     """Structured search criteria — LLM fills this, we translate to WHERE."""
 
     county: str
+    state: str | None = None
+    lat: float | None = None
+    lng: float | None = None
     land_use_type: str | None = None
     city: str | None = None
     max_sale_date: str | None = None  # ISO "2006-01-01"
@@ -248,6 +252,10 @@ def _get_field_map(county: str) -> CountyFieldMap:
             f"Unsupported county: {county}. Supported: Miami-Dade, Broward, Palm Beach"
         )
     return fm
+
+
+def _has_static_field_map(county: str) -> bool:
+    return county.lower().strip() in _COUNTY_MAP
 
 
 def build_where_clause(params: PropertySearchParams) -> tuple[str, CountyFieldMap]:
@@ -435,6 +443,229 @@ def _normalize_record(attrs: dict, geometry: dict | None, fm: CountyFieldMap) ->
 
 
 # ---------------------------------------------------------------------------
+# Dynamic ArcGIS Hub fallback for counties without static field maps
+# ---------------------------------------------------------------------------
+
+
+_GENERIC_LAND_USE_TERMS: dict[str, list[str]] = {
+    "vacant_residential": ["VACANT", "RESIDENTIAL"],
+    "vacant_commercial": ["VACANT", "COMMERCIAL"],
+    "single_family": ["SINGLE", "FAMILY", "RESIDENTIAL"],
+    "multifamily": ["MULTI", "APARTMENT"],
+    "commercial": ["COMMERCIAL", "BUSINESS", "RETAIL", "OFFICE"],
+    "industrial": ["INDUSTRIAL", "WAREHOUSE", "MANUFACTURING"],
+    "agricultural": ["AGRICULT", "FARM"],
+}
+
+
+def _sql_literal(value: str) -> str:
+    return value.replace("'", "''").upper().strip()
+
+
+def _source_field_for(mapping: Any, target: str) -> str | None:
+    for src_field, mapped_target in mapping.mappings.items():
+        if mapped_target == target:
+            return str(src_field)
+    return None
+
+
+def _mapped_value(attrs: dict[str, Any], mapping: Any, target: str) -> Any:
+    src_field = _source_field_for(mapping, target)
+    if not src_field:
+        return None
+    raw_value = attrs.get(src_field)
+    conversion = mapping.unit_conversions.get(src_field)
+    if conversion == "acres_to_sqft":
+        return _safe_float(raw_value) * 43560
+    if conversion == "sq_meters_to_sqft":
+        return _safe_float(raw_value) * 10.764
+    return raw_value
+
+
+def _threshold_for_source(mapping: Any, source_field: str, sqft: float) -> float:
+    conversion = mapping.unit_conversions.get(source_field)
+    if conversion == "acres_to_sqft":
+        return sqft / 43560
+    if conversion == "sq_meters_to_sqft":
+        return sqft / 10.764
+    return sqft
+
+
+def _build_dynamic_where_clause(params: PropertySearchParams, mapping: Any) -> str:
+    """Build a best-effort WHERE clause for a discovered county dataset."""
+
+    conditions: list[str] = []
+
+    if params.land_use_type:
+        terms = _GENERIC_LAND_USE_TERMS.get(params.land_use_type, [])
+        land_use_field = _source_field_for(mapping, "land_use_description") or _source_field_for(
+            mapping, "land_use_code"
+        )
+        if terms and land_use_field:
+            clauses = [f"UPPER({land_use_field}) LIKE '%{_sql_literal(term)}%'" for term in terms]
+            conditions.append("(" + " OR ".join(clauses) + ")")
+
+    if params.city:
+        city_field = _source_field_for(mapping, "municipality")
+        if city_field:
+            conditions.append(f"UPPER({city_field}) LIKE '%{_sql_literal(params.city)}%'")
+
+    if params.owner_name_contains:
+        owner_field = _source_field_for(mapping, "owner")
+        if owner_field:
+            conditions.append(
+                f"UPPER({owner_field}) LIKE '%{_sql_literal(params.owner_name_contains)}%'"
+            )
+
+    lot_field = _source_field_for(mapping, "lot_size_sqft")
+    if lot_field and params.min_lot_size_sqft is not None:
+        threshold = _threshold_for_source(mapping, lot_field, float(params.min_lot_size_sqft))
+        conditions.append(f"{lot_field}>={threshold:.4f}")
+    if lot_field and params.max_lot_size_sqft is not None:
+        threshold = _threshold_for_source(mapping, lot_field, float(params.max_lot_size_sqft))
+        conditions.append(f"{lot_field}<={threshold:.4f}")
+
+    numeric_filters = [
+        ("assessed_value", params.min_assessed_value, ">="),
+        ("assessed_value", params.max_assessed_value, "<="),
+        ("last_sale_price", params.min_sale_price, ">="),
+        ("last_sale_price", params.max_sale_price, "<="),
+        ("year_built", params.year_built_after, ">"),
+        ("year_built", params.year_built_before, "<"),
+    ]
+    for target, value, operator in numeric_filters:
+        src_field = _source_field_for(mapping, target)
+        if src_field and value is not None:
+            conditions.append(f"{src_field}{operator}{value}")
+
+    return " AND ".join(conditions) if conditions else "1=1"
+
+
+def _dataset_query_url(dataset: Any) -> str:
+    base_url = str(dataset.url).rstrip("/")
+    if base_url.endswith("/query"):
+        return base_url
+    if base_url.rsplit("/", 1)[-1].isdigit():
+        return f"{base_url}/query"
+    return f"{base_url}/{dataset.layer_id}/query"
+
+
+def _geometry_point(geometry: dict | None) -> tuple[float | None, float | None]:
+    if not geometry:
+        return None, None
+    if geometry.get("x") is not None and geometry.get("y") is not None:
+        return geometry.get("y"), geometry.get("x")
+    rings = geometry.get("rings") or []
+    if rings and rings[0]:
+        xs = [point[0] for point in rings[0] if len(point) >= 2]
+        ys = [point[1] for point in rings[0] if len(point) >= 2]
+        if xs and ys:
+            return sum(ys) / len(ys), sum(xs) / len(xs)
+    return None, None
+
+
+def _normalize_dynamic_record(
+    attrs: dict, geometry: dict | None, county: str, mapping: Any
+) -> dict:
+    lat, lng = _geometry_point(geometry)
+    return {
+        "folio": str(_mapped_value(attrs, mapping, "folio") or ""),
+        "address": str(_mapped_value(attrs, mapping, "address") or ""),
+        "city": str(_mapped_value(attrs, mapping, "municipality") or ""),
+        "county": county,
+        "owner": str(_mapped_value(attrs, mapping, "owner") or ""),
+        "land_use_code": str(_mapped_value(attrs, mapping, "land_use_code") or ""),
+        "lot_size_sqft": round(_safe_float(_mapped_value(attrs, mapping, "lot_size_sqft")), 1),
+        "year_built": int(_safe_float(_mapped_value(attrs, mapping, "year_built"))),
+        "assessed_value": _safe_float(_mapped_value(attrs, mapping, "assessed_value")),
+        "last_sale_price": _safe_float(_mapped_value(attrs, mapping, "last_sale_price")),
+        "last_sale_date": str(_mapped_value(attrs, mapping, "last_sale_date") or ""),
+        "lat": lat,
+        "lng": lng,
+    }
+
+
+async def _bulk_property_search_dynamic(params: PropertySearchParams) -> list[dict]:
+    """Search a discovered ArcGIS parcel dataset for a non-hardcoded county."""
+
+    from plotlot.property.field_mapper import map_fields
+    from plotlot.property.hub_discovery import discover_datasets
+
+    state = str(params.state or "").strip().upper()
+    if not state:
+        raise ValueError("state is required for dynamic county property search")
+
+    validate_coverage = params.lat is not None and params.lng is not None
+    parcels_ds, _ = await discover_datasets(
+        params.lat or 0.0,
+        params.lng or 0.0,
+        params.county,
+        state,
+        validate_coverage=validate_coverage,
+        place_hint=params.city,
+    )
+    if parcels_ds is None:
+        logger.info("No dynamic parcel dataset found for %s, %s", params.county, state)
+        return []
+
+    mapping = await map_fields(source_fields=parcels_ds.fields, county=params.county)
+    where = _build_dynamic_where_clause(params, mapping)
+    query_url = _dataset_query_url(parcels_ds)
+
+    max_results = min(params.max_results, 2000)
+    page_size = 1000
+    all_records: list[dict] = []
+    offset = 0
+
+    while len(all_records) < max_results:
+        batch_size = min(page_size, max_results - len(all_records))
+        try:
+            features = await _query_arcgis(
+                query_url,
+                where=where,
+                out_fields="*",
+                extra_params={
+                    "resultOffset": str(offset),
+                    "resultRecordCount": str(batch_size),
+                    "outSR": "4326",
+                },
+                limit=None,
+            )
+        except Exception as e:
+            logger.warning("Dynamic ArcGIS bulk query failed (offset=%d): %s", offset, e)
+            break
+
+        if not features:
+            break
+
+        for feat in features:
+            if len(all_records) >= max_results:
+                break
+            all_records.append(
+                _normalize_dynamic_record(
+                    feat.get("attributes", {}),
+                    feat.get("geometry"),
+                    params.county,
+                    mapping,
+                )
+            )
+
+        if len(features) < batch_size:
+            break
+        offset += len(features)
+
+    logger.info(
+        "Dynamic bulk search: county=%s state=%s where=%s dataset=%s results=%d",
+        params.county,
+        state,
+        where[:100],
+        parcels_ds.name,
+        len(all_records),
+    )
+    return all_records
+
+
+# ---------------------------------------------------------------------------
 # Paginated bulk search
 # ---------------------------------------------------------------------------
 
@@ -445,6 +676,9 @@ async def bulk_property_search(params: PropertySearchParams) -> list[dict]:
     Uses resultOffset + resultRecordCount for pagination.
     Returns list of normalized dicts with consistent keys.
     """
+    if not _has_static_field_map(params.county):
+        return await _bulk_property_search_dynamic(params)
+
     where, fm = build_where_clause(params)
     max_results = min(params.max_results, 2000)
     page_size = 1000  # ArcGIS server typical max

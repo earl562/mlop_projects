@@ -89,6 +89,67 @@ class TestHeuristicMapping:
         assert mapping.mappings["ASSESSED_VAL"] == "assessed_value"
         assert mapping.mappings["TOTAL_MARKET"] == "market_value"
 
+    def test_discovered_wake_style_fields(self):
+        """Common discovered parcel fields should map without county-specific code."""
+        fields = ["PARCEL_NUMBER", "SITEADR1", "SITECITY", "OWNER", "Acres", "TOTAMT"]
+        mapping = map_fields_heuristic(fields)
+
+        assert mapping.mappings["PARCEL_NUMBER"] == "folio"
+        assert mapping.mappings["SITEADR1"] == "address"
+        assert mapping.mappings["SITECITY"] == "municipality"
+        assert mapping.mappings["OWNER"] == "owner"
+        assert mapping.mappings["TOTAMT"] == "assessed_value"
+        assert mapping.unit_conversions["Acres"] == "acres_to_sqft"
+
+    def test_raleigh_property_data_fields(self):
+        """City-hosted property data fields should map to search result fields."""
+        fields = [
+            "PIN_NUM",
+            "SITE_ADDRESS",
+            "CITY_DECODE",
+            "OWNER",
+            "DEED_ACRES",
+            "TOTAL_VALUE_ASSD",
+            "TOTSALPRICE",
+        ]
+        mapping = map_fields_heuristic(fields)
+
+        assert mapping.mappings["PIN_NUM"] == "folio"
+        assert mapping.mappings["SITE_ADDRESS"] == "address"
+        assert mapping.mappings["CITY_DECODE"] == "municipality"
+        assert mapping.mappings["DEED_ACRES"] == "lot_size_sqft"
+        assert mapping.unit_conversions["DEED_ACRES"] == "acres_to_sqft"
+        assert mapping.mappings["TOTAL_VALUE_ASSD"] == "assessed_value"
+        assert mapping.mappings["TOTSALPRICE"] == "last_sale_price"
+
+    def test_travis_property_data_fields(self):
+        """Lowercase county parcel fields should map through normalized keywords."""
+        fields = [
+            "parcelid",
+            "siteaddres",
+            "ownernme1",
+            "usecd",
+            "usedscrp",
+            "assessedac",
+            "cntassdval",
+            "bldgarea",
+            "resflrarea",
+            "resyrblt",
+        ]
+        mapping = map_fields_heuristic(fields)
+
+        assert mapping.mappings["parcelid"] == "folio"
+        assert mapping.mappings["siteaddres"] == "address"
+        assert mapping.mappings["ownernme1"] == "owner"
+        assert mapping.mappings["usecd"] == "land_use_code"
+        assert mapping.mappings["usedscrp"] == "land_use_description"
+        assert mapping.mappings["assessedac"] == "lot_size_sqft"
+        assert mapping.unit_conversions["assessedac"] == "acres_to_sqft"
+        assert mapping.mappings["cntassdval"] == "assessed_value"
+        assert mapping.mappings["bldgarea"] == "building_area_sqft"
+        assert mapping.mappings["resflrarea"] == "living_area_sqft"
+        assert mapping.mappings["resyrblt"] == "year_built"
+
     def test_acres_conversion_detected(self):
         """Fields with ACRES should trigger unit conversion."""
         fields = ["PARCEL_ID", "ACRES", "OWNER"]

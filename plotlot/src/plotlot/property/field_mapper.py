@@ -32,25 +32,33 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "APN",
         "PID",
         "PIN",
+        "PIN_NUM",
+        "REID",
+        "PARCELID",
         "PARCELNO",
         "PARCEL_NUM",
         "TAX_ID",
     ],
     "address": [
         "SITE_ADDR",
+        "SITEADR",
+        "SITEADR1",
+        "SITE_ADDRESS",
         "TRUE_SITE_ADDR",
         "SITUS_ADDR",
         "PROP_ADDR",
-        "SITE_ADDRESS",
         "PROPERTY_ADDRESS",
         "FULL_ADDRESS",
         "ADDRESS",
         "SITUS_ADDRESS",
         "SITE_ADDR_STR",
+        "SITEADDRES",
     ],
     "municipality": [
         "MUNICIPALITY",
         "CITY",
+        "SITECITY",
+        "CITY_DECODE",
         "SITE_CITY",
         "TRUE_SITE_CITY",
         "SITUS_CITY",
@@ -64,6 +72,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "TRUE_OWNER1",
         "TRUE_OWNER",
         "OWN_NAME",
+        "OWNERNME",
     ],
     "zoning_code": [
         "ZONE_CODE",
@@ -89,7 +98,9 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "DOR_CODE",
         "DOR_CODE_CUR",
         "PROPERTY_USE",
+        "LANDUSE",
         "LU_CODE",
+        "USECD",
     ],
     "land_use_description": [
         "LAND_USE_DESC",
@@ -97,6 +108,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "USE_DESC",
         "LAND_USE_DESCRIPTION",
         "LU_DESC",
+        "USEDSCRP",
     ],
     "lot_size_sqft": [
         "LOT_SIZE",
@@ -105,6 +117,9 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "SQ_FOOTAGE",
         "TOTAL_SQFT",
         "LAND_AREA",
+        "DEED_ACRES",
+        "CALC_AREA",
+        "ASSESSEDAC",
     ],
     "bedrooms": [
         "BEDROOM_COUNT",
@@ -130,6 +145,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
     "floors": [
         "FLOOR_COUNT",
         "FLOORS",
+        "FLOORCOUNT",
         "STORIES",
         "NO_STORIES",
         "NUM_FLOORS",
@@ -149,6 +165,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "BLDG_AREA",
         "BLDG_ADJ_SQ_FOOTAGE",
         "TOTAL_BLDG_AREA",
+        "BLDGAREA",
     ],
     "living_area_sqft": [
         "BUILDING_HEATED_AREA",
@@ -157,6 +174,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "UNDER_AIR_SQFT",
         "UNDER_AIR",
         "HEATED_SQFT",
+        "RESFLRAREA",
     ],
     "year_built": [
         "YEAR_BUILT",
@@ -165,6 +183,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "BLDG_YEAR_BUILT",
         "YEARBUILT",
         "BUILT_YEAR",
+        "RESYRBLT",
     ],
     "assessed_value": [
         "ASSESSED_VAL",
@@ -172,6 +191,10 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "JUST_VALUE",
         "ASSESSED_VAL_CUR",
         "ASSESSED_TOTAL",
+        "TOTAL_VALUE_ASSD",
+        "TOTAMT",
+        "CNTASSDVAL",
+        "PRVASSDVAL",
     ],
     "market_value": [
         "MARKET_VALUE",
@@ -186,6 +209,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
         "PRICE",
         "SALE_AMOUNT",
         "LAST_SALE_AMT",
+        "TOTSALPRICE",
     ],
     "last_sale_date": [
         "DOS_1",
@@ -197,7 +221,7 @@ _HEURISTIC_RULES: dict[str, list[str]] = {
 }
 
 # Fields that need unit conversion based on field name keywords
-_ACRE_KEYWORDS = {"ACRES", "ACREAGE", "LAND_ACRES"}
+_ACRE_KEYWORDS = {"ACRES", "ACREAGE", "LAND_ACRES", "ASSESSEDAC"}
 _SQ_METER_KEYWORDS = {"SQ_M", "SQMETERS", "SQ_METERS", "AREA_M2"}
 
 ACRES_TO_SQFT = 43_560.0

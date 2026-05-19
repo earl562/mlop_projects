@@ -220,6 +220,23 @@ export interface RuntimeHealthData {
   };
 }
 
+export type ToolRiskClass =
+  | "read_only"
+  | "expensive_read"
+  | "write_internal"
+  | "write_external"
+  | "execution";
+
+export interface McpToolContract {
+  name: string;
+  description: string;
+  risk_class: ToolRiskClass;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  timeout_seconds: number;
+  budget_cents: number;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const STREAM_TIMEOUT_MS = 120_000;
 const FIRST_EVENT_TIMEOUT_MS = 15_000;
@@ -299,6 +316,18 @@ export async function fetchRuntimeHealth(): Promise<RuntimeHealthData> {
 
   if (!response.ok) {
     throw new Error(`Health request failed with HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function listMcpTools(): Promise<McpToolContract[]> {
+  const response = await fetch(`${API_BASE}/api/v1/mcp/tools/list`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`MCP tools request failed with HTTP ${response.status}`);
   }
 
   return response.json();

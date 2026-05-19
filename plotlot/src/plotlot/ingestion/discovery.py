@@ -522,6 +522,8 @@ _NAME_MAP: dict[str, str] = {
     "North Augusta": "North Augusta",
 }
 
+COUNTY_AUTHORITY_STATES = ("FL", "NC", "CA")
+
 # Module-level cache
 _cached_configs: dict[str, MunicodeConfig] | None = None
 _cache_lock: asyncio.Lock | None = None
@@ -599,6 +601,89 @@ def _make_key(name: str) -> str:
     key = re.sub(r"[^a-z0-9\s]", " ", key)
     key = re.sub(r"\s+", "_", key.strip())
     return key
+
+
+def normalize_county_key(county: str) -> str:
+    """Normalize county labels into the keys used by Municode configs.
+
+    Examples:
+      ``Miami-Dade County`` -> ``miami_dade``
+      ``St. Johns`` -> ``st_johns``
+    """
+
+    label = county.strip()
+    label = re.sub(r"\bcounty\b", "", label, flags=re.IGNORECASE)
+    label = label.replace(" - ", "-")
+    return _make_key(label)
+
+
+def _county_key_from_client_name(client_name: str) -> str | None:
+    """Return a county key for exact county government Municode clients.
+
+    Municode state lists include unrelated authorities with "County" in their
+    names (water districts, clerks, boards, trusts). For county-level zoning
+    research we only want clients whose display name is exactly a county.
+    """
+
+    stripped = client_name.strip()
+    lowered = stripped.lower()
+    agency_words = (" board ", " clerk ", " district", " trust ", " authority")
+    if " of " in lowered or "," in lowered or any(word in lowered for word in agency_words):
+        return None
+    if not re.search(r"\bcounty$", stripped, flags=re.IGNORECASE):
+        return None
+    return normalize_county_key(stripped)
+
+
+def _merge_config(configs: dict[str, MunicodeConfig], key: str, config: MunicodeConfig) -> None:
+    """Merge configs while preserving same-name authorities across states."""
+
+    state_key = f"{config.state.lower()}_{key}"
+    configs[state_key] = config
+
+    existing = configs.get(key)
+    if existing is None or existing.state.upper() == config.state.upper():
+        configs[key] = config
+        return
+
+    existing_key = f"{existing.state.lower()}_{key}"
+    configs.setdefault(existing_key, existing)
+
+
+def _merge_configs(configs: dict[str, MunicodeConfig], new_configs: dict[str, MunicodeConfig]) -> None:
+    for key, config in new_configs.items():
+        _merge_config(configs, key, config)
+
+
+def resolve_municode_config(
+    configs: dict[str, MunicodeConfig],
+    jurisdiction_name: str,
+    *,
+    state: str | None = None,
+) -> MunicodeConfig | None:
+    """Resolve a Municode config with state-aware collision handling."""
+
+    key = _make_key(jurisdiction_name)
+    state_code = (state or "").strip().upper()
+
+    exact = configs.get(key)
+    if exact and (not state_code or exact.state.upper() == state_code):
+        return exact
+
+    if state_code:
+        state_exact = configs.get(f"{state_code.lower()}_{key}")
+        if state_exact:
+            return state_exact
+
+    candidates = [
+        cfg for cfg in configs.values() if _make_key(cfg.municipality) == key
+    ]
+    if state_code:
+        candidates = [cfg for cfg in candidates if cfg.state.upper() == state_code]
+    if candidates:
+        return candidates[0]
+
+    return exact if not state_code else None
 
 
 # Convenience flat set of all NC target municipality names (lowercased, underscored).
@@ -1002,6 +1087,101 @@ async def _discover_state(
         return configs
 
 
+async def discover_municode_authority_for_name(
+    jurisdiction_name: str,
+    state_abbr: str,
+    *,
+    county: str | None = None,
+) -> MunicodeConfig | None:
+    """Discover one live Municode zoning authority by name and state.
+
+    This is used as a fallback when an MCP caller asks for a county or
+    municipality that is not present in the warm cache yet.
+    """
+
+    state_code = state_abbr.strip().upper()
+    county_key = normalize_county_key(county or jurisdiction_name)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        state_clients = await _fetch_json(client, "Clients/stateAbbr", stateAbbr=state_code)
+        if not state_clients or not isinstance(state_clients, list):
+            logger.error("Failed to fetch %s clients from Municode Library API", state_code)
+            return None
+        _, config = await _discover_municipality(
+            client,
+            asyncio.Semaphore(1),
+            county_key,
+            jurisdiction_name,
+            state_clients,
+            state=state_code,
+        )
+        return config
+
+
+async def discover_county_authorities(
+    state_abbr: str,
+    *,
+    county: str | None = None,
+    max_concurrent: int = 5,
+) -> dict[str, MunicodeConfig]:
+    """Discover exact county-government Municode authorities for a state.
+
+    The Municode state client API has no county metadata for cities, but many
+    counties publish a first-class county client. This discovers those county
+    authorities directly and filters out similarly named non-county agencies.
+    """
+
+    state_code = state_abbr.strip().upper()
+    requested_county_key = normalize_county_key(county) if county else None
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        state_clients = await _fetch_json(client, "Clients/stateAbbr", stateAbbr=state_code)
+        if not state_clients or not isinstance(state_clients, list):
+            logger.error("Failed to fetch %s clients from Municode Library API", state_code)
+            return {}
+
+        targets: list[tuple[str, str]] = []
+        for state_client in state_clients:
+            if not isinstance(state_client, dict):
+                continue
+            client_name = str(state_client.get("ClientName") or "").strip()
+            county_key = _county_key_from_client_name(client_name)
+            if not county_key:
+                continue
+            if requested_county_key and county_key != requested_county_key:
+                continue
+            targets.append((county_key, client_name))
+
+        tasks = [
+            _discover_municipality(
+                client,
+                semaphore,
+                county_key,
+                client_name,
+                state_clients,
+                state=state_code,
+            )
+            for county_key, client_name in targets
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        configs: dict[str, MunicodeConfig] = {}
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("%s county authority discovery task failed: %s", state_code, result)
+                continue
+            key, config = result
+            if config is not None:
+                configs[key] = config
+
+        logger.info(
+            "Discovered %d %s county Municode authorities with zoning data",
+            len(configs),
+            state_code,
+        )
+        return configs
+
+
 async def discover_tx(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
     """Discover TX municipalities with zoning data on Municode."""
     return await _discover_state("TX", TEXAS_METROS, max_concurrent)
@@ -1020,10 +1200,11 @@ async def discover_sc(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
 async def get_all_municode_configs(
     force_refresh: bool = False,
 ) -> dict[str, MunicodeConfig]:
-    """Get FL + NC + TX + GA + SC Municode configs, using cached discovery results.
+    """Get known Municode configs, using cached discovery results.
 
-    Runs all 5 state discoveries in parallel, merges results, and applies
-    fallback configs for FL and NC (other states use discovery-only).
+    Runs metro municipal discovery plus county-government authority discovery
+    for FL, NC, and CA. Same-name authorities across states are preserved with
+    state-prefixed aliases so callers can resolve by name + state.
     """
     global _cached_configs
 
@@ -1039,46 +1220,68 @@ async def get_all_municode_configs(
                 _cached_configs = disk_configs
                 return _cached_configs
 
-        logger.info("Running combined FL + NC + TX + GA + SC Municode auto-discovery...")
+        logger.info(
+            "Running combined municipal + FL/NC/CA county Municode auto-discovery..."
+        )
         configs: dict[str, MunicodeConfig] = {}
         try:
-            fl_configs, nc_configs, tx_configs, ga_configs, sc_configs = await asyncio.gather(
+            (
+                fl_configs,
+                nc_configs,
+                tx_configs,
+                ga_configs,
+                sc_configs,
+                fl_county_configs,
+                nc_county_configs,
+                ca_county_configs,
+            ) = await asyncio.gather(
                 discover_all(),
                 discover_nc(),
                 discover_tx(),
                 discover_ga(),
                 discover_sc(),
+                discover_county_authorities("FL"),
+                discover_county_authorities("NC"),
+                discover_county_authorities("CA"),
                 return_exceptions=False,
             )
-            configs.update(fl_configs)
-            configs.update(nc_configs)
-            configs.update(tx_configs)
-            configs.update(ga_configs)
-            configs.update(sc_configs)
+            for discovered in (
+                fl_configs,
+                nc_configs,
+                tx_configs,
+                ga_configs,
+                sc_configs,
+                fl_county_configs,
+                nc_county_configs,
+                ca_county_configs,
+            ):
+                _merge_configs(configs, discovered)
         except Exception as e:
             logger.error("Combined discovery failed, returning fallback configs: %s", e)
             from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
-            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
+            _cached_configs = {}
+            _merge_configs(_cached_configs, {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS})
             return _cached_configs
 
         if not configs:
             logger.warning("Discovery returned 0 results, using fallback configs")
             from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
-            _cached_configs = {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}
+            _cached_configs = {}
+            _merge_configs(_cached_configs, {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS})
             return _cached_configs
 
         # Merge in fallback configs for any municipalities not discovered
         from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
-            if key not in configs:
-                configs[key] = fallback
+            if resolve_municode_config(configs, fallback.municipality, state=fallback.state) is None:
+                _merge_config(configs, key, fallback)
 
         _cached_configs = configs
         _write_disk_cache(configs)
-        logger.info("Cached %d municipality configs across 5 states", len(_cached_configs))
+        logger.info("Cached %d Municode configs", len(_cached_configs))
         return _cached_configs
 
 
@@ -1090,6 +1293,7 @@ async def get_municode_configs(
     On first call, runs full discovery against the Library API.
     Subsequent calls return the cached result.
 
-    Now includes both FL and NC municipalities.
+    Includes metro municipalities and FL/NC/CA county-government authorities
+    that have zoning content on Municode.
     """
     return await get_all_municode_configs(force_refresh=force_refresh)
