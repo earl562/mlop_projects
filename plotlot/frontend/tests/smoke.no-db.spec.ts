@@ -1,6 +1,7 @@
 import {
   test,
   expect,
+  gotoLanding,
   gotoHome,
   switchToAgent,
   runLookupFlow,
@@ -8,7 +9,20 @@ import {
 } from "./helpers";
 
 test.describe("Canonical no-db smoke", () => {
-  test("lookup welcome exposes canonical selectors", async ({ page }) => {
+  test("public homepage is restored at root without workspace chrome", async ({ page }) => {
+    await gotoLanding(page);
+
+    await expect(
+      page.getByRole("heading", {
+        name: "PlotLot turns parcel uncertainty into buildable answers.",
+      }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Start a lookup" })).toBeVisible();
+    await expect(page.getByTestId("lookup-input")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar-nav-site-finder")).toHaveCount(0);
+  });
+
+  test("workspace lookup welcome exposes canonical selectors", async ({ page }) => {
     await gotoHome(page);
 
     await expect(page.getByTestId("lookup-input")).toBeVisible();
