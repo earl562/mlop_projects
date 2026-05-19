@@ -410,7 +410,9 @@ async def _lookup_broward(
             street_name = re.sub(rf"\b{suffix}\b", "", street_name).strip()
 
         city_hint = _extract_city_hint(address)
-        city_code = BROWARD_CITY_CODES.get(city_hint, city_hint.upper() if len(city_hint) == 2 else "")
+        city_code = BROWARD_CITY_CODES.get(
+            city_hint, city_hint.upper() if len(city_hint) == 2 else ""
+        )
 
         where = f"SITUS_STREET_NUMBER='{street_num}' AND SITUS_STREET_NAME LIKE '%{street_name}%'"
         if city_code:
@@ -434,6 +436,7 @@ async def _lookup_broward(
             return None
 
         if len(features) > 1:
+
             def _feature_score(feature: dict) -> float:
                 attrs = feature.get("attributes", {})
                 geom = feature.get("geometry", {})

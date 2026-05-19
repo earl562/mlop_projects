@@ -129,7 +129,9 @@ async def test_tools_call_search_ordinances_returns_normalized_results(client):
     with (
         patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_session)),
         patch("plotlot.storage.db.get_session", new=AsyncMock(return_value=fake_session)),
-        patch("plotlot.retrieval.search.hybrid_search", new=AsyncMock(side_effect=_fake_hybrid_search)),
+        patch(
+            "plotlot.retrieval.search.hybrid_search", new=AsyncMock(side_effect=_fake_hybrid_search)
+        ),
     ):
         resp = await client.post(
             "/api/v1/tools/call",
@@ -184,7 +186,9 @@ async def test_tools_call_search_zoning_ordinance_records_evidence_and_matches_m
     fake_api_session = FakeSession()
     fake_search_session = FakeSession()
 
-    async def _fake_hybrid_search(session, municipality: str, zone_code: str, limit: int = 10, embedding=None):
+    async def _fake_hybrid_search(
+        session, municipality: str, zone_code: str, limit: int = 10, embedding=None
+    ):
         assert municipality == "Example City"
         assert zone_code == "parking"
         return [

@@ -36,8 +36,7 @@ def _script_env(tmp_path: Path) -> dict[str, str]:
         "RUNNER_LOG_DIR": str(runner_log_dir),
         "WATCHDOG_LOG_DIR": str(runner_log_dir),
         "PROCESS_LINES_OVERRIDE": (
-            "python -m uvicorn plotlot.api.main:app --reload\n"
-            "node next dev --port 3000"
+            "python -m uvicorn plotlot.api.main:app --reload\nnode next dev --port 3000"
         ),
         "ANALYZE_SMOKE_ENABLED": "1",
         "ANALYZE_SMOKE_TIMEOUT": "5",
@@ -168,7 +167,10 @@ def test_healthcheck_writes_runtime_status_with_successful_smoke_test(tmp_path):
     assert payload["capability_details"]["db_backed_analysis_ready"]["dependencies"] == ["database"]
     assert "Agent chat unavailable: llm_credentials_missing" in payload["open_issues"]
     assert "Portfolio unavailable: database_ok" not in payload["open_issues"]
-    assert payload["next_action"] == "Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN to re-enable agent chat"
+    assert (
+        payload["next_action"]
+        == "Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN to re-enable agent chat"
+    )
     assert payload["runtime"]["startup_mode"] == "healthy"
     assert payload["runtime"]["startup_warnings"] == []
     assert payload["analyze_smoke"]["enabled"] is True
@@ -253,9 +255,18 @@ def test_watchdog_fails_when_analyze_smoke_fails(tmp_path):
 
     assert result.returncode == 1
     assert "WATCHDOG_STATUS=fail" in result.stdout
-    assert "WATCHDOG_CAPABILITIES=db_backed_analysis_ready=blocked, portfolio_ready=blocked, agent_chat_ready=blocked" in result.stdout
-    assert "WATCHDOG_BLOCKERS=db_backed_analysis_ready=database; portfolio_ready=database; agent_chat_ready=llm_credentials" in result.stdout
-    assert "WATCHDOG_DEPENDENCIES=db_backed_analysis_ready=database; portfolio_ready=database; agent_chat_ready=llm_credentials" in result.stdout
+    assert (
+        "WATCHDOG_CAPABILITIES=db_backed_analysis_ready=blocked, portfolio_ready=blocked, agent_chat_ready=blocked"
+        in result.stdout
+    )
+    assert (
+        "WATCHDOG_BLOCKERS=db_backed_analysis_ready=database; portfolio_ready=database; agent_chat_ready=llm_credentials"
+        in result.stdout
+    )
+    assert (
+        "WATCHDOG_DEPENDENCIES=db_backed_analysis_ready=database; portfolio_ready=database; agent_chat_ready=llm_credentials"
+        in result.stdout
+    )
     assert "WATCHDOG_SMOKE_SUMMARY=" in result.stdout
     assert 'analyze={"detail": "pipeline unavailable"}' in result.stdout
     assert 'chat=event: error\ndata: {"detail":"Chat unavailable"}' in result.stdout
@@ -285,12 +296,18 @@ def test_watchdog_fails_when_analyze_smoke_fails(tmp_path):
     assert payload["database"]["name"] == "plotlot"
     assert payload["database"]["ssl_required"] is False
     assert payload["capabilities"]["db_backed_analysis_ready"] is False
-    assert payload["capability_details"]["db_backed_analysis_ready"]["reason"] == "database_unavailable"
+    assert (
+        payload["capability_details"]["db_backed_analysis_ready"]["reason"]
+        == "database_unavailable"
+    )
     assert payload["capability_details"]["db_backed_analysis_ready"]["blocked_by"] == ["database"]
     assert payload["capability_details"]["db_backed_analysis_ready"]["dependencies"] == ["database"]
     assert "DB-backed analysis unavailable: database_unavailable" in payload["open_issues"]
     assert "Portfolio unavailable: database_unavailable" in payload["open_issues"]
-    assert payload["next_action"] == "Investigate /api/v1/analyze failure before continuing product work"
+    assert (
+        payload["next_action"]
+        == "Investigate /api/v1/analyze failure before continuing product work"
+    )
     assert payload["runtime"]["startup_mode"] == "degraded"
     assert "database_unavailable" in payload["runtime"]["startup_warnings"]
 
@@ -373,7 +390,10 @@ def test_healthcheck_prioritizes_portfolio_smoke_when_only_portfolio_fails(tmp_p
     assert payload["analyze_smoke"]["status"] == "ok"
     assert payload["chat_smoke"]["status"] == "ok"
     assert payload["portfolio_smoke"]["status"] == "failed"
-    assert payload["next_action"] == "Investigate /api/v1/portfolio failure before continuing product work"
+    assert (
+        payload["next_action"]
+        == "Investigate /api/v1/portfolio failure before continuing product work"
+    )
 
 
 def test_healthcheck_prioritizes_chat_smoke_when_only_chat_fails(tmp_path):
@@ -454,4 +474,6 @@ def test_healthcheck_prioritizes_chat_smoke_when_only_chat_fails(tmp_path):
     assert payload["analyze_smoke"]["status"] == "ok"
     assert payload["chat_smoke"]["status"] == "failed"
     assert payload["portfolio_smoke"]["status"] == "ok"
-    assert payload["next_action"] == "Investigate /api/v1/chat failure before continuing product work"
+    assert (
+        payload["next_action"] == "Investigate /api/v1/chat failure before continuing product work"
+    )

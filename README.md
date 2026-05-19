@@ -94,9 +94,11 @@ Backend default: `http://127.0.0.1:8000`
 From the repository root, you can also use the delegated command surface:
 
 ```bash
+make deploy-doctor
 make frontend-lint
 make frontend-build
 make verify-local
+make ship-branch
 ```
 
 ## Useful Commands
@@ -124,6 +126,14 @@ npm run test:e2e:no-db
 npm run test:e2e:db
 ```
 
+### Deployment / shipping
+
+```bash
+make deploy-doctor
+make verify-local
+make ship-branch
+```
+
 ## Workflow and CI
 
 The repository is set up around three quality lanes:
@@ -141,6 +151,8 @@ PlotLot should use separate development branches for ongoing work and reserve `m
 - push continuously to `codex/*`, `dev/*`, `feat/*`, `fix/*`, or `hotfix/*` branches
 - CI runs on every branch push
 - GitHub auto-opens a draft PR from those branches into `main`
+- use `make deploy-doctor` before shipping to catch local/platform drift
+- use `make ship-branch` to push the current feature branch and open or reuse a draft PR
 - when the work is ready, mark the PR ready for review and collect approval
 - merge to `main` only after approval
 

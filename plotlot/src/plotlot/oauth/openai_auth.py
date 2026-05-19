@@ -299,7 +299,9 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         return
 
 
-def _wait_for_callback(redirect_uri: str, timeout_seconds: int = 120) -> tuple[str | None, str | None]:
+def _wait_for_callback(
+    redirect_uri: str, timeout_seconds: int = 120
+) -> tuple[str | None, str | None]:
     parsed = urlparse(redirect_uri)
     _CallbackHandler.oauth_code = None
     _CallbackHandler.oauth_state = None

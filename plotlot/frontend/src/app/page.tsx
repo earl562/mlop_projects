@@ -360,7 +360,6 @@ export default function Home() {
             updateMessage(progressId, {
               role: "assistant",
               content: errorContent,
-              pipelineSteps: undefined,
               errorType: isTimeout ? "timeout" : isBadAddress ? "bad_address" : isBackendUnavailable ? "backend_unavailable" : "generic",
               retryAddress: address,
             } as Partial<DisplayMessage>);

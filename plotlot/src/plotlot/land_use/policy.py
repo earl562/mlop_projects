@@ -28,10 +28,11 @@ class ToolPolicy:
         """Authorize a tool call or return an approval/block decision."""
 
         risk = ToolRiskClass(tool.risk_class)
-        if (
-            not context.live_network_allowed
-            and risk in {ToolRiskClass.EXPENSIVE_READ, ToolRiskClass.WRITE_EXTERNAL, ToolRiskClass.EXECUTION}
-        ):
+        if not context.live_network_allowed and risk in {
+            ToolRiskClass.EXPENSIVE_READ,
+            ToolRiskClass.WRITE_EXTERNAL,
+            ToolRiskClass.EXECUTION,
+        }:
             return PolicyDecision(
                 allowed=False,
                 reason="live network tools are disabled for this run",

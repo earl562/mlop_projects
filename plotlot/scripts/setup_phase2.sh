@@ -97,7 +97,7 @@ fi
 # Check if linked
 if [ ! -f "$FRONTEND_DIR/.vercel/project.json" ]; then
     info "Linking Vercel project..."
-    vercel link --project mlop_projects --yes
+    vercel link --project plotlot-v2 --yes
 fi
 
 # Set Sentry DSN on Vercel (frontend needs it as NEXT_PUBLIC_)

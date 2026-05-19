@@ -34,7 +34,9 @@ def test_configure_mlflow_short_circuits_when_tracking_backend_unreachable():
     with (
         patch("plotlot.observability.tracing._HAS_MLFLOW", True),
         patch("plotlot.observability.tracing._mlflow", mock_mlflow),
-        patch("plotlot.observability.tracing.socket.create_connection", side_effect=OSError("refused")),
+        patch(
+            "plotlot.observability.tracing.socket.create_connection", side_effect=OSError("refused")
+        ),
     ):
         result = configure_mlflow(
             "postgresql://plotlot:plotlot@localhost:5433/plotlot",

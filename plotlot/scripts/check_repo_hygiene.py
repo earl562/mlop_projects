@@ -32,6 +32,11 @@ NON_CANONICAL_FRONTEND_PREFIXES = (
     "apps/plotlot/frontend/",
 )
 
+NON_CANONICAL_ROOT_FILES = (
+    "package.json",
+    "package-lock.json",
+)
+
 
 def list_tracked_files(repo_root: Path | None = None) -> list[str]:
     resolved_repo_root = repo_root or Path(__file__).resolve().parents[2]
@@ -62,6 +67,10 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
             violations.append((normalized, "non-canonical-frontend-root"))
             continue
 
+        if normalized in NON_CANONICAL_ROOT_FILES:
+            violations.append((normalized, "non-canonical-root-node-manifest"))
+            continue
+
         suffix = PurePosixPath(normalized).suffix.lower()
         if suffix in BANNED_MEDIA_SUFFIXES:
             violations.append((normalized, "tracked-media"))
@@ -89,6 +98,10 @@ def main() -> int:
     )
     print(
         "Keep tracked frontend code under plotlot/frontend/. Duplicate tracked frontend roots are not allowed.",
+        file=sys.stderr,
+    )
+    print(
+        "Do not track root-level Node manifests for ad hoc installs; keep frontend package files under plotlot/frontend/ only.",
         file=sys.stderr,
     )
     return 1

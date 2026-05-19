@@ -324,15 +324,15 @@ def _result_relevance(
 
 def _is_source_candidate(url: str, title: str, county: str, state: str) -> bool:
     netloc = urlparse(url).netloc.lower().removeprefix("www.")
-    if any(netloc == blocked or netloc.endswith(f".{blocked}") for blocked in BLOCKED_DISCOVERY_DOMAINS):
+    if any(
+        netloc == blocked or netloc.endswith(f".{blocked}") for blocked in BLOCKED_DISCOVERY_DOMAINS
+    ):
         return False
     haystack = normalize_label(f"{url} {title}")
     if normalize_label(county) == "san francisco" and "south san francisco" in haystack:
         return False
     platform = _candidate_platform(url, title, county, state)
-    if platform == "elaws" and _compact_label(county) not in _compact_label(
-        urlparse(url).netloc
-    ):
+    if platform == "elaws" and _compact_label(county) not in _compact_label(urlparse(url).netloc):
         return False
     if platform != "unknown" and not _mentions_county(url, title, county):
         return False
@@ -455,6 +455,7 @@ async def discover_web_code_sources(
         follow_redirects=True,
         headers=headers,
     ) as client:
+
         def add_candidate(
             url: str,
             title: str,

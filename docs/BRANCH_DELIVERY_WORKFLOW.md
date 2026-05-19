@@ -22,12 +22,14 @@ Recommended branch prefixes:
 ## Delivery Flow
 
 1. Create a development branch from `main`.
-2. Commit and push continuously to that branch while work is in progress.
-3. GitHub Actions runs CI on every push to supported development branch patterns.
-4. The repo auto-opens a draft PR from that branch into `main` if one does not already exist.
-5. When the branch is ready, mark the PR ready for review.
-6. Collect approval.
-7. Merge to `main`.
+2. Commit continuously to that branch while work is in progress.
+3. Run `make deploy-doctor` from the repo root to catch root-directory, Vercel-link, and Render-service drift before shipping.
+4. Run `make verify-local` from the repo root.
+5. Run `make ship-branch` from the repo root. This pushes the branch and opens or reuses a draft PR into `main`.
+6. GitHub Actions runs CI on every push to supported development branch patterns.
+7. When the branch is ready, mark the PR ready for review.
+8. Collect approval.
+9. Merge to `main`.
 
 `main` should be treated as the approved integration branch, not the branch where ongoing implementation happens.
 
@@ -59,3 +61,10 @@ GitHub branch protection / rulesets are not fully stored in the repository, so e
 - no ongoing feature work on `main`
 - `main` advances only through reviewed PRs
 - production deployment remains tied to `main`
+
+## Canonical Deploy Roots
+
+- Render backend service: repo root `plotlot/`
+- Render Dockerfile path (relative to Render root): `./Dockerfile`
+- Vercel frontend root directory: `plotlot/frontend`
+- local `.vercel` links under legacy roots such as `frontend/.vercel` or `apps/plotlot/frontend/.vercel` should be removed

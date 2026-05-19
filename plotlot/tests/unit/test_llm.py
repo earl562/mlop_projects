@@ -269,7 +269,9 @@ class TestAnalyzeZoning:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         with (
-            patch("plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+            patch(
+                "plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client
+            ) as async_openai_ctor,
             patch("plotlot.retrieval.llm.has_saved_tokens", return_value=True),
             patch("plotlot.retrieval.llm.settings") as mock_settings,
         ):
@@ -314,7 +316,9 @@ class TestAnalyzeZoning:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         with (
-            patch("plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+            patch(
+                "plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client
+            ) as async_openai_ctor,
             patch("plotlot.retrieval.llm.settings") as mock_settings,
         ):
             mock_settings.nvidia_api_key = "nv-key"
@@ -357,7 +361,9 @@ class TestAnalyzeZoning:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         with (
-            patch("plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+            patch(
+                "plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client
+            ) as async_openai_ctor,
             patch("plotlot.retrieval.llm.settings") as mock_settings,
         ):
             mock_settings.nvidia_api_key = "nv-key"

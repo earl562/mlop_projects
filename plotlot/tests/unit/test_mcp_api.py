@@ -277,9 +277,7 @@ async def test_mcp_discover_municode_authorities_returns_county_matches(client):
 async def test_mcp_discover_code_authorities_returns_non_municode_sources(client):
     from plotlot.land_use.code_providers import CodeAuthority
 
-    async def _fake_discover_code_authorities(
-        *, county, state, include_web_fallback=True
-    ):  # noqa: ANN001
+    async def _fake_discover_code_authorities(*, county, state, include_web_fallback=True):  # noqa: ANN001
         assert county == "Alpine"
         assert state == "CA"
         assert include_web_fallback is True

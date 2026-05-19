@@ -28,7 +28,9 @@ def _tool(name: str, risk_class: ToolRiskClass, *, budget_cents: int = 0) -> Too
 
 
 def test_read_only_tools_are_allowed_by_default():
-    decision = ToolPolicy().authorize(_tool("search_ordinances", ToolRiskClass.READ_ONLY), _context())
+    decision = ToolPolicy().authorize(
+        _tool("search_ordinances", ToolRiskClass.READ_ONLY), _context()
+    )
 
     assert decision.allowed is True
     assert decision.approval_required is False

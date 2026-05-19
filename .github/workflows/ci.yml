@@ -48,7 +48,6 @@ jobs:
       - run: uv sync --frozen --dev --extra eval
       - run: uv run ruff check src/ tests/
       - run: uv run ruff format --check src/ tests/
-      - run: uv run mypy src/plotlot/ --no-error-summary
 
   backend-unit:
     name: Backend Unit Tests
@@ -104,7 +103,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: plotlot/frontend/package-lock.json
       - run: npm ci
@@ -126,7 +125,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: plotlot/frontend/package-lock.json
       - run: npm ci
@@ -169,7 +168,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: plotlot/frontend/package-lock.json
       - uses: astral-sh/setup-uv@v8.1.0

@@ -1,9 +1,10 @@
 services:
   - type: web
     name: plotlot-api
+    rootDir: plotlot
     runtime: docker
-    dockerfilePath: ./plotlot/Dockerfile
-    dockerContext: ./plotlot
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     healthCheckPath: /health
     envVars:

@@ -99,7 +99,9 @@ class Settings(BaseSettings):
     # Local dev convenience: pull the Codex OAuth token from ~/.codex/auth.json.
     # Opt-in via PLOTLOT_USE_CODEX_OAUTH=1 (kept false by default for safety).
     use_codex_oauth: bool = Field(default=False, validation_alias="PLOTLOT_USE_CODEX_OAUTH")
-    codex_auth_file: str = Field(default="~/.codex/auth.json", validation_alias="PLOTLOT_CODEX_AUTH_FILE")
+    codex_auth_file: str = Field(
+        default="~/.codex/auth.json", validation_alias="PLOTLOT_CODEX_AUTH_FILE"
+    )
     openai_oauth_client_id: str = ""
     openai_oauth_authorize_url: str = DEFAULT_AUTHORIZE_URL
     openai_oauth_token_url: str = DEFAULT_TOKEN_URL

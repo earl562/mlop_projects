@@ -83,6 +83,20 @@ def test_flags_tracked_duplicate_frontend_roots():
     ) not in violations
 
 
+def test_flags_root_level_node_manifests():
+    violations = repo_hygiene.find_violations(
+        [
+            "package.json",
+            "package-lock.json",
+            "plotlot/frontend/package.json",
+        ]
+    )
+
+    assert ("package.json", "non-canonical-root-node-manifest") in violations
+    assert ("package-lock.json", "non-canonical-root-node-manifest") in violations
+    assert ("plotlot/frontend/package.json", "non-canonical-root-node-manifest") not in violations
+
+
 def test_list_tracked_files_uses_repo_root_for_git_lookup(tmp_path: Path, monkeypatch):
     calls: list[list[str]] = []
 

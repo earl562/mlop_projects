@@ -43,6 +43,7 @@ from plotlot.storage.db import get_session, init_db
 
 logger = logging.getLogger(__name__)
 
+
 class _RuntimeHealth(TypedDict):
     startup_mode: str
     startup_warnings: list[str]
@@ -341,6 +342,7 @@ async def health():
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     database_ready = checks.get("database") == "ok"
+
     def _has_text_setting(name: str) -> bool:
         """Return true only for explicitly configured string settings.
 

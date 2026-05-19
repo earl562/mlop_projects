@@ -87,12 +87,12 @@ export default async function ConnectorsPage() {
         <div className="relative overflow-hidden rounded-[2rem] border border-[var(--border-soft)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-panel)] sm:p-8">
           <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--brand)]">
-                MCP connector plane
-              </p>
-              <h1 className="font-display text-4xl leading-[0.95] tracking-tight text-[var(--text-primary)] sm:text-6xl">
-                Connected tools, visible policy.
+              <h1 className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--brand)]">
+                Connectors
               </h1>
+              <p className="font-display text-4xl leading-[0.95] tracking-tight text-[var(--text-primary)] sm:text-6xl">
+                Connected tools, visible policy.
+              </p>
               <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-secondary)]">
                 PlotLot now exposes the same governed tool contracts through REST and the MCP-like
                 adapter. Read tools can run directly; live reads and external writes stay behind

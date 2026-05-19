@@ -695,7 +695,9 @@ def _build_source_refs(search_results: list | None) -> list[SourceRef]:
     return source_refs
 
 
-def _extract_fallback_insights(search_results: list | None) -> tuple[dict[str, str], NumericZoningParams | None]:
+def _extract_fallback_insights(
+    search_results: list | None,
+) -> tuple[dict[str, str], NumericZoningParams | None]:
     if not search_results:
         return ({}, None)
 
@@ -749,9 +751,15 @@ def _extract_fallback_insights(search_results: list | None) -> tuple[dict[str, s
         r"(?:minimum|min)\s+lot\s+(?:size|area)[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
         r"lot\s+area\s+per\s+unit[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
     )
-    setback_front_ft = _search_float(r"front(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
-    setback_side_ft = _search_float(r"side(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
-    setback_rear_ft = _search_float(r"rear(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b")
+    setback_front_ft = _search_float(
+        r"front(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b"
+    )
+    setback_side_ft = _search_float(
+        r"side(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b"
+    )
+    setback_rear_ft = _search_float(
+        r"rear(?:\s+yard)?(?:\s+setback)?[^.]{0,40}?(\d+(?:\.\d+)?)\s*(?:feet|foot|ft)\b"
+    )
     parking_spaces_per_unit = _search_float(
         r"(\d+(?:\.\d+)?)\s+spaces?\s+per\s+(?:dwelling\s+)?unit",
     )
@@ -915,8 +923,10 @@ def _build_fallback_report(
         )
     )
     extracted, numeric_params = _extract_fallback_insights(search_results)
-    zoning_district = (prop_record.zoning_code if prop_record else "") or (zone_codes[0] if zone_codes else "")
-    zoning_description = (prop_record.zoning_description if prop_record else "")
+    zoning_district = (prop_record.zoning_code if prop_record else "") or (
+        zone_codes[0] if zone_codes else ""
+    )
+    zoning_description = prop_record.zoning_description if prop_record else ""
     summary_bits = []
     if zoning_district:
         summary_bits.append(f"Fallback preserved zoning district {zoning_district}")
@@ -945,9 +955,7 @@ def _build_fallback_report(
         parking_requirements=extracted.get("parking_requirements", ""),
         numeric_params=numeric_params,
         property_record=prop_record,
-        summary=(
-            "; ".join(summary_bits) + ". " if summary_bits else ""
-        )
+        summary=("; ".join(summary_bits) + ". " if summary_bits else "")
         + "Automated analysis incomplete. Property data and ordinance sections were retrieved — "
         "see sources below for relevant zoning regulations.",
         sources=deduped_sources,

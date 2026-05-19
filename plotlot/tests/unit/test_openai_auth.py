@@ -84,5 +84,11 @@ class TestOpenAIOAuthHelpers:
 
     def test_token_needs_refresh_uses_expiry_skew(self):
         assert token_needs_refresh(StoredOAuthTokens(access="", refresh="r")) is True
-        assert token_needs_refresh(StoredOAuthTokens(access="a", refresh="r", expires=1000), now=0) is False
-        assert token_needs_refresh(StoredOAuthTokens(access="a", refresh="r", expires=299), now=0) is True
+        assert (
+            token_needs_refresh(StoredOAuthTokens(access="a", refresh="r", expires=1000), now=0)
+            is False
+        )
+        assert (
+            token_needs_refresh(StoredOAuthTokens(access="a", refresh="r", expires=299), now=0)
+            is True
+        )
