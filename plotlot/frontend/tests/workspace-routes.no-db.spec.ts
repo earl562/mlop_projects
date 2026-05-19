@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("workspace route scaffolds", () => {
+  test("workspace shell renders on explicit workspace route", async ({ page }) => {
+    await page.goto("/workspace");
+    await expect(page.getByTestId("lookup-input")).toBeVisible();
+    await expect(page.getByTestId("sidebar-nav-site-finder")).toBeVisible();
+  });
+
   test("projects routes render", async ({ page }) => {
     await page.goto("/projects");
     await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();

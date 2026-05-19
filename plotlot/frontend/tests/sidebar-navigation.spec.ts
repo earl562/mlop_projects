@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("sidebar navigation", () => {
   test("sidebar items are clickable and switch between lookup and agent modes", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/workspace");
 
     await expect(page.getByTestId("lookup-input")).toBeVisible();
 
@@ -20,6 +20,7 @@ test.describe("sidebar navigation", () => {
     const siteFinder = page.getByTestId("sidebar-nav-site-finder");
     await siteFinder.click();
     await expect(page.getByTestId("lookup-input")).toBeVisible();
+    await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
     await expect(siteFinder).toHaveAttribute("aria-current", "page");
 
     const connectors = page.getByTestId("sidebar-nav-connectors");

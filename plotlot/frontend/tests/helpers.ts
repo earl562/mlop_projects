@@ -86,19 +86,28 @@ export async function requireHealthyBackend(
 }
 
 export async function gotoHome(page: Page) {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto("/workspace", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("send-button")).toBeVisible();
   await expect(page.getByTestId("lookup-input")).toBeVisible();
   await page.waitForTimeout(300);
 }
 
+export async function gotoLanding(page: Page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("public-homepage")).toBeVisible();
+}
+
 export async function switchToAgent(page: Page) {
   await page.getByRole("button", { name: "Agent" }).click();
+  await expect(page).toHaveURL(/\/workspace\?mode=agent$/);
+  await expect(page.getByTestId("agent-input")).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
 }
 
 export async function switchToLookup(page: Page) {
   await page.getByRole("button", { name: "Lookup" }).click();
+  await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
+  await expect(page.getByTestId("lookup-input")).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
 }
 
