@@ -7,7 +7,7 @@ This repository should use a branch-first delivery model.
 - day-to-day work happens on separate development branches
 - every pushed branch gets CI
 - each development branch promotes into `main` through a pull request
-- `main` stays approval-gated and release-ready
+- `main` stays PR-gated, status-check-gated, and release-ready
 
 ## Branch Types
 
@@ -28,10 +28,10 @@ Recommended branch prefixes:
 5. Run `make ship-branch` from the repo root. This pushes the branch and opens or reuses a draft PR into `main`.
 6. GitHub Actions runs CI on every push to supported development branch patterns.
 7. When the branch is ready, mark the PR ready for review.
-8. Collect approval.
-9. Merge to `main`.
+8. If collaborators are involved, collect approval before merging.
+9. Merge to `main` only after the required checks pass and the owner is satisfied with the promotion.
 
-`main` should be treated as the approved integration branch, not the branch where ongoing implementation happens.
+`main` should be treated as the verified integration branch, not the branch where ongoing implementation happens.
 
 ## What The Repo Enforces
 
@@ -49,7 +49,7 @@ GitHub branch protection / rulesets are not fully stored in the repository, so e
 
 - enable `Allow GitHub Actions to create and approve pull requests`
 - require pull requests before merging
-- require at least one approval
+- if your team has multiple reviewers, require at least one approval
 - require status checks to pass before merging
 - require branches to be up to date before merging
 - restrict direct pushes to `main`
@@ -59,7 +59,7 @@ GitHub branch protection / rulesets are not fully stored in the repository, so e
 
 - no direct commits to `main`
 - no ongoing feature work on `main`
-- `main` advances only through reviewed PRs
+- `main` advances only through PRs with passing required checks
 - production deployment remains tied to `main`
 
 ## Canonical Deploy Roots

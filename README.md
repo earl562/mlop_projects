@@ -146,15 +146,16 @@ Generated screenshots, Playwright reports, and other large test artifacts are in
 
 ## Branch Workflow
 
-PlotLot should use separate development branches for ongoing work and reserve `main` for approved changes.
+PlotLot should use separate development branches for ongoing work and reserve `main` for verified PR promotions.
 
 - push continuously to `codex/*`, `dev/*`, `feat/*`, `fix/*`, or `hotfix/*` branches
 - CI runs on every branch push
 - GitHub auto-opens a draft PR from those branches into `main`
 - use `make deploy-doctor` before shipping to catch local/platform drift
 - use `make ship-branch` to push the current feature branch and open or reuse a draft PR
-- when the work is ready, mark the PR ready for review and collect approval
-- merge to `main` only after approval
+- when the work is ready, mark the PR ready for review
+- if collaborators are involved, collect approval before merging
+- merge to `main` only after the required checks pass
 
 Branch-flow details and the matching GitHub settings are in [BRANCH_DELIVERY_WORKFLOW.md](/Users/earlperry/Desktop/Projects/EP/docs/BRANCH_DELIVERY_WORKFLOW.md).
 
