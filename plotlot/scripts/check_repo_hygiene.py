@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 BANNED_DIR_PREFIXES = (
     ".playwright-mcp/",
@@ -27,10 +27,16 @@ BANNED_MEDIA_SUFFIXES = {
     ".zip",
 }
 
+NON_CANONICAL_FRONTEND_PREFIXES = (
+    "frontend/",
+    "apps/plotlot/frontend/",
+)
 
-def list_tracked_files() -> list[str]:
+
+def list_tracked_files(repo_root: Path | None = None) -> list[str]:
+    resolved_repo_root = repo_root or Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "-C", str(resolved_repo_root), "ls-files", "-z"],
         check=True,
         capture_output=True,
         text=False,
@@ -49,6 +55,13 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
             violations.append((normalized, "generated-artifact-directory"))
             continue
 
+        if any(
+            normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
+            for prefix in NON_CANONICAL_FRONTEND_PREFIXES
+        ):
+            violations.append((normalized, "non-canonical-frontend-root"))
+            continue
+
         suffix = PurePosixPath(normalized).suffix.lower()
         if suffix in BANNED_MEDIA_SUFFIXES:
             violations.append((normalized, "tracked-media"))
@@ -57,7 +70,8 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
 
 
 def main() -> int:
-    violations = find_violations(list_tracked_files())
+    repo_root = Path(__file__).resolve().parents[2]
+    violations = find_violations(list_tracked_files(repo_root))
     if not violations:
         print("Repository hygiene check passed.")
         return 0
@@ -71,6 +85,10 @@ def main() -> int:
     print("", file=sys.stderr)
     print(
         "Move screenshots, Playwright outputs, and other large generated artifacts to ignored local paths or GitHub Actions artifacts instead of git history.",
+        file=sys.stderr,
+    )
+    print(
+        "Keep tracked frontend code under plotlot/frontend/. Duplicate tracked frontend roots are not allowed.",
         file=sys.stderr,
     )
     return 1

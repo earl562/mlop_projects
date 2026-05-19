@@ -58,12 +58,16 @@ Agent is the higher-capability workflow.
 
 ## Repository Layout
 
-- [`plotlot/`](/Users/earlperry/Desktop/Projects/EP/plotlot) - main application workspace
-- [`plotlot/frontend/`](/Users/earlperry/Desktop/Projects/EP/plotlot/frontend) - Next.js frontend
-- [`plotlot/src/plotlot/`](/Users/earlperry/Desktop/Projects/EP/plotlot/src/plotlot) - FastAPI backend, pipeline, providers, and retrieval logic
-- [`plotlot/tests/`](/Users/earlperry/Desktop/Projects/EP/plotlot/tests) - unit, integration, and evaluation coverage
-- [`plotlot/docs/PLOTLOT_FLOW_CONTRACT.md`](/Users/earlperry/Desktop/Projects/EP/plotlot/docs/PLOTLOT_FLOW_CONTRACT.md) - product, UX, and data contract for Lookup vs Agent
+- Repository root: collaboration, CI, deployment wiring, and shared docs
+- [`plotlot/`](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot) - canonical PlotLot application workspace
+- [`plotlot/frontend/`](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot/frontend) - canonical Next.js frontend
+- [`plotlot/src/plotlot/`](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot/src/plotlot) - FastAPI backend, pipeline, providers, and retrieval logic
+- [`plotlot/tests/`](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot/tests) - unit, integration, and evaluation coverage
+- [`plotlot/docs/PLOTLOT_FLOW_CONTRACT.md`](/Users/earlperry/Desktop/Projects/EP/plotlot/plotlot/docs/PLOTLOT_FLOW_CONTRACT.md) - product, UX, and data contract for Lookup vs Agent
+- [`Makefile`](/Users/earlperry/Desktop/Projects/EP/plotlot/Makefile) - repo-root command surface that delegates to the canonical workspace
 - [`docs/REPO_HISTORY_REWRITE.md`](/Users/earlperry/Desktop/Projects/EP/docs/REPO_HISTORY_REWRITE.md) - collaborator recovery notes for the media purge rewrite
+
+Treat `plotlot/` as the only application source of truth for CI, Vercel, and day-to-day development. Local scratch directories such as top-level `frontend/` or `apps/plotlot/` should not be used as deploy or implementation targets.
 
 ## Quick Start
 
@@ -86,6 +90,14 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 
 Frontend default: `http://127.0.0.1:3000`  
 Backend default: `http://127.0.0.1:8000`
+
+From the repository root, you can also use the delegated command surface:
+
+```bash
+make frontend-lint
+make frontend-build
+make verify-local
+```
 
 ## Useful Commands
 

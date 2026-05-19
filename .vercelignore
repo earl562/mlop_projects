@@ -1,3 +1,13 @@
+# Local toolchains and caches
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.agents/
+.codex/
+.omx/
+
 # Python backend (not needed for Vercel frontend deploy)
 plotlot/.venv/
 plotlot/src/
@@ -16,6 +26,11 @@ plotlot/frontend/.next/
 plotlot/frontend/tests/
 plotlot/frontend/playwright-report/
 plotlot/frontend/test-results/
+
+# Non-canonical local mirrors and scratch workspaces
+frontend/
+apps/plotlot/
+docs/research/
 
 # Screenshots and test artifacts
 *.png
