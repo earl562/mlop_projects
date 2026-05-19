@@ -19,6 +19,7 @@ from plotlot.property.registry import get_provider, register_provider, registere
 # Register built-in providers ---------------------------------------------------
 
 from plotlot.property.broward import BrowardProvider
+from plotlot.property.california import CaliforniaProvider
 from plotlot.property.mecklenburg import MecklenburgProvider
 from plotlot.property.miami_dade import MiamiDadeProvider
 from plotlot.property.palm_beach import PalmBeachProvider
@@ -37,6 +38,25 @@ register_provider("palm beach", _palm_beach)
 _mecklenburg = MecklenburgProvider()
 
 register_provider("mecklenburg", _mecklenburg)
+
+# CA providers — five counties with ingested ordinance data
+_california = CaliforniaProvider()
+
+# Sacramento County (Citrus Heights, Lincoln, Rocklin)
+register_provider("sacramento", _california)
+
+# Contra Costa County (El Cerrito, Lafayette, Moraga, Orinda, Richmond)
+register_provider("contra costa", _california)
+
+# Alameda County (Alameda, Hayward, Newark, Oakland)
+register_provider("alameda", _california)
+
+# Santa Clara County (Campbell, Los Altos, Los Gatos, Milpitas, Monte Sereno,
+#                     Morgan Hill, Mountain View, San Jose, Saratoga)
+register_provider("santa clara", _california)
+
+# San Mateo County (Daly City, East Palo Alto, Hillsborough, Portola Valley, Woodside)
+register_provider("san mateo", _california)
 
 
 # Convenience top-level lookup ---------------------------------------------------

@@ -1,0 +1,9 @@
+id: shared.counterparts
+category: legal_admin
+title: "Counterparts; Electronic Signatures"
+document_types: [psa, loi]
+order_weight: 740
+is_required: true
+source: "SubTo Purchase Contract Section 14.6"
+content_template: |
+  This Contract may be executed in any number of counterparts, each of which shall be deemed an original and all of which together shall constitute one and the same instrument. Electronic signatures and PDF copies shall be deemed original signatures for all purposes.

@@ -52,6 +52,24 @@ ZONING_KEYWORDS = [
     "land development regulations",
     "appendix a",
     "appendix b",  # some munis put zoning in appendices
+    # Industrial / data center site selection keywords
+    "industrial",
+    "manufacturing",
+    "light industrial",
+    "heavy industrial",
+    "industrial district",
+    "industrial park",
+    "special use",
+    "utility",
+    "utilities",
+    "performance standards",
+    "noise",
+    "vibration",
+    "outdoor storage",
+    "loading",
+    "truck",
+    "warehouse",
+    "logistics",
 ]
 
 # Disk cache settings
@@ -520,6 +538,123 @@ _NAME_MAP: dict[str, str] = {
     "North Myrtle Beach": "North Myrtle Beach",
     "Hilton Head Island": "Hilton Head Island",
     "North Augusta": "North Augusta",
+    # CA NorCal aliases — Municode often uses "City of X" which pass-2 handles,
+    # but some clients have unusual names worth mapping explicitly.
+    "East Palo Alto": "East Palo Alto",
+    "Mountain View": "Mountain View",
+    "Los Altos Hills": "Los Altos Hills",
+    "Portola Valley": "Portola Valley",
+    "Woodside": "Woodside",
+    "Atherton": "Atherton",
+    "San Ramon": "San Ramon",
+    "Walnut Creek": "Walnut Creek",
+    "Pleasant Hill": "Pleasant Hill",
+    "El Cerrito": "El Cerrito",
+    "Elk Grove": "Elk Grove",
+    "Citrus Heights": "Citrus Heights",
+}
+
+# CA Northern California high-development metros by county.
+# Priority order based on LAND DEAL ACTIVITY for PlotLot's core use case
+# (land acquisition pricing for residential development), NOT permit volume:
+#
+#   1. sacramento    — Eliminated SFR zoning (FAR-limited = PlotLot's exact calc).
+#                      $583M traded in 2025, Waegell (6,916 units), fastest-growing CA metro.
+#   2. contra_costa  — Concord Naval Weapons Station (15,600 units, master dev being finalized).
+#                      Antioch/Pittsburg lead East Bay rent growth. Low land costs = high deal vol.
+#   3. alameda       — Fremont 13,000-unit RHNA mandate, Milpitas 60du/acre TOD, Hayward corridor.
+#   4. santa_clara   — San Jose RHNA pressure + city incentive programs. High land cost = fewer
+#                      individual deals but still strong developer community.
+#   5. san_mateo     — Redwood City infill hub, East Palo Alto accessible land.
+#   6. san_francisco — Last: scarce land, deals are institutional-scale ($15M+), not PlotLot's user.
+#
+# Within each county, cities are ordered by individual land deal activity.
+NORCAL_METROS: dict[str, list[str]] = {
+    "sacramento": [
+        "Sacramento",  # eliminated SFR zoning — every R-1 lot is now a dev site
+        "Elk Grove",  # fastest-growing NorCal city (176K), $84M dev pipeline
+        "Rancho Cordova",  # Waegell property 6,916 units, Rio Del Oro — massive land deals
+        "Roseville",  # fast-growing suburb, active new construction
+        "Rocklin",  # same growth corridor as Roseville
+        "West Sacramento",  # infill-focused, across from downtown
+        "Citrus Heights",
+        "Folsom",
+        "Davis",
+        "Woodland",
+        "Lincoln",
+    ],
+    "contra_costa": [
+        "Concord",  # Naval Weapons Station 15,600 units, BART TOD, master dev being finalized
+        "Antioch",  # DeNova Homes active, Somersville 702 units, leads East Bay rent growth
+        "Pittsburg",  # same submarket as Antioch, BART access, low land costs
+        "Richmond",  # large underutilized sites, strong RHNA obligation
+        "Brentwood",  # fast-growing outer East Bay, active residential dev
+        "San Ramon",
+        "Walnut Creek",
+        "Pleasant Hill",
+        "Martinez",
+        "El Cerrito",
+        "Hercules",
+        "Pinole",
+        "Orinda",
+        "Lafayette",
+        "Moraga",
+    ],
+    "alameda": [
+        "Fremont",  # 13,000-unit RHNA obligation, zoning reform Jan 2024
+        "Hayward",  # Mission Blvd corridor priority dev area
+        "San Leandro",  # two neighborhood projects recently approved
+        "Oakland",  # infill pipeline active, 8-story approvals
+        "Union City",  # BART corridor, accessible land
+        "Newark",
+        "Dublin",  # fast-growing BART corridor
+        "Emeryville",  # 1,815 units recently approved
+        "Pleasanton",
+        "Livermore",
+        "Berkeley",
+        "Alameda",
+        "Albany",
+        "Piedmont",
+    ],
+    "santa_clara": [
+        "San Jose",  # RHNA pressure, city multifamily incentive programs
+        "Milpitas",  # BART corridor, 60du/acre in Town Center zone
+        "Santa Clara",  # 1,700-unit project near Levi's Stadium
+        "Sunnyvale",
+        "Mountain View",
+        "Cupertino",  # Vallco Mall 2,600 units resuming
+        "Campbell",
+        "Los Altos",
+        "Gilroy",
+        "Morgan Hill",
+        "Los Altos Hills",
+        "Monte Sereno",
+        "Saratoga",
+        "Los Gatos",
+        "Palo Alto",  # very high land cost — institutional deals, lower PlotLot relevance
+    ],
+    "san_mateo": [
+        "Redwood City",  # Peninsula infill hub
+        "East Palo Alto",  # most accessible land in county, genuine missing-middle market
+        "South San Francisco",
+        "San Mateo",
+        "Daly City",
+        "Foster City",
+        "Burlingame",
+        "San Bruno",
+        "Millbrae",
+        "Belmont",
+        "San Carlos",
+        "Half Moon Bay",
+        "Menlo Park",
+        "Hillsborough",
+        "Atherton",  # ultra-high land cost, minimal deal activity for PlotLot users
+        "Portola Valley",
+        "Woodside",
+    ],
+    "san_francisco": [
+        "San Francisco",  # last: scarce land, institutional-scale deals, lowest PlotLot relevance
+    ],
 }
 
 COUNTY_AUTHORITY_STATES = ("FL", "NC", "CA")
@@ -700,6 +835,10 @@ GEORGIA_METROS_KEYS: set[str] = {
 
 SOUTH_CAROLINA_METROS_KEYS: set[str] = {
     _make_key(name) for names in SOUTH_CAROLINA_METROS.values() for name in names
+}
+
+NORCAL_METROS_KEYS: set[str] = {
+    _make_key(name) for names in NORCAL_METROS.values() for name in names
 }
 
 
@@ -1197,6 +1336,11 @@ async def discover_sc(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
     return await _discover_state("SC", SOUTH_CAROLINA_METROS, max_concurrent)
 
 
+async def discover_ca(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
+    """Discover NorCal municipalities with zoning data on Municode."""
+    return await _discover_state("CA", NORCAL_METROS, max_concurrent)
+
+
 async def get_all_municode_configs(
     force_refresh: bool = False,
 ) -> dict[str, MunicodeConfig]:
@@ -1217,6 +1361,9 @@ async def get_all_municode_configs(
         if not force_refresh:
             disk_configs = _read_disk_cache()
             if disk_configs:
+                from plotlot.core.types import _CA_OVERRIDES
+
+                disk_configs.update(_CA_OVERRIDES)
                 _cached_configs = disk_configs
                 return _cached_configs
 
@@ -1258,7 +1405,7 @@ async def get_all_municode_configs(
                 _merge_configs(configs, discovered)
         except Exception as e:
             logger.error("Combined discovery failed, returning fallback configs: %s", e)
-            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
             _cached_configs = {}
             _merge_configs(_cached_configs, {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS})
@@ -1266,18 +1413,21 @@ async def get_all_municode_configs(
 
         if not configs:
             logger.warning("Discovery returned 0 results, using fallback configs")
-            from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+            from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
             _cached_configs = {}
             _merge_configs(_cached_configs, {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS})
             return _cached_configs
 
         # Merge in fallback configs for any municipalities not discovered
-        from plotlot.core.types import _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
+        from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
             if resolve_municode_config(configs, fallback.municipality, state=fallback.state) is None:
                 _merge_config(configs, key, fallback)
+
+        # CA overrides always win — they correct wrong products from auto-discovery
+        configs.update(_CA_OVERRIDES)
 
         _cached_configs = configs
         _write_disk_cache(configs)

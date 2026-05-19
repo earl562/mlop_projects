@@ -53,9 +53,11 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
-            self.wfile.write(b"<html><body><h2>Success! You can close this tab.</h2>"
-                             b"<p>PlotLot has received your authorization. "
-                             b"Go back to the terminal.</p></body></html>")
+            self.wfile.write(
+                b"<html><body><h2>Success! You can close this tab.</h2>"
+                b"<p>PlotLot has received your authorization. "
+                b"Go back to the terminal.</p></body></html>"
+            )
         else:
             error = params.get("error", ["unknown"])[0]
             self.send_response(400)
@@ -79,7 +81,11 @@ def update_env_file(refresh_token: str):
     content = env_path.read_text()
 
     # Check if Google creds already exist
-    if "GOOGLE_REFRESH_TOKEN=" in content and "GOOGLE_REFRESH_TOKEN=\n" not in content and "GOOGLE_REFRESH_TOKEN=$" not in content:
+    if (
+        "GOOGLE_REFRESH_TOKEN=" in content
+        and "GOOGLE_REFRESH_TOKEN=\n" not in content
+        and "GOOGLE_REFRESH_TOKEN=$" not in content
+    ):
         print("Google credentials already in .env — updating...")
         lines = content.split("\n")
         new_lines = []
@@ -121,14 +127,16 @@ def main():
 
     # Build the consent URL
     scope_str = " ".join(SCOPES)
-    auth_params = urllib.parse.urlencode({
-        "client_id": OAUTH_CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": REDIRECT_URI,
-        "scope": scope_str,
-        "access_type": "offline",
-        "prompt": "consent",
-    })
+    auth_params = urllib.parse.urlencode(
+        {
+            "client_id": OAUTH_CLIENT_ID,
+            "response_type": "code",
+            "redirect_uri": REDIRECT_URI,
+            "scope": scope_str,
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+    )
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{auth_params}"
 
     # Start local server to catch the redirect
@@ -152,13 +160,15 @@ def main():
     print("Got authorization! Getting tokens...")
 
     # Exchange auth code for tokens
-    token_data = urllib.parse.urlencode({
-        "code": _auth_code,
-        "client_id": OAUTH_CLIENT_ID,
-        "client_secret": OAUTH_CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI,
-        "grant_type": "authorization_code",
-    }).encode()
+    token_data = urllib.parse.urlencode(
+        {
+            "code": _auth_code,
+            "client_id": OAUTH_CLIENT_ID,
+            "client_secret": OAUTH_CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+    ).encode()
 
     req = urllib.request.Request(TOKEN_URL, data=token_data, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")

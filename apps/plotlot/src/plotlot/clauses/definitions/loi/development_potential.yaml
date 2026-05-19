@@ -1,0 +1,21 @@
+id: loi.development_potential
+category: property_definition
+title: "Development Potential (PlotLot Analysis)"
+document_types: [loi]
+order_weight: 250
+is_required: false
+condition_expr: "context.max_units > 0"
+source: "PlotLot custom"
+formatting:
+  heading_level: 3
+  style: table
+  columns: ["Metric", "Value"]
+content_template: |
+  Maximum Allowable Units | {{ context.max_units }} ({{ context.governing_constraint or 'N/A' }})
+  Zoning District | {{ context.zoning_district }}
+  Max Height | {{ context.max_height or 'N/A' }}
+  Max Density | {{ context.max_density or 'N/A' }}
+  {% if context.gross_development_value > 0 %}Gross Development Value | {{ context.gross_development_value|currency }}{% endif %}
+  {% if context.hard_costs > 0 %}Estimated Hard Costs | {{ context.hard_costs|currency }}{% endif %}
+  {% if context.max_land_price > 0 %}Max Land Price (Residual) | {{ context.max_land_price|currency }}{% endif %}
+  Analysis Confidence | {{ context.confidence or 'N/A' }}

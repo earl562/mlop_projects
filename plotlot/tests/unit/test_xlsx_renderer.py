@@ -322,7 +322,7 @@ class TestXlsxEdgeCases:
 
 
 class TestXlsxEndToEnd:
-    def test_engine_generates_xlsx(self):
+    async def test_engine_generates_xlsx(self):
         """Test that assemble_document routes to xlsx_renderer correctly."""
         from plotlot.clauses.engine import assemble_document
         from plotlot.clauses.loader import ClauseRegistry
@@ -333,7 +333,7 @@ class TestXlsxEndToEnd:
             output_format="xlsx",
         )
         context = _proforma_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"
         assert doc.filename.endswith(".xlsx")

@@ -19,6 +19,12 @@ BANNED_DIR_PREFIXES = (
     "plotlot/tests/screenshots/",
 )
 
+# Static product assets in Next.js public/ directories are intentionally tracked.
+ALLOWED_DIR_PREFIXES = (
+    "plotlot/frontend/public/",
+    "apps/plotlot/frontend/public/",
+)
+
 BANNED_MEDIA_SUFFIXES = {
     ".png",
     ".jpg",
@@ -78,7 +84,10 @@ def main() -> int:
 
     print("Repository hygiene check failed.", file=sys.stderr)
     print("", file=sys.stderr)
-    print("The following tracked files violate the no-media / no-generated-artifacts policy:", file=sys.stderr)
+    print(
+        "The following tracked files violate the no-media / no-generated-artifacts policy:",
+        file=sys.stderr,
+    )
     for path, reason in violations:
         print(f"- {path} [{reason}]", file=sys.stderr)
 

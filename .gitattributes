@@ -1,0 +1,15 @@
+# Normalize line endings to LF in the repository for all text files
+* text=auto eol=lf
+
+# Explicitly LF for source files
+*.py eol=lf
+*.ts eol=lf
+*.tsx eol=lf
+*.js eol=lf
+*.mjs eol=lf
+*.json eol=lf
+*.yml eol=lf
+*.yaml eol=lf
+*.md eol=lf
+*.toml eol=lf
+*.css eol=lf

@@ -10,6 +10,7 @@ from plotlot.retrieval.property import (
     _normalize_address,
     _parse_lot_dimensions,
     _safe_float,
+    _select_best_address_feature,
     lookup_property,
 )
 
@@ -137,6 +138,26 @@ class TestLookupProperty:
         assert result.bathrooms == 3.0
         assert result.year_built == 1962
         assert result.owner == "ROBERT L HARRIS"
+
+    def test_select_best_address_feature_prefers_exact_match(self):
+        features = [
+            {
+                "attributes": {
+                    "TRUE_SITE_ADDR": "171 NE 46 ST",
+                    "TRUE_OWNER1": "WRONG OWNER",
+                }
+            },
+            {
+                "attributes": {
+                    "TRUE_SITE_ADDR": "171 NE 209 TER",
+                    "TRUE_OWNER1": "CORRECT OWNER",
+                }
+            },
+        ]
+
+        best = _select_best_address_feature(features, "171 NE 209 TER")
+        assert best["attributes"]["TRUE_SITE_ADDR"] == "171 NE 209 TER"
+        assert best["attributes"]["TRUE_OWNER1"] == "CORRECT OWNER"
 
     @pytest.mark.asyncio
     async def test_broward_success(self):

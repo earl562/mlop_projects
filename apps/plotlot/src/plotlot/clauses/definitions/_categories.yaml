@@ -1,0 +1,53 @@
+# Clause categories with default ordering ranges.
+# Each category gets a 100-weight block for ordering within documents.
+
+categories:
+  party_identification:
+    label: "Party Identification"
+    order_range: [100, 199]
+    description: "Buyer, seller, entity, contact information"
+
+  property_definition:
+    label: "Property Definition"
+    order_range: [200, 299]
+    description: "Address, APN, legal description, improvements"
+
+  financial_terms:
+    label: "Financial Terms"
+    order_range: [300, 399]
+    description: "Purchase price, earnest money, financing structure"
+
+  contingencies:
+    label: "Contingencies"
+    order_range: [400, 499]
+    description: "Inspection, feasibility, financing, appraisal"
+
+  reps_warranties:
+    label: "Representations & Warranties"
+    order_range: [500, 599]
+    description: "Buyer/seller representations, acknowledgements"
+
+  risk_liability:
+    label: "Risk & Liability"
+    order_range: [600, 699]
+    description: "As-is, lead paint, due-on-sale, disclosures"
+
+  legal_admin:
+    label: "Legal & Administrative"
+    order_range: [700, 799]
+    description: "Assignment, notices, choice of law, counterparts"
+
+  dispute_resolution:
+    label: "Dispute Resolution"
+    order_range: [800, 899]
+    description: "Cure notice, remedies, attorney fees, mediation"
+
+  closing:
+    label: "Closing"
+    order_range: [900, 999]
+    description: "Escrow, closing costs, prorations, title"
+
+  signatures:
+    label: "Signatures"
+    order_range: [1000, 1099]
+    description: "Signature blocks, dates, cancellation notice"

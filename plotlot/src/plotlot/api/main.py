@@ -31,6 +31,7 @@ from plotlot.api.evidence import router as evidence_router
 from plotlot.api.mcp import router as mcp_router
 from plotlot.api.geometry import router as geometry_router
 from plotlot.api.middleware import rate_limiter
+from plotlot.api.ordinance import router as ordinance_router
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.render import router as render_router
 from plotlot.api.routes import router
@@ -42,6 +43,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.storage.db import get_session, init_db
 
 logger = logging.getLogger(__name__)
+
 
 class _RuntimeHealth(TypedDict):
     startup_mode: str

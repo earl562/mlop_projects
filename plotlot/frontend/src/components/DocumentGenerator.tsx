@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   generateDocument,
   previewDocument,
+  type GeneratedSpreadsheetResult,
   type DocumentPreviewData,
   type ZoningReportData,
 } from "@/lib/api";
@@ -126,9 +127,11 @@ function buildContextFromReport(report: ZoningReportData): Record<string, string
 export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
   const [documentType, setDocumentType] = useState("deal_summary");
   const [dealType, setDealType] = useState("land_deal");
+  const [outputFormat, setOutputFormat] = useState("docx");
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<DocumentPreviewData | null>(null);
+  const [generatedSheet, setGeneratedSheet] = useState<GeneratedSpreadsheetResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Additional context fields for LOI/PSA
@@ -138,28 +141,46 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
 
   const selectedDocType = DOCUMENT_TYPES.find((d) => d.value === documentType);
   const needsPartyInfo = documentType === "psa" || documentType === "loi";
+  const supportsGoogleSheets = documentType === "proforma_spreadsheet";
+
+  function getDefaultFormat(nextDocumentType: string): string {
+    return nextDocumentType === "proforma_spreadsheet" ? "google_sheets" : "docx";
+  }
+
+  function isGeneratedSpreadsheetResult(value: Blob | GeneratedSpreadsheetResult): value is GeneratedSpreadsheetResult {
+    return typeof value === "object" && value !== null && "spreadsheet_url" in value;
+  }
 
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
+    setGeneratedSheet(null);
     try {
       const ctx = buildContextFromReport(report);
       if (buyerName) ctx.buyer_name = buyerName;
       if (sellerName) ctx.seller_name = sellerName;
       if (purchasePrice) ctx.purchase_price = parseFloat(purchasePrice);
 
-      const blob = await generateDocument({
+      const result = await generateDocument({
         document_type: documentType,
         deal_type: dealType,
         context: ctx,
-        output_format: selectedDocType?.format,
+        output_format: outputFormat,
       });
 
+      if (isGeneratedSpreadsheetResult(result)) {
+        setGeneratedSheet(result);
+        if (typeof window !== "undefined") {
+          window.open(result.spreadsheet_url, "_blank", "noopener,noreferrer");
+        }
+        return;
+      }
+
       // Trigger download
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(result);
       const a = document.createElement("a");
       a.href = url;
-      const ext = selectedDocType?.format || "docx";
+      const ext = outputFormat === "google_sheets" ? "url" : outputFormat;
       const addr = (report.address || "property").split(",")[0].replace(/\s+/g, "_").slice(0, 30);
       a.download = `${documentType.toUpperCase()}_${addr}.${ext}`;
       document.body.appendChild(a);
@@ -207,14 +228,17 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Document type */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+          <label htmlFor="document-type" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
             Document Type
           </label>
           <select
+            id="document-type"
             value={documentType}
             onChange={(e) => {
               setDocumentType(e.target.value);
+              setOutputFormat(getDefaultFormat(e.target.value));
               setPreview(null);
+              setGeneratedSheet(null);
             }}
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
           >
@@ -228,14 +252,16 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
 
         {/* Deal type */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+          <label htmlFor="deal-type" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
             Deal Type
           </label>
           <select
+            id="deal-type"
             value={dealType}
             onChange={(e) => {
               setDealType(e.target.value);
               setPreview(null);
+              setGeneratedSheet(null);
             }}
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
           >
@@ -248,14 +274,40 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
         </div>
       </div>
 
+      {supportsGoogleSheets && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="output-format" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+              Output Format
+            </label>
+            <select
+              id="output-format"
+              value={outputFormat}
+              onChange={(e) => {
+                setOutputFormat(e.target.value);
+                setGeneratedSheet(null);
+              }}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+            >
+              <option value="google_sheets">Google Sheets</option>
+              <option value="xlsx">Excel (.xlsx)</option>
+            </select>
+            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+              Google Sheets opens a collaborative pro forma in a new tab. Excel downloads a local spreadsheet.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Party info (LOI/PSA) */}
       {needsPartyInfo && (
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+            <label htmlFor="buyer-name" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
               Buyer Name
             </label>
             <input
+              id="buyer-name"
               type="text"
               value={buyerName}
               onChange={(e) => setBuyerName(e.target.value)}
@@ -264,10 +316,11 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+            <label htmlFor="seller-name" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
               Seller Name
             </label>
             <input
+              id="seller-name"
               type="text"
               value={sellerName}
               onChange={(e) => setSellerName(e.target.value)}
@@ -276,10 +329,11 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+            <label htmlFor="purchase-price" className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
               Purchase Price
             </label>
             <input
+              id="purchase-price"
               type="number"
               value={purchasePrice}
               onChange={(e) => setPurchasePrice(e.target.value)}
@@ -293,6 +347,7 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
       {/* Actions */}
       <div className="mt-4 flex gap-3">
         <button
+          type="button"
           onClick={handlePreview}
           disabled={previewing}
           className="rounded-lg border border-amber-600 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50 dark:border-amber-500 dark:text-amber-400 dark:hover:bg-amber-900/20"
@@ -300,13 +355,16 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
           {previewing ? "Loading..." : "Preview"}
         </button>
         <button
+          type="button"
           onClick={handleGenerate}
           disabled={generating}
           className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
         >
           {generating
             ? "Generating..."
-            : `Download .${selectedDocType?.format || "docx"}`}
+            : outputFormat === "google_sheets"
+              ? "Open Google Sheet"
+              : `Download .${outputFormat || selectedDocType?.format || "docx"}`}
         </button>
       </div>
 
@@ -317,14 +375,47 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
         </div>
       )}
 
+      {generatedSheet && (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <div className="font-medium">Google Sheet created: {generatedSheet.title}</div>
+          <a
+            href={generatedSheet.spreadsheet_url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex text-emerald-700 underline underline-offset-2 hover:text-emerald-900 dark:text-emerald-300"
+          >
+            Open spreadsheet
+          </a>
+        </div>
+      )}
+
+      {/* Preview skeleton */}
+      {previewing && (
+        <div className="mt-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)] p-4">
+          <div className="flex items-center justify-between">
+            <div className="h-3 w-28 animate-shimmer rounded" />
+            <div className="h-3 w-12 animate-shimmer rounded" />
+          </div>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2 border-b border-[var(--border)] pb-3">
+              <div className="h-3.5 w-1/3 animate-shimmer rounded" />
+              <div className="h-3 w-full animate-shimmer rounded" />
+              <div className="h-3 w-5/6 animate-shimmer rounded" />
+              <div className="h-3 w-4/6 animate-shimmer rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Preview */}
-      {preview && (
+      {!previewing && preview && (
         <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
               Preview: {preview.clause_count} clauses
             </span>
             <button
+              type="button"
               onClick={() => setPreview(null)}
               className="text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400"
             >

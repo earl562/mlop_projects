@@ -1,0 +1,12 @@
+id: loi.escrow_agent
+category: closing
+title: "Escrow Agent / Closing Attorney"
+document_types: [loi]
+order_weight: 900
+is_required: false
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  {{ context.escrow_agent_name or '[ESCROW AGENT / CLOSING ATTORNEY]' }}
+  {{ context.escrow_agent_address or '[ADDRESS]' }}
+  Telephone: {{ context.escrow_agent_phone or '[PHONE]' }}
+  Email: {{ context.escrow_agent_email or '[EMAIL]' }}

@@ -1,0 +1,20 @@
+id: loi.financing_hybrid
+category: financial_terms
+title: "Seller/Wrap Financing Terms — Hybrid"
+document_types: [loi]
+deal_types: [hybrid, wrap]
+order_weight: 320
+is_required: false
+group_id: financing_type
+condition_expr: "context.financing_type == 'hybrid'"
+source: "SubTo Multi Letter of Intent"
+content_template: |
+  All seller/wrap financing will be evidenced by a promissory note and secured by a mortgage or deed of trust against the Property, which will contain the following substantive terms:
+
+  Hybrid: Existing Loan plus {{ context.additional_principal|currency if context.additional_principal > 0 else '[ADDITIONAL PRINCIPAL]' }} ("Additional Principal").
+
+  The initial portion of the Seller carryback financing (principal balance, interest rate, monthly payments and maturity date) will be identical to the Existing Loan and the following terms apply to the Additional Principal:
+
+  Interest Rate: {{ context.wrap_rate|pct if context.wrap_rate > 0 else '[RATE]' }} per annum
+  Monthly Payment: {{ context.wrap_payment|currency if context.wrap_payment > 0 else '[PAYMENT]' }}
+  Maturity Date: {{ context.maturity_date or '[MATURITY DATE]' }}

@@ -3,11 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeProvider";
-import ChatHistory from "@/components/ChatHistory";
+import PortfolioPanel from "@/components/PortfolioPanel";
+import ProjectTree from "@/components/ProjectTree";
+import WorkspaceSelector from "@/components/WorkspaceSelector";
+import NewProjectModal from "@/components/NewProjectModal";
 import type { ChatSession } from "@/lib/sessions";
 import type { AppMode } from "@/components/ModeToggle";
 
 export type { ChatSession };
+
+// ---------------------------------------------------------------------------
+// Props — identical to the original interface. SidebarLayout is untouched.
+// ---------------------------------------------------------------------------
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -17,6 +24,7 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
+  onSelectAnalysis?: (analysis: SavedAnalysis) => void;
 }
 
 type NavItem = {
@@ -44,6 +52,7 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
+  onSelectAnalysis,
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();

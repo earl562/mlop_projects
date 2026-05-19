@@ -1,0 +1,175 @@
+{
+  "updated_at": "2026-05-12T21:06:28Z",
+  "frontend_url": "http://127.0.0.1:3000",
+  "frontend_status": "production_build_passed_not_running_after_validation",
+  "backend_url": "http://127.0.0.1:8000",
+  "backend_status": "degraded_local_db_unavailable_agent_chat_ready_with_groq_smoke_key",
+  "backend_health_raw": {
+    "status": "degraded",
+    "checks": {
+      "database": "error: [Errno 61] Connection refused",
+      "last_ingestion": "unknown",
+      "mlflow": "ok"
+    },
+    "database_target": {
+      "host": "localhost",
+      "port": 5433,
+      "database": "plotlot",
+      "ssl_required": false
+    },
+    "capabilities": {
+      "db_backed_analysis_ready": false,
+      "portfolio_ready": false,
+      "agent_chat_ready": true
+    },
+    "capability_details": {
+      "db_backed_analysis_ready": {
+        "ready": false,
+        "reason": "database_unavailable",
+        "blocked_by": [
+          "database"
+        ],
+        "dependencies": [
+          "database"
+        ]
+      },
+      "portfolio_ready": {
+        "ready": false,
+        "reason": "database_unavailable",
+        "blocked_by": [
+          "database"
+        ],
+        "dependencies": [
+          "database"
+        ]
+      },
+      "agent_chat_ready": {
+        "ready": true,
+        "reason": "llm_credentials_present",
+        "blocked_by": [],
+        "dependencies": [
+          "llm_credentials"
+        ]
+      }
+    },
+    "runtime": {
+      "startup_mode": "degraded",
+      "startup_warnings": [
+        "mlflow_unavailable",
+        "database_unavailable"
+      ]
+    }
+  },
+  "backend_error": "",
+  "production": {
+    "frontend_project": "plotlot-v2",
+    "frontend_alias": "https://mlopprojects.vercel.app",
+    "frontend_status": "ready_by_vercel_inspect",
+    "frontend_env": {
+      "NEXT_PUBLIC_API_URL": "https://plotlot-api.onrender.com",
+      "google_env_vars_present": false
+    },
+    "backend_url": "https://plotlot-api.onrender.com",
+    "backend_health": {
+      "status": "healthy",
+      "database": "ok",
+      "agent_chat_ready": true,
+      "db_backed_analysis_ready": true,
+      "portfolio_ready": true,
+      "mlflow": "error: schema migration required"
+    },
+    "llm_debug": {
+      "provider": "nvidia",
+      "status": "ok",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "model": "meta/llama-3.3-70b-instruct"
+    },
+    "frontend_root_directory": "plotlot/frontend (Vercel setting; source now lives at apps/plotlot/frontend)"
+  },
+  "database_target": {
+    "host": "localhost",
+    "port": 5433,
+    "database": "plotlot",
+    "ssl_required": false
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5433,
+    "name": "plotlot",
+    "ssl_required": false,
+    "status": "error: [Errno 61] Connection refused"
+  },
+  "mlflow_status": "ok_local_schema_error_in_production",
+  "last_ingestion": "unknown_local_2026-02-19T23:19:23.705560+00:00_production",
+  "capabilities": {
+    "db_backed_analysis_ready": false,
+    "portfolio_ready": false,
+    "agent_chat_ready": true
+  },
+  "capability_details": {
+    "db_backed_analysis_ready": {
+      "ready": false,
+      "reason": "database_unavailable",
+      "blocked_by": [
+        "database"
+      ],
+      "dependencies": [
+        "database"
+      ]
+    },
+    "portfolio_ready": {
+      "ready": false,
+      "reason": "database_unavailable",
+      "blocked_by": [
+        "database"
+      ],
+      "dependencies": [
+        "database"
+      ]
+    },
+    "agent_chat_ready": {
+      "ready": true,
+      "reason": "llm_credentials_present",
+      "blocked_by": [],
+      "dependencies": [
+        "llm_credentials"
+      ]
+    }
+  },
+  "runtime": {
+    "startup_mode": "degraded",
+    "startup_warnings": [
+      "mlflow_unavailable",
+      "database_unavailable"
+    ]
+  },
+  "processes": {
+    "backend_seen": true,
+    "frontend_seen": false
+  },
+  "health_ok": false,
+  "quality_gates": {
+    "mypy": "passed: uv run mypy src/plotlot/ --no-error-summary",
+    "ruff": "passed: uv run ruff check src/ tests/",
+    "provider_tests": "passed: uv run pytest tests/unit/test_health.py tests/unit/test_llm.py tests/unit/test_api.py -q (53 tests)",
+    "frontend_build": "passed: npm run build",
+    "ui_tests": "passed: npm run test:ui (14 tests)",
+    "no_db_e2e": "passed: npm run test:e2e:no-db (9 tests)",
+    "targeted_replacement_tests": "passed: uv run pytest tests/unit/test_local_artifacts.py tests/unit/test_render.py tests/unit/test_api.py -q (42 tests)",
+    "local_health": "passed: /health HTTP 200 and agent_chat_ready=true with GROQ_API_KEY smoke env; db-backed capabilities degraded because local Postgres was down",
+    "production_health": "passed: https://plotlot-api.onrender.com/health HTTP 200, status=healthy, agent_chat_ready=true",
+    "production_llm_debug": "passed: https://plotlot-api.onrender.com/debug/llm returned nvidia status ok",
+    "vercel_env": "passed: plotlot-v2 production has NEXT_PUBLIC_API_URL only; stale NEXT_PUBLIC_GOOGLE_MAPS_KEY removed",
+    "google_code_scan": "passed: git grep -i google across src/frontend/src/tests/scripts/pyproject/env/render returned no matches",
+    "frontend_lint": "passed: npm run lint",
+    "script_syntax": "passed: bash -n scripts/run_backend_with_codex_oauth.sh scripts/setup_phase2.sh"
+  },
+  "open_issues": [
+    "DB-backed analysis and portfolio are blocked locally until Postgres is started on localhost:5433",
+    "Production MLflow reports an out-of-date schema and needs an MLflow DB migration window",
+    "Vercel project root directory is still plotlot/frontend while current source is apps/plotlot/frontend; production deploy from current source requires updating Vercel Project Settings or a corrected deploy path",
+    "No automated heartbeat to Discord/origin yet",
+    "No enforced handoff protocol across sessions"
+  ],
+  "next_action": "Start local Postgres with make db-up for db-backed local verification; keep production NVIDIA working until GROQ_API_KEY is added to production."
+}

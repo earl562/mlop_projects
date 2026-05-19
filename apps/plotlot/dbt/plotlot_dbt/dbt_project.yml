@@ -1,0 +1,45 @@
+# dbt_project.yml — the main project configuration file dbt reads when you run any dbt command
+# This file must live at the root of your dbt project directory (plotlot_dbt/)
+
+name: plotlot_dbt          # Project name — must match "profile:" below and in profiles.yml
+version: '1.0.0'           # Project version (semantic versioning, informational only)
+config-version: 2          # dbt config file format version — always 2 for modern dbt
+
+# Which connection profile to use (must match a key in ~/.dbt/profiles.yml)
+profile: plotlot_dbt
+
+# Directories where dbt looks for model SQL files
+# "models" is the standard name; dbt will recursively find all .sql files inside
+model-paths: ["models"]
+
+# Directories where dbt looks for custom data tests (singular test SQL files)
+# These are .sql files that return rows when they fail (empty result = pass)
+test-paths: ["tests"]
+
+# Directories where dbt looks for seed CSV files (small lookup tables you load into the DB)
+seed-paths: ["seeds"]
+
+# Directories where dbt looks for Jinja macros (reusable SQL functions)
+macro-paths: ["macros"]
+
+# Directories where dbt stores compiled SQL and run artifacts (auto-generated, not committed)
+target-path: "target"
+
+# Patterns for files dbt should ignore (temp files, OS metadata, etc.)
+clean-targets:
+  - "target"      # Compiled SQL artifacts from dbt compile / dbt run
+  - "dbt_packages" # Installed dbt packages from packages.yml (like dbt_utils)
+
+# Model-level configuration: sets defaults for how models are materialized
+# Can be overridden per-model using {{ config() }} at the top of any SQL file
+models:
+  plotlot_dbt:                  # Must match the project "name" above
+    staging:                    # Applies to all models in models/staging/
+      +materialized: view       # "view" = lightweight SQL view, always reflects current data
+                                # Good for staging: no storage cost, always fresh
+    intermediate:               # Applies to all models in models/intermediate/
+      +materialized: table      # "table" = physical table written to disk
+                                # Good for intermediate: JOINs are expensive, cache the result
+    marts:                      # Applies to all models in models/marts/
+      +materialized: table      # "table" = physical table, queried by API and BI tools
+                                # Marts are the consumer-facing layer — performance matters

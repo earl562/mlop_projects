@@ -1,0 +1,17 @@
+frontend/
+.next/
+node_modules/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.venv/
+mlruns.db
+*.png
+*.jpg
+*.docx
+*.xlsx
+tests/screenshots/
+docs/
+templates/
+How_I_Built_PlotLot.docx
+PlotLot_v2_Architecture.docx

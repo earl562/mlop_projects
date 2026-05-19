@@ -1,0 +1,9 @@
+id: shared.severability
+category: legal_admin
+title: "Severability"
+document_types: [psa, loi]
+order_weight: 730
+is_required: true
+source: "SubTo Purchase Contract Section 14.5"
+content_template: |
+  If any provision of this Contract is held to be invalid or unenforceable, the remaining provisions shall continue in full force and effect. The invalid or unenforceable provision shall be modified to the minimum extent necessary to make it valid and enforceable while preserving the original intent of the parties.

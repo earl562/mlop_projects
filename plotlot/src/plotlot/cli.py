@@ -1,11 +1,89 @@
 """PlotLot CLI — ingestion, discovery, search, and property lookup commands."""
 
 import asyncio
+import json
 import logging
 import sys
+from pathlib import Path
 
 from plotlot.config import settings
 from plotlot.observability.tracing import configure_mlflow
+
+# ~/.plotlot/nvidia_credits_used.json — persists cumulative credit usage across runs
+_CREDITS_FILE = Path.home() / ".plotlot" / "nvidia_credits_used.json"
+# NVIDIA free tier allocation
+_NVIDIA_FREE_CREDITS = 1000
+
+
+def _load_cumulative_credits() -> int:
+    """Load total credits used across all prior runs."""
+    try:
+        if _CREDITS_FILE.exists():
+            return int(json.loads(_CREDITS_FILE.read_text()).get("total_api_calls", 0))
+    except Exception:
+        pass
+    return 0
+
+
+def _save_cumulative_credits(total: int) -> None:
+    """Persist cumulative credit usage to disk."""
+    try:
+        _CREDITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CREDITS_FILE.write_text(json.dumps({"total_api_calls": total}))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Could not save credit usage: %s", exc)
+
+
+def _print_credit_summary(
+    county: str,
+    results: dict[str, int],
+    calls_this_run: int,
+    prior_calls: int,
+) -> None:
+    """Print credit usage summary after a county run."""
+    from plotlot.ingestion.embedder import BATCH_SIZE
+
+    total_calls = prior_calls + calls_this_run
+    remaining = max(0, _NVIDIA_FREE_CREDITS - total_calls)
+    chunks_this_run = sum(results.values())
+
+    # Each batch ≈ BATCH_SIZE chunks → estimate chunks per call
+    chunks_per_call = BATCH_SIZE  # conservative estimate
+
+    # Estimate how many more municipalities could be ingested
+    # Use this run's average as the baseline
+    munis_this_run = sum(1 for v in results.values() if v > 0)
+    avg_chunks_per_muni = (chunks_this_run / munis_this_run) if munis_this_run else 500
+    calls_per_muni = max(1, avg_chunks_per_muni / chunks_per_call)
+    munis_remaining_est = int(remaining / calls_per_muni) if calls_per_muni > 0 else 0
+
+    print("\n" + "=" * 62)
+    print(f"  COUNTY COMPLETE: {county.upper().replace('_', ' ')}")
+    print("=" * 62)
+    print(f"  Chunks ingested this run : {chunks_this_run:,}")
+    print(f"  Municipalities succeeded : {munis_this_run} / {len(results)}")
+    print()
+    print("  ── NVIDIA Credit Usage ──────────────────────────────────")
+    print(f"  API calls this run       : {calls_this_run:,}")
+    print(f"  Cumulative calls (total) : {total_calls:,} / {_NVIDIA_FREE_CREDITS:,}")
+    print(f"  Credits remaining (est.) : {remaining:,}")
+    print()
+    if remaining > 0:
+        print(
+            f"  At ~{avg_chunks_per_muni:.0f} chunks/municipality ({calls_per_muni:.1f} calls each):"
+        )
+        print(f"  Estimated municipalities left: ~{munis_remaining_est}")
+        print()
+        print("  Next county commands:")
+        print("    plotlot-ingest --state CA --county contra_costa")
+        print("    plotlot-ingest --state CA --county alameda")
+        print("    plotlot-ingest --state CA --county santa_clara")
+        print("    plotlot-ingest --state CA --county san_mateo")
+        print("    plotlot-ingest --state CA --county san_francisco")
+    else:
+        print("  ⚠  Free credits exhausted. Upgrade to continue:")
+        print("     https://build.nvidia.com")
+    print("=" * 62 + "\n")
 
 
 def _init_mlflow() -> None:
@@ -214,42 +292,154 @@ def ingest_main() -> None:
 
     args = sys.argv[1:]
     if not args or args[0] == "--help":
-        print("Usage: plotlot-ingest [--all | --discover | --state XX | --resume ID | <key>]")
+        print(
+            "Usage: plotlot-ingest [--all | --discover | --state XX [--county YY | --counties Y1 Y2 ...] | --resume ID | <key>]"
+        )
         print(f"  Fallback keys: {', '.join(MUNICODE_CONFIGS)}")
-        print("  --all              Ingest all discovered municipalities (FL, NC, TX, GA, SC)")
-        print("  --state FL         Ingest only one state (FL, NC, TX, GA, SC)")
-        print("  --resume BATCH_ID  Resume a previously interrupted batch")
-        print("  --discover         Run discovery across all 5 states and print results")
-        print("  <key>              Ingest a single municipality by key")
+        print(
+            "  --all                                  Ingest all discovered municipalities (FL, NC, TX, GA, SC, CA)"
+        )
+        print("  --state FL                             Ingest only one state")
+        print(
+            "  --state CA --county sacramento         Ingest one county (manual county-by-county mode)"
+        )
+        print(
+            "  --state CA --counties c1 c2 c3         Ingest multiple counties in order, stop on credit exhaustion"
+        )
+        print("  --resume BATCH_ID                      Resume a previously interrupted batch")
+        print(
+            "  --discover                             Run discovery across all states and print results"
+        )
+        print("  <key>                                  Ingest a single municipality by key")
+        print()
+        print(
+            "  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco"
+        )
         sys.exit(0 if "--help" in args else 1)
 
-    if args[0] == "--discover":
+    # Parse all flags upfront
+    state_filter: str | None = None
+    county_filter: str | None = None
+    counties_filter: list[str] = []
+    resume_batch: str | None = None
+    mode = args[0]
+
+    i = 0
+    while i < len(args):
+        if args[i] == "--state" and i + 1 < len(args):
+            state_filter = args[i + 1]
+            i += 2
+        elif args[i] == "--county" and i + 1 < len(args):
+            county_filter = args[i + 1]
+            i += 2
+        elif args[i] == "--counties":
+            i += 1
+            while i < len(args) and not args[i].startswith("--"):
+                counties_filter.append(args[i])
+                i += 1
+        elif args[i] == "--resume" and i + 1 < len(args):
+            resume_batch = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if mode == "--discover":
         _run_discover()
-    elif args[0] in ("--all", "--state", "--resume"):
+
+    elif mode in ("--all", "--state", "--resume") and counties_filter:
+        # Multi-county sequential ingestion — stops cleanly on credit exhaustion
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
+        from plotlot.ingestion.embedder import get_api_calls, reset_api_calls
+        from plotlot.pipeline.ingest import ingest_county
+
+        if not state_filter:
+            print(
+                "Error: --counties requires --state. Example: --state CA --counties san_mateo san_francisco"
+            )
+            sys.exit(1)
+
+        prior_calls = _load_cumulative_credits()
+        total_chunks = 0
+
+        for county in counties_filter:
+            reset_api_calls()
+            print(f"\n{'=' * 62}")
+            print(f"  Starting county: {county.upper()}")
+            print(f"  Credits used so far: {prior_calls} / {_NVIDIA_FREE_CREDITS}")
+            print(f"{'=' * 62}")
+
+            try:
+                results = asyncio.run(ingest_county(state_filter, county))
+            except NvidiaCreditsExhaustedError as e:
+                calls_this_run = get_api_calls()
+                _save_cumulative_credits(prior_calls + calls_this_run)
+                prior_calls += calls_this_run
+                _print_credits_exhausted(str(e))
+                print(
+                    f"\n  Completed {counties_filter.index(county)} of {len(counties_filter)} counties before exhaustion."
+                )
+                sys.exit(2)
+
+            calls_this_run = get_api_calls()
+            _save_cumulative_credits(prior_calls + calls_this_run)
+            prior_calls += calls_this_run
+
+            county_chunks = sum(results.values())
+            total_chunks += county_chunks
+
+            print("\nMunicipality results:")
+            for key, count in results.items():
+                status = f"{count:,} chunks" if count > 0 else "FAILED"
+                print(f"  {key:<40} {status}")
+
+            _print_credit_summary(county, results, calls_this_run, prior_calls - calls_this_run)
+
+        print(f"\n{'=' * 62}")
+        print(f"  ALL {len(counties_filter)} COUNTIES COMPLETE")
+        print(f"  Total chunks: {total_chunks:,}")
+        print(f"  Total API calls used: {prior_calls} / {_NVIDIA_FREE_CREDITS}")
+        print(f"{'=' * 62}")
+
+    elif mode in ("--all", "--state", "--resume") and county_filter:
+        # County-by-county manual ingestion
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
+        from plotlot.ingestion.embedder import get_api_calls, reset_api_calls
+        from plotlot.pipeline.ingest import ingest_county
+
+        if not state_filter:
+            print("Error: --county requires --state. Example: --state CA --county sacramento")
+            sys.exit(1)
+
+        reset_api_calls()
+        prior_calls = _load_cumulative_credits()
+
+        try:
+            results = asyncio.run(ingest_county(state_filter, county_filter))
+        except NvidiaCreditsExhaustedError as e:
+            calls_this_run = get_api_calls()
+            _save_cumulative_credits(prior_calls + calls_this_run)
+            _print_credits_exhausted(str(e))
+            sys.exit(2)
+
+        calls_this_run = get_api_calls()
+        _save_cumulative_credits(prior_calls + calls_this_run)
+
+        print("\nMunicipality results:")
+        for key, count in results.items():
+            status = f"{count:,} chunks" if count > 0 else "FAILED"
+            print(f"  {key:<40} {status}")
+
+        _print_credit_summary(county_filter, results, calls_this_run, prior_calls)
+
+    elif mode in ("--all", "--state", "--resume"):
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
         from plotlot.pipeline.ingest import ingest_all
 
-        state_filter = None
-        resume_batch = None
-
-        # Parse flags
-        i = 0
-        while i < len(args):
-            if args[i] == "--state" and i + 1 < len(args):
-                state_filter = args[i + 1]
-                i += 2
-            elif args[i] == "--resume" and i + 1 < len(args):
-                resume_batch = args[i + 1]
-                i += 2
-            else:
-                i += 1
-
-        results = asyncio.run(ingest_all(state_filter=state_filter, resume_batch=resume_batch))
-
-        # Summary grouped by state
-        by_state: dict[str, list[tuple[str, int]]] = {}
-        for key, count in sorted(results.items()):
-            # Infer state from key (configs not available here, just show flat)
-            by_state.setdefault("all", []).append((key, count))
+        try:
+            results = asyncio.run(ingest_all(state_filter=state_filter, resume_batch=resume_batch))
+        except NvidiaCreditsExhaustedError as e:
+            _print_credits_exhausted(str(e))
+            sys.exit(2)
 
         print("\nIngestion results:")
         for key, count in sorted(results.items()):
@@ -260,12 +450,33 @@ def ingest_main() -> None:
         succeeded = sum(1 for v in results.values() if v > 0)
         failed = sum(1 for v in results.values() if v == 0)
         print(f"\nTotal: {total} chunks | {succeeded} succeeded | {failed} failed")
+
     else:
-        key = args[0]
+        from plotlot.core.errors import NvidiaCreditsExhaustedError
         from plotlot.pipeline.ingest import ingest_municipality
 
-        count = asyncio.run(ingest_municipality(key))
+        key = args[0]
+        try:
+            count = asyncio.run(ingest_municipality(key))
+        except NvidiaCreditsExhaustedError as e:
+            _print_credits_exhausted(str(e))
+            sys.exit(2)
         print(f"\nIngested {count} chunks for {key}")
+
+
+def _print_credits_exhausted(detail: str) -> None:
+    print("\n" + "=" * 60)
+    print("  ⛔  NVIDIA NIM CREDITS EXHAUSTED — INGESTION STOPPED")
+    print("=" * 60)
+    print(f"\n  {detail}\n")
+    print("  Progress so far has been saved via checkpoints.")
+    print("  Your options:\n")
+    print("  1. Upgrade NVIDIA NIM ($0.06 / 1M tokens — ~$0.50 for all NorCal):")
+    print("     https://build.nvidia.com\n")
+    print("  2. Swap key in .env once upgraded, then resume:")
+    print("     plotlot-ingest --resume <batch_id>  (or re-run --all)")
+    print("\n  Already-indexed municipalities are serving live traffic.")
+    print("=" * 60 + "\n")
 
 
 def _run_discover() -> None:

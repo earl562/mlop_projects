@@ -38,6 +38,12 @@ docs/research/
 *.docx
 plotlot/test-results/
 
+# Public landing/reference assets are required by the deployed frontend.
+!apps/plotlot/frontend/public/plotlot-assets/
+!apps/plotlot/frontend/public/plotlot-assets/**
+!apps/plotlot/frontend/public/plotlot-ref/
+!apps/plotlot/frontend/public/plotlot-ref/**
+
 # Logs
 *.log
 .playwright-mcp/

@@ -1,0 +1,19 @@
+id: psa.property_description
+category: property_definition
+title: "Property"
+document_types: [psa]
+order_weight: 200
+is_required: true
+source: "SubTo Purchase Contract Sections 1.1-1.4"
+formatting:
+  heading_level: 2
+  style: table
+  columns: ["Term", "Value"]
+content_template: |
+  Property Address | {{ context.property_address or '[PROPERTY ADDRESS]' }}
+  Property APN | {{ context.apn or '[APN]' }}
+  Legal Description | {{ context.legal_description or 'To be provided by Escrow Agent' }}
+  Lot Size | {{ context.lot_size_sqft|comma }} sqft
+  Zoning | {{ context.zoning_district or 'N/A' }}
+
+  The real property bearing the street address above, together with all improvements, fixtures, and appurtenances thereon or incidental thereto, including all rights, privileges, and easements appurtenant thereto (collectively, the "Property").

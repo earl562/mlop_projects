@@ -1,0 +1,20 @@
+[2026-04-10T00:27:51Z] PlotLot healthcheck
+frontend_url=http://localhost:3002
+frontend_http_code=200
+frontend_status=ok
+backend_url=http://127.0.0.1:8000
+backend_status=healthy
+database_status=ok
+mlflow_status=ok
+last_ingestion=2026-04-10T00:11:08.832126+00:00
+backend_seen=true
+frontend_seen=true
+
+processes:
+earlperry        20945  10.3  1.9 432718704 159616   ??  S     7:16PM   0:41.43 next-server (v16.1.6) 
+earlperry        46452   2.0  0.8 412078640  71264   ??  Ss    7:45PM   0:09.33 /opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -m uvicorn plotlot.api.main:app --host 127.0.0.1 --port 8000
+earlperry        45540   0.1  0.3 430716784  26912   ??  S    11:16PM   0:22.29 next-server (v16.2.3) 
+earlperry        20944   0.0  0.0 420308304   2208   ??  S     7:16PM   0:00.34 node /Users/earlperry/Desktop/Projects/EP/plotlot/frontend/node_modules/.bin/next dev --port 3002
+
+backend_raw:
+{"status":"healthy","checks":{"database":"ok","last_ingestion":"2026-04-10T00:11:08.832126+00:00","mlflow":"ok"}}

@@ -12,7 +12,7 @@ import io
 import logging
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from plotlot.api.schemas import (
     DocumentGenerateRequest,
@@ -293,11 +293,20 @@ async def generate_document(req: DocumentGenerateRequest):
     )
 
     try:
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except NotImplementedError as e:
-        raise HTTPException(status_code=501, detail=str(e)) from e
+
+    from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
+
+    if isinstance(doc, SheetsProFormaResult):
+        return JSONResponse(
+            content={
+                "spreadsheet_id": doc.spreadsheet_id,
+                "spreadsheet_url": doc.spreadsheet_url,
+                "title": doc.title,
+            }
+        )
 
     return StreamingResponse(
         io.BytesIO(doc.data),

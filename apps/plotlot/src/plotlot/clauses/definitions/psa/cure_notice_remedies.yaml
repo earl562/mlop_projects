@@ -1,0 +1,11 @@
+id: psa.cure_notice_remedies
+category: dispute_resolution
+title: "Cure Notice; Remedies; Attorneys' Fees"
+document_types: [psa]
+order_weight: 800
+is_required: true
+source: "SubTo Purchase Contract Sections 10-11"
+content_template: |
+  CURE NOTICE. If a party fails to comply or perform under this Contract, the other party shall deliver a notice to the breaching party specifying the non-compliance (the "Cure Notice"). If the non-compliance is not cured within 10 business days of the Cure Notice, the non-breaching party may exercise remedies available hereunder.
+
+  REMEDIES; ATTORNEYS' FEES. If Seller shall breach any of the terms or provisions of this Contract, Buyer may proceed against Seller for any claim or remedy the Buyer may have in law or equity, which may include specific performance. If Buyer shall breach, Seller's sole remedy shall be to retain the Deposit as liquidated damages, not as a penalty. The prevailing party in any litigation shall be entitled to recover reasonable attorney's fees and costs.

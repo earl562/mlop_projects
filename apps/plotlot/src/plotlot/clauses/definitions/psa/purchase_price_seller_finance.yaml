@@ -1,0 +1,27 @@
+id: psa.purchase_price_seller_finance
+category: financial_terms
+title: "Purchase Price — Seller Financing"
+document_types: [psa]
+deal_types: [seller_finance]
+order_weight: 300
+is_required: true
+group_id: psa_financing
+condition_expr: "context.financing_type == 'seller_carryback'"
+source: "SubTo Purchase Contract Sections 1.5, 1.14, 3.4"
+formatting:
+  heading_level: 2
+  style: table
+  columns: ["Component", "Amount"]
+content_template: |
+  Purchase Price | {{ context.purchase_price|currency if context.purchase_price > 0 else '[PURCHASE PRICE]' }}
+  Earnest Money Deposit | {{ context.earnest_money|currency if context.earnest_money > 0 else '[DEPOSIT]' }}
+  Seller Carryback Financing | {{ context.seller_carryback_amount|currency }}
+  Cash at COE | {{ context.cash_at_closing|currency if context.cash_at_closing > 0 else '[CASH AT COE]' }}
+
+  Seller carryback, but not subject to Existing Loan(s). The terms of the Seller carryback will be as follows:
+  Principal Amount: {{ context.seller_carryback_amount|currency }}
+  Interest Rate: {{ context.seller_carryback_rate|pct }} per annum
+  Monthly Payment: {{ context.seller_carryback_payment|currency if context.seller_carryback_payment > 0 else '[PAYMENT]' }}
+  Maturity Date: {{ context.maturity_date or '[MATURITY DATE]' }}
+
+  Monthly Payment will be made to: Directly to Seller.

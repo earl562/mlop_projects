@@ -1,0 +1,21 @@
+id: shared.notices
+category: legal_admin
+title: "Notices"
+document_types: [psa]
+order_weight: 760
+is_required: true
+source: "SubTo Purchase Contract Section 14.2"
+content_template: |
+  All notices required or permitted under this Contract shall be in writing and shall be deemed given when delivered personally, sent by certified mail (return receipt requested), or sent by overnight courier to the following addresses:
+
+  To Buyer:
+  {{ context.buyer_name or '[BUYER NAME]' }}
+  {{ context.buyer_address or '[BUYER ADDRESS]' }}
+  Email: {{ context.buyer_email or '[EMAIL]' }}
+
+  To Seller:
+  {{ context.seller_name or '[SELLER NAME]' }}
+  {{ context.seller_address or '[SELLER ADDRESS]' }}
+  Email: {{ context.seller_email or '[EMAIL]' }}
+
+  Either party may change its notice address by providing written notice to the other party.

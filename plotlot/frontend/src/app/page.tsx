@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { staggerContainer, staggerItem, fadeUp, springGentle } from "@/lib/motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import ZoningReport from "@/components/ZoningReport";
 import TabbedReport from "@/components/TabbedReport";
 import AnalysisStream from "@/components/AnalysisStream";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
@@ -381,7 +380,7 @@ export default function Home() {
           },
         );
 
-        if (finalReport) {
+        if (finalReport && mode === "agent") {
           addMessage({
             role: "assistant",
             content: "Here's the full zoning analysis. Ask me anything about this property.",
@@ -591,6 +590,7 @@ export default function Home() {
     setIsProcessing(false);
     localStorage.removeItem("plotlot_backend_session");
     localStorage.removeItem("plotlot_last_session");
+    window.dispatchEvent(new CustomEvent("plotlot:clear-active-session"));
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
@@ -745,7 +745,7 @@ export default function Home() {
         <button
           onClick={handleNewAnalysis}
           data-testid="new-analysis-button"
-          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+          className="shrink-0 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
           style={{ boxShadow: "var(--shadow-nav)" }}
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -774,7 +774,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Embedded report — TabbedReport for lookup mode, ZoningReport for agent */}
+              {/* Embedded report — use the same polished report shell in both lookup and agent flows */}
               {msg.report && (
                 <div className="space-y-3 animate-fade-up">
                   <ErrorBoundary>

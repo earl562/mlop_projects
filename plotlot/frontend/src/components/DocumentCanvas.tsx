@@ -46,7 +46,7 @@ export default function DocumentCanvas({ report, isOpen, onClose }: DocumentCanv
       />
 
       {/* Panel */}
-      <div className="relative z-10 flex h-[90vh] w-[90vw] max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-2xl">
+      <div className="relative z-10 flex h-[calc(100dvh-2rem)] w-[90vw] max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-2xl sm:h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
           <div>
