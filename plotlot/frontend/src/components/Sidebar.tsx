@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeProvider";
 import ChatHistory from "@/components/ChatHistory";
 import type { ChatSession } from "@/lib/sessions";
@@ -28,13 +28,21 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "site-finder", label: "Site Finder", icon: "⌖", mode: "lookup", href: "/" },
+  { id: "site-finder", label: "Site Finder", icon: "⌖", mode: "lookup", href: "/workspace" },
   { id: "analyses", label: "Analyses", icon: "◫", href: "/analyses" },
   { id: "evidence", label: "Evidence", icon: "◉", href: "/evidence" },
   { id: "reports", label: "Reports", icon: "☰", href: "/reports" },
-  { id: "harness-workspace", label: "Harness Workspace", icon: "✳", mode: "agent", href: "/" },
+  { id: "harness-workspace", label: "Harness Workspace", icon: "✳", mode: "agent", href: "/workspace" },
   { id: "connectors", label: "Connectors", icon: "◎", href: "/connectors" },
 ];
+
+function resolveActiveNavId(pathname: string | null, modeParam: string | null): string {
+  if (!pathname || pathname === "/workspace") {
+    return modeParam === "agent" ? "harness-workspace" : "site-finder";
+  }
+  const match = NAV_ITEMS.find((item) => item.href === pathname && !item.mode);
+  return match ? match.id : "site-finder";
+}
 
 export default function Sidebar({
   sessions,
@@ -47,11 +55,10 @@ export default function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [activeNavId, setActiveNavId] = useState<string>(() => {
-    if (!pathname || pathname === "/") return "site-finder";
-    const match = NAV_ITEMS.find((item) => item.href === pathname);
-    return match ? match.id : "site-finder";
+    return resolveActiveNavId(pathname, searchParams.get("mode"));
   });
 
   const filtered = search.trim()
@@ -88,16 +95,24 @@ export default function Sidebar({
     return () => window.removeEventListener("plotlot:mode-changed", handler);
   }, []);
 
+  useEffect(() => {
+    setActiveNavId(resolveActiveNavId(pathname, searchParams.get("mode")));
+  }, [pathname, searchParams]);
+
   const handleNavClick = useCallback(
     (item: NavItem) => {
       setActiveNavId(item.id);
-      if (item.href) router.push(item.href);
+      if (item.href) {
+        const href = item.mode ? `${item.href}?mode=${item.mode}` : item.href;
+        router.push(href);
+      }
       if (!item.mode) return;
       window.dispatchEvent(
         new CustomEvent("plotlot:mode-change", { detail: { mode: item.mode } }),
       );
+      if (window.innerWidth < 1024) setTimeout(onToggle, 0);
     },
-    [router],
+    [onToggle, router],
   );
 
   return (
@@ -223,6 +238,7 @@ export function SidebarToggle({ onClick }: { onClick: () => void }) {
         strokeLinejoin="round"
         style={{ color: "var(--text-secondary)" }}
       >
+        <title>Toggle sidebar</title>
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="3" y1="12" x2="21" y2="12" />
         <line x1="3" y1="18" x2="21" y2="18" />

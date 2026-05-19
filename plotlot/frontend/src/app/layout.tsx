@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/Toast";
-import { SidebarLayout } from "./SidebarLayout";
 
 export const metadata: Metadata = {
   title: "PlotLot - AI Zoning Analysis",
@@ -32,29 +32,18 @@ export default function RootLayout({
 }>) {
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const app = (
-      <html lang="en" suppressHydrationWarning>
-        <head>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-              (function() {
-                try {
-                  var mode = localStorage.getItem('theme');
-                  if (mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.documentElement.classList.add('dark');
-                  }
-                } catch(e) {}
-              })();
-            `,
-            }}
-          />
-        </head>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function(){try{var mode=localStorage.getItem('theme');if(mode==='dark'||(!mode&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`}
+        </Script>
+      </head>
         <body
           className="min-h-screen bg-[var(--bg-primary)] font-sans antialiased"
         >
           <ThemeProvider>
             <ToastProvider>
-              <SidebarLayout>{children}</SidebarLayout>
+              {children}
             </ToastProvider>
           </ThemeProvider>
         </body>
