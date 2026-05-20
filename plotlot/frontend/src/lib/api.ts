@@ -546,6 +546,47 @@ export interface ToolUseEvent {
   message: string;
 }
 
+export interface ToolResultEvent {
+  tool: string;
+  status?: "complete" | "error" | "blocked" | "approval_required";
+  message?: string;
+}
+
+export type AgentTaskStatus = "queued" | "running" | "complete" | "attention";
+
+export interface AgentTaskEvent {
+  task_id?: string;
+  task_type?: string;
+  type?: string;
+  title?: string;
+  name?: string;
+  detail?: string;
+  status?: AgentTaskStatus;
+  percent?: number;
+  duration_ms?: number;
+  url?: string | null;
+  screenshot_b64?: string | null;
+  citations?: string[];
+}
+
+export interface BrowserActionEvent {
+  type?: string;
+  action?: string;
+  url?: string | null;
+  selector?: string | null;
+  value?: string | null;
+  screenshot_b64?: string | null;
+  extracted_text?: string | null;
+}
+
+export interface ReasoningEvent {
+  phase?: string;
+  step?: string;
+  summary?: string;
+  thoughts?: string[];
+  alternatives?: string[];
+}
+
 /**
  * Stream a chat response with token-by-token delivery.
  * Handles tool use events and session persistence.
@@ -560,8 +601,12 @@ export async function streamChat(
   sessionId?: string | null,
   onSession?: (sessionId: string) => void,
   onToolUse?: (event: ToolUseEvent) => void,
-  onToolResult?: (tool: string) => void,
+  onToolResult?: (event: ToolResultEvent) => void,
   onThinking?: (event: ThinkingEvent) => void,
+  onTask?: (event: AgentTaskEvent) => void,
+  onBrowserAction?: (event: BrowserActionEvent) => void,
+  onReasoning?: (event: ReasoningEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat`, {
     method: "POST",
@@ -572,6 +617,7 @@ export async function streamChat(
       report_context: reportContext,
       session_id: sessionId || undefined,
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -616,7 +662,17 @@ export async function streamChat(
           } else if (eventType === "tool_use") {
             onToolUse?.(parsed as ToolUseEvent);
           } else if (eventType === "tool_result") {
-            onToolResult?.(parsed.tool);
+            onToolResult?.({
+              tool: parsed.tool,
+              status: parsed.status,
+              message: parsed.message,
+            } as ToolResultEvent);
+          } else if (eventType === "agent_task") {
+            onTask?.(parsed as AgentTaskEvent);
+          } else if (eventType === "browser_action") {
+            onBrowserAction?.(parsed as BrowserActionEvent);
+          } else if (eventType === "reasoning") {
+            onReasoning?.(parsed as ReasoningEvent);
           } else if (eventType === "done") {
             onDone(parsed.full_content);
           } else if (eventType === "error") {
