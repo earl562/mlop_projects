@@ -14,11 +14,23 @@ test.describe("Canonical no-db smoke", () => {
 
     await expect(
       page.getByRole("heading", {
-        name: "PlotLot turns parcel uncertainty into buildable answers.",
+        name: "See What Fits.",
       }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Start a lookup" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Analyze a Lot" }).first()).toBeVisible();
     await expect(page.getByTestId("lookup-input")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar-nav-site-finder")).toHaveCount(0);
+  });
+
+  test("analyze route renders the PI console without workspace chrome", async ({ page }) => {
+    await page.goto("/analyze", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("heading", { name: "Land-use intelligence console." })).toBeVisible();
+    await expect(page.getByTestId("analyze-computer-card")).toBeVisible();
+    await expect(page.getByTestId("analyze-status-card")).toBeVisible();
+    await expect(page.getByTestId("analyze-plan-card")).toBeVisible();
+    await expect(page.getByTestId("analyze-evidence-card")).toBeVisible();
+    await expect(page.getByTestId("analyze-actions-card")).toBeVisible();
     await expect(page.getByTestId("sidebar-nav-site-finder")).toHaveCount(0);
   });
 

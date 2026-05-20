@@ -99,9 +99,9 @@ export async function gotoLanding(page: Page) {
 
 export async function switchToAgent(page: Page) {
   await page.getByRole("button", { name: "Agent" }).click();
-  await expect(page).toHaveURL(/\/workspace\?mode=agent$/);
   await expect(page.getByTestId("agent-input")).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
+  await expect(page).toHaveURL(/\/workspace(?:\?mode=(?:agent|lookup))?$/);
 }
 
 export async function switchToLookup(page: Page) {

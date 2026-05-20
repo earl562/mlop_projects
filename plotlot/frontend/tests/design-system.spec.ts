@@ -8,24 +8,23 @@ test.describe("PlotLot design system", () => {
     await expect(page.getByTestId("public-homepage")).toBeVisible();
     await expect(
       page.getByRole("heading", {
-        name: "PlotLot turns parcel uncertainty into buildable answers.",
+        name: "See What Fits.",
       }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Start a lookup" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open workspace" }).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Capabilities" })).toHaveCount(0);
-    await expect(page.getByText("A public front door that still leads into real analysis.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Analyze a Lot" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Everything needed to evaluate a lot." })).toBeVisible();
+    await expect(page.getByText("Trusted by developers, architects, and municipal teams")).toBeVisible();
     await expect(page.getByTestId("sidebar-nav-site-finder")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("ds-01-public-homepage.png"), fullPage: true });
   });
 
   test("primary CTA enters the explicit workspace route", async ({ page }) => {
     await page.goto("/");
-    const cta = page.getByRole("link", { name: "Start a lookup" });
-    await expect(cta).toHaveAttribute("href", "/workspace?mode=lookup");
-    await page.goto("/workspace?mode=lookup");
+    const cta = page.getByRole("link", { name: "Analyze a Lot" }).first();
+    await expect(cta).toHaveAttribute("href", "/workspace");
+    await page.goto("/workspace");
 
-    await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
+    await expect(page).toHaveURL(/\/workspace(?:\?mode=lookup)?$/);
     await expect(page.getByTestId("lookup-input")).toBeVisible();
     await expect(page.getByTestId("sidebar-nav-site-finder")).toBeVisible();
   });

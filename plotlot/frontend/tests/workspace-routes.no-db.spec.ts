@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("workspace route scaffolds", () => {
+  test("analyze route renders the dedicated agent console", async ({ page }) => {
+    await page.goto("/analyze");
+    await expect(page.getByRole("heading", { name: "Land-use intelligence console." })).toBeVisible();
+    await expect(page.getByTestId("analyze-task-timeline-card")).toBeVisible();
+    await expect(page.getByTestId("agent-input")).toBeVisible();
+  });
+
   test("workspace shell renders on explicit workspace route", async ({ page }) => {
     await page.goto("/workspace");
     await expect(page.getByTestId("lookup-input")).toBeVisible();
