@@ -785,7 +785,9 @@ def _merge_config(configs: dict[str, MunicodeConfig], key: str, config: Municode
     configs.setdefault(existing_key, existing)
 
 
-def _merge_configs(configs: dict[str, MunicodeConfig], new_configs: dict[str, MunicodeConfig]) -> None:
+def _merge_configs(
+    configs: dict[str, MunicodeConfig], new_configs: dict[str, MunicodeConfig]
+) -> None:
     for key, config in new_configs.items():
         _merge_config(configs, key, config)
 
@@ -810,9 +812,7 @@ def resolve_municode_config(
         if state_exact:
             return state_exact
 
-    candidates = [
-        cfg for cfg in configs.values() if _make_key(cfg.municipality) == key
-    ]
+    candidates = [cfg for cfg in configs.values() if _make_key(cfg.municipality) == key]
     if state_code:
         candidates = [cfg for cfg in candidates if cfg.state.upper() == state_code]
     if candidates:
@@ -1426,7 +1426,10 @@ async def get_all_municode_configs(
         from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
-            if resolve_municode_config(configs, fallback.municipality, state=fallback.state) is None:
+            if (
+                resolve_municode_config(configs, fallback.municipality, state=fallback.state)
+                is None
+            ):
                 _merge_config(configs, key, fallback)
 
         # CA overrides always win — they correct wrong products from auto-discovery

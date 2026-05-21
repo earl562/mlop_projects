@@ -18,19 +18,22 @@ from plotlot.land_use.code_providers import (
 
 def test_platform_from_url_identifies_known_hosts():
     assert platform_from_url("https://ecode360.com/AM4323") == "ecode360"
-    assert platform_from_url("https://codelibrary.amlegal.com/codes/foo/latest/overview") == "amlegal"
+    assert (
+        platform_from_url("https://codelibrary.amlegal.com/codes/foo/latest/overview") == "amlegal"
+    )
     assert platform_from_url("https://www.codepublishing.com/CA/AlpineCounty/") == "codepublishing"
     assert platform_from_url("https://glenn.municipalcodeonline.com/") == "municipal_code_online"
-    assert platform_from_url("https://online.encodeplus.com/regs/guilfordcounty-nc/") == "encodeplus"
-    assert platform_from_url("https://guilfordco-nc.elaws.us/code/do_land_development_ord") == "elaws"
+    assert (
+        platform_from_url("https://online.encodeplus.com/regs/guilfordcounty-nc/") == "encodeplus"
+    )
+    assert (
+        platform_from_url("https://guilfordco-nc.elaws.us/code/do_land_development_ord") == "elaws"
+    )
     assert platform_from_url("https://www.countyofglenn.net/planning") == "unknown"
 
 
 def test_decode_duckduckgo_redirect_url():
-    raw = (
-        "//duckduckgo.com/l/?uddg=https%3A%2F%2Fglenn.municipalcodeonline.com%2F"
-        "&rut=abc"
-    )
+    raw = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fglenn.municipalcodeonline.com%2F&rut=abc"
     assert _decode_duckduckgo_url(raw) == "https://glenn.municipalcodeonline.com/"
 
 

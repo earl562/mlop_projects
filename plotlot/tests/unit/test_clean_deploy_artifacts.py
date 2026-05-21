@@ -27,8 +27,7 @@ def test_existing_transient_paths_only_returns_known_targets(tmp_path: Path):
     (tmp_path / "plotlot" / "frontend" / "src").mkdir(parents=True)
 
     found = {
-        path.relative_to(tmp_path).as_posix()
-        for path in cleanup.existing_transient_paths(tmp_path)
+        path.relative_to(tmp_path).as_posix() for path in cleanup.existing_transient_paths(tmp_path)
     }
 
     assert ".mypy_cache" in found

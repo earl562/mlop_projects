@@ -90,7 +90,11 @@ class HarnessRuntime:
             )
             self._emit(
                 kind="tool_result",
-                payload={"tool_name": tool_name, "status": result.status, "message": result.message},
+                payload={
+                    "tool_name": tool_name,
+                    "status": result.status,
+                    "message": result.message,
+                },
                 buffer=events,
             )
             return result
@@ -99,18 +103,26 @@ class HarnessRuntime:
         if handler is None:
             result = ToolCallResult(
                 tool_name=tool_name,
-                decision=PolicyDecision(allowed=False, reason="tool is not implemented in this runtime"),
+                decision=PolicyDecision(
+                    allowed=False, reason="tool is not implemented in this runtime"
+                ),
                 status="unavailable",
                 message=f"No handler registered for {tool_name}",
             )
             self._emit(
                 kind="tool_result",
-                payload={"tool_name": tool_name, "status": result.status, "message": result.message},
+                payload={
+                    "tool_name": tool_name,
+                    "status": result.status,
+                    "message": result.message,
+                },
                 buffer=events,
             )
             return result
 
-        decision = self._policy.authorize(tool_name=tool_name, context=context, approval_id=approval_id)
+        decision = self._policy.authorize(
+            tool_name=tool_name, context=context, approval_id=approval_id
+        )
         if decision.approval_required:
             result = ToolCallResult(
                 tool_name=tool_name,
@@ -129,7 +141,11 @@ class HarnessRuntime:
             )
             self._emit(
                 kind="tool_result",
-                payload={"tool_name": tool_name, "status": result.status, "message": result.message},
+                payload={
+                    "tool_name": tool_name,
+                    "status": result.status,
+                    "message": result.message,
+                },
                 buffer=events,
             )
             return result
@@ -142,7 +158,11 @@ class HarnessRuntime:
             )
             self._emit(
                 kind="tool_result",
-                payload={"tool_name": tool_name, "status": result.status, "message": result.message},
+                payload={
+                    "tool_name": tool_name,
+                    "status": result.status,
+                    "message": result.message,
+                },
                 buffer=events,
             )
             return result

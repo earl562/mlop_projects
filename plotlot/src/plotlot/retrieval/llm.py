@@ -451,7 +451,9 @@ async def _call_openai(
                 except Exception as exc:
                     logger.error("%s failed: %s: %s", active_provider_name, type(exc).__name__, exc)
                     breaker.record_failure()
-                    span.set_outputs({"error": f"{type(exc).__name__}: {exc}", "retries": retries_used})
+                    span.set_outputs(
+                        {"error": f"{type(exc).__name__}: {exc}", "retries": retries_used}
+                    )
                     return None
 
             breaker.record_failure()
@@ -472,7 +474,9 @@ async def _call_openai(
                 fallback_model,
             )
             fallback_result = await _call_model(fallback_model, f"NVIDIA/{fallback_model}")
-            if fallback_result and (fallback_result.get("content") or fallback_result.get("tool_calls")):
+            if fallback_result and (
+                fallback_result.get("content") or fallback_result.get("tool_calls")
+            ):
                 return fallback_result
 
     return primary_result
@@ -569,6 +573,7 @@ async def _call_groq(
         breaker.record_failure()
         span.set_outputs({"error": "retry_exhausted", "retries": retries_used})
         return None
+
 
 async def _call_openrouter(
     messages: list[dict],
@@ -679,7 +684,9 @@ async def call_llm_stream(messages: list[dict]):
 
     # Primary: OpenAI
     if _has_openai_credentials():
-        provider_name = f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}"
+        provider_name = (
+            f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}"
+        )
         breaker = _get_breaker(provider_name)
         if breaker.allow_request():
             try:

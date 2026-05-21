@@ -200,7 +200,9 @@ class TestHealthEndpoint:
             patch("mlflow.search_experiments", return_value=[]),
             patch("plotlot.api.main.settings") as mock_settings,
         ):
-            mock_settings.database_url = "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+            mock_settings.database_url = (
+                "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+            )
             mock_settings.database_require_ssl = False
             mock_settings.nvidia_api_key = "nv-key"
             mock_settings.openai_api_key = ""
@@ -210,4 +212,6 @@ class TestHealthEndpoint:
             result = await health()
 
         assert result["capabilities"]["agent_chat_ready"] is True
-        assert result["capability_details"]["agent_chat_ready"]["reason"] == "llm_credentials_present"
+        assert (
+            result["capability_details"]["agent_chat_ready"]["reason"] == "llm_credentials_present"
+        )

@@ -77,14 +77,23 @@ def test_tool_evidence_and_approval_models_support_governance() -> None:
 
 
 def test_model_runs_capture_llm_audit_data() -> None:
-    assert {"workspace_id", "provider", "model", "purpose", "input_tokens", "output_tokens"}.issubset(
-        _column_names(ModelRun)
-    )
+    assert {
+        "workspace_id",
+        "provider",
+        "model",
+        "purpose",
+        "input_tokens",
+        "output_tokens",
+    }.issubset(_column_names(ModelRun))
 
 
 def test_report_document_connector_and_eval_models_exist() -> None:
-    assert {"workspace_id", "report_json", "evidence_ids", "version"}.issubset(_column_names(Report))
-    assert {"workspace_id", "document_type", "status", "storage_url"}.issubset(_column_names(Document))
+    assert {"workspace_id", "report_json", "evidence_ids", "version"}.issubset(
+        _column_names(Report)
+    )
+    assert {"workspace_id", "document_type", "status", "storage_url"}.issubset(
+        _column_names(Document)
+    )
 
     assert {"workspace_id", "provider", "auth_type", "scopes", "status"}.issubset(
         _column_names(ConnectorAccount)
@@ -94,6 +103,10 @@ def test_report_document_connector_and_eval_models_exist() -> None:
     )
     assert {"status", "counts_json", "error_message"}.issubset(_column_names(ConnectorSyncRun))
 
-    assert {"suite", "case_id", "jurisdiction", "expected_json"}.issubset(_column_names(GoldSetCase))
+    assert {"suite", "case_id", "jurisdiction", "expected_json"}.issubset(
+        _column_names(GoldSetCase)
+    )
     assert {"suite", "status", "metrics_json"}.issubset(_column_names(EvalRun))
-    assert {"status", "diffs_json", "trajectory_metrics_json"}.issubset(_column_names(EvalCaseResult))
+    assert {"status", "diffs_json", "trajectory_metrics_json"}.issubset(
+        _column_names(EvalCaseResult)
+    )

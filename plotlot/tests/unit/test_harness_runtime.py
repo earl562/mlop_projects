@@ -46,7 +46,9 @@ async def test_harness_runtime_calls_handler_when_allowed():
         approved_approval_ids=set(),
     )
 
-    result = await runtime.call_tool(tool_name="geocode_address", tool_args={"address": "x"}, context=context)
+    result = await runtime.call_tool(
+        tool_name="geocode_address", tool_args={"address": "x"}, context=context
+    )
 
     assert result.status == "ok"
     assert result.result is not None

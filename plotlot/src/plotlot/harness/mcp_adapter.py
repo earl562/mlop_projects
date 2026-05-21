@@ -23,7 +23,11 @@ class MCPAdapter:
         self._runtime = runtime
 
     def list_tools(self) -> list[dict[str, Any]]:
-        return [tool.model_dump() for tool in list_tool_contracts() if self._runtime.has_handler(tool.name)]
+        return [
+            tool.model_dump()
+            for tool in list_tool_contracts()
+            if self._runtime.has_handler(tool.name)
+        ]
 
     async def call_tool(
         self,

@@ -36,8 +36,7 @@ def _script_env(tmp_path: Path) -> dict[str, str]:
         "RUNNER_LOG_DIR": str(runner_log_dir),
         "WATCHDOG_LOG_DIR": str(runner_log_dir),
         "PROCESS_LINES_OVERRIDE": (
-            "python -m uvicorn plotlot.api.main:app --reload\n"
-            "node next dev --port 3000"
+            "python -m uvicorn plotlot.api.main:app --reload\nnode next dev --port 3000"
         ),
         "ANALYZE_SMOKE_ENABLED": "1",
         "ANALYZE_SMOKE_TIMEOUT": "5",

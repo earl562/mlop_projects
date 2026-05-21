@@ -56,7 +56,9 @@ async def _call_discovery(
             adapter.call_tool(
                 name="discover_code_authorities",
                 arguments={"county": county, "state": state, "include_web_fallback": True},
-                context=_base_context(f"code_provider_{state.lower()}_{county.lower().replace(' ', '_')}"),
+                context=_base_context(
+                    f"code_provider_{state.lower()}_{county.lower().replace(' ', '_')}"
+                ),
             ),
             timeout=timeout_seconds,
         )
@@ -138,7 +140,9 @@ async def run_research(
     state_counts: defaultdict[str, Counter[str]] = defaultdict(Counter)
     for result in results:
         state_counts[str(result["state"])][str(result.get("primary_platform") or "not_found")] += 1
-    by_state = {state: dict(sorted(counter.items())) for state, counter in sorted(state_counts.items())}
+    by_state = {
+        state: dict(sorted(counter.items())) for state, counter in sorted(state_counts.items())
+    }
 
     return {
         "schema_version": 1,
