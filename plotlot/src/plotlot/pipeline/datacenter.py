@@ -463,7 +463,7 @@ async def extract_datacenter_params(
             max_completion_tokens=1200,
             temperature=0.0,
             openai_provider_name="OpenAI/gpt-4.1",
-            openrouter_provider_name="OpenRouter/openai/gpt-4.1",
+            groq_provider_name="OpenRouter/openai/gpt-4.1",
         )
         if result and result.get("content"):
             raw = json.loads(result["content"])
@@ -576,7 +576,7 @@ async def generate_site_summary(
             max_completion_tokens=600,
             temperature=0.2,
             openai_provider_name="OpenAI/gpt-4.1",
-            openrouter_provider_name="OpenRouter/openai/gpt-4.1",
+            groq_provider_name="OpenRouter/openai/gpt-4.1",
         )
         if result and result.get("content"):
             raw = json.loads(result["content"])

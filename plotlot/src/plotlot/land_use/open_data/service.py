@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+from pydantic import HttpUrl
+
 from plotlot.land_use.citations import arcgis_layer_citation
-from plotlot.land_use.models import EvidenceConfidence, LayerCandidate
+from plotlot.land_use.models import EvidenceConfidence, LayerCandidate, LayerType
 from plotlot.property.hub_discovery import discover_datasets
 
 
@@ -24,10 +28,10 @@ async def discover_layers(*, county: str, state: str, lat: float, lng: float):
             LayerCandidate(
                 id=ds.dataset_id,
                 title=ds.name,
-                source_url=ds.url,
-                service_url=ds.url,
+                source_url=HttpUrl(ds.url),
+                service_url=HttpUrl(ds.url),
                 layer_id=ds.layer_id or 0,
-                layer_type=ds.dataset_type,
+                layer_type=cast(LayerType, ds.dataset_type),
                 field_mapping_confidence=EvidenceConfidence.MEDIUM,
                 citation=citation,
             )

@@ -44,10 +44,10 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionRequest):
         if approval.expires_at is not None and approval.expires_at <= datetime.now(timezone.utc):
             raise HTTPException(status_code=409, detail="Approval has expired")
 
-        approval.status = "approved" if body.decision == "approve" else "rejected"
-        approval.decided_by = body.decided_by
-        approval.decided_at = datetime.now(timezone.utc)
-        approval.response_json = body.response_json or {}
+        approval.status = "approved" if body.decision == "approve" else "rejected"  # type: ignore[assignment]
+        approval.decided_by = body.decided_by  # type: ignore[assignment]
+        approval.decided_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        approval.response_json = body.response_json or {}  # type: ignore[assignment]
         await session.commit()
         return {
             "status": approval.status,

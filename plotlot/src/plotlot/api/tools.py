@@ -200,7 +200,7 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
             workspace_id=req.workspace_id,
             actor_user_id=actor_user_id,
             run_id=run_id,
-            tool_run_id=tool_run.id,
+            tool_run_id=str(tool_run.id),
             project_id=project_id,
             site_id=req.site_id,
             analysis_id=req.analysis_id,
@@ -224,8 +224,8 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
         result_payload: dict[str, Any] | None = call_result.result
 
         if call_result.status == "pending_approval":
-            tool_run.status = "pending_approval"
-            tool_run.output_json = {
+            tool_run.status = "pending_approval"  # type: ignore[assignment]
+            tool_run.output_json = {  # type: ignore[assignment]
                 "status": "pending_approval",
                 "approval_id": call_result.decision.approval_id,
                 "reason": call_result.decision.reason,
@@ -246,10 +246,10 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
             )
             session.add(approval)
         elif call_result.status == "ok":
-            tool_run.status = "ok"
-            tool_run.output_json = result_payload or {}
+            tool_run.status = "ok"  # type: ignore[assignment]
+            tool_run.output_json = result_payload or {}  # type: ignore[assignment]
 
-            evidence_payloads = []
+            evidence_payloads: list[Any] = []
             if isinstance(result_payload, dict):
                 evidence_payloads = result_payload.get("evidence", []) or []
 
@@ -298,16 +298,16 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
                 await persist_land_use_evidence(session, evidence=evidence)
                 evidence_ids.append(evidence.id)
         else:
-            tool_run.status = call_result.status
-            tool_run.output_json = result_payload or {}
-            tool_run.error_message = call_result.message
+            tool_run.status = call_result.status  # type: ignore[assignment]
+            tool_run.output_json = result_payload or {}  # type: ignore[assignment]
+            tool_run.error_message = call_result.message  # type: ignore[assignment]
 
-        tool_run.completed_at = datetime.now(timezone.utc)
+        tool_run.completed_at = datetime.now(timezone.utc)  # type: ignore[assignment]
         await session.commit()
 
         return ToolCallResponse(
             run_id=run_id,
-            tool_run_id=tool_run.id,
+            tool_run_id=str(tool_run.id),
             tool_name=call_result.tool_name,
             status=call_result.status,
             decision=call_result.decision.model_dump(),

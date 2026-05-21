@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any, cast
 import uuid
-from typing import Any
 
-from plotlot.harness.events import HarnessEvent
+from plotlot.harness.events import EventKind, HarnessEvent
 from plotlot.harness.policy import HarnessPolicyEngine
 from plotlot.harness.tool_registry import tool_exists
 from plotlot.land_use.models import PolicyDecision, ToolContext
@@ -50,7 +50,7 @@ class HarnessRuntime:
         payload: dict[str, Any],
         buffer: list[HarnessEvent] | None,
     ) -> None:
-        event = HarnessEvent(kind=kind, id=str(uuid.uuid4()), payload=payload)
+        event = HarnessEvent(kind=cast(EventKind, kind), id=str(uuid.uuid4()), payload=payload)
         if buffer is not None:
             buffer.append(event)
         if self._event_sink is not None:
@@ -168,7 +168,7 @@ class HarnessRuntime:
             return result
 
         try:
-            result = await handler(tool_args, context)
+            handler_result = await handler(tool_args, context)
         except Exception as exc:
             out = ToolCallResult(
                 tool_name=tool_name,
@@ -190,7 +190,7 @@ class HarnessRuntime:
             tool_name=tool_name,
             decision=decision,
             status="ok",
-            result=result,
+            result=handler_result,
         )
         self._emit(
             kind="tool_result",
