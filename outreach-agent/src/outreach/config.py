@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Anthropic
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+
+    # Hunter.io
+    hunter_api_key: str = ""
+
+    # Gmail
+    gmail_credentials_path: str = "credentials.json"
+    gmail_token_path: str = "token.json"
+    outreach_from_email: str = ""
+
+    # Twitter
+    twitter_api_key: str = ""
+    twitter_api_secret: str = ""
+    twitter_access_token: str = ""
+    twitter_access_secret: str = ""
+    twitter_bearer_token: str = ""
+
+    # Eventbrite
+    eventbrite_api_key: str = ""
+
+    # Database
+    database_url: str = "sqlite+aiosqlite:///./outreach.db"
+
+    # PlotLot context
+    plotlot_demo_url: str = "https://plotlot.app"
+    plotlot_counties: str = "Sacramento, Santa Clara, Alameda, Contra Costa, San Mateo"
+
+
+settings = Settings()
