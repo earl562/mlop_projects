@@ -1271,35 +1271,29 @@ export default function Home() {
           )}
 
 
-          {/* Input bar — hidden in lookup mode after report is shown */}
-          {mode === "lookup" && hasReport ? (
-            <div className="mx-auto flex max-w-3xl justify-center px-3 py-2">
-              <ModeToggle mode={mode} onChange={setMode} />
-            </div>
-          ) : (
-            <div>
-              <InputBar
-                inputRef={inputRef as RefObject<HTMLInputElement | null>}
-                value={input}
-                onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
-                onSubmit={handleSubmit}
-                onAddressSelect={(address) => sendMessage(address)}
-                mode={mode}
-                onModeChange={setMode}
-                placeholder={mode === "lookup"
-                  ? "Enter a property address..."
-                  : hasReport
-                    ? "Ask about this property's zoning..."
-                    : "Ask about zoning, density, or property data..."
-                }
-                  disabled={isProcessing}
-                  isProcessing={isProcessing}
-                />
-              {inputError && (
-                <p className="mt-2 px-4 text-sm text-red-500">{inputError}</p>
-              )}
-            </div>
-          )}
+          {/* Input bar */}
+          <div>
+            <InputBar
+              inputRef={inputRef as RefObject<HTMLInputElement | null>}
+              value={input}
+              onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
+              onSubmit={handleSubmit}
+              onAddressSelect={(address) => sendMessage(address)}
+              mode={mode}
+              onModeChange={setMode}
+              placeholder={mode === "lookup"
+                ? "Enter a property address..."
+                : hasReport
+                  ? "Ask about this property's zoning..."
+                  : "Ask about zoning, density, or property data..."
+              }
+              disabled={isProcessing}
+              isProcessing={isProcessing}
+            />
+            {inputError && (
+              <p className="mt-2 px-4 text-sm text-red-500">{inputError}</p>
+            )}
+          </div>
 
         </div>
       </div>
