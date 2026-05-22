@@ -40,6 +40,9 @@ firebase-debug.log
 .vercel
 /.omx/
 
+# Non-canonical frontend roots (only plotlot/frontend/ is canonical)
+apps/plotlot/frontend/package-lock.json
+
 # Playwright and local capture artifacts
 .playwright-mcp/
 apps/plotlot/frontend/playwright-report/
