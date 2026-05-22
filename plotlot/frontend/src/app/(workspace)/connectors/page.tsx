@@ -81,6 +81,7 @@ export default async function ConnectorsPage() {
       data-testid="connectors-page"
     >
       <section className="relative mx-auto max-w-7xl">
+        <h1 className="sr-only">Connectors</h1>
         <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(180,83,9,0.16),transparent_68%)]" />
         <div className="pointer-events-none absolute -left-20 top-56 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(4,120,87,0.10),transparent_68%)]" />
 
