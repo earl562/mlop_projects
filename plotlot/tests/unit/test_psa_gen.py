@@ -292,7 +292,7 @@ class TestPSARendering:
 
 
 class TestPSADocx:
-    def test_subject_to_generates_valid_docx(self):
+    async def test_subject_to_generates_valid_docx(self):
         registry = _registry()
         config = AssemblyConfig(
             document_type=DocumentType.psa,
@@ -300,14 +300,14 @@ class TestPSADocx:
             output_format="docx",
         )
         context = _subject_to_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"
         assert doc.filename.startswith("PSA_")
         assert doc.filename.endswith(".docx")
         assert len(doc.data) > 2000  # PSA is a substantial document
 
-    def test_seller_finance_generates_valid_docx(self):
+    async def test_seller_finance_generates_valid_docx(self):
         registry = _registry()
         config = AssemblyConfig(
             document_type=DocumentType.psa,
@@ -315,12 +315,12 @@ class TestPSADocx:
             output_format="docx",
         )
         context = _seller_finance_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"
         assert len(doc.data) > 2000
 
-    def test_cash_wholesale_generates_valid_docx(self):
+    async def test_cash_wholesale_generates_valid_docx(self):
         registry = _registry()
         config = AssemblyConfig(
             document_type=DocumentType.psa,
@@ -328,7 +328,7 @@ class TestPSADocx:
             output_format="docx",
         )
         context = _cash_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"
         assert len(doc.data) > 2000

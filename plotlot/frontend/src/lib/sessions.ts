@@ -27,6 +27,8 @@ export interface ChatSession {
   messages: ChatMessage[];
   report?: ZoningReportData;
   mode: "lookup" | "agent";
+  /** Backend session ID — used to resume agent conversations even after backend restarts. */
+  backendSessionId?: string;
   createdAt: string;
   updatedAt: string;
 }

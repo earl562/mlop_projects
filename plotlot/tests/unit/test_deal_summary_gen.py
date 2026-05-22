@@ -225,7 +225,7 @@ class TestDealSummaryAssembly:
 
 
 class TestDealSummaryDocx:
-    def test_generates_valid_docx(self):
+    async def test_generates_valid_docx(self):
         """End-to-end: assemble a deal summary and verify .docx bytes."""
         registry = _registry()
         config = AssemblyConfig(
@@ -234,7 +234,7 @@ class TestDealSummaryDocx:
             output_format="docx",
         )
         context = _full_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"  # ZIP/docx magic bytes
         assert doc.filename.startswith("DEAL_SUMMARY_")
@@ -245,7 +245,7 @@ class TestDealSummaryDocx:
         )
         assert len(doc.data) > 1000  # non-trivial document
 
-    def test_minimal_docx_still_valid(self):
+    async def test_minimal_docx_still_valid(self):
         """Even with minimal context, the document should be valid."""
         registry = _registry()
         config = AssemblyConfig(
@@ -254,7 +254,7 @@ class TestDealSummaryDocx:
             output_format="docx",
         )
         context = _minimal_context()
-        doc = assemble_document(config, context, registry)
+        doc = await assemble_document(config, context, registry)
 
         assert doc.data[:4] == b"PK\x03\x04"
         assert len(doc.data) > 500

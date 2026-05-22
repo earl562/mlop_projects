@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { ZoningReportData } from "@/lib/api";
 import { openStreetMapStaticUrl, openStreetMapUrl } from "@/lib/mapAlternatives";
@@ -265,7 +265,6 @@ function ParcelMapTab({ report, onFloodZone }: { report: ZoningReportData; onFlo
 }
 
 export default function ParcelViewer({ report }: ParcelViewerProps) {
-  const [activeTab, setActiveTab] = useState<ViewTab>("street");
   const [floodZone, setFloodZone] = useState<{ zone: string; sfha: boolean } | null>(null);
   const hasCoords = report.lat != null && report.lng != null;
 
@@ -292,10 +291,11 @@ export default function ParcelViewer({ report }: ParcelViewerProps) {
 
           {/* Right: Tabbed views — 60% on desktop */}
           <div className="order-1 flex flex-col lg:order-2 lg:w-[60%]">
-            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+            <div className="border-b border-[var(--border)] px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] sm:px-5">
+              Parcel Map
+            </div>
             <div className="flex-1 lg:min-h-[380px]">
-              {activeTab === "street" && <StreetViewTab report={report} />}
-              {activeTab === "parcel" && <ParcelMapTab report={report} onFloodZone={handleFloodZone} />}
+              <ParcelMapTab report={report} onFloodZone={handleFloodZone} />
             </div>
           </div>
         </div>

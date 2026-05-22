@@ -138,6 +138,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             municipality = geo["municipality"]
             county = geo["county"]
+            state = geo.get("state", "")
             lat = geo.get("lat")
             lng = geo.get("lng")
 
@@ -166,7 +167,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             # Cache check — skip full pipeline for repeated addresses
             try:
-                cached = await get_cached_report(request.address)
+                cached = await get_cached_report(request.address, analysis_type="residential")
                 if cached:
                     logger.info("Cache HIT for %s", request.address)
                     yield _sse_event(
@@ -190,7 +191,7 @@ async def analyze_stream(request: AnalyzeRequest):
                 },
             )
             prop_task = asyncio.create_task(
-                lookup_property(request.address, county, lat=lat, lng=lng)
+                lookup_property(request.address, county, lat=lat, lng=lng, state=state)
             )
             prop_record = None
             prop_lookup_error: Exception | None = None
@@ -199,6 +200,17 @@ async def analyze_stream(request: AnalyzeRequest):
                 if done:
                     try:
                         prop_record = prop_task.result()
+                    except OSError as e:
+                        # Connection refused / network unreachable — backend is down
+                        logger.warning("Property lookup failed: %s", e)
+                        yield _sse_event(
+                            "error",
+                            {
+                                "detail": "data backend is offline",
+                                "error_type": "backend_unavailable",
+                            },
+                        )
+                        return
                     except Exception as e:
                         prop_lookup_error = e
                         logger.warning("Property lookup failed: %s", e)
@@ -561,7 +573,7 @@ async def analyze_stream(request: AnalyzeRequest):
 
             # Cache the result for future lookups
             try:
-                await cache_report(request.address, report_dict)
+                await cache_report(request.address, report_dict, analysis_type="residential")
                 logger.info("Cached report for %s", request.address)
             except Exception as exc:
                 logger.warning("Cache write failed: %s", exc)

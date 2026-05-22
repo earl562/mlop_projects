@@ -195,6 +195,45 @@ def _parse_lot_dimensions(legal: str) -> str:
     return ""
 
 
+def _score_address_match(candidate: str, target: str) -> tuple[int, int, int, int]:
+    """Score a parcel address against the requested normalized address.
+
+    Higher tuples are better. Prioritize:
+    1. exact normalized match
+    2. matching house number
+    3. matching final street token (ST/AVE/TER/etc)
+    4. token overlap count
+    """
+    normalized = _normalize_address(candidate)
+    target_tokens = target.split()
+    candidate_tokens = normalized.split()
+
+    exact = 1 if normalized == target else 0
+    same_number = (
+        1 if target_tokens and candidate_tokens and target_tokens[0] == candidate_tokens[0] else 0
+    )
+    same_suffix = (
+        1 if target_tokens and candidate_tokens and target_tokens[-1] == candidate_tokens[-1] else 0
+    )
+    overlap = len(set(target_tokens) & set(candidate_tokens))
+    return (exact, same_number, same_suffix, overlap)
+
+
+def _select_best_address_feature(features: list[dict], target_street: str) -> dict:
+    """Choose the best parcel feature for the requested address.
+
+    Miami-Dade can return multiple rows for broad LIKE queries. Prefer an exact
+    normalized address match over a nearby same-number parcel.
+    """
+    return max(
+        features,
+        key=lambda feature: _score_address_match(
+            str(feature.get("attributes", {}).get("TRUE_SITE_ADDR") or ""),
+            target_street,
+        ),
+    )
+
+
 async def _query_arcgis(
     url: str,
     where: str,
@@ -318,8 +357,9 @@ async def _lookup_miami_dade(
             span.set_outputs({"error": "no_features_found"})
             return None
 
-        attrs = features[0].get("attributes", {})
-        geom = features[0].get("geometry", {})
+        best_feature = _select_best_address_feature(features, street)
+        attrs = best_feature.get("attributes", {})
+        geom = best_feature.get("geometry", {})
 
         # Get coordinates from feature if not provided
         feat_lat = lat or geom.get("y")
@@ -346,7 +386,7 @@ async def _lookup_miami_dade(
         folio = str(attrs.get("FOLIO") or "")
 
         # Extract parcel boundary polygon (WGS84 via outSR=4326)
-        parcel_geom = _extract_parcel_rings(features[0])
+        parcel_geom = _extract_parcel_rings(best_feature)
 
         span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(

@@ -574,7 +574,6 @@ async def _call_groq(
         span.set_outputs({"error": "retry_exhausted", "retries": retries_used})
         return None
 
-
 async def _call_openrouter(
     messages: list[dict],
     *,

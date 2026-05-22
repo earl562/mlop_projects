@@ -31,6 +31,7 @@ from plotlot.api.evidence import router as evidence_router
 from plotlot.api.mcp import router as mcp_router
 from plotlot.api.geometry import router as geometry_router
 from plotlot.api.middleware import rate_limiter
+from plotlot.api.ordinance import router as ordinance_router
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.render import router as render_router
 from plotlot.api.routes import router
@@ -205,6 +206,7 @@ app.include_router(evidence_router)
 app.include_router(mcp_router)
 app.include_router(portfolio_router)
 app.include_router(geometry_router)
+app.include_router(ordinance_router)
 app.include_router(render_router)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)

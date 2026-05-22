@@ -28,7 +28,12 @@ htmlcov/
 
 # MLflow local artifacts
 mlflow.db
+mlruns.db
+plotlot_tmp_mlflow.db
 mlruns/
+
+# Firebase local logs
+firebase-debug.log
 
 # Frontend
 **/node_modules/
@@ -37,10 +42,22 @@ mlruns/
 
 # Playwright and local capture artifacts
 .playwright-mcp/
-plotlot/frontend/playwright-report/
-plotlot/frontend/test-results/
-plotlot/frontend/tests/screenshots/
-plotlot/tests/screenshots/
+apps/plotlot/frontend/playwright-report/
+apps/plotlot/frontend/test-results/
+apps/plotlot/frontend/tests/screenshots/
+apps/plotlot/tests/screenshots/
+apps/plotlot/frontend/playwright-chat-before.png
+apps/plotlot/frontend/playwright-chat-after.png
+apps/plotlot/frontend/IMAGE_TO_CODE_WORKFLOW.md
+
+# Frontend design/reference assets (not required to run PlotLot)
+apps/plotlot/frontend/public/plotlot-assets/
+apps/plotlot/frontend/public/plotlot-comps/
+apps/plotlot/frontend/public/plotlot-ref/
+!apps/plotlot/frontend/public/plotlot-assets/
+!apps/plotlot/frontend/public/plotlot-assets/**
+!apps/plotlot/frontend/public/plotlot-ref/
+!apps/plotlot/frontend/public/plotlot-ref/**
 
 # Local PlotLot scratch outputs
 /plotlot-*.png
@@ -58,5 +75,12 @@ plotlot/tests/screenshots/
 /*.webm
 /*.zip
 
+# Research caches (downloaded PDFs, extracted text)
+docs/research/_cache/
+docs/research/_tmp-*
+
 # Python typing cache
 .mypy_cache/
+
+#Handoff
+HANDOFF.md

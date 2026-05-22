@@ -3,11 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import PortfolioPanel from "@/components/PortfolioPanel";
+import ProjectTree from "@/components/ProjectTree";
+import WorkspaceSelector from "@/components/WorkspaceSelector";
+import NewProjectModal from "@/components/NewProjectModal";
 import ChatHistory from "@/components/ChatHistory";
 import type { ChatSession } from "@/lib/sessions";
 import type { AppMode } from "@/components/ModeToggle";
 
 export type { ChatSession };
+
+// ---------------------------------------------------------------------------
+// Props — identical to the original interface. SidebarLayout is untouched.
+// ---------------------------------------------------------------------------
 
 interface SidebarProps {
   sessions: ChatSession[];

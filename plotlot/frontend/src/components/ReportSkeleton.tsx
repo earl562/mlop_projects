@@ -83,6 +83,48 @@ export function ReportSkeleton() {
   );
 }
 
+export function DocumentGeneratorSkeleton() {
+  return (
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-6">
+      <Pulse className="h-5 w-40" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Pulse className="h-3 w-24" />
+          <Pulse className="h-9 w-full rounded-lg" />
+        </div>
+        <div className="space-y-2">
+          <Pulse className="h-3 w-20" />
+          <Pulse className="h-9 w-full rounded-lg" />
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <Pulse className="h-9 w-24 rounded-lg" />
+        <Pulse className="h-9 w-32 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+export function AnalysisStreamSkeleton() {
+  return (
+    <div className="space-y-3 py-2">
+      <div className="flex items-center justify-between">
+        <Pulse className="h-4 w-32" />
+        <Pulse className="h-3 w-16" />
+      </div>
+      <Pulse className="h-1.5 w-full rounded-full" />
+      <div className="space-y-2 pt-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Pulse className="h-4 w-4 shrink-0 rounded-full" />
+            <Pulse className="h-3 w-36" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SatelliteMapSkeleton() {
   return (
     <div className="relative h-[200px] w-full overflow-hidden rounded-lg border border-[var(--border)] sm:h-[250px]">
@@ -90,6 +132,7 @@ export function SatelliteMapSkeleton() {
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
           <svg
+            aria-hidden="true"
             className="h-6 w-6 animate-spin text-[var(--text-muted)]"
             viewBox="0 0 24 24"
             fill="none"

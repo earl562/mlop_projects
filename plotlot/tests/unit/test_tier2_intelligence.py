@@ -95,9 +95,13 @@ class TestIntentClassification:
         result = self._classify("Generate an LOI for this deal")
         assert result.intent == "document_generation"
 
-    def test_general_question_intent(self):
+    def test_greeting_intent(self):
         result = self._classify("Hello, how are you?")
-        assert result.intent == "general_question"
+        assert result.intent == "greeting"
+
+    def test_land_sourcing_intent(self):
+        result = self._classify("Help me source vacant lots in Broward County")
+        assert result.intent == "land_sourcing"
 
     def test_wholesale_deal_type(self):
         result = self._classify("I want to wholesale this property")
@@ -163,6 +167,13 @@ class TestIntentContextBuilder:
         ic = IntentClassification(intent="document_generation")
         ctx = _build_intent_context(ic)
         assert "generate_document" in ctx
+
+    def test_greeting_context(self):
+        from plotlot.api.chat import IntentClassification, _build_intent_context
+
+        ic = IntentClassification(intent="greeting")
+        ctx = _build_intent_context(ic)
+        assert "land-sourcing" in ctx.lower()
 
 
 # ---------------------------------------------------------------------------

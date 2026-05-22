@@ -86,6 +86,17 @@ class ConfigurationError(FatalError):
     """Missing or invalid configuration."""
 
 
+class NvidiaCreditsExhaustedError(FatalError):
+    """NVIDIA NIM free-tier credits exhausted — ingestion must stop."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "NVIDIA NIM credits exhausted (HTTP 402). "
+            "Upgrade at https://build.nvidia.com or swap NVIDIA_API_KEY in .env "
+            "to resume ingestion from the last checkpoint."
+        )
+
+
 # --- Degraded errors (partial results possible) ---
 
 
