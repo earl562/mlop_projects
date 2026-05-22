@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { staggerContainer, staggerItem, fadeUp, springGentle } from "@/lib/motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import ZoningReport from "@/components/ZoningReport";
+import TabbedReport from "@/components/TabbedReport";
 import AnalysisStream from "@/components/AnalysisStream";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import ModeToggle from "@/components/ModeToggle";
@@ -881,7 +881,7 @@ export default function Home() {
               {msg.report && (
                 <div className="space-y-3 animate-fade-up">
                   <ErrorBoundary>
-                    <ZoningReport report={msg.report} />
+                    <TabbedReport report={msg.report} dealType="land_deal" />
                   </ErrorBoundary>
                   {msg.report.confidence_warning && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
@@ -1272,7 +1272,11 @@ export default function Home() {
 
 
           {/* Input bar — hidden in lookup mode after report is shown */}
-          {!(mode === "lookup" && hasReport) && (
+          {mode === "lookup" && hasReport ? (
+            <div className="mx-auto flex max-w-3xl justify-center px-3 py-2">
+              <ModeToggle mode={mode} onChange={setMode} />
+            </div>
+          ) : (
             <div>
               <InputBar
                 inputRef={inputRef as RefObject<HTMLInputElement | null>}
