@@ -72,3 +72,9 @@ frontend/tests/temp-*.spec.ts
 
 # OMX local integration hooks
 .omx/tmux-hook.json
+outreach-agent/credentials.json
+outreach-agent/token.json
+outreach-agent/*.db
+outreach-agent/linkedin_session.json
+outreach-agent/.env
+outreach-agent/.env.example
