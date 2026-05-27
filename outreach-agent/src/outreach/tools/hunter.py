@@ -77,20 +77,64 @@ def domain_from_company(company: str) -> str | None:
     Covers the main homebuilders and firms in PlotLot's ICP.
     """
     known = {
+        # Homebuilders
         "d.r. horton": "drhorton.com",
         "dr horton": "drhorton.com",
         "lennar": "lennar.com",
         "kb home": "kbhome.com",
         "pulte": "pultegroup.com",
+        "pultegroup": "pultegroup.com",
         "meritage": "meritagehomes.com",
+        "meritage homes": "meritagehomes.com",
         "taylor morrison": "taylormorrison.com",
         "tri pointe": "tripointehomes.com",
+        "tri pointe homes": "tripointehomes.com",
         "william lyon": "lyonhomes.com",
-        "valley oak partners": "valleyoakpartners.com",
-        "kenji capital": "kenjicapital.com",
-        "tierra energy": "tierraenergy.com",
+        "shea homes": "sheahomes.com",
+        "calathlantic": "calatlantichomes.com",
+        # CRE brokers
         "cbre": "cbre.com",
         "jll": "jll.com",
         "colliers": "colliers.com",
+        "cushman & wakefield": "cushmanwakefield.com",
+        "cushman and wakefield": "cushmanwakefield.com",
+        "newmark": "nmrk.com",
+        "marcus & millichap": "marcusmillichap.com",
+        "kidder mathews": "kiddermathews.com",
+        # Press / media
+        "bisnow": "bisnow.com",
+        "the real deal": "therealdeal.com",
+        "san francisco business times": "bizjournals.com",
+        "sacramento business journal": "bizjournals.com",
+        "globest": "globest.com",
+        "the san francisco standard": "sfstandard.com",
+        "bay area reporter": "ebar.com",
+        "nbc bay area": "nbcbayarea.com",
+        "los angeles times": "latimes.com",
+        "bloomberg news": "bloomberg.net",
+        "bloomberg": "bloomberg.net",
+        # Investors / developers
+        "valley oak partners": "valleyoakpartners.com",
+        "kenji capital": "kenjicapital.com",
+        "tierra energy": "tierraenergy.com",
+        "manulife investment management": "manulife.com",
+        "kilroy realty": "kilroyrealty.com",
+        "kilroy realty corporation": "kilroyrealty.com",
+        "cohen ventures co.": "cohenventures.com",
+        "cohen ventures": "cohenventures.com",
+        "jakob ventures": "jakobventures.com",
+        "c3 development group": "c3devgroup.com",
+        "massimino development": "massiminodevelopment.com",
+        "massimino impact housing": "massiminodevelopment.com",
+        "norcal realty": "norcalrealty.com",
+        "saliman investments": "salimaninvestments.com",
     }
-    return known.get(company.lower().strip())
+    key = company.lower().strip()
+    # exact match first
+    if key in known:
+        return known[key]
+    # partial match fallback
+    for k, v in known.items():
+        if k in key or key in k:
+            return v
+    return None

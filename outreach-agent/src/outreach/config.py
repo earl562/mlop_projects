@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     twitter_access_secret: str = ""
     twitter_bearer_token: str = ""
 
+    # Brave Search API (free: 2,000 queries/month)
+    brave_api_key: str = ""
+
     # Eventbrite
     eventbrite_api_key: str = ""
 

@@ -72,12 +72,15 @@ Twitter: {p.twitter_handle or "N/A"}
 Notes: {p.notes or "None"}
 
 Channel: {ctx.channel.value}
-PlotLot demo URL: {ctx.plotlot_demo_url}
 Counties with live data: {ctx.plotlot_counties}
 {char_constraint}
 
 Write ONLY the message body. No subject line, no greeting prefix like "Message:", no explanation.
-Sign off as: — Earl
+Do NOT include any URLs or links. Refer to the product by name (PlotLot) only — the demo link will be shared after they reply with interest.
+Close with a stress-test offer (e.g. "try it on an address you've already underwritten") but do not include a URL.
+Sign off as:
+Regards,
+Phat
 """
 
     response = _client.messages.create(

@@ -25,6 +25,13 @@ SEARCH_TARGETS: list[dict] = [
                           "Taylor Morrison", "Tri Pointe", "private equity real estate"],
     },
     {
+        "icp_type": ICPType.RESIDENTIAL,
+        "titles": ["Land Acquisition", "Land Development", "Entitlements Manager", "Division President"],
+        "markets": ["Bay Area", "Sacramento", "NorCal"],
+        "company_types": ["Taylor Morrison", "Meritage Homes", "Tri Pointe Homes",
+                          "William Lyon", "Shea Homes", "CalAtlantic"],
+    },
+    {
         "icp_type": ICPType.DATACENTER,
         "titles": ["Site Acquisition", "Site Selection", "Land Acquisition", "Real Estate",
                    "Infrastructure Development"],
@@ -42,7 +49,7 @@ SEARCH_TARGETS: list[dict] = [
         "icp_type": ICPType.PRESS,
         "titles": ["reporter", "journalist", "editor", "correspondent"],
         "markets": ["Bay Area", "California", "NorCal"],
-        "company_types": ["CoStar", "Bisnow", "The Real Deal", "San Francisco Business Times",
+        "company_types": ["Bisnow", "The Real Deal", "San Francisco Business Times",
                           "Sacramento Business Journal", "GlobeSt"],
     },
 ]
