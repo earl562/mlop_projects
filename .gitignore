@@ -88,3 +88,9 @@ docs/research/_tmp-*
 #Handoff
 HANDOFF.md
 OUTREACH.md
+
+# Outreach agent secrets
+outreach-agent/credentials.json
+outreach-agent/token.json
+outreach-agent/*.db
+outreach-agent/linkedin_session.json
