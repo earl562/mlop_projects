@@ -134,7 +134,14 @@ def _sacramento_attrs(
 
 class TestCountyConfig:
     def test_all_five_counties_present(self):
-        expected = {"santa clara", "alameda", "contra costa", "san mateo", "sacramento", "san diego"}
+        expected = {
+            "santa clara",
+            "alameda",
+            "contra costa",
+            "san mateo",
+            "sacramento",
+            "san diego",
+        }
         assert expected == set(_COUNTY_CONFIG.keys())
 
     def test_each_county_has_required_keys(self):
