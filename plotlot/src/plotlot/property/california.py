@@ -138,6 +138,26 @@ _COUNTY_CONFIG: dict[str, dict] = {
         "lot_unit": "sqft",
         "folio_fields": ["PARCEL_NUMBER", "APN10", "APN"],
     },
+    "san diego": {
+        # San Diego County — CA statewide parcel layer for lot size + APN.
+        # Zoning via City of San Diego citywide zoning layer (point-in-polygon).
+        # Verified 2026-05: ZONE_NAME field returns e.g. "RM-3-7" for Linda Vista.
+        # Parcel layer has no address field — spatial query only.
+        "parcel_url": (
+            "https://services2.arcgis.com/zr3KAIbsRSUyARHG/arcgis/rest/services"
+            "/CA_State_Parcels/FeatureServer/0"
+        ),
+        "zoning_url": (
+            "https://services1.arcgis.com/eGSDp8lpKe5izqVc/arcgis/rest/services"
+            "/San_Diego_Zoning/FeatureServer/0"
+        ),
+        "address_field": "",
+        "zoning_fields": ["ZONE_NAME", "ZONE", "ZONING"],
+        "desc_fields": ["ZONE_NAME"],
+        "lot_fields": ["Shape__Area"],
+        "lot_unit": "sqm",
+        "folio_fields": ["PARCEL_APN"],
+    },
 }
 
 # sq meters → sq ft conversion (used when lot_unit = "sqm")
