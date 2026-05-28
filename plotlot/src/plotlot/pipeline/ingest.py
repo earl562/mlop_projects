@@ -388,7 +388,7 @@ async def ingest_san_diego() -> int:
                     "chunk_index": chunk.metadata.chunk_index,
                     "embedding": emb,
                     "municode_node_id": chunk.metadata.municode_node_id,
-                    "source_url": f"https://docs.sandiego.gov/municode/",
+                    "source_url": "https://docs.sandiego.gov/municode/",
                     "scraped_at": now,
                     "embedding_model": EMBEDDING_MODEL_ID,
                     "state": "CA",

@@ -13,7 +13,6 @@ Stop on 404. SSL verification is disabled — docs.sandiego.gov has a known cert
 
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
 import re
