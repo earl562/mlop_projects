@@ -315,7 +315,14 @@ def ingest_main() -> None:
         print(
             "  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco"
         )
+        print("  --san-diego                            Ingest San Diego from city-hosted PDFs (not on Municode)")
         sys.exit(0 if "--help" in args else 1)
+
+    if "--san-diego" in args:
+        from plotlot.pipeline.ingest import ingest_san_diego
+        count = asyncio.run(ingest_san_diego())
+        print(f"San Diego ingestion complete: {count:,} chunks stored")
+        sys.exit(0)
 
     # Parse all flags upfront
     state_filter: str | None = None

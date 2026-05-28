@@ -657,6 +657,23 @@ NORCAL_METROS: dict[str, list[str]] = {
     ],
 }
 
+# CA SoCal — San Diego County.
+# Added to serve Kevin Woo (Jakob Ventures) who is actively evaluating SD addresses.
+SOCAL_METROS: dict[str, list[str]] = {
+    "san_diego": [
+        "San Diego",        # primary — 92110 (Mission Valley) is where Kevin's deal is
+        "Chula Vista",      # fast-growing south county, active residential pipeline
+        "El Cajon",
+        "La Mesa",
+        "Santee",
+        "Lemon Grove",
+        "National City",
+        "Coronado",
+        "Poway",
+        "Escondido",
+    ],
+}
+
 COUNTY_AUTHORITY_STATES = ("FL", "NC", "CA")
 
 # Module-level cache
@@ -840,6 +857,12 @@ SOUTH_CAROLINA_METROS_KEYS: set[str] = {
 NORCAL_METROS_KEYS: set[str] = {
     _make_key(name) for names in NORCAL_METROS.values() for name in names
 }
+
+SOCAL_METROS_KEYS: set[str] = {
+    _make_key(name) for names in SOCAL_METROS.values() for name in names
+}
+
+CA_METROS_KEYS: set[str] = NORCAL_METROS_KEYS | SOCAL_METROS_KEYS
 
 
 def _normalize(name: str) -> str:
@@ -1337,8 +1360,12 @@ async def discover_sc(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
 
 
 async def discover_ca(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
-    """Discover NorCal municipalities with zoning data on Municode."""
-    return await _discover_state("CA", NORCAL_METROS, max_concurrent)
+    """Discover CA municipalities (NorCal + SoCal) with zoning data on Municode."""
+    norcal, socal = await asyncio.gather(
+        _discover_state("CA", NORCAL_METROS, max_concurrent),
+        _discover_state("CA", SOCAL_METROS, max_concurrent),
+    )
+    return {**norcal, **socal}
 
 
 async def get_all_municode_configs(
