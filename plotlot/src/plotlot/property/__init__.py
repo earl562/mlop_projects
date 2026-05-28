@@ -58,6 +58,9 @@ register_provider("santa clara", _california)
 # San Mateo County (Daly City, East Palo Alto, Hillsborough, Portola Valley, Woodside)
 register_provider("san mateo", _california)
 
+# San Diego County — uses CA statewide parcel layer (no county-specific config needed)
+register_provider("san diego", _california)
+
 
 # Convenience top-level lookup ---------------------------------------------------
 
