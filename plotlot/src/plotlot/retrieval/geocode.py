@@ -19,7 +19,7 @@ from plotlot.observability.tracing import trace
 logger = logging.getLogger(__name__)
 
 GEOCODIO_URL = "https://api.geocod.io/v1.7/geocode"
-CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
 
 # In-memory geocode cache — 1hr TTL, SHA256 key
 _geocode_cache: dict[str, tuple[dict | None, float]] = {}
@@ -48,6 +48,7 @@ async def _census_geocode(address: str) -> dict | None:
                 params={
                     "address": address,
                     "benchmark": "Public_AR_Current",
+                    "vintage": "Current_Current",
                     "format": "json",
                 },
             )
@@ -66,18 +67,24 @@ async def _census_geocode(address: str) -> dict | None:
     coords = top.get("coordinates", {})
     matched_address = top.get("matchedAddress", address)
 
-    # Census returns addressComponents with city, state, etc.
     components = top.get("addressComponents", {})
     city = components.get("city", "")
+    state = components.get("state", "")
 
-    # Census does not return county directly in the geocoder response —
-    # extract from tigerLine or leave empty for downstream enrichment
+    # Geography endpoint returns TIGER county name under geographies.Counties
     county = ""
+    geographies = top.get("geographies", {})
+    counties = geographies.get("Counties", [])
+    if counties:
+        raw_county = counties[0].get("NAME", "")
+        # Strip " County" suffix to match our provider registry keys
+        county = re.sub(r"\s+County$", "", raw_county, flags=re.IGNORECASE).strip()
 
     return {
         "formatted_address": matched_address,
         "municipality": city,
         "county": county,
+        "state": state,
         "lat": coords.get("y"),  # Census uses y for latitude
         "lng": coords.get("x"),  # Census uses x for longitude
         "accuracy": None,
