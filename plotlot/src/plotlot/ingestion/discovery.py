@@ -661,8 +661,8 @@ NORCAL_METROS: dict[str, list[str]] = {
 # Added to serve Kevin Woo (Jakob Ventures) who is actively evaluating SD addresses.
 SOCAL_METROS: dict[str, list[str]] = {
     "san_diego": [
-        "San Diego",        # primary — 92110 (Mission Valley) is where Kevin's deal is
-        "Chula Vista",      # fast-growing south county, active residential pipeline
+        "San Diego",  # primary — 92110 (Mission Valley) is where Kevin's deal is
+        "Chula Vista",  # fast-growing south county, active residential pipeline
         "El Cajon",
         "La Mesa",
         "Santee",
@@ -858,9 +858,7 @@ NORCAL_METROS_KEYS: set[str] = {
     _make_key(name) for names in NORCAL_METROS.values() for name in names
 }
 
-SOCAL_METROS_KEYS: set[str] = {
-    _make_key(name) for names in SOCAL_METROS.values() for name in names
-}
+SOCAL_METROS_KEYS: set[str] = {_make_key(name) for names in SOCAL_METROS.values() for name in names}
 
 CA_METROS_KEYS: set[str] = NORCAL_METROS_KEYS | SOCAL_METROS_KEYS
 

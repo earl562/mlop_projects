@@ -373,26 +373,28 @@ async def ingest_san_diego() -> int:
         stored = 0
         now = datetime.now(timezone.utc)
         for batch_start in range(0, len(chunks), COMMIT_BATCH_SIZE):
-            batch_chunks = chunks[batch_start: batch_start + COMMIT_BATCH_SIZE]
-            batch_embeddings = embeddings[batch_start: batch_start + COMMIT_BATCH_SIZE]
+            batch_chunks = chunks[batch_start : batch_start + COMMIT_BATCH_SIZE]
+            batch_embeddings = embeddings[batch_start : batch_start + COMMIT_BATCH_SIZE]
             row_dicts = []
             for chunk, emb in zip(batch_chunks, batch_embeddings):
-                row_dicts.append({
-                    "municipality": chunk.metadata.municipality,
-                    "county": chunk.metadata.county,
-                    "chapter": chunk.metadata.chapter,
-                    "section": chunk.metadata.section,
-                    "section_title": chunk.metadata.section_title,
-                    "zone_codes": chunk.metadata.zone_codes,
-                    "chunk_text": chunk.text,
-                    "chunk_index": chunk.metadata.chunk_index,
-                    "embedding": emb,
-                    "municode_node_id": chunk.metadata.municode_node_id,
-                    "source_url": "https://docs.sandiego.gov/municode/",
-                    "scraped_at": now,
-                    "embedding_model": EMBEDDING_MODEL_ID,
-                    "state": "CA",
-                })
+                row_dicts.append(
+                    {
+                        "municipality": chunk.metadata.municipality,
+                        "county": chunk.metadata.county,
+                        "chapter": chunk.metadata.chapter,
+                        "section": chunk.metadata.section,
+                        "section_title": chunk.metadata.section_title,
+                        "zone_codes": chunk.metadata.zone_codes,
+                        "chunk_text": chunk.text,
+                        "chunk_index": chunk.metadata.chunk_index,
+                        "embedding": emb,
+                        "municode_node_id": chunk.metadata.municode_node_id,
+                        "source_url": "https://docs.sandiego.gov/municode/",
+                        "scraped_at": now,
+                        "embedding_model": EMBEDDING_MODEL_ID,
+                        "state": "CA",
+                    }
+                )
             stmt = pg_insert(OrdinanceChunk).values(row_dicts)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["municipality", "municode_node_id", "chunk_index"],

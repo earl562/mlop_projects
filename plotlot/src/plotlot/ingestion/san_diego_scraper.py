@@ -67,6 +67,7 @@ async def _fetch_pdf_text(client: httpx.AsyncClient, url: str) -> str | None:
 
     try:
         from pypdf import PdfReader
+
         reader = PdfReader(io.BytesIO(resp.content))
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n".join(pages).strip()
@@ -91,31 +92,33 @@ async def scrape_san_diego() -> list[PdfSection]:
 
                 for div in range(1, MAX_DIVISIONS + 1):
                     div_str = f"{div:02d}"
-                    url = (
-                        f"{BASE_URL}/MuniCodeChapter{ch}/"
-                        f"Ch{ch}Art{art_str}Division{div_str}.pdf"
-                    )
+                    url = f"{BASE_URL}/MuniCodeChapter{ch}/Ch{ch}Art{art_str}Division{div_str}.pdf"
                     text = await _fetch_pdf_text(client, url)
                     if text is None:
                         if div == 1:
                             break  # no divisions in this article → article doesn't exist
-                        break      # no more divisions in this article
+                        break  # no more divisions in this article
 
                     if len(text) < 50:
-                        continue   # empty or boilerplate-only page
+                        continue  # empty or boilerplate-only page
 
-                    sections.append(PdfSection(
-                        chapter=chapter_num,
-                        chapter_label=chapter_label,
-                        article=art,
-                        division=div,
-                        url=url,
-                        text=text,
-                    ))
+                    sections.append(
+                        PdfSection(
+                            chapter=chapter_num,
+                            chapter_label=chapter_label,
+                            article=art,
+                            division=div,
+                            url=url,
+                            text=text,
+                        )
+                    )
                     found_any_division = True
                     logger.info(
                         "scraped Ch%s Art%s Div%s — %d chars",
-                        ch, art_str, div_str, len(text),
+                        ch,
+                        art_str,
+                        div_str,
+                        len(text),
                     )
 
                 if found_any_division:
@@ -179,19 +182,21 @@ def sections_to_chunks(sections: list[PdfSection]) -> list[TextChunk]:
 
         for idx, chunk_text in enumerate(raw_chunks):
             node_id = f"ch{section.chapter:02d}_art{section.article:02d}_div{section.division:02d}"
-            chunks.append(TextChunk(
-                text=chunk_text,
-                metadata=ChunkMetadata(
-                    municipality=MUNICIPALITY,
-                    county=COUNTY,
-                    chapter=chapter_label,
-                    section=f"Art.{section.article:02d} Div.{section.division:02d}",
-                    section_title=section_title,
-                    zone_codes=_extract_zone_codes(chunk_text),
-                    chunk_index=idx,
-                    municode_node_id=f"{node_id}_chunk{idx}",
-                ),
-            ))
+            chunks.append(
+                TextChunk(
+                    text=chunk_text,
+                    metadata=ChunkMetadata(
+                        municipality=MUNICIPALITY,
+                        county=COUNTY,
+                        chapter=chapter_label,
+                        section=f"Art.{section.article:02d} Div.{section.division:02d}",
+                        section_title=section_title,
+                        zone_codes=_extract_zone_codes(chunk_text),
+                        chunk_index=idx,
+                        municode_node_id=f"{node_id}_chunk{idx}",
+                    ),
+                )
+            )
 
     logger.info("san_diego_chunks_created count=%d", len(chunks))
     return chunks
