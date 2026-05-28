@@ -33,12 +33,16 @@ MAX_CHUNK_SIZE = 1500
 OVERLAP = 200
 
 # Chapters to scrape: (chapter_num, chapter_label)
+# Verified present on docs.sandiego.gov — Ch04, Ch07, Ch09, Ch10 return 404.
 TARGET_CHAPTERS: list[tuple[int, str]] = [
+    (11, "Subdivisions"),
+    (12, "Signs"),
     (13, "Zones"),
+    (14, "Development Regulations"),
     (15, "Planned District Ordinance Zones"),
 ]
 
-MAX_ARTICLES = 12
+MAX_ARTICLES = 30
 MAX_DIVISIONS = 25
 
 
@@ -131,8 +135,17 @@ async def scrape_san_diego() -> list[PdfSection]:
 
 
 def _chunk_text(text: str, max_size: int = MAX_CHUNK_SIZE, overlap: int = OVERLAP) -> list[str]:
-    """Split text into overlapping chunks by paragraph boundaries."""
-    paragraphs = re.split(r"\n{2,}", text)
+    """Split text into overlapping chunks by paragraph boundaries.
+
+    PDF text from docs.sandiego.gov uses single newlines, not double newlines.
+    Fall back to single-newline splitting when no paragraph breaks are present.
+    """
+    # Use double-newline split if present; otherwise single-newline (PDF layout)
+    if "\n\n" in text:
+        paragraphs = re.split(r"\n{2,}", text)
+    else:
+        paragraphs = text.splitlines()
+
     chunks: list[str] = []
     current = ""
 
@@ -140,14 +153,15 @@ def _chunk_text(text: str, max_size: int = MAX_CHUNK_SIZE, overlap: int = OVERLA
         para = para.strip()
         if not para:
             continue
-        if len(current) + len(para) + 2 <= max_size:
-            current = f"{current}\n\n{para}".strip() if current else para
+        separator = "\n\n" if "\n\n" in text else "\n"
+        if len(current) + len(para) + len(separator) <= max_size:
+            current = f"{current}{separator}{para}".strip() if current else para
         else:
             if current:
                 chunks.append(current)
             # carry overlap from end of previous chunk
             tail = current[-overlap:] if len(current) > overlap else current
-            current = f"{tail}\n\n{para}".strip() if tail else para
+            current = f"{tail}{separator}{para}".strip() if tail else para
 
     if current:
         chunks.append(current)
