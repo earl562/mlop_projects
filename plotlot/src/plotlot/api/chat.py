@@ -1212,12 +1212,16 @@ async def _execute_lookup_property(
                 "living_area_sqft": record.living_area_sqft,
                 "living_units": record.living_units,
             }
-            if record.zoning_code:
-                result["next_step"] = (
-                    f"Now call search_zoning_ordinance with municipality='{record.municipality}' "
-                    f"and query='{record.zoning_code} setbacks density height' to get the "
-                    f"specific regulations for this zoning district"
-                )
+            muni = record.municipality or address
+            zoning_query = (
+                f"{record.zoning_code} setbacks density height"
+                if record.zoning_code
+                else f"{muni} zoning setbacks density height allowed uses"
+            )
+            result["next_step"] = (
+                f"Now call search_zoning_ordinance with municipality='{muni}' "
+                f"and query='{zoning_query}' to get the zoning regulations for this property"
+            )
             return json.dumps(result)
         return json.dumps(
             {
