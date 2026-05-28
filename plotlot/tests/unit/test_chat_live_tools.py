@@ -143,11 +143,16 @@ async def test_execute_municode_live_search_returns_matching_sections():
         zoning_node_id="root",
     )
 
-    with patch(
-        "plotlot.ingestion.discovery.get_municode_configs",
-        new=AsyncMock(return_value={"fort_lauderdale": config}),
-    ), patch("plotlot.ingestion.scraper.MunicodeScraper", _FakeScraper):
-        payload = json.loads(await _execute_municode_live_search("Fort Lauderdale", "RS-8 setbacks"))
+    with (
+        patch(
+            "plotlot.ingestion.discovery.get_municode_configs",
+            new=AsyncMock(return_value={"fort_lauderdale": config}),
+        ),
+        patch("plotlot.ingestion.scraper.MunicodeScraper", _FakeScraper),
+    ):
+        payload = json.loads(
+            await _execute_municode_live_search("Fort Lauderdale", "RS-8 setbacks")
+        )
 
     assert payload["status"] == "success"
     assert payload["municipality"] == "Fort Lauderdale"
@@ -170,11 +175,16 @@ async def test_execute_municode_live_search_returns_no_results_when_headings_do_
         zoning_node_id="root",
     )
 
-    with patch(
-        "plotlot.ingestion.discovery.get_municode_configs",
-        new=AsyncMock(return_value={"fort_lauderdale": config}),
-    ), patch("plotlot.ingestion.scraper.MunicodeScraper", _FakeScraper):
-        payload = json.loads(await _execute_municode_live_search("Fort Lauderdale", "shipyard cranes"))
+    with (
+        patch(
+            "plotlot.ingestion.discovery.get_municode_configs",
+            new=AsyncMock(return_value={"fort_lauderdale": config}),
+        ),
+        patch("plotlot.ingestion.scraper.MunicodeScraper", _FakeScraper),
+    ):
+        payload = json.loads(
+            await _execute_municode_live_search("Fort Lauderdale", "shipyard cranes")
+        )
 
     assert payload["status"] == "no_results"
     assert "shipyard cranes" in payload["message"]
@@ -182,12 +192,15 @@ async def test_execute_municode_live_search_returns_no_results_when_headings_do_
 
 @pytest.mark.asyncio
 async def test_execute_tool_routes_new_live_tools():
-    with patch(
-        "plotlot.api.chat._execute_open_data_discovery",
-        new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "open_data"})),
-    ), patch(
-        "plotlot.api.chat._execute_municode_live_search",
-        new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "municode"})),
+    with (
+        patch(
+            "plotlot.api.chat._execute_open_data_discovery",
+            new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "open_data"})),
+        ),
+        patch(
+            "plotlot.api.chat._execute_municode_live_search",
+            new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "municode"})),
+        ),
     ):
         open_data_payload = json.loads(
             await _execute_tool(

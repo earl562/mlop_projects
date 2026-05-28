@@ -48,14 +48,13 @@ except ImportError:
 
 def trace(name: str | None = None, **kwargs):
     """Decorator: wraps function with MLflow trace if available."""
+
     def decorator(fn):
         traced_fn = None
         if _HAS_MLFLOW:
             try:
                 traced_fn = (
-                    _mlflow.trace(name=name, **kwargs)(fn)
-                    if name
-                    else _mlflow.trace(**kwargs)(fn)
+                    _mlflow.trace(name=name, **kwargs)(fn) if name else _mlflow.trace(**kwargs)(fn)
                 )
             except Exception as exc:
                 logger.debug("MLflow trace wrapper unavailable — using passthrough: %s", exc)

@@ -81,9 +81,7 @@ async def tools_call(body: MCPCallRequest) -> dict[str, Any]:
             workspace_id=body.context.workspace_id,
         )
         body = body.model_copy(
-            update={
-                "context": body.context.model_copy(update={"approved_approval_ids": validated})
-            }
+            update={"context": body.context.model_copy(update={"approved_approval_ids": validated})}
         )
 
     result = await adapter.call_tool(

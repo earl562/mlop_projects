@@ -344,6 +344,7 @@ async def health():
 
     status = "healthy" if checks.get("database") == "ok" else "degraded"
     database_ready = checks.get("database") == "ok"
+
     def _has_text_setting(name: str) -> bool:
         """Return true only for explicitly configured string settings.
 

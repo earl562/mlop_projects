@@ -325,6 +325,105 @@ async def ingest_municipality(key: str) -> int:
             await session.close()
 
 
+async def ingest_san_diego() -> int:
+    """Ingest San Diego zoning code from city-hosted PDFs (not on Municode).
+
+    Scrapes Chapters 13 (Zones) and 15 (Planned Districts) from
+    docs.sandiego.gov, chunks the text, embeds, and stores in pgvector.
+    Returns total chunks stored.
+    """
+    from plotlot.ingestion.san_diego_scraper import scrape_san_diego, sections_to_chunks
+
+    logger.info("=== Ingesting San Diego (PDF pipeline) ===")
+
+    sections = await retry_async(
+        scrape_san_diego,
+        retries=2,
+        delay=15.0,
+        label="scrape:San Diego",
+    )
+    if not sections:
+        logger.warning("No sections scraped for San Diego — check docs.sandiego.gov availability")
+        return 0
+
+    logger.info("Scraped %d PDF sections", len(sections))
+    chunks = await asyncio.to_thread(sections_to_chunks, sections)
+    logger.info("Created %d chunks", len(chunks))
+
+    if not chunks:
+        return 0
+
+    texts = [c.text for c in chunks]
+    embeddings = await retry_async(
+        embed_texts,
+        texts,
+        retries=3,
+        delay=10.0,
+        label="embed:San Diego",
+    )
+
+    chunks, embeddings = validate_chunks(chunks, embeddings)
+    if not chunks:
+        logger.warning("No valid chunks after validation")
+        return 0
+
+    await init_db()
+    session = await get_session()
+    try:
+        stored = 0
+        now = datetime.now(timezone.utc)
+        for batch_start in range(0, len(chunks), COMMIT_BATCH_SIZE):
+            batch_chunks = chunks[batch_start : batch_start + COMMIT_BATCH_SIZE]
+            batch_embeddings = embeddings[batch_start : batch_start + COMMIT_BATCH_SIZE]
+            row_dicts = []
+            for chunk, emb in zip(batch_chunks, batch_embeddings):
+                row_dicts.append(
+                    {
+                        "municipality": chunk.metadata.municipality,
+                        "county": chunk.metadata.county,
+                        "chapter": chunk.metadata.chapter,
+                        "section": chunk.metadata.section,
+                        "section_title": chunk.metadata.section_title,
+                        "zone_codes": chunk.metadata.zone_codes,
+                        "chunk_text": chunk.text,
+                        "chunk_index": chunk.metadata.chunk_index,
+                        "embedding": emb,
+                        "municode_node_id": chunk.metadata.municode_node_id,
+                        "source_url": "https://docs.sandiego.gov/municode/",
+                        "scraped_at": now,
+                        "embedding_model": EMBEDDING_MODEL_ID,
+                        "state": "CA",
+                    }
+                )
+            stmt = pg_insert(OrdinanceChunk).values(row_dicts)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["municipality", "municode_node_id", "chunk_index"],
+                set_={
+                    "chunk_text": stmt.excluded.chunk_text,
+                    "embedding": stmt.excluded.embedding,
+                    "section": stmt.excluded.section,
+                    "section_title": stmt.excluded.section_title,
+                    "zone_codes": stmt.excluded.zone_codes,
+                    "chapter": stmt.excluded.chapter,
+                    "county": stmt.excluded.county,
+                    "source_url": stmt.excluded.source_url,
+                    "scraped_at": stmt.excluded.scraped_at,
+                    "embedding_model": stmt.excluded.embedding_model,
+                    "state": stmt.excluded.state,
+                },
+            )
+            await session.execute(stmt)
+            await session.commit()
+            stored += len(row_dicts)
+        logger.info("Stored %d chunks for San Diego", stored)
+        return stored
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+
 async def ingest_county(state_abbr: str, county_key: str) -> dict[str, int]:
     """Ingest all municipalities within a single county.
 

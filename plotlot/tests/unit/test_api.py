@@ -134,13 +134,16 @@ async def test_cors_preflight_allows_loopback_origin(client):
 @pytest.mark.asyncio
 async def test_autocomplete_uses_geocode_fallback_without_geocodio_key(client):
     """Autocomplete should still return a suggestion when Google/Geocodio are unavailable."""
-    with patch("plotlot.api.main.settings") as mock_settings, patch(
-        "plotlot.api.main.geocode_address",
-        new_callable=AsyncMock,
-        return_value={
-            "formatted_address": "171 NE 209TH TER, MIAMI GARDENS, FL, 33179",
-            "municipality": "Miami Gardens",
-        },
+    with (
+        patch("plotlot.api.main.settings") as mock_settings,
+        patch(
+            "plotlot.api.main.geocode_address",
+            new_callable=AsyncMock,
+            return_value={
+                "formatted_address": "171 NE 209TH TER, MIAMI GARDENS, FL, 33179",
+                "municipality": "Miami Gardens",
+            },
+        ),
     ):
         mock_settings.geocodio_api_key = ""
         resp = await client.get("/api/v1/autocomplete?q=171 NE 209th Ter Miami Florida 33179")
@@ -229,14 +232,14 @@ async def test_analyze_stream_backend_unavailable_error_is_actionable(client):
     with (
         patch("plotlot.api.routes.get_cached_report", new_callable=AsyncMock, return_value=None),
         patch(
-        "plotlot.api.routes.geocode_address",
-        new_callable=AsyncMock,
-        return_value={
-            "municipality": "Miami Gardens",
-            "county": "Miami-Dade",
-            "lat": 25.957,
-            "lng": -80.199,
-        },
+            "plotlot.api.routes.geocode_address",
+            new_callable=AsyncMock,
+            return_value={
+                "municipality": "Miami Gardens",
+                "county": "Miami-Dade",
+                "lat": 25.957,
+                "lng": -80.199,
+            },
         ),
         patch(
             "plotlot.api.routes.lookup_property",
@@ -439,6 +442,8 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
     assert create_kwargs["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     assert create_kwargs["messages"][0]["content"] == "/no_think"
     assert "reasoning_effort" not in create_kwargs
+
+
 @pytest.mark.asyncio
 async def test_chat_with_report_context(client):
     """Chat with report context doesn't error."""

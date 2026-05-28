@@ -657,6 +657,23 @@ NORCAL_METROS: dict[str, list[str]] = {
     ],
 }
 
+# CA SoCal — San Diego County.
+# Added to serve Kevin Woo (Jakob Ventures) who is actively evaluating SD addresses.
+SOCAL_METROS: dict[str, list[str]] = {
+    "san_diego": [
+        "San Diego",  # primary — 92110 (Mission Valley) is where Kevin's deal is
+        "Chula Vista",  # fast-growing south county, active residential pipeline
+        "El Cajon",
+        "La Mesa",
+        "Santee",
+        "Lemon Grove",
+        "National City",
+        "Coronado",
+        "Poway",
+        "Escondido",
+    ],
+}
+
 COUNTY_AUTHORITY_STATES = ("FL", "NC", "CA")
 
 # Module-level cache
@@ -785,7 +802,9 @@ def _merge_config(configs: dict[str, MunicodeConfig], key: str, config: Municode
     configs.setdefault(existing_key, existing)
 
 
-def _merge_configs(configs: dict[str, MunicodeConfig], new_configs: dict[str, MunicodeConfig]) -> None:
+def _merge_configs(
+    configs: dict[str, MunicodeConfig], new_configs: dict[str, MunicodeConfig]
+) -> None:
     for key, config in new_configs.items():
         _merge_config(configs, key, config)
 
@@ -810,9 +829,7 @@ def resolve_municode_config(
         if state_exact:
             return state_exact
 
-    candidates = [
-        cfg for cfg in configs.values() if _make_key(cfg.municipality) == key
-    ]
+    candidates = [cfg for cfg in configs.values() if _make_key(cfg.municipality) == key]
     if state_code:
         candidates = [cfg for cfg in candidates if cfg.state.upper() == state_code]
     if candidates:
@@ -840,6 +857,10 @@ SOUTH_CAROLINA_METROS_KEYS: set[str] = {
 NORCAL_METROS_KEYS: set[str] = {
     _make_key(name) for names in NORCAL_METROS.values() for name in names
 }
+
+SOCAL_METROS_KEYS: set[str] = {_make_key(name) for names in SOCAL_METROS.values() for name in names}
+
+CA_METROS_KEYS: set[str] = NORCAL_METROS_KEYS | SOCAL_METROS_KEYS
 
 
 def _normalize(name: str) -> str:
@@ -1337,8 +1358,12 @@ async def discover_sc(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
 
 
 async def discover_ca(max_concurrent: int = 5) -> dict[str, MunicodeConfig]:
-    """Discover NorCal municipalities with zoning data on Municode."""
-    return await _discover_state("CA", NORCAL_METROS, max_concurrent)
+    """Discover CA municipalities (NorCal + SoCal) with zoning data on Municode."""
+    norcal, socal = await asyncio.gather(
+        _discover_state("CA", NORCAL_METROS, max_concurrent),
+        _discover_state("CA", SOCAL_METROS, max_concurrent),
+    )
+    return {**norcal, **socal}
 
 
 async def get_all_municode_configs(
@@ -1426,7 +1451,10 @@ async def get_all_municode_configs(
         from plotlot.core.types import _CA_OVERRIDES, _FALLBACK_CONFIGS, _NC_FALLBACK_CONFIGS
 
         for key, fallback in {**_FALLBACK_CONFIGS, **_NC_FALLBACK_CONFIGS}.items():
-            if resolve_municode_config(configs, fallback.municipality, state=fallback.state) is None:
+            if (
+                resolve_municode_config(configs, fallback.municipality, state=fallback.state)
+                is None
+            ):
                 _merge_config(configs, key, fallback)
 
         # CA overrides always win — they correct wrong products from auto-discovery
