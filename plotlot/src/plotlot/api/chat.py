@@ -2177,7 +2177,9 @@ async def chat(request: ChatRequest, http_request: Request):
                                             "municipality": prop.get("municipality", ""),
                                             "county": prop.get("county", ""),
                                             "zoning_code": prop.get("zoning_code", ""),
-                                            "zoning_description": prop.get("zoning_description", ""),
+                                            "zoning_description": prop.get(
+                                                "zoning_description", ""
+                                            ),
                                             "lot_size_sqft": prop.get("lot_size_sqft"),
                                         },
                                     )

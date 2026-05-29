@@ -60,6 +60,7 @@ async def test_harness_runtime_calls_handler_when_allowed():
 # Bug 2 regression — search_municode_live short-circuit for PDF-scraped cities
 # ---------------------------------------------------------------------------
 
+
 def test_is_pdf_scraped_san_diego():
     assert _is_pdf_scraped("San Diego") is True
     assert _is_pdf_scraped("san diego") is True

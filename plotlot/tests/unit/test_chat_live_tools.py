@@ -241,6 +241,7 @@ async def test_external_write_tools_fail_closed_without_approval():
 # Bug 3 regression — web search graceful error handling
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_execute_web_search_no_key_returns_not_configured():
     with patch("plotlot.api.chat.settings") as mock_settings:

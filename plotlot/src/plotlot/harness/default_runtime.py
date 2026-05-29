@@ -415,9 +415,11 @@ async def _handle_fetch_ordinance_section(
         await session.close()
 
 
-_PDF_SCRAPED_MUNICIPALITIES: frozenset[str] = frozenset({
-    "san diego",
-})
+_PDF_SCRAPED_MUNICIPALITIES: frozenset[str] = frozenset(
+    {
+        "san diego",
+    }
+)
 
 
 def _is_pdf_scraped(municipality: str) -> bool:

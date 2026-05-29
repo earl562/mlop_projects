@@ -74,9 +74,10 @@ async def test_hybrid_search_passes_boost_through_to_rrf():
     """hybrid_search must forward zone_code_boost to _hybrid_rrf."""
     mock_session = MagicMock()
 
-    with patch("plotlot.retrieval.search._hybrid_rrf", new=AsyncMock(return_value=[])) as mock_rrf, \
-         patch("plotlot.retrieval.search.embed_texts", new=AsyncMock(return_value=[[0.1] * 5])):
-
+    with (
+        patch("plotlot.retrieval.search._hybrid_rrf", new=AsyncMock(return_value=[])) as mock_rrf,
+        patch("plotlot.retrieval.search.embed_texts", new=AsyncMock(return_value=[[0.1] * 5])),
+    ):
         await hybrid_search(
             mock_session,
             "San Diego",
@@ -93,6 +94,7 @@ async def test_hybrid_search_passes_boost_through_to_rrf():
 def test_chat_agent_prompt_contains_zone_code_prefix_instruction():
     """System prompt must instruct agent to prefix queries with zone code."""
     from plotlot.observability.prompts import get_active_prompt
+
     prompt = get_active_prompt("chat_agent")
     assert "prefix" in prompt.lower() or "zone code" in prompt.lower()
     assert "RM-3-7" in prompt
@@ -101,6 +103,7 @@ def test_chat_agent_prompt_contains_zone_code_prefix_instruction():
 def test_chat_agent_prompt_contains_permitted_uses_diversification():
     """System prompt must instruct agent to use distinct queries for use type questions."""
     from plotlot.observability.prompts import get_active_prompt
+
     prompt = get_active_prompt("chat_agent")
     assert "permitted uses" in prompt.lower()
     assert "conditional uses" in prompt.lower()
@@ -108,4 +111,5 @@ def test_chat_agent_prompt_contains_permitted_uses_diversification():
 
 def test_chat_agent_prompt_version_updated():
     from plotlot.observability.prompts import get_prompt_version
+
     assert get_prompt_version("chat_agent") == "v3"
