@@ -19,6 +19,7 @@ from plotlot.api.chat import (
     _execute_municode_live_search,
     _execute_open_data_discovery,
     _execute_tool,
+    _execute_web_search,
 )
 from plotlot.core.types import MunicodeConfig, TocNode
 from plotlot.property.models import DatasetInfo
@@ -234,3 +235,56 @@ async def test_external_write_tools_fail_closed_without_approval():
 
     assert payload["status"] == "pending_approval"
     mock_create.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Bug 3 regression — web search graceful error handling
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_execute_web_search_no_key_returns_not_configured():
+    with patch("plotlot.api.chat.settings") as mock_settings:
+        mock_settings.jina_api_key = None
+        payload = json.loads(await _execute_web_search("RM-3-7 density San Diego"))
+
+    assert payload["status"] == "not_configured"
+    assert "JINA_API_KEY" in payload["message"]
+    assert "search_zoning_ordinance" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_execute_web_search_402_returns_quota_exceeded():
+    mock_response = AsyncMock()
+    mock_response.status_code = 402
+
+    with (
+        patch("plotlot.api.chat.settings") as mock_settings,
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_settings.jina_api_key = "test-key"
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client_cls)
+        mock_client_cls.get = AsyncMock(return_value=mock_response)
+
+        payload = json.loads(await _execute_web_search("density"))
+
+    assert payload["status"] == "quota_exceeded"
+    assert "search_zoning_ordinance" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_execute_web_search_401_returns_auth_error():
+    mock_response = AsyncMock()
+    mock_response.status_code = 401
+
+    with (
+        patch("plotlot.api.chat.settings") as mock_settings,
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_settings.jina_api_key = "bad-key"
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client_cls)
+        mock_client_cls.get = AsyncMock(return_value=mock_response)
+
+        payload = json.loads(await _execute_web_search("density"))
+
+    assert payload["status"] == "auth_error"
+    assert "search_zoning_ordinance" in payload["message"]

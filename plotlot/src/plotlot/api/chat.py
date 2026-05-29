@@ -193,6 +193,7 @@ class SessionStore:
         self._conversations: dict[str, list[dict]] = {}
         self._datasets: dict[str, DatasetInfo | None] = {}
         self._geocode: dict[str, dict] = {}
+        self._property_context: dict[str, dict] = {}
         self._tokens: dict[str, int] = {}
         self._last_access: dict[str, float] = {}
 
@@ -218,6 +219,7 @@ class SessionStore:
         self._conversations.pop(session_id, None)
         self._datasets.pop(session_id, None)
         self._geocode.pop(session_id, None)
+        self._property_context.pop(session_id, None)
         self._tokens.pop(session_id, None)
         self._last_access.pop(session_id, None)
 
@@ -240,6 +242,12 @@ class SessionStore:
 
     def set_geocode(self, session_id: str, data: dict) -> None:
         self._geocode[session_id] = data
+
+    def get_property_context(self, session_id: str) -> dict | None:
+        return self._property_context.get(session_id)
+
+    def set_property_context(self, session_id: str, data: dict) -> None:
+        self._property_context[session_id] = data
 
     def get_tokens(self, session_id: str) -> int:
         return self._tokens.get(session_id, 0)
@@ -1402,7 +1410,10 @@ async def _execute_web_search(query: str) -> str:
     """Search the web via Jina.ai Search API."""
     if not settings.jina_api_key:
         return json.dumps(
-            {"status": "error", "message": "Web search not configured (JINA_API_KEY not set)"}
+            {
+                "status": "not_configured",
+                "message": "Web search is not available (JINA_API_KEY not set). Use search_zoning_ordinance for zoning questions.",
+            }
         )
 
     try:
@@ -1415,6 +1426,20 @@ async def _execute_web_search(query: str) -> str:
                     "X-Retain-Images": "none",
                 },
             )
+            if resp.status_code in (402, 429):
+                return json.dumps(
+                    {
+                        "status": "quota_exceeded",
+                        "message": "Web search quota exhausted. Use search_zoning_ordinance for zoning questions.",
+                    }
+                )
+            if resp.status_code in (401, 403):
+                return json.dumps(
+                    {
+                        "status": "auth_error",
+                        "message": "Web search authentication failed (invalid JINA_API_KEY). Use search_zoning_ordinance for zoning questions.",
+                    }
+                )
             resp.raise_for_status()
             data = resp.json()
 
@@ -1884,6 +1909,26 @@ async def chat(request: ChatRequest, http_request: Request):
             system_content = AGENT_SYSTEM_PROMPT
             if request.report_context:
                 system_content += _build_report_context(request.report_context)
+            else:
+                # Inject lightweight property context from session even when no full
+                # ZoningReport exists (e.g. chat-only flow after lookup_property_info).
+                prop_ctx = _sessions.get_property_context(session_id)
+                if prop_ctx and prop_ctx.get("address"):
+                    ctx_lines = [
+                        "\n\n## Active Property Context",
+                        f"- Address: {prop_ctx['address']}",
+                    ]
+                    if prop_ctx.get("municipality"):
+                        ctx_lines.append(f"- Municipality: {prop_ctx['municipality']}")
+                    if prop_ctx.get("county"):
+                        ctx_lines.append(f"- County: {prop_ctx['county']}")
+                    if prop_ctx.get("zoning_code"):
+                        ctx_lines.append(f"- Zoning Code: {prop_ctx['zoning_code']}")
+                    if prop_ctx.get("zoning_description"):
+                        ctx_lines.append(f"- Zoning Description: {prop_ctx['zoning_description']}")
+                    if prop_ctx.get("lot_size_sqft"):
+                        ctx_lines.append(f"- Lot Size: {prop_ctx['lot_size_sqft']:,.0f} sqft")
+                    system_content += "\n".join(ctx_lines)
             system_content += _build_intent_context(intent)
 
             messages = [{"role": "system", "content": system_content}]
@@ -2122,6 +2167,20 @@ async def chat(request: ChatRequest, http_request: Request):
                                 geocode = tool_result.result.get("result")
                                 if isinstance(geocode, dict) and session_id:
                                     _sessions.set_geocode(session_id, geocode)
+                            if fn_name == "lookup_property_info" and tool_result.result:
+                                prop = tool_result.result.get("result")
+                                if isinstance(prop, dict) and session_id:
+                                    _sessions.set_property_context(
+                                        session_id,
+                                        {
+                                            "address": prop.get("address", ""),
+                                            "municipality": prop.get("municipality", ""),
+                                            "county": prop.get("county", ""),
+                                            "zoning_code": prop.get("zoning_code", ""),
+                                            "zoning_description": prop.get("zoning_description", ""),
+                                            "lot_size_sqft": prop.get("lot_size_sqft"),
+                                        },
+                                    )
                             result = json.dumps(tool_result.result or {})
                         else:
                             result = await _execute_tool(fn_name, fn_args, session_id=session_id)

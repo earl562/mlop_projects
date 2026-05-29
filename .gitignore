@@ -89,3 +89,6 @@ docs/research/_tmp-*
 HANDOFF.md
 OUTREACH.md
 outreach-agent
+
+# Claude Code local settings (contains personal permissions/hooks)
+.claude/settings.json

@@ -21,18 +21,24 @@ async def hybrid_search(
     zone_code: str,
     limit: int = 10,
     embedding: list[float] | None = None,
+    zone_code_boost: str | None = None,
 ) -> list[SearchResult]:
     """Run hybrid search combining vector similarity and full-text matching.
 
     Uses Reciprocal Rank Fusion (RRF) to combine vector and keyword scores.
     If an embedding is provided it is used directly; otherwise the zone_code
     is embedded at query time with input_type="query".
+
+    zone_code_boost: optional exact zone code (e.g. "RM-3-7") used to boost chunks
+    whose zone_codes[] metadata contains that code, improving accuracy when the
+    query text is a natural-language phrase rather than the bare code.
     """
     with start_span(name="hybrid_search", span_type="RETRIEVER") as span:
         span.set_inputs(
             {
                 "municipality": municipality,
                 "query": zone_code,
+                "zone_code_boost": zone_code_boost,
                 "limit": limit,
             }
         )
@@ -47,7 +53,9 @@ async def hybrid_search(
                 embedding = None
 
         if embedding is not None:
-            results = await _hybrid_rrf(session, municipality, zone_code, embedding, limit)
+            results = await _hybrid_rrf(
+                session, municipality, zone_code, embedding, limit, zone_code_boost
+            )
         else:
             # Fallback: keyword-only when embedding unavailable
             results = await _keyword_only(session, municipality, zone_code, limit)
@@ -79,9 +87,20 @@ async def _hybrid_rrf(
     zone_code: str,
     embedding: list[float],
     limit: int,
+    zone_code_boost: str | None = None,
 ) -> list[SearchResult]:
-    """Full hybrid search with RRF fusion of vector + keyword results."""
-    query = text("""
+    """Full hybrid search with RRF fusion of vector + keyword results.
+
+    zone_code_boost: when provided, chunks whose zone_codes[] metadata contains
+    this exact code receive a +0.1 RRF score bonus. This lifts zone-specific
+    sections above generic provisions that happen to rank well on semantics alone.
+    """
+    boost_sql = (
+        "CASE WHEN :zone_code_boost = ANY(COALESCE(v.zone_codes, k.zone_codes)) THEN 0.1 ELSE 0 END"
+        if zone_code_boost
+        else "0"
+    )
+    query = text(f"""
         WITH vector_results AS (
             SELECT id, section, section_title, zone_codes, chunk_text, municipality,
                    chapter, municode_node_id, source_url,
@@ -115,7 +134,8 @@ async def _hybrid_rrf(
                 COALESCE(v.municode_node_id, k.municode_node_id) AS municode_node_id,
                 COALESCE(v.source_url, k.source_url) AS source_url,
                 COALESCE(1.0 / (:rrf_k + v.vrank), 0) +
-                COALESCE(1.0 / (:rrf_k + k.krank), 0) AS rrf_score
+                COALESCE(1.0 / (:rrf_k + k.krank), 0) +
+                {boost_sql} AS rrf_score
             FROM vector_results v
             FULL OUTER JOIN keyword_results k ON v.id = k.id
         )
@@ -129,18 +149,19 @@ async def _hybrid_rrf(
     embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
     pool_size = limit * 3  # fetch 3x from each source for better fusion
 
-    result = await session.execute(
-        query,
-        {
-            "municipality": f"%{municipality}%",
-            "zone_code": zone_code,
-            "query": zone_code,
-            "embedding": embedding_str,
-            "rrf_k": RRF_K,
-            "pool": pool_size,
-            "limit": limit,
-        },
-    )
+    params: dict = {
+        "municipality": f"%{municipality}%",
+        "zone_code": zone_code,
+        "query": zone_code,
+        "embedding": embedding_str,
+        "rrf_k": RRF_K,
+        "pool": pool_size,
+        "limit": limit,
+    }
+    if zone_code_boost:
+        params["zone_code_boost"] = zone_code_boost
+
+    result = await session.execute(query, params)
     rows = result.fetchall()
 
     return [
