@@ -415,6 +415,17 @@ async def _handle_fetch_ordinance_section(
         await session.close()
 
 
+_PDF_SCRAPED_MUNICIPALITIES: frozenset[str] = frozenset(
+    {
+        "san diego",
+    }
+)
+
+
+def _is_pdf_scraped(municipality: str) -> bool:
+    return municipality.strip().lower() in _PDF_SCRAPED_MUNICIPALITIES
+
+
 async def _handle_search_municode_live(
     args: dict[str, Any], context: ToolContext
 ) -> dict[str, Any]:
@@ -427,6 +438,18 @@ async def _handle_search_municode_live(
 
     municipality = str(args.get("municipality", "")).strip()
     query = str(args.get("query", "")).strip()
+
+    if _is_pdf_scraped(municipality):
+        return {
+            "status": "no_results",
+            "results": [],
+            "evidence": [],
+            "message": (
+                f"{municipality} uses a local PDF index, not Municode. "
+                "Use search_zoning_ordinance instead to query the indexed ordinance chunks."
+            ),
+        }
+
     state = str(args.get("state") or "").strip().upper()
     configs = await get_municode_configs()
     config = resolve_municode_config(configs, municipality, state=state)

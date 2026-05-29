@@ -111,6 +111,18 @@ When the user clearly wants property analysis:
 Then present: zoning district, lot size, setbacks (front/side/rear ft), max height, \
 max density, max allowable units. If a value isn't found, say so explicitly.
 
+## search_zoning_ordinance Query Construction
+ALWAYS prefix the search query with the zone code obtained from lookup_property_info. \
+Examples: "RM-3-7 density dwelling units per lot area", "R-3 setbacks front side rear", \
+"RM-3-7 permitted uses allowed conditional". Never pass a bare natural-language phrase \
+without the zone code prefix — the retriever uses it to boost zone-specific sections above \
+generic provisions.
+
+When the user asks about permitted uses or what can be built, use query terms like \
+"[ZONE] permitted uses allowed uses conditional uses" — not the same terms used for a prior \
+setback or density query. Each distinct topic needs a distinct search to avoid returning \
+the same cached results.
+
 ## Land-Sourcing Workflow
 When the user wants to source opportunities rather than analyze one known site:
 1. search_properties with filters (county is REQUIRED)
@@ -162,7 +174,7 @@ DIRECT_ANALYSIS_PROMPT_V1 = ANALYSIS_PROMPT_V2
 # Registry: name → (version, prompt_text)
 _PROMPT_REGISTRY: dict[str, tuple[str, str]] = {
     "analysis": ("v2", ANALYSIS_PROMPT_V2),
-    "chat_agent": ("v2", CHAT_AGENT_PROMPT_V2),
+    "chat_agent": ("v3", CHAT_AGENT_PROMPT_V2),
     "direct_analysis": ("v1", DIRECT_ANALYSIS_PROMPT_V1),
 }
 
