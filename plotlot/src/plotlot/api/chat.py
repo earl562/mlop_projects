@@ -194,6 +194,7 @@ class SessionStore:
         self._datasets: dict[str, DatasetInfo | None] = {}
         self._geocode: dict[str, dict] = {}
         self._property_context: dict[str, dict] = {}
+        self._evidence_ids: dict[str, list[str]] = {}
         self._tokens: dict[str, int] = {}
         self._last_access: dict[str, float] = {}
 
@@ -220,6 +221,7 @@ class SessionStore:
         self._datasets.pop(session_id, None)
         self._geocode.pop(session_id, None)
         self._property_context.pop(session_id, None)
+        self._evidence_ids.pop(session_id, None)
         self._tokens.pop(session_id, None)
         self._last_access.pop(session_id, None)
 
@@ -248,6 +250,15 @@ class SessionStore:
 
     def set_property_context(self, session_id: str, data: dict) -> None:
         self._property_context[session_id] = data
+
+    def get_evidence_ids(self, session_id: str) -> list[str]:
+        return self._evidence_ids.get(session_id, [])
+
+    def add_evidence_ids(self, session_id: str, ids: list[str]) -> None:
+        existing = self._evidence_ids.setdefault(session_id, [])
+        for ev_id in ids:
+            if ev_id and ev_id not in existing:
+                existing.append(ev_id)
 
     def get_tokens(self, session_id: str) -> int:
         return self._tokens.get(session_id, 0)
@@ -2155,6 +2166,13 @@ async def chat(request: ChatRequest, http_request: Request):
                             "discover_open_data_layers",
                             "generate_document",
                         }:
+                            # For generate_document: inject accumulated session evidence IDs
+                            # when the agent didn't pass any (common case in chat-only flow).
+                            if fn_name == "generate_document" and not fn_args.get("evidence_ids"):
+                                accumulated = _sessions.get_evidence_ids(session_id)
+                                if accumulated:
+                                    fn_args = {**fn_args, "evidence_ids": accumulated}
+
                             runtime = get_default_runtime()
                             tool_result = await runtime.call_tool(
                                 tool_name=fn_name,
@@ -2183,6 +2201,18 @@ async def chat(request: ChatRequest, http_request: Request):
                                             "lot_size_sqft": prop.get("lot_size_sqft"),
                                         },
                                     )
+                            # Accumulate evidence IDs from every tool that returns them,
+                            # so generate_document can reference the full research chain.
+                            if tool_result.result and session_id:
+                                evidence_list = tool_result.result.get("evidence") or []
+                                if isinstance(evidence_list, list):
+                                    new_ids = [
+                                        ev["id"]
+                                        for ev in evidence_list
+                                        if isinstance(ev, dict) and ev.get("id")
+                                    ]
+                                    if new_ids:
+                                        _sessions.add_evidence_ids(session_id, new_ids)
                             result = json.dumps(tool_result.result or {})
                         else:
                             result = await _execute_tool(fn_name, fn_args, session_id=session_id)

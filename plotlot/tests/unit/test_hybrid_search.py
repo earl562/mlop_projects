@@ -112,4 +112,13 @@ def test_chat_agent_prompt_contains_permitted_uses_diversification():
 def test_chat_agent_prompt_version_updated():
     from plotlot.observability.prompts import get_prompt_version
 
-    assert get_prompt_version("chat_agent") == "v3"
+    assert get_prompt_version("chat_agent") == "v4"
+
+
+def test_chat_agent_prompt_contains_generate_document_instruction():
+    """System prompt must tell agent to call generate_document without passing evidence_ids."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent")
+    assert "generate_document" in prompt
+    assert "evidence_ids" in prompt

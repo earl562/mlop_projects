@@ -58,3 +58,46 @@ def test_session_store_has_property_context_dict_attribute():
     store = _make_store()
     assert hasattr(store, "_property_context")
     assert isinstance(store._property_context, dict)
+
+
+# ---------------------------------------------------------------------------
+# Evidence ID accumulator tests (generate_document fix)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_ids_empty_by_default():
+    store = _make_store()
+    assert store.get_evidence_ids("unknown") == []
+
+
+def test_evidence_ids_accumulate():
+    store = _make_store()
+    sid = "sess_ev"
+    store.add_evidence_ids(sid, ["ev1", "ev2"])
+    store.add_evidence_ids(sid, ["ev3"])
+    assert store.get_evidence_ids(sid) == ["ev1", "ev2", "ev3"]
+
+
+def test_evidence_ids_deduped():
+    store = _make_store()
+    sid = "sess_dedup"
+    store.add_evidence_ids(sid, ["ev1", "ev2"])
+    store.add_evidence_ids(sid, ["ev2", "ev3"])
+    ids = store.get_evidence_ids(sid)
+    assert ids.count("ev2") == 1
+    assert set(ids) == {"ev1", "ev2", "ev3"}
+
+
+def test_evidence_ids_evicted_with_session():
+    store = _make_store()
+    sid = "sess_ev_evict"
+    store.add_evidence_ids(sid, ["ev1"])
+    store.delete_session(sid)
+    assert store.get_evidence_ids(sid) == []
+
+
+def test_evidence_ids_ignores_empty_strings():
+    store = _make_store()
+    sid = "sess_empty"
+    store.add_evidence_ids(sid, ["", "ev1", ""])
+    assert store.get_evidence_ids(sid) == ["ev1"]

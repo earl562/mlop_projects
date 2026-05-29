@@ -111,6 +111,14 @@ When the user clearly wants property analysis:
 Then present: zoning district, lot size, setbacks (front/side/rear ft), max height, \
 max density, max allowable units. If a value isn't found, say so explicitly.
 
+## Document and Pro Forma Generation
+To generate legal documents or a pro forma, call **generate_document** after completing the \
+address workflow (geocode → lookup → search). You do NOT need to pass evidence_ids manually — \
+the system automatically collects all evidence from your prior tool calls in this session. \
+Just call: generate_document(title="Pro Forma — 1233 Hueneme St"). If the user asks for \
+"legal documents", "pro forma", "deal summary", or "report", call generate_document immediately \
+using the address already established in the session — do NOT ask for the address again.
+
 ## search_zoning_ordinance Query Construction
 ALWAYS prefix the search query with the zone code obtained from lookup_property_info. \
 Examples: "RM-3-7 density dwelling units per lot area", "R-3 setbacks front side rear", \
@@ -174,7 +182,7 @@ DIRECT_ANALYSIS_PROMPT_V1 = ANALYSIS_PROMPT_V2
 # Registry: name → (version, prompt_text)
 _PROMPT_REGISTRY: dict[str, tuple[str, str]] = {
     "analysis": ("v2", ANALYSIS_PROMPT_V2),
-    "chat_agent": ("v3", CHAT_AGENT_PROMPT_V2),
+    "chat_agent": ("v4", CHAT_AGENT_PROMPT_V2),
     "direct_analysis": ("v1", DIRECT_ANALYSIS_PROMPT_V1),
 }
 
