@@ -208,7 +208,6 @@ export default function Home() {
       });
       queueMicrotask(() => setCurrentReport(restoredReport));
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring persisted session state on first mount
     setMessages(normalizeMessageIds(restored));
     setLocalSessionId(lastId);
     localSessionIdRef.current = lastId;
