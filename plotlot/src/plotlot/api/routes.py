@@ -539,6 +539,55 @@ async def analyze_stream(request: AnalyzeRequest):
                     {"step": "proforma", "message": "Skipped", "complete": True},
                 )
 
+            # Step 8: Site risk — FEMA flood zone + NWI wetlands (non-blocking)
+            if "site_risk" not in request.skip_steps and lat and lng:
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "site_risk",
+                        "message": "Checking FEMA flood zone and wetland data...",
+                    },
+                )
+                try:
+                    from plotlot.pipeline.site_risk import fetch_site_risk
+
+                    site_risk = await asyncio.wait_for(
+                        fetch_site_risk(lat, lng),
+                        timeout=15,
+                    )
+                    report.site_risk = site_risk
+                    risk_msg = (
+                        f"Flood zone {site_risk.flood_zone.zone} — {site_risk.overall_risk} risk"
+                        if site_risk.flood_zone
+                        else "No flood zone data"
+                    )
+                    if site_risk.has_wetlands:
+                        risk_msg += " · Wetlands detected"
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "site_risk",
+                            "message": risk_msg,
+                            "complete": True,
+                            "risk_level": site_risk.overall_risk,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("Site risk fetch failed (non-blocking): %s", e)
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "site_risk",
+                            "message": "Site risk data unavailable",
+                            "complete": True,
+                        },
+                    )
+            elif "site_risk" in request.skip_steps:
+                yield _sse_event(
+                    "status",
+                    {"step": "site_risk", "message": "Skipped", "complete": True},
+                )
+
             # Final result
             report_dict = asdict(report)
             yield _sse_event("result", report_dict)
