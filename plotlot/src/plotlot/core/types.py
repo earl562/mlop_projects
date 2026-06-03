@@ -490,6 +490,45 @@ class ZoningReport:
     # Inline citations — maps extracted values back to source ordinance chunks
     source_refs: list[SourceRef] = field(default_factory=list)
 
+    # Site risk — FEMA flood zone + NWI wetland data
+    site_risk: "SiteRisk | None" = None
+
+
+# ---------------------------------------------------------------------------
+# Site risk types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FloodZoneInfo:
+    """FEMA flood zone designation for a parcel."""
+
+    zone: str  # e.g. "AE", "X", "VE"
+    zone_subtype: str  # FEMA ZONE_SUBTY field
+    in_sfha: bool  # Special Flood Hazard Area — mandatory flood insurance
+    risk_level: str  # "high", "moderate", "minimal", "undetermined"
+    description: str
+
+
+@dataclass
+class WetlandInfo:
+    """A single NWI wetland polygon intersecting or adjacent to the parcel."""
+
+    wetland_type: str  # e.g. "Freshwater Emergent Wetland"
+    acres: float
+
+
+@dataclass
+class SiteRisk:
+    """Physical site risk flags drawn from FEMA NFHL and USFWS NWI."""
+
+    flood_zone: FloodZoneInfo | None = None
+    wetlands: list[WetlandInfo] = field(default_factory=list)
+    has_wetlands: bool = False
+    overall_risk: str = "unknown"  # "high", "moderate", "low", "unknown"
+    risk_flags: list[str] = field(default_factory=list)
+    data_sources: list[str] = field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Comparable sales types

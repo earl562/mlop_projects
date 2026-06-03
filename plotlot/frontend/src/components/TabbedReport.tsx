@@ -13,6 +13,7 @@ import DocumentGenerator from "./DocumentGenerator";
 import FloorPlanViewer from "./FloorPlanViewer";
 import SetbackDiagram from "./SetbackDiagram";
 import PropertyIntelligence from "./PropertyIntelligence";
+import SiteRiskCard from "./SiteRiskCard";
 import { useToast } from "./Toast";
 import ErrorBoundary from "./ErrorBoundary";
 import {
@@ -502,6 +503,16 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
                   zoningDistrict={report.zoning_district}
                   municipality={report.municipality}
                 /></ErrorBoundary>
+              </div>
+            )}
+
+            {/* Site Risk — FEMA flood zone + NWI wetlands */}
+            {report.site_risk && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">Site Risk</h3>
+                <ErrorBoundary>
+                  <SiteRiskCard siteRisk={report.site_risk} />
+                </ErrorBoundary>
               </div>
             )}
 

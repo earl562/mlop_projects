@@ -19,6 +19,7 @@ const STEP_ORDER = [
   "calculation",
   "comps",
   "proforma",
+  "site_risk",
 ];
 
 const STEP_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ const STEP_LABELS: Record<string, string> = {
   calculation: "Max Units Calc",
   comps: "Comparable Sales",
   proforma: "Land Pro Forma",
+  site_risk: "Site Risk",
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
@@ -41,6 +43,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   calculation: "Running 4-constraint density calculator (density, lot area, FAR, envelope)...",
   comps: "Discovering comparable sales within 3-mile radius via ArcGIS Hub...",
   proforma: "Computing residual land valuation (GDV - costs - margin = max offer)...",
+  site_risk: "Checking FEMA flood zone and USFWS wetland inventory...",
 };
 
 // Static narratives shown when a step has no dynamic message from the backend
@@ -51,6 +54,7 @@ const STEP_FALLBACK_NARRATIVES: Record<string, string> = {
   calculation: "Determined maximum allowable units",
   comps: "Comparable sales analysis complete",
   proforma: "Pro forma calculated — max offer price determined",
+  site_risk: "Site risk assessment complete",
 };
 
 // ---------------------------------------------------------------------------

@@ -166,6 +166,28 @@ export interface SourceRefData {
   score: number;
 }
 
+export interface FloodZoneData {
+  zone: string;
+  zone_subtype: string;
+  in_sfha: boolean;
+  risk_level: string;
+  description: string;
+}
+
+export interface WetlandData {
+  wetland_type: string;
+  acres: number;
+}
+
+export interface SiteRiskData {
+  flood_zone: FloodZoneData | null;
+  wetlands: WetlandData[];
+  has_wetlands: boolean;
+  overall_risk: string;
+  risk_flags: string[];
+  data_sources: string[];
+}
+
 export interface ZoningReportData {
   address: string;
   formatted_address: string;
@@ -190,6 +212,7 @@ export interface ZoningReportData {
   density_analysis: DensityAnalysisData | null;
   comp_analysis: CompAnalysisData | null;
   pro_forma: LandProFormaData | null;
+  site_risk: SiteRiskData | null;
   summary: string;
   sources: string[];
   confidence: string;
