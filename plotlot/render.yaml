@@ -28,3 +28,13 @@ services:
         sync: false
       - key: CORS_ORIGINS
         value: '["https://mlopprojects.vercel.app","https://plotlot-v2.vercel.app","http://localhost:3000"]'
+      - key: AUTH_ENABLED
+        value: "false"
+      - key: CLERK_JWKS_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRO_PRICE_ID
+        sync: false
