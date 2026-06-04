@@ -6,8 +6,6 @@ cannot accidentally re-introduce the pattern that caused wrong zoning outputs.
 
 from __future__ import annotations
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Analysis prompt grounding
