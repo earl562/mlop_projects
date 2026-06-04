@@ -112,7 +112,7 @@ def test_chat_agent_prompt_contains_permitted_uses_diversification():
 def test_chat_agent_prompt_version_updated():
     from plotlot.observability.prompts import get_prompt_version
 
-    assert get_prompt_version("chat_agent") == "v4"
+    assert get_prompt_version("chat_agent") == "v5"
 
 
 def test_chat_agent_prompt_contains_generate_document_instruction():
@@ -122,3 +122,31 @@ def test_chat_agent_prompt_contains_generate_document_instruction():
     prompt = get_active_prompt("chat_agent")
     assert "generate_document" in prompt
     assert "evidence_ids" in prompt
+
+
+def test_chat_agent_prompt_contains_session_property_context_rule():
+    """Session property context section must exist to prevent lot-size drift."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent")
+    assert "lot_size_sqft" in prompt
+    assert "lookup_property_info" in prompt.lower() or "lookup_property" in prompt.lower()
+
+
+def test_chat_agent_prompt_contains_disambiguation_rule():
+    """Disambiguation rule must tell agent to ask before guessing on ambiguous intent."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent")
+    assert "DO NOT guess" in prompt or "Don't guess" in prompt or "don't guess" in prompt.lower()
+    assert "clarif" in prompt.lower()
+
+
+def test_chat_agent_prompt_does_not_hardcode_whole_area():
+    """The fix must be generic — must not hardcode the phrase 'whole area' as a rule."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent")
+    # 'whole area' may appear as an example in context, but the rule itself
+    # must cover ambiguous intent generically, not just this one phrase
+    assert "ambiguous" in prompt.lower() or "unclear" in prompt.lower()
