@@ -771,8 +771,13 @@ def _clean_messages_for_api(messages: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 DIRECT_SYSTEM_PROMPT = """\
-You are a zoning analysis expert for South Florida real estate. You analyze municipal zoning \
-ordinance text and extract structured zoning information for a given property address.
+You are a zoning analyst. You extract structured zoning information from retrieved municipal \
+ordinance text for any US municipality.
+
+GROUNDING RULE: Every value you extract MUST be explicitly stated in the retrieved chunks. \
+If a value is not found in the text, use empty string "" or empty array []. \
+Do NOT use your training knowledge to fill gaps — wrong numbers cause real financial harm. \
+Null/empty is always correct when the text does not state the value.
 
 Given the zoning ordinance chunks retrieved for a municipality, extract and return a JSON object \
 with the following fields. Use empty string "" for fields you cannot determine from the provided text. \

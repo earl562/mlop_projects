@@ -35,7 +35,7 @@ from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
 
-MAX_ANALYSIS_TURNS = 3
+MAX_ANALYSIS_TURNS = 6
 PIPELINE_VERSION = "v2.2"
 
 # Pipeline result cache — 30min TTL (Care Access: 86% cost reduction with caching)
@@ -504,9 +504,13 @@ async def _agentic_analysis(
                 {
                     "role": "user",
                     "content": (
-                        "STOP searching. Call the submit_report tool NOW with your analysis. "
-                        "Fill in all fields using the data you have. If some data is missing, "
-                        "use your expert knowledge and set confidence accordingly. "
+                        "You have gathered enough data. Call submit_report NOW with your findings. "
+                        "For any field where you did not find explicit text in the retrieved chunks, "
+                        "set the value to null (numeric) or empty string (text). "
+                        "Do NOT fill in values from general knowledge — null is correct when the "
+                        "ordinance text does not state a value. Set confidence based on how many "
+                        "fields are supported by retrieved text: high = all key fields found, "
+                        "medium = most found, low = critical fields missing. "
                         "You MUST call submit_report immediately."
                     ),
                 }
