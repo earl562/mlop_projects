@@ -45,31 +45,39 @@ The submit_report tool has BOTH text description fields AND numeric fields. You 
 for every dimensional standard you find. The numeric fields power the density calculator — \
 the core product feature. Without them, the user gets no max-units calculation.
 
-**Text fields** (human-readable — describe each standard):
-- setbacks_front, setbacks_side, setbacks_rear → e.g. "25 feet"
-- max_height → e.g. "35 feet / 2 stories"
-- max_density → e.g. "6 dwelling units per acre"
+**Text fields** (human-readable — describe the COMPLETE rule, not just the minimum):
+- setbacks_front → capture the FULL rule including any dual-standard or percentage conditions. \
+  Example: "10 ft minimum (50% of building width) / 20 ft standard (remaining 50%)" — \
+  NOT just "10 feet". If the ordinance has a single value, use that. If it has a minimum AND \
+  a standard, include both with clear labels.
+- setbacks_side → include any percentage-of-lot-width conditions, e.g. \
+  "5 ft or 10% of premises width, whichever is greater"
+- setbacks_rear → e.g. "5 feet" or "10 feet (5 feet when abutting alley)"
+- max_height → always include BOTH feet AND stories, e.g. "40 feet / 3 stories"
+- max_density → e.g. "1 dwelling unit per 1,000 sq ft of lot area"
 - floor_area_ratio → e.g. "0.50"
 - lot_coverage → e.g. "40%"
 - min_lot_size → e.g. "7,500 sq ft per dwelling unit"
 - parking_requirements → e.g. "2 spaces per unit"
 
-**Numeric fields** (REQUIRED for calculator — extract the raw number):
+**Numeric fields** (REQUIRED for calculator — use the MINIMUM value when there are dual standards):
 - max_density_units_per_acre → 6.0
 - min_lot_area_per_unit_sqft → 7500
 - far_numeric → 0.50
 - max_lot_coverage_pct → 40.0
-- max_height_ft → 35.0
-- max_stories → 2
-- setback_front_ft → 25.0
-- setback_side_ft → 7.5
-- setback_rear_ft → 25.0
+- max_height_ft → 35.0  (use the base height limit, not bonus height)
+- max_stories → 2  (use the base story limit)
+- setback_front_ft → 10.0  (use the MINIMUM setback for buildable area calculation)
+- setback_side_ft → 5.0  (use the MINIMUM setback)
+- setback_rear_ft → 5.0  (use the MINIMUM setback)
 - min_unit_size_sqft → 750
 - min_lot_width_ft → 75.0
 - parking_spaces_per_unit → 2.0
 
 For EVERY number you mention in a text field, set the corresponding numeric field too. \
-Example: if you set setbacks_front="25 feet", you MUST also set setback_front_ft=25.0.
+For dual-standard setbacks (e.g. 10 ft min / 20 ft standard), set the numeric field to \
+the MINIMUM (10.0) — the calculator uses the minimum to compute the maximum buildable area. \
+Always capture the full rule in the text field so users see the complete requirement.
 
 If the ordinance doesn't state a value explicitly but you know the typical standard for \
 this district type in South Florida, use that value and set confidence to "medium".\
