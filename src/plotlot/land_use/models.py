@@ -109,6 +109,14 @@ class EvidenceItem(BaseModel):
     confidence: EvidenceConfidence
     citation: EvidenceCitation
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    # Lifecycle tracking fields for full acquisition/development process
+    process_phase: str | None = None  # acquisition, entitlement, design, construction, disposition
+    decision_point: str | None = None  # what decision this evidence supported (e.g., "go/no-go", "design_approval")
+    supersedes_evidence: str | None = None  # ID of evidence this replaces
+    is_superseded_by: str | None = None  # ID of evidence that replaces this
+    regulatory_framework: str | None = None  # zoning, environmental, building_codes, etc.
+    stakeholder_relevance: list[str] = Field(default_factory=list)  # developer, planner, engineer, financier, etc.
 
     @field_validator("retrieved_at")
     @classmethod

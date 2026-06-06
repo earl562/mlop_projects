@@ -5,6 +5,7 @@ This first slice provides a bounded packet of:
 - the user objective
 - site selectors (workspace/project/site)
 - any existing evidence IDs
+- lifecycle tracking for acquisition/development process
 
 Later iterations can add ranking, token budgeting, and report/document state.
 """
