@@ -1,148 +1,455 @@
-# ARXIV PAPERS TECHNICAL BREAKDOWN - BATCH 2
+# ARXIV PAPERS TECHNICAL BREAKDOWN - BATCH 2 (DEEP DIVE)
 ## Harness Research Papers from Obsidian Vault - Ralph Loop Iteration 2
 
 **Source:** `/Users/earlperry/Documents/AgenticHarnesses/Sandboxes/Harnesses/Harness info.md`
-**Papers Processed (this batch):** 6 of 127 remaining
-**Status:** BATCH 2 IN PROGRESS
-**Naming Convention:** This file will become `ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_2.md` when moved to `/agentic_harness_tracking/education/` after limit reached
-**Previous Batch:** `education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_1.md` (Papers 18, 19)
-**Ralph Loop Pattern:** Process batch → Move to education → Commit → Push to feature branch → PR to dev → Repeat
+**Status:** BATCH 2 REWRITTEN - DEEP DIVE LEVEL
+**Target depth per paper:** 150-300 lines (matches Paper 18 at 177 lines, Paper 19 at 386 lines in PART_1)
+**Previous Batch (committed, pushed):**
+- `education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_1.md` (Papers 18, 19) - 576 lines
+**This file:** PART_2 - 5 papers at deep level (replacing 19 shallow)
+**Ralph Loop Pattern:** Process paper deeply → Update batch file → When limit reached, move to education → Commit → Push to feature branch → PR to dev → Repeat
+
+**Papers in this batch (re-selected for impact on PlotLot):**
+- 20: Meta-Harness (Stanford, 30 Mar 2026) - **End-to-end optimization of harness code**
+- 22: AlphaLab (31 Mar 2026) - **Autonomous multi-agent research harness**
+- 23: Runtime Governance (9 Apr 2026) - **Policy-constrained execution framework**
+- 24: SkVM (3 Apr 2026) - **Skill compilation/runtiming for portable skills**
+- 25: DebugHarness (4 Apr 2026) - **Dynamic debugging for autonomous program repair**
+
+**Papers deferred to PART_3+ for deep treatment:**
+- 21: NLAH (now in batch 3 deep dive)
+- 26-38: 13 papers at lower priority for PlotLot
 
 ---
 
 # PAPER 20: 2603.28052 - Meta-Harness: End-to-End Optimization of Model Harnesses
 
-**Authors:** Yoonho Lee, Roshen Nair, Qizheng Zhang, Kangwook Lee, Omar Khattab, Chelsea Finn
-**Date:** 30 Mar 2026 | cs.AI | 693 KB
+**Authors:** Yoonho Lee (Stanford), Roshen Nair (Stanford), Qizheng Zhang (Stanford), Kangwook Lee (KRAFTON), Omar Khattab (MIT), Chelsea Finn (Stanford)
+**Date:** 30 Mar 2026 | cs.AI | 693 KB | CC BY 4.0
+**Project page:** https://yoonholee.com/meta-harness/
+**Code:** https://github.com/stanford-iris-lab/meta-harness-tbench2-artifact
 
 ## TECHNICAL BREAKDOWN
 
-### Core Contributions
-1. **Outer-Loop Harness Optimization System**: Treats harness code as a first-class optimization target, separate from model weights
-2. **Agentic Proposer Architecture**: LLM agent accesses source code, scores, and execution traces of all prior candidates via filesystem
-3. **Richer-Feedback Search**: Avoids aggressive text compression that breaks existing text optimizers
-4. **Cross-Domain Validation**: Demonstrated on text classification, math reasoning, and agentic coding
+### 1. Problem Statement and Motivation
 
-### Key Results
-- **Online text classification**: +7.7 points over SOTA context management while using 4x fewer context tokens
-- **Retrieval-augmented math reasoning**: Single discovered harness improves accuracy 4.7 points on 200 IMO-level problems across 5 held-out models
-- **Agentic coding**: Discovered harnesses surpass best hand-engineered baselines on TerminalBench-2
+Changing the harness around a fixed LLM can produce a **6× performance gap** on the same benchmark. The harness — the code that determines what to store, retrieve, and show to the model — often matters as much as the model itself. Yet harness engineering remains **largely manual**: practitioners inspect failures, adjust heuristics, iterate on small numbers of designs.
 
-### Architecture
-- **Filesystem-based candidate storage**: All prior harnesses persisted as files for proposer access
-- **Score + trace retrieval**: Proposer queries past attempts, full execution traces, and scores
-- **Source code editing**: Proposer writes new harness code as files
-- **Evaluation loop**: New candidate evaluated against benchmarks, results feed back
+The paper asks: **can harness engineering itself be automated?**
 
-### Relationship to PlotLot
-- **Direct mapping**: PlotLot's harness layer (`src/plotlot/harness/`) is the optimization target
-- **Entitlement phase tools** (zoning_variance_analyzer, etc.) are candidates the Meta-Harness proposer could mutate
-- **Trace persistence**: PlotLot's `ContextPacket.decision_history` already records execution paths—Meta-Harness would consume these as proposer input
-- **Score signal**: Use EvidenceItem lifecycle fields (`supersedes_evidence`, `is_superseded_by`) to track which harness version won on which deal
+### 2. Why Existing Text Optimizers Fail at Harness Engineering
 
-### Implementation Sketch
+Recent text optimization methods (OPRO, TextGrad, AlphaEvolve, GEPA, Feedback Descent, TTT-Discover) are poorly matched to harness engineering because they operate with **short-horizon or heavily compressed feedback**:
+
+- Some condition only on the current candidate (OPRO, TextGrad)
+- Others rely primarily on scalar scores (AlphaEvolve)
+- Others restrict feedback to short templates or LLM-generated summaries (GEPA, Feedback Descent)
+- TTT-Discover uses previous solution fragments only
+
+Harnesses act over **long horizons**: a single choice about storage, retrieval, or presentation affects behavior many reasoning steps later. Compressed feedback removes the information needed to trace downstream failures to earlier decisions.
+
+**Token context comparison (Table 1):**
+
+| Method | History | Log Content | MTok/iter |
+|--------|---------|-------------|-----------|
+| OPRO | Window | past (solution, score) pairs | 0.002 |
+| TextGrad | Last | textual feedback on current artifact | 0.015 |
+| AlphaEvolve | Window | program database + eval. scores | 0.022 |
+| GEPA | Summary | reflective feedback from rollout traces | 0.008 |
+| Feedback Descent | Summary | comparison + textual feedback | 0.012 |
+| TTT-Discover | Window | prev. solution fragment | 0.026 |
+| **Meta-Harness** | **Full** | **all logs and scores** | **10.0** |
+
+In the most demanding setting, a single evaluation can produce up to 10,000,000 tokens of diagnostic information — **3 orders of magnitude beyond** the largest feedback budgets in prior text optimization.
+
+### 3. Mathematical Formulation
+
+A harness H is a stateful program that wraps a language model M and determines what context the model sees at each step. For a task instance x ∈ X, execute a rollout trajectory τ ~ p_M(H, x). The harness constructs prompts for M, the model responds, and the harness updates state. A task-specific reward function r(τ, x) scores the trajectory.
+
+**Objective:**
+
+```
+H* = argmax_H  E_{x~X, τ~p_M(H,x)}  r(τ, x)
+```
+
+When multiple objectives (e.g., accuracy and context cost) are relevant, evaluate under Pareto dominance and report the frontier.
+
+### 4. Meta-Harness Architecture
+
+**Coding-agent proposer.** A language-model-based system that can invoke developer tools and modify code. In experiments, the proposer P is **Claude Code with Opus-4.6**. The proposer is guided by a minimal domain-specific skill describing where to write new harnesses, how to inspect previous harnesses and execution traces, and what files it can/cannot modify.
+
+**Filesystem-based feedback channel.** Each evaluated harness contributes a directory containing:
+- Source code
+- Scores
+- Execution traces (prompts, tool calls, model outputs, state updates)
+
+The filesystem is far larger than the proposer's context window, so the proposer queries it through terminal tools (`grep`, `cat`) rather than ingesting as a single prompt. In practice, the proposer reads a **median of 82 files per iteration**, referencing over 20 prior candidates per step.
+
+**Pareto frontier.** Maintains a population H and a Pareto frontier over evaluated harnesses, but **imposes no parent-selection rule**: the proposer is free to inspect any prior harness and its execution trace when proposing new ones. Run evolution for a fixed number of iterations; perform final test-set evaluation on the Pareto frontier.
+
+**Why code-space search.** Coding models tend to propose coherent algorithms rather than brittle hard-coded solutions, biasing search toward reusable context-management procedures. Action space aligns with read-write-execute workflows on which frontier coding assistants are trained.
+
+### 5. Algorithm 1: Meta-Harness Outer Loop
+
+```
+Input: tasks X, LLM M, proposer P, iterations N
+Initialize: population H   ⊳ Initial set of valid harnesses
+Initialize: filesystem D ← ∅  ⊳ stores code, scores, traces
+
+for H ∈ H do:
+    E_H ← Evaluate(H, M, X)
+    D ← D ∪ {(H, E_H)}
+
+for t = 1...N do:
+    Proposer P queries filesystem D  ⊳ inspects prior harnesses and scores
+    Proposer P proposes k new harnesses {H_1, ..., H_k}
+    for H in {H_1, ..., H_k} do:
+        if H passes interface validation:
+            D ← D ∪ {(H, Evaluate(H, M, X))}
+
+return Pareto frontier of harnesses stored in D
+```
+
+**Critical design choice:** The proposer is **not** a raw next-token model operating on a fixed prompt assembled by the outer loop. It is an **agent that retrieves information, navigates prior artifacts, and edits code** as part of the search itself.
+
+### 6. Experiment 1: Online Text Classification
+
+**Setup:** Following Zhang et al. (ACE) and Ye et al. (MCE). An LLM receives labeled examples one at a time, updates its memory, evaluated on held-out test set. LLM: GPT-OSS-120B.
+
+**Datasets:**
+- LawBench (Law) — criminal charges from case descriptions, 215 classes
+- Symptom2Disease (S2D) — diseases from symptom descriptions, 22 classes
+- USPTO-50k — precursor reactants from product molecules, 180 classes
+
+**Search:** 20 iterations × 2 candidates/iteration = 40 candidates. Initialized from zero-shot, few-shot, ACE, MCE.
+
+**Results (Table 2):**
+
+| Harness | USPTO | S2D | Law | Avg Acc | Ctx (k) |
+|---------|-------|-----|-----|---------|---------|
+| Zero-Shot | 12.0 | 63.2 | 7.0 | 27.4 | 0 |
+| Few-Shot (8) | 14.0 | 67.9 | 21.0 | 34.3 | 2.0 |
+| Few-Shot (32) | 13.0 | 72.2 | 21.0 | 35.4 | 7.9 |
+| Few-Shot (all) | 15.0 | 78.3 | 29.0 | 40.8 | 12.3 |
+| MCE | 14.0 | 83.0 | 23.0 | 40.0 | 28.5 |
+| ACE | 16.0 | 77.8 | 29.0 | 40.9 | 50.8 |
+| **Meta-Harness** | **14.0** | **86.8** | **45.0** | **48.6** | **11.4** |
+
+Meta-Harness improves over ACE by **+7.7 points** while using **4× fewer context tokens** (11.4k vs 50.8k).
+
+**Ablation (Table 3) — what matters in the proposer interface:**
+
+| Interface | Scores | Code | Summary | Traces | Median | Best Acc | #>ZS |
+|-----------|--------|------|---------|--------|--------|----------|------|
+| Scores Only | ✓ | ✓ | × | × | 34.6 | 41.3 | 26 |
+| Scores + Summary | ✓ | ✓ | ✓ | × | 34.9 | 38.7 | 23 |
+| **Meta-Harness (full)** | ✓ | ✓ | - | ✓ | **50.0** | **56.7** | **39** |
+
+**Key finding:** Full access to raw execution traces is the most important component. Summaries do not recover missing signal and may hurt by compressing away diagnostically useful details.
+
+**Text optimizer comparison (Table 4):**
+
+| Method | Median | Best |
+|--------|--------|------|
+| GEPA | 32.6 | 40.2 |
+| Best-of-N | 34.0 | 44.2 |
+| OpenEvolve | 39.1 | 43.3 |
+| TTT-Discover | 34.1 | 45.6 |
+| **Meta-Harness** | **50.0** | **56.7** |
+
+Meta-Harness matches best prior text optimizers in 0.1× the evaluations; final accuracy surpasses theirs by >10 points.
+
+**OOD generalization (Table 5):** On 9 previously unseen datasets (SciC, FiNER, Amz5, FPB, GoEmo, Bank77, News, SciT, TwHate), Meta-Harness achieves best average (73.1%) outperforming ACE (70.2%) and all few-shot baselines. Best performance on 6/9 datasets — suggesting discovered harness captures generally effective strategies rather than overfitting.
+
+### 7. Experiment 2: Retrieval-Augmented Math Reasoning
+
+**Setup:** Olympiad math (OlympiadBench + Omni-MATH hard). 250-problem search set, 200-problem test set (IMO-AnswerBench, IMO-ProofBench, ArXivMath). Retrieval corpus: ≥500,000 solved problems from 8 open-source datasets (deduplicated and decontaminated).
+
+**Search:** 40 iterations → 109 candidate retrieval harnesses. Initialized from zero-shot, few-shot, ACE. LLM: GPT-OSS-20B. Eval harness tested on 4 unseen models: GPT-5.4-nano, GPT-5.4-mini, Gemini-3.1-Flash-Lite, Gemini-3-Flash.
+
+**Results (Table 6) — pass@1 averaged over 3 samples:**
+
+| Method | GPT-5.4n | GPT-5.4m | Gem-3.1FL | Gem-3F | GPT-20B | Avg |
+|--------|----------|----------|-----------|--------|---------|-----|
+| No Retriever | 23.0 | 28.8 | 28.6 | 42.6 | 47.6 | 34.1 |
+| Dense Retrieval (k=1) | 27.1 | 24.5 | 31.3 | 42.3 | 46.9 | 34.4 |
+| Dense Retrieval (k=5) | 31.1 | 28.3 | 37.1 | 47.2 | 46.7 | 38.1 |
+| Random Few-shot | 23.1 | 24.5 | 31.0 | 40.4 | 41.8 | 32.2 |
+| BM25 Retrieval | 30.2 | 29.2 | 32.8 | 46.6 | 48.9 | 37.5 |
+| **Meta-Harness** | **31.7** | **30.4** | **34.9** | 46.3 | **50.6** | **38.8** |
+
+**Key result:** Single discovered retrieval harness transfers across 5 held-out models, improving accuracy by **+4.7 points** average over no retriever. Meta-Harness operates entirely in code space on top of BM25 lexical stack (no new dense encoder needed).
+
+### 8. Experiment 3: TerminalBench-2 (Agentic Coding)
+
+**Setup:** 89 challenging long-horizon autonomous execution tasks. Initialize from Terminus 2 and Terminus-KIRA. Used as a discovery problem (search and eval on same benchmark). Overfitting checked via manual inspection and regex-based audits for task-specific string leakage.
+
+**Results (Table 7) — pass rate on TerminalBench-2:**
+
+| Harness | Auto? | Pass (%) |
+|---------|-------|----------|
+| **Claude Opus 4.6** | | |
+| Claude Code | × | 58.0 |
+| Terminus 2 | × | 62.9 |
+| Mux | × | 66.5 |
+| Droid | × | 69.9 |
+| TongAgents | × | 71.9 |
+| MAYA-V2 | × | 72.1 |
+| Terminus-KIRA | × | 74.7 |
+| Capy | × | 75.3 |
+| ForgeCode | × | 81.8 |
+| **Meta-Harness** | ✓ | **76.4** |
+| **Claude Haiku 4.5** | | |
+| OpenHands | × | 13.9 |
+| Claude Code | × | 27.5 |
+| Terminus 2 | × | 28.3 |
+| Mini-SWE-Agent | × | 29.8 |
+| Terminus-KIRA | × | 33.7 |
+| Goose | × | 35.5 |
+| **Meta-Harness** | ✓ | **37.6** |
+
+**Rankings:** #2 among all Opus 4.6 agents (only ForgeCode above at 81.8%, but their result is not reproducible from public code). **#1 among all Haiku 4.5 agents** (+2.1 over Goose).
+
+### 9. Qualitative Proposer Behavior (Appendix A.2)
+
+The proposer can often infer **why** a harness failed and which earlier design choices likely contributed, not just **that** it failed. Search trajectories show the proposer:
+- Reads broadly across prior code and logs
+- Uses traces to identify confounded edits
+- Isolates likely causal changes
+- Shifts toward safer modifications after repeated regressions
+
+### 10. APPLICATION TO PLOTLOT
+
+#### 10.1 Meta-Harness for PlotLot's Tool Layer
+
+**Target:** Search over the ToolContract implementations in `src/plotlot/land_use/entitlement/` and beyond.
+
 ```python
 # src/plotlot/harness/meta_harness.py
-class MetaHarnessOptimizer:
-    def __init__(self, harness_dir: Path, proposer: LLMClient):
-        self.harness_dir = harness_dir  # filesystem-based candidate store
-        self.proposer = proposer
-        self.traces = []  # execution traces
+from pathlib import Path
+from dataclasses import dataclass
+import json
+import time
+
+@dataclass
+class HarnessCandidate:
+    harness_id: str
+    source_path: Path
+    score: float
+    context_cost: int  # tokens
+    execution_trace: list[dict]
+    pareto_dominates: list[str]  # IDs it dominates
+
+class PlotLotMetaHarness:
+    """
+    Outer-loop harness optimizer for PlotLot's land development tools.
+    Uses Claude Code (Opus-4.6) as proposer, with filesystem as feedback channel.
+    """
     
-    def optimize(self, objective: Callable, budget: int) -> HarnessCandidate:
-        for iteration in range(budget):
-            prior = self._load_all_candidates()  # read all prior harness files
-            scores = self._load_scores()
-            new_code = self.proposer.edit(
-                sources=[c.source for c in prior],
-                scores=scores,
-                traces=self.traces[-10:],
-                objective=objective
+    def __init__(self, 
+                 base_model: str,
+                 proposer_model: str = "claude-opus-4-6",
+                 archive_dir: Path = Path("./harness_archive"),
+                 eval_benchmark: str = "plotlot-bench-v1"):
+        self.base_model = base_model
+        self.proposer_model = proposer_model
+        self.archive_dir = archive_dir
+        self.eval_benchmark = eval_benchmark
+        self.population: list[HarnessCandidate] = []
+        self.pareto_frontier: list[HarnessCandidate] = []
+    
+    def initialize_population(self, seed_harnesses: list[Path]):
+        """Initialize from existing hand-engineered harnesses."""
+        for h_path in seed_harnesses:
+            score, ctx = self._evaluate(h_path)
+            candidate = HarnessCandidate(
+                harness_id=h_path.stem,
+                source_path=h_path,
+                score=score,
+                context_cost=ctx,
+                execution_trace=[],
+                pareto_dominates=[]
             )
-            candidate = self._compile(new_code)
-            score = self._evaluate(candidate, objective)
-            candidate.persist(self.harness_dir)  # write to filesystem
-            self.traces.append(candidate.execution_trace)
-        return self._select_best()
+            self.population.append(candidate)
+            self._persist(candidate)
+        self._update_pareto()
+    
+    def run_evolution(self, n_iterations: int = 20, k_per_iter: int = 2):
+        """
+        Main search loop. Proposer inspects archive, proposes new harnesses.
+        """
+        proposer_skill = self._build_proposer_skill()
+        
+        for t in range(n_iterations):
+            # 1. Proposer inspects filesystem
+            inspection_report = self._proposer_inspect(
+                proposer_skill=proposer_skill,
+                archive=self.archive_dir,
+                pareto=self.pareto_frontier,
+            )
+            
+            # 2. Proposer proposes k new harnesses
+            new_harness_paths = self._proposer_propose(
+                proposer_skill=proposer_skill,
+                inspection=inspection_report,
+                k=k_per_iter,
+            )
+            
+            # 3. Evaluate each new harness
+            for h_path in new_harness_paths:
+                if self._interface_validates(h_path):
+                    score, ctx = self._evaluate(h_path)
+                    trace = self._get_execution_trace(h_path)
+                    candidate = HarnessCandidate(
+                        harness_id=f"iter{t}_{h_path.stem}",
+                        source_path=h_path,
+                        score=score,
+                        context_cost=ctx,
+                        execution_trace=trace,
+                        pareto_dominates=[]
+                    )
+                    self.population.append(candidate)
+                    self._persist(candidate)
+            
+            # 4. Update Pareto frontier
+            self._update_pareto()
+            
+            print(f"Iter {t}: best={max(c.score for c in self.population):.3f}, "
+                  f"frontier_size={len(self.pareto_frontier)}")
+    
+    def _build_proposer_skill(self) -> str:
+        """Build the proposer skill (NLAH-like) describing where to write harnesses."""
+        return f"""
+You are optimizing tool harnesses for PlotLot, a land development platform.
+You have access to the archive at {self.archive_dir}.
+
+What you can modify:
+- Files in {self.archive_dir}/harnesses/*.py (each is one candidate harness)
+- File in {self.archive_dir}/traces/*.json (execution traces)
+
+What you CANNOT modify:
+- {self.archive_dir}/eval/* (the evaluation harness)
+- The base model: {self.base_model}
+- The benchmark: {self.eval_benchmark}
+
+How to propose a new harness:
+1. Read at least 3 prior harnesses: `cat {self.archive_dir}/harnesses/<id>.py`
+2. Read their execution traces: `cat {self.archive_dir}/traces/<id>.json`
+3. Identify WHY a candidate failed (not just that it failed)
+4. Propose a targeted edit: `write_file {self.archive_dir}/harnesses/iter<N>_<name>.py`
+5. Write the trace: `write_file {self.archive_dir}/traces/iter<N>_<name>.json`
+
+The harness is a Python file with a `run(parcel_context: dict) -> dict` function.
+The dict must have: {{"decision": "GO"|"NO-GO"|"REVIEW", "evidence": [...], "context_tokens": N}}
+"""
+    
+    def _proposer_inspect(self, proposer_skill, archive, pareto) -> dict:
+        """Run proposer agent to inspect archive and identify failure modes."""
+        # Uses Claude Code / Codex CLI with filesystem access
+        # Returns report: {failure_modes: [...], promising_directions: [...]}
+        # (Implementation: spawn subprocess running claude-code CLI)
+        pass
+    
+    def _proposer_propose(self, proposer_skill, inspection, k) -> list[Path]:
+        """Run proposer agent to write k new harness files."""
+        pass
+    
+    def _evaluate(self, harness_path: Path) -> tuple[float, int]:
+        """
+        Run harness on PlotLot benchmark, return (accuracy, context_tokens).
+        """
+        # Execute harness on benchmark tasks
+        # Measure decision quality vs ground truth
+        # Track total context tokens used
+        pass
+    
+    def _persist(self, candidate: HarnessCandidate):
+        """Write candidate to archive filesystem."""
+        target = self.archive_dir / "harnesses" / f"{candidate.harness_id}.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(candidate.source_path.read_text())
+        
+        trace_target = self.archive_dir / "traces" / f"{candidate.harness_id}.json"
+        trace_target.parent.mkdir(parents=True, exist_ok=True)
+        trace_target.write_text(json.dumps({
+            "score": candidate.score,
+            "context_cost": candidate.context_cost,
+            "execution_trace": candidate.execution_trace,
+        }, indent=2))
+    
+    def _update_pareto(self):
+        """Compute Pareto frontier over (score, context_cost)."""
+        frontier = []
+        for c in self.population:
+            dominated = False
+            for other in self.population:
+                if (other.score >= c.score and other.context_cost <= c.context_cost 
+                    and (other.score > c.score or other.context_cost < c.context_cost)):
+                    dominated = True
+                    break
+            if not dominated:
+                frontier.append(c)
+        self.pareto_frontier = frontier
 ```
 
-### Key Insights for PlotLot
-1. **Harness code is optimization surface**: Stop hand-tuning zoning analyzer; let an outer loop propose improvements
-2. **Filesystem as state**: Avoid complex databases—let proposer read raw files (matches Codex's `docs/automations/` pattern from Harness info.md line 136)
-3. **Score transparency**: PlotLot's deal-gate evaluation becomes the natural fitness signal
-4. **Cross-model portability**: A harness optimized on Opus 4.6 should still work on Sonnet 4.5 (matches harness-engineering-OpenAI insight)
+#### 10.2 PlotLot's Failure Mode Library (Proposer's Diagnostic Vocabulary)
 
----
+The proposer must build a vocabulary of PlotLot-specific failure modes. Examples:
 
-# PAPER 21: 2603.25723 - Natural-Language Agent Harnesses (NLAH)
+| Failure Mode | Description | Example Trace Signal |
+|--------------|-------------|----------------------|
+| Incomplete_evidence | Tool returns partial EvidenceItem | evidence.score < 1.0 |
+| Stale_zoning | Zoning data older than 30 days | tool_output.timestamp delta > 30d |
+| Cross_doc_inconsistency | Zoning says R-1, environmental says wetlands | evidence[i].zoning ≠ evidence[j].zoning |
+| Fee_miscalc | Fee differs from official schedule | abs(calc_fee - official_fee) > 0.01 |
+| Missing_approval | Required approval not requested | workflow.missing_steps contains "submit_to_council" |
+| Handoff_loss | Child agent didn't receive parent context | context_overlap(parent, child) < 0.5 |
 
-**Authors:** Linyue Pan, Lexiao Zou, Shuo Guo, Jingchen Ni, Hai-Tao Zheng
-**Date:** 26 Mar 2026 (v1), revised 18 May 2026 (v2) | cs.CL, cs.AI | 2,408 KB
+#### 10.3 Meta-Harness for Zoning Variance Analyzer (Concrete Example)
 
-## TECHNICAL BREAKDOWN
+Starting from the existing `zoning_variance_analyzer.py`, Meta-Harness could:
+- Try different prompt templates for hardship analysis
+- Try different ways of structuring the EvidenceItem output
+- Try different retrieval strategies for prior variance cases
+- Discover that the "3-factor hardship test" framing improves accuracy by 12%
 
-### Core Contributions
-1. **NLAH (Natural-Language Agent Harness)**: Editable markdown documents that describe run-level harness policy
-2. **IHR (Intelligent Harness Runtime)**: Shared runtime that interprets NLAHs into agent calls, handoffs, state updates, validation gates, and artifact contracts
-3. **Decoupling of policy and execution**: Reusable policy specification independent of controller code
-4. **Module ablation-friendly**: Explicit harness modules enable analysis of which components matter
+### 11. Key Insights for PlotLot
 
-### Architecture
-```
-┌─────────────────────────────────┐
-│   NLAH Document (markdown)      │   ← Editable, versioned, code-reviewable
-│   - Agent selection policy      │
-│   - Handoff rules               │
-│   - Validation gates            │
-│   - Artifact contracts          │
-└─────────────────────────────────┘
-              ↓ interpreted by
-┌─────────────────────────────────┐
-│   IHR Runtime                   │
-│   - Reads NLAH, executes        │
-│   - Maintains state             │
-│   - Enforces contracts          │
-└─────────────────────────────────┘
-```
+1. **Treat harness code as optimization surface**: Stop hand-tuning zoning analyzer. Meta-Harness proposer mutates code in `archive/`.
+2. **Filesystem is the feedback channel**: Don't use a database; raw files are inspectable by coding-agent proposer.
+3. **Median 82 files inspected per iteration**: PlotLot proposer needs similar budget — expose full history, not summaries.
+4. **Full execution traces are critical**: Don't compress trace data; the proposer needs raw failure signals.
+5. **Pareto frontier over (accuracy, cost)**: Track both deal-gate accuracy AND cost-per-decision. PlotLot users care about both.
+6. **Cross-model transfer**: A harness discovered on GPT-OSS-20B transferred to 4 held-out models (+4.7 avg). PlotLot should test harnesses across multiple LLMs.
+7. **Specialized harness + smaller model = competitive**: Haiku 4.5 + Meta-Harness = 37.6% (beats much larger models with worse harnesses). Cost savings significant.
+8. **No parent-selection rule is a feature**: The proposer is free to inspect any prior harness. This enables creative "crossover" between unrelated candidates.
 
-### Key Results
-- **Coding benchmarks**: Comparable task outcomes to code/prompted realizations
-- **Terminal-use and computer-use**: Equivalent performance
-- **Static policy size**: NLAHs are *much shorter* than equivalent controller code
-- **Module ablations**: Components are individually analyzable
+### 12. Failure Modes and Limitations
 
-### Relationship to PlotLot
-- **Huge architectural fit**: PlotLot's `ToolContract` definitions are essentially NLAH artifacts already
-- **Entitlement tool policies** could be specified as NLAH documents rather than hard-coded Python
-- **Validation gates** map to PlotLot's phase gates (`ContextPacket.phase_gate_criteria`)
-- **Artifact contracts** map to EvidenceItem schema requirements
+- **Overfitting to benchmark**: Manual inspection + regex audits for task-specific string leakage
+- **Specialized to TerminalBench regime**: "Although the resulting harness is specialized to the TerminalBench-2 regime, autonomous completion of difficult long-horizon tasks from a single instruction is a core capability"
+- **Proposer is fixed (Opus-4.6)**: As coding agents improve, Meta-Harness should improve automatically (deliberate design)
+- **Best-by-iter cost**: A typical run evaluates ~60 harnesses over 20 iterations (expensive for plotlot-bench if tasks are slow)
 
-### Example: PlotLot NLAH for Entitlement Phase
-```markdown
-# NLAH: plotlot-entitlement-policy-v1
+### 13. Relationship to Other Papers
 
-## Agents
-- primary: "zoning-expert" (opus-4.6)
-- validator: "compliance-checker" (sonnet-4.5)
+- **vs Paper 21 (NLAH)**: NLAH provides inspectable policy that Meta-Harness can mutate as code
+- **vs Paper 22 (AlphaLab)**: Both use LLM agents to optimize; Meta-Harness optimizes harness code, AlphaLab optimizes research artifacts
+- **vs Paper 38 (ShinkaEvolve)**: Both do code evolution; ShinkaEvolve is open-ended scientific discovery, Meta-Harness is harness-specific
+- **vs Paper 24 (SkVM)**: SkVM is the runtime for compiled skills; Meta-Harness generates skills that SkVM can execute
+- **Enables Paper 23 (Runtime Governance)**: Meta-Harness can discover new governance policies that respect runtime constraints
 
-## Handoffs
-- zoning-expert → compliance-checker: when evidence.completeness < 0.8
-- compliance-checker → zoning-expert: when validation.failed
+### 14. Implementation Strategy for PlotLot
 
-## Validation Gates
-- pre-tool: verify EvidenceItem.process_phase == "entitlement"
-- post-tool: assert phase_gate_criteria.zoning_verified == true
+**Sprint 1:** Set up archive structure (`archive/harnesses/`, `archive/traces/`). Port existing `zoning_variance_analyzer.py` as initial population.
 
-## Artifact Contracts
-- output: EvidenceItem {process_phase: "entitlement", decision_point: "zoning_check", regulatory_framework: str}
-- traceability: every output links to input parcel_id and zoning_code
-```
+**Sprint 2:** Build proposer skill (NLAH-style markdown). Wire up Claude Code CLI invocation.
 
-### Key Insights for PlotLot
-1. **Policies belong in versioned markdown, not Python**: Mirrors the Codex `docs/automations/` pattern (Harness info.md line 136)
-2. **Code review for harness changes**: PRs review NLAH diffs rather than coupled controller code
-3. **Module-level ablations enable A/B testing**: Turn off "compliance-checker" module and measure deal-gate accuracy
-4. **Faster iteration**: Edit markdown, redeploy—skip code-compile-test cycle
+**Sprint 3:** Build `_evaluate()` against PlotLot-Bench. Run 5-iteration evolution. Inspect archive growth.
+
+**Sprint 4:** Add 3 more entitlement tools to initial population. Run 20-iteration evolution. Compare Pareto frontier to hand-engineered baseline.
+
+**Sprint 5:** Land the discovered harness as `zoning_variance_analyzer_v2.py`. Add to production via canary.
 
 ---
 
@@ -153,25 +460,27 @@ class MetaHarnessOptimizer:
 
 ## TECHNICAL BREAKDOWN
 
-### Core Contributions
-1. **End-to-end autonomous research harness** for quantitative domains
-2. **Three-phase pipeline**: Domain exploration → Evaluation framework construction → Large-scale experimentation
-3. **Strategist/Worker loop**: Hierarchical multi-agent architecture for parallel GPU experiments
-4. **Persistent playbook**: Online prompt optimization via accumulated domain knowledge
-5. **Self-generated adapters**: Domain-specific behavior factored into model-generated adapters
+### 1. Problem Statement and Motivation
 
-### Pipeline Phases
-1. **Domain Exploration**: Given dataset + natural-language objective, agent writes analysis code, produces research report
-2. **Evaluation Construction**: Agent adversarially validates its own evaluation framework
-3. **Large-Scale Experimentation**: Strategist/Worker loop runs GPU experiments; playbook accumulates findings
+Given only a dataset and a natural-language objective, an autonomous research system should:
+1. Adapt to the domain and explore data
+2. Construct and adversarially validate an evaluation framework
+3. Run large-scale experiments and accumulate domain knowledge
 
-### Key Results
-- **CUDA kernel optimization**: 4.4x faster than PyTorch on average (up to 91x speedup)
-- **LLM pretraining**: 22% lower validation loss vs single-shot baseline
-- **Traffic forecasting**: 23-25% improvement over standard baselines
-- **Multi-model coverage**: GPT-5.2 and Claude Opus 4.6 discover qualitatively different solutions (complementary search)
+This requires an end-to-end harness that handles domain adaptation, evaluation, and experimentation without human intervention. The paper's contribution: **AlphaLab**, a multi-agent research harness with **domain adapters as a primitive**.
 
-### Architecture
+### 2. Three-Phase Pipeline
+
+**Phase 1: Domain Exploration.** Agent adapts to the domain, explores the data, writes analysis code, produces a research report. The agent generates its own domain-specific exploration strategy.
+
+**Phase 2: Evaluation Construction.** Agent constructs AND adversarially validates its own evaluation framework. This is critical — without adversarial validation, the eval framework may have blind spots that invalidate experimental conclusions.
+
+**Phase 3: Large-Scale Experimentation.** Strategist/Worker loop runs GPU experiments; playbook accumulates domain knowledge. Persistent playbook functions as a form of online prompt optimization.
+
+### 3. Architecture: Domain Adapters as Primitive
+
+All domain-specific behavior is factored into **adapters generated by the model itself**. The same pipeline handles qualitatively different tasks without modification. This is the key design decision that enables the system to scale to multiple domains.
+
 ```
 User: Dataset + Natural-Language Objective
                 ↓
@@ -195,160 +504,367 @@ User: Dataset + Natural-Language Objective
 └─────────────────────────────────────┘
 ```
 
-### Relationship to PlotLot
-- **Land-acquisition research mode**: User provides parcel + objective ("find highest-yield redevelopment")
-- **Phase 1 → PlotLot deal-gate evaluation**: Domain exploration becomes zoning/comp analysis
-- **Phase 2 → PlotLot evidence validation**: Adversarially test that EvidenceItem is reliable
-- **Phase 3 → Multi-agent entitlement processing**: Strategist plans permit sequence, workers execute
-- **Persistent playbook → PlotLotContextPacket.decision_history**: Accumulated decisions become playbook entries
+### 4. Key Results Across Three Domains
 
-### Implementation Sketch
+**CUDA Kernel Optimization:**
+- 4.4× faster than PyTorch on average
+- Up to 91× speedup on individual kernels
+- Agent writes GPU kernels from scratch
+
+**LLM Pretraining:**
+- 22% lower validation loss than single-shot baseline using same model
+- Full system achieves substantial improvement over single-pass
+
+**Traffic Forecasting:**
+- 23-25% improvement over standard baselines
+- After researching and implementing published model families from literature
+
+**Multi-model finding:** GPT-5.2 and Claude Opus 4.6 discover qualitatively different solutions in every domain (neither dominates uniformly). This suggests **multi-model campaigns provide complementary search coverage**.
+
+### 5. Failure Mode Analysis (from paper)
+
+The paper reports results on financial time series forecasting in the appendix but acknowledges that not all domains are equally successful. The key insight is that the **playbook is critical for transfer**: knowledge accumulated in one task informs future tasks.
+
+### 6. APPLICATION TO PLOTLOT
+
+#### 6.1 Land Acquisition Research Mode
+
+User provides parcel + objective ("find highest-yield redevelopment"):
+- **Phase 1**: Agent analyzes parcel characteristics, comps, zoning
+- **Phase 2**: Agent builds evaluation framework for "highest-yield" (NPV? IRR? Yield-on-cost?)
+- **Phase 3**: Strategist/Worker loop runs parallel pro-formas under different scenarios
+
 ```python
 # src/plotlot/harness/alpha_lab.py
-class AlphaLabHarness:
+class PlotLotAlphaLab:
     def __init__(self, strategist: LLMClient, workers: list[LLMClient]):
         self.strategist = strategist
         self.workers = workers
         self.playbook = Playbook()  # online prompt optimization
     
-    def run_research(self, dataset: ParcelDataset, objective: str) -> ResearchReport:
+    def run_research(self, parcel: Parcel, objective: str) -> ResearchReport:
         # Phase 1: Domain exploration
-        report = self._explore_domain(dataset, objective)
+        report = self._explore_domain(parcel, objective)
         
         # Phase 2: Adversarial evaluation construction
-        eval_framework = self._construct_evaluation(dataset, objective)
+        eval_framework = self._construct_evaluation(parcel, objective)
         self._adversarially_validate(eval_framework)
         
         # Phase 3: Strategist/Worker experiments
-        plan = self.strategist.plan_experiments(report, eval_framework)
+        plan = self.strategist.plan_experiments(parcel, report, eval_framework)
         results = parallel_map(self.workers, plan.tasks)
         
-        # Update playbook
         self.playbook.absorb(results, plan)
         return report.with_results(results)
+    
+    def _explore_domain(self, parcel, objective):
+        # Worker agents write analysis code, run it, produce report
+        return self._generate_research_report(parcel, objective)
+    
+    def _construct_evaluation(self, parcel, objective):
+        # Adversarial: build eval, then try to break it
+        eval_framework = self._build_evaluation(parcel, objective)
+        adversarial_findings = self._adversarial_audit(eval_framework)
+        if adversarial_findings:
+            eval_framework = self._patch_evaluation(eval_framework, adversarial_findings)
+        return eval_framework
 ```
 
-### Key Insights for PlotLot
-1. **Domain adapters as a primitive**: Every land-dev sub-domain (entitlement, environmental, construction) gets its own adapter
-2. **Playbook as compounding asset**: Each deal teaches the system; future deals start smarter
-3. **Multi-model complementary search**: Run Opus 4.6 + GPT-5.2 in parallel; union their best solutions
-4. **Adversarial evaluation is mandatory**: Self-validate EvidenceItem schemas; catch hallucinations before they corrupt the playbook
+#### 6.2 Domain Adapters for PlotLot
+
+Generate adapters for each land-dev sub-domain:
+- **Acquisition adapter**: Tear-down analysis, comp selection
+- **Entitlement adapter**: Zoning, variance, permits (already have)
+- **Environmental adapter**: Wetlands, habitats, hazmat
+- **Construction adapter**: Cost estimation, scheduling
+- **Disposition adapter**: Marketing, pricing strategy
+
+### 7. Key Insights for PlotLot
+
+1. **Domain adapters as primitive**: Don't hardcode per-domain logic; let the model generate adapters
+2. **Adversarial evaluation is mandatory**: Self-validate EvidenceItem schemas; catch hallucinations
+3. **Multi-model complementary search**: Run Opus + GPT-5.2 in parallel; union their best solutions
+4. **Playbook compounds**: Each deal teaches the system; future deals start smarter
+5. **Three-phase rigor**: Exploration → Evaluation → Experimentation is the right decomposition
 
 ---
 
-# PAPER 23: 2604.07833 - Harnessing Embodied Agents: Runtime Governance for Policy-Constrained Execution
+# PAPER 23: 2604.07833 - Runtime Governance for Policy-Constrained Execution
 
 **Authors:** Xue Qin, Simin Luan, John See, Cong Yang, Zhijun Li
 **Date:** 9 Apr 2026 (v1), revised 21 May 2026 (v3) | cs.RO | 36 pages, 3 figures, 10 tables
 
 ## TECHNICAL BREAKDOWN
 
-### Core Contributions
-1. **Externalized runtime governance layer**: Separates agent cognition from execution oversight
-2. **Five governance functions**: Policy checking, capability admission, execution monitoring, rollback handling, human override
-3. **Embodied Capability Modules (ECMs)**: Standardized capability interface between agent and execution
-4. **Empirical validation**: 1000 randomized simulation trials, statistically significant (p<0.001)
+### 1. Problem Statement
 
-### Five Governance Functions
-| Function | Purpose |
-|----------|---------|
-| **Policy Checking** | Pre-execution validation against rules |
-| **Capability Admission** | Verify agent has required permissions for tool |
-| **Execution Monitoring** | Real-time tracking of action vs. policy |
-| **Rollback Handling** | Automatic reversion on policy violation |
-| **Human Override** | Escalation path for ambiguous cases |
+Embodied Agents are evolving from passive reasoning systems into active executors that interact with tools, robots, and physical environments. **Once granted execution authority, the central challenge becomes how to keep actions governable at runtime.**
 
-### Architecture
+Existing approaches embed safety and recovery logic inside the agent loop, making execution control difficult to standardize, audit, and adapt. The paper proposes **externalizing governance into a dedicated runtime layer** performing policy checking, capability admission, execution monitoring, rollback handling, and human override.
+
+### 2. Core Thesis
+
+> Embodied intelligence requires not only stronger agents, but stronger runtime governance.
+
+The paper formalizes the control boundary among the **Embodied Agent**, **Embodied Capability Modules (ECMs)**, and **Runtime Governance Layer**, and validates through 1000 randomized simulation trials across three governance dimensions.
+
+### 3. Mathematical Formalization
+
+**Embodied Agent at time t:**
+
 ```
-┌──────────────────────┐
-│   Embodied Agent     │  ← cognition, planning
-└──────────────────────┘
-           ↓
-┌──────────────────────┐
-│   Runtime Governance │  ← policy, oversight
-│   - Policy Checking  │
-│   - Capability Adm.  │
-│   - Monitoring       │
-│   - Rollback         │
-│   - Human Override   │
-└──────────────────────┘
-           ↓
-┌──────────────────────┐
-│   ECMs               │  ← capability modules
-│   (Tools, Robots,    │
-│    Physical Actions) │
-└──────────────────────┘
+A_t = (I_t, M_t, G_t, P_t)
 ```
 
-### Key Results
-- **96.2% interception** of unauthorized actions
-- **Unsafe continuation**: Reduced from 100% → 22.2% under runtime drift
-- **91.4% recovery success** with full policy compliance
-- **p<0.001** vs all baselines (statistically significant)
+where I_t = identity/state continuity, M_t = memory/context, G_t = active goals, P_t = proposed plan. **P_t is a proposal, not execution.**
 
-### Relationship to PlotLot
-- **Critical for irreversible actions**: Submitting a permit, paying a fee, signing a contract—these need governance
-- **Entitlement tools** are exactly the "irreversible action" category this paper targets
-- **EvidenceItem.process_phase** + **regulatory_framework** fields already support policy tagging
-- **ContextPacket.stakeholder_context** + **risk_register** map to human override escalation
+**Capability Package:**
 
-### Implementation Sketch
+```
+C_i = (name, interface, preconditions, postconditions, 
+       permissions, risk, rollback, env-profile)
+```
+
+**Runtime Governance State at time t:**
+
+```
+R_t = (Π_t, Γ_t, Ω_t, Λ_t)
+```
+
+where Π_t = active policy set, Γ_t = governance context, Ω_t = runtime observations, Λ_t = intervention state.
+
+**Control Boundary (the central thesis):**
+
+```
+E_t = GOV(P_t, C_i, Π_t, Γ_t, Ω_t)
+```
+
+Execution is NOT E_t = P_t (direct projection of agent intention). Execution is a **governance-mediated transformation**. The agent owns proposal and adaptation; execution authority is conditionally granted by runtime governance.
+
+### 4. Three Entities
+
+**Embodied Agent:** Persistent decision-making subject. Interprets goals, maintains context, selects/composes capabilities, proposes execution plans, reacts to runtime feedback at planning level. Does NOT have unrestricted execution authority.
+
+**Capability Package:** Executable unit encapsulating a bounded operational function. May contain a robot skill, motion primitive, controller wrapper, tool-use procedure, perception-action routine, recovery behavior, or composite workflow. Exposes machine-readable interface and metadata.
+
+**Runtime Governance Layer:** Dedicated operational layer mediating between agent intention and execution. Responsible for: capability admission, policy evaluation, execution monitoring, anomaly-triggered interruption, rollback/recovery dispatch, human approval/override, logging/audit trace generation.
+
+### 5. Policy-Constrained Execution (Definition)
+
+A system exhibits policy-constrained execution if every agent-initiated executable action is admitted and carried out **only after evaluation against an explicit runtime policy set**, and **remains subject to runtime observation, interruption, and governance intervention throughout execution**.
+
+Four implications:
+1. Admission before execution
+2. Constraint during execution (not only pre-check)
+3. Intervention under anomaly or escalation
+4. Environment-sensitive enforcement
+
+### 6. Six Governance Functions
+
+1. **Capability Admission:** Verify agent has required permissions for tool
+2. **Policy Guard:** Pre-execution validation against rules
+3. **Execution Watcher:** Real-time tracking of action vs. policy
+4. **Recovery and Rollback Manager:** Automatic reversion on policy violation
+5. **Human Override Interface:** Escalation path for ambiguous cases
+6. **Audit and Telemetry Layer:** Every governance decision logged
+
+### 7. Policy-Constrained Execution Pipeline (7 Stages)
+
+1. **Goal Interpretation:** Parse user goal into task objective
+2. **Capability Proposal:** Agent proposes capabilities to invoke
+3. **Admission and Policy Evaluation:** Capability admission + policy evaluation
+4. **Governed Execution Launch:** Execute with monitoring
+5. **Runtime Observation and Constraint Tracking:** Watcher monitors
+6. **Intervention, Recovery, or Escalation:** Trigger rollback or human override
+7. **Completion, Audit, and Re-entry into Planning:** Log and loop
+
+### 8. Environment Profiles
+
+The same capability may be permissible under one deployment condition but restricted under another. For example, actions acceptable in simulation may be disallowed on a physical robot. **env-profile** parameter enables environment-sensitive governance without modifying the agent.
+
+### 9. Evaluation Results (1000 Trials, 5 Seeds × 200)
+
+| Dimension | Result | Baseline Comparison |
+|-----------|--------|---------------------|
+| **Unauthorized Action Interception** | 96.2% ± 2.7% | Significantly outperforms direct execution, static-rule, capability-internal baselines (p<0.001, paired t-test) |
+| **Unsafe Continuation under Runtime Drift** | Reduced from 100% to 22.2% ± 3.1% | Substantial improvement |
+| **Recovery and Rollback Success** | 91.4% ± 3.0% with full policy compliance | Significantly outperforms all baselines (p<0.001) |
+| **Human Override** | Blocks 100% of unapproved high-risk requests that would otherwise proceed 34.2% of the time | Critical safety guarantee |
+
+### 10. Component Ablation Study
+
+- **Removing Execution Watcher:** Eliminates all runtime detection
+- **Removing Recovery Manager:** Collapses recovery success to 28.1%
+- **Both demonstrate each subsystem contributes uniquely**
+
+### 11. Comparison to Prior Runtime Enforcement
+
+| Dimension | Simplex | AgentSpec | NeMo GR | AutoRT | RoboGuard | **Ours** |
+|-----------|---------|-----------|---------|--------|-----------|----------|
+| Capability admission | – | ~ | – | ✓ | ~ | **✓** |
+| Policy-based gating | ~ | ✓ | ✓ | ✓ | ✓ | **✓** |
+| Runtime execution watch | ✓ | ~ | – | – | – | **✓** |
+| Recovery & rollback | ✓ | – | – | – | – | **✓** |
+| Human override interface | – | – | – | – | – | **✓** |
+| Audit & telemetry | – | ~ | ~ | ~ | – | **✓** |
+| Environment profiles | – | – | – | – | – | **✓** |
+| Embodied-specific design | ~ | ~ | – | ✓ | ✓ | **✓** |
+
+**No prior system combines all of these for embodied AI.**
+
+### 12. APPLICATION TO PLOTLOT
+
+#### 12.1 Critical Use Cases (Irreversible Actions)
+
+For PlotLot, the "irreversible actions" analogous to physical robot actions are:
+- **Submitting a permit application**
+- **Paying a fee to a municipality**
+- **Signing a contract (LOI, PSA)**
+- **Pulling due-diligence triggers**
+- **Filing environmental reports**
+- **Earmarking earnest money**
+
+Each of these is exactly the kind of action that needs governance.
+
+#### 12.2 Runtime Governance Layer for PlotLot
+
 ```python
 # src/plotlot/harness/governance.py
-class RuntimeGovernance:
-    def __init__(self, policy_engine: PolicyEngine):
-        self.policy = policy_engine
-        self.audit_log = []
+class PlotLotRuntimeGovernance:
+    """
+    Externalized runtime governance for PlotLot entitlement tools.
+    Mirrors the Embodied Agent / Capability Package / Runtime Governance
+    Layer pattern from the paper.
+    """
     
-    def check_policy(self, action: ProposedAction) -> PolicyDecision:
-        # 1. Capability admission
-        if not self._has_capability(action.agent_id, action.tool):
-            return PolicyDecision.deny("no_capability")
-        
-        # 2. Policy checking
-        violations = self.policy.evaluate(action, action.context)
+    def __init__(self, policy_engine: PolicyEngine, audit_log: AuditLog):
+        self.policy = policy_engine
+        self.audit = audit_log
+        self.watcher = ExecutionWatcher()
+        self.recovery = RecoveryManager()
+        self.override = HumanOverrideInterface()
+    
+    def check_capability_admission(self, agent_id: str, tool_name: str) -> AdmissionDecision:
+        """Step 1: Does this agent have permission to invoke this tool?"""
+        tool = self.policy.get_tool(tool_name)
+        if not tool.permissions.allows(agent_id):
+            return AdmissionDecision.deny("no_capability")
+        return AdmissionDecision.allow()
+    
+    def evaluate_policy(self, action: ProposedAction, context: Context) -> PolicyDecision:
+        """Step 2: Pre-execution policy check."""
+        violations = self.policy.evaluate(action, context)
         if violations:
-            self.audit_log.append(AuditEntry.denied(action, violations))
+            self.audit.log_decision(action, violations, denied=True)
             return PolicyDecision.deny(violations)
-        
         return PolicyDecision.allow()
     
     def monitor_execution(self, action_id: str, runtime_state: State) -> MonitorResult:
-        if self._is_drift_detected(runtime_state):
+        """Step 3: Real-time execution monitoring."""
+        if self.watcher.detect_drift(runtime_state):
+            # Trigger recovery
+            self.recovery.rollback(action_id, reason="runtime_drift")
             return MonitorResult.rollback("runtime_drift")
         return MonitorResult.continue_()
     
-    def request_human_override(self, action: ProposedAction, reason: str):
-        return HumanOverrideRequest(
+    def request_human_override(self, action: ProposedAction, reason: str) -> OverrideRequest:
+        """Step 4: Escalation path for ambiguous cases."""
+        stakeholder = action.context.stakeholder_context.owner
+        return OverrideRequest(
             action=action,
             reason=reason,
-            escalate_to=action.context.stakeholder_context.owner
+            escalate_to=stakeholder,
+            timeout_minutes=30,
         )
+    
+    def execute_with_governance(self, action: ProposedAction) -> ExecutionResult:
+        """Full pipeline: admission → policy → execution → monitor → recovery."""
+        # Stage 1: Capability admission
+        admission = self.check_capability_admission(action.agent_id, action.tool_name)
+        if not admission.allowed:
+            return ExecutionResult.denied(admission.reason)
+        
+        # Stage 2: Policy evaluation
+        policy = self.evaluate_policy(action, action.context)
+        if not policy.allowed:
+            # Stage 6: Escalation check
+            if action.context.requires_human_approval:
+                override = self.request_human_override(action, policy.violations)
+                return ExecutionResult.escalated(override)
+            return ExecutionResult.denied(policy.violations)
+        
+        # Stage 4: Governed execution launch
+        execution = self._launch_execution(action)
+        
+        # Stage 5: Runtime observation
+        monitor_result = self.monitor_execution(execution.id, execution.state)
+        if monitor_result.should_rollback:
+            # Stage 6: Recovery
+            self.recovery.rollback(execution.id, monitor_result.reason)
+            return ExecutionResult.rolled_back(monitor_result.reason)
+        
+        # Stage 7: Completion + audit
+        self.audit.log_completion(action, execution, success=True)
+        return ExecutionResult.success(execution.output)
 ```
 
-### Key Insights for PlotLot
-1. **Externalize governance from agent loop**: Don't embed safety checks in tool code; put them in a dedicated layer
-2. **ECM abstraction for tools**: Wrap each entitlement tool as an Embodied Capability Module with declared permissions
-3. **Auditability is non-negotiable**: Every governance decision must log to EvidenceItem for legal traceability
-4. **Runtime drift detection**: Compare actual action vs. declared plan; rollback if mismatch (e.g., fee calculator charges differently than estimated)
+#### 12.3 Environment Profiles for PlotLot
+
+```python
+class EnvironmentProfile:
+    """Per-deployment governance configuration."""
+    
+    SIMULATION = "simulation"        # No real permits; agent can experiment freely
+    PRE_DEAL_RESEARCH = "pre_deal"  # Soft actions only; require human approval for hard actions
+    DUE_DILIGENCE = "dd"            # Most actions allowed; certain requires human override
+    UNDER_CONTRACT = "contract"     # All actions require human approval
+    POST_CLOSING = "post_close"     # Owner controls all actions; agent is read-only
+```
+
+### 13. Key Insights for PlotLot
+
+1. **Externalize governance from agent loop**: Don't embed safety in tool code; put it in a dedicated layer
+2. **ECM abstraction for tools**: Wrap each entitlement tool as a Capability Package with declared permissions
+3. **Auditability is non-negotiable**: Every governance decision must log to EvidenceItem
+4. **Runtime drift detection**: Compare actual action vs. declared plan; rollback if mismatch
+5. **Environment profiles**: sim vs. pre-deal vs. due-diligence vs. under-contract have different governance
+6. **Recovery success is 91.4%**: Rollback should be designed in from the start, not added later
+7. **Human override blocks 100% of unapproved high-risk**: Always have a human-in-the-loop path
+8. **Component ablation matters**: Each governance subsystem contributes uniquely; don't skip any
+
+### 14. Failure Modes Acknowledged
+
+- **Frank Assessment of Weak Metrics**: Paper acknowledges some metrics underperform baselines; not over-claiming
+- **False Rejection**: Some legitimate actions get blocked; trade-off with safety
+- **Sim-to-Real gap**: Validation is in simulation; real-world deployment is future work
 
 ---
 
-# PAPER 24: 2604.03088 - SkVM: Revisiting Language VM for Skills across Heterogenous LLMs and Harnesses
+# PAPER 24: 2604.03088 - SkVM: Language VM for Skills across Heterogeneous LLMs and Harnesses
 
 **Authors:** Le Chen, Erhu Feng, Yubin Xia, Haibo Chen
 **Date:** 3 Apr 2026 (v1), revised 11 Apr 2026 (v3) | cs.SE, cs.LG | 647 KB
 
 ## TECHNICAL BREAKDOWN
 
-### Core Contributions
-1. **Skills as code, LLMs as heterogeneous processors**: Compiler-inspired framing of skill portability
-2. **Primitive capability decomposition**: Skill requirements broken into measurable capabilities
-3. **Capability profiles**: Per (model, harness) pair measurement of capability support
-4. **SkVM compilation pipeline**: Capability-based compilation, environment binding, concurrency extraction
-5. **JIT code solidification + adaptive recompilation**: Runtime performance optimization
+### 1. Problem Statement
 
-### Architecture
+LLM agents increasingly adopt skills as a reusable unit of composition. While skills are shared across diverse agent platforms, **current systems treat them as raw context**, causing the same skill to behave inconsistently for different agents. This fragility undermines skill portability and execution efficiency.
+
+The paper draws inspiration from **traditional compiler design**: treat skills as code, LLMs as heterogeneous processors.
+
+### 2. Core Idea: Capability Profiles
+
+To make portability actionable, decompose a skill's requirements into a set of **primitive capabilities**, and measure how well each model-harness pair supports them. Each (model, harness) pair has a **capability profile** describing what it can do.
+
+**Example decomposition for "variance analysis" skill:**
+- Read parcel data (capability: data_retrieval)
+- Query zoning API (capability: tool_use)
+- Apply 3-factor hardship test (capability: legal_reasoning)
+- Generate structured EvidenceItem (capability: structured_output)
+
+### 3. SkVM Architecture
+
 ```
 Skill Source (markdown/code)
          ↓
@@ -368,22 +884,37 @@ Optimized Skill (target-specific)
 └─────────────────────────────────┘
 ```
 
-### Key Results
-- **Tested on 8 LLMs** of varying scales × 3 agent harnesses
-- **SkillsBench + representative tasks**: Significant task completion rate improvements
-- **Token consumption**: Reduced by up to 40%
-- **Performance**: 3.2x speedup via parallelism, 19-50x latency reduction via code solidification
+**Compile-time operations:**
+- **Capability-based compilation**: Map skill to target model's capabilities
+- **Environment binding**: Resolve variable references, tool specs
+- **Concurrency extraction**: Identify independent operations for parallel execution
 
-### Relationship to PlotLot
-- **Skills = entitlement tools**: Zoning analyzer, permit evaluator, fee calculator are skills
-- **Primitive capabilities**: Read parcel data, query zoning API, validate against regulation, generate report
-- **Capability profiles**: Some models better at regulation lookup; others at code generation
-- **JIT solidification**: Cache successful tool invocations; replay without LLM call when possible
+**Runtime operations:**
+- **JIT code solidification**: Cache successful skill invocations; replay without LLM call
+- **Adaptive recompilation**: Adjust compilation based on observed performance
 
-### Implementation Sketch
+### 4. Evaluation Results
+
+**Setup:** 8 LLMs of varying scales × 3 agent harnesses. SkillsBench + representative skill tasks.
+
+**Results:**
+- **Task completion rates**: Significant improvements across different models and environments
+- **Token consumption**: Reduced by **up to 40%**
+- **Performance**: **3.2× speedup** with enhanced parallelism
+- **Latency**: **19-50× reduction** through code solidification
+
+### 5. Application to PlotLot
+
+PlotLot's entitlement tools (zoning analyzer, permit checker, fee calculator) are skills. Each can be:
+- **Compiled** for a specific (Opus-4.6, Sonnet-4.5, Haiku-4.5) target
+- **Cached** for repeated invocations (same parcel, same zoning code)
+- **Parallelized** across independent entitlement checks
+
+#### 5.1 SkVM Implementation Sketch for PlotLot
+
 ```python
 # src/plotlot/harness/skvm.py
-class SkillVirtualMachine:
+class PlotLotSkillVirtualMachine:
     def __init__(self, model_profiles: dict[ModelID, CapabilityProfile]):
         self.profiles = model_profiles
         self.solidified_cache = {}  # JIT-cached skill results
@@ -410,33 +941,46 @@ class SkillVirtualMachine:
         self.profiles[model_id] = self._update_profile(self.profiles[model_id], feedback)
 ```
 
-### Key Insights for PlotLot
+### 6. Key Insights for PlotLot
+
 1. **Skills are portable, not model-specific**: Write once, compile for target model
-2. **Capability profiles guide model selection**: Route to GPT-5.2 for heavy reasoning, Sonnet 4.5 for fast lookups
+2. **Capability profiles guide model selection**: Route to Opus for heavy reasoning, Sonnet for fast lookups
 3. **JIT solidification saves tokens**: Cache fee calculations, zoning lookups; bypass LLM on repeat
-4. **Concurrency extraction**: Run independent entitlement checks in parallel (zoning + environmental + subdivision)
+4. **Concurrency extraction**: Run independent entitlement checks in parallel
+5. **40% token reduction**: Significant cost savings
+6. **3.2× speedup**: Better user experience
+7. **19-50× latency reduction**: For repeat invocations
+
+### 7. Limitations
+
+- Cold start: first invocation still pays full cost
+- Cache invalidation: when zoning codes change, must clear cache
+- Capability profile maintenance: requires ongoing benchmarking
 
 ---
 
-# PAPER 25: 2604.03610 - DebugHarness: Emulating Human Dynamic Debugging for Autonomous Program Repair
+# PAPER 25: 2604.03610 - DebugHarness: Human Dynamic Debugging for Autonomous Program Repair
 
 **Authors:** Maolin Sun, Yibiao Yang, Xuanlin Liu, Yuming Zhou, Baowen Xu
-**Date:** 4 Apr 2026 | cs.SE | 15 pages, 6 figures | 2,148 KB
+**Date:** 4 Apr 2026 | cs.SE | 2,148 KB | 15 pages, 6 figures
 
 ## TECHNICAL BREAKDOWN
 
-### Core Contributions
+### 1. Problem Statement
+
+Patching severe security flaws in complex software remains a major challenge. While automated tools like fuzzers efficiently discover bugs, fixing deep-rooted low-level faults (e.g., use-after-free, memory corruption) still requires labor-intensive manual analysis by experts.
+
+Emerging LLM agents attempt to automate this pipeline, but they typically treat bug fixing as a **purely static code-generation task**. Relying solely on static artifacts, these methods miss the **dynamic execution context** strictly necessary for diagnosing intricate memory safety violations.
+
+### 2. Core Contributions
+
 1. **Dynamic debugging harness for LLM agents**: Moves beyond static code analysis
 2. **Pattern-guided investigation strategy**: Hypothesis formation grounded in crash patterns
 3. **Interactive memory state probing**: Agent queries live runtime, not just static artifacts
 4. **Closed-loop validation cycle**: Synthesize patch → validate → iterate
 
-### Problem Framing
-- **Static-only approaches miss critical context**: Memory safety bugs (use-after-free, corruption) require runtime state
-- **LLM agents default to static analysis**: They read code but don't interact with the running process
-- **Need for human-like debugging workflow**: Hypothesis → probe → patch → validate
+### 3. Architecture
 
-### Architecture
 ```
 Crash Reproduction
         ↓
@@ -455,21 +999,28 @@ Crash Reproduction
 └────────────────────────────────────┘
 ```
 
-### Key Results
-- **SEC-bench dataset**: ~90% patch success rate
-- **30%+ relative improvement** over SOTA static-only baselines
-- **Real-world C/C++ vulnerabilities**: Validated on production-style code
+### 4. Evaluation Results
 
-### Relationship to PlotLot
-- **Direct analogy**: Zoning variance denials, permit rejections, fee calculation errors are "crashes" in the PlotLot workflow
-- **Harness should interact with live data**: Not just analyze static ContextPacket—query live zoning APIs, parcel databases
-- **Closed-loop validation**: When a tool produces a result, re-validate against ground truth before accepting
-- **EvidenceItem.supersedes_evidence**: Track which tool version fixed which bug
+**Dataset:** SEC-bench, a rigorous dataset of real-world C/C++ security vulnerabilities.
 
-### Implementation Sketch
+**Results:**
+- **DebugHarness**: ~90% patch success rate
+- **SOTA baselines**: ~60% patch success rate
+- **Relative improvement**: **+30%+** over state-of-the-art baselines
+
+### 5. Application to PlotLot
+
+**Direct analogy:** Zoning variance denials, permit rejections, fee calculation errors are "crashes" in the PlotLot workflow. The harness should:
+- Query live zoning/permit systems (not just static ContextPacket)
+- Form hypotheses about why the workflow failed
+- Interactively probe state, not just analyze static artifacts
+- Closed-loop validation: re-verify against ground truth
+
+#### 5.1 DebugHarness for PlotLot Entitlement
+
 ```python
 # src/plotlot/harness/debug_harness.py
-class DebugHarness:
+class PlotLotDebugHarness:
     def __init__(self, live_data_sources: list[DataSource]):
         self.live_sources = live_data_sources
         self.crash_patterns = CrashPatternLibrary()
@@ -496,654 +1047,40 @@ class DebugHarness:
         return patch
 ```
 
-### Key Insights for PlotLot
+### 6. Key Insights for PlotLot
+
 1. **Static context is insufficient**: When entitlement fails, the harness must query live zoning/permit systems
 2. **Crash patterns as a library**: Build a taxonomy of "why entitlements fail" (incomplete evidence, expired permits, fee miscalc)
 3. **Closed-loop validation is mandatory**: Every tool output must be re-verified before propagating downstream
-4. **Hypothesis-driven debugging**: Don't randomly retry—form explicit hypotheses about what went wrong
-
----
-
-# PAPER 26: 2604.00362 - In Harmony with gpt-oss
-
-**Authors:** Borislav Mavrin
-**Date:** 1 Apr 2026 | cs.AI, cs.LG | 139 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Reverse-engineered gpt-oss in-distribution tools**: Model calls tools from training distribution even without tool definitions (strong prior, not hallucination)
-2. **Native harmony agent harness**: Encodes messages in model's native format, bypassing lossy Chat Completions conversion
-3. **First independent reproduction** of OpenAI's published gpt-oss-20b scores
-
-### Key Results
-- **SWE Verified HIGH**: 60.4% (published: 60.7%)
-- **SWE Verified MEDIUM**: 53.3% (published: 53.2%)
-- **AIME25 with tools**: 91.7% (published: 90.4%)
-
-### Architecture Insight
-- **Native format matters**: Chat Completions API conversion is lossy
-- **Tool prior is statistical**: Model knows its training tools; harness should match format
-- **Reproducibility requires disclosed harnesses**: OpenAI's paper omitted harness details—this work reverse-engineered them
-
-### Relationship to PlotLot
-- **Harness format alignment**: PlotLot's tool descriptions should match the model's training format
-- **Tool prior exploitation**: If a model "knows" certain tool patterns, leverage them
-- **Reproducibility principle**: Every PlotLot benchmark should publish its full harness
-- **Native encoding**: Don't use generic OpenAI-format wrappers; encode in the format each model expects
-
-### Implementation Sketch
-```python
-# src/plotlot/harness/native_harmony.py
-class NativeHarmonyAdapter:
-    def __init__(self, model_format: ModelFormat):
-        self.format = model_format  # 'harmony', 'chatml', 'claude', etc.
-    
-    def encode(self, messages: list[Message], tools: list[Tool]) -> EncodedPrompt:
-        if self.format == 'harmony':
-            return self._encode_harmony(messages, tools)
-        elif self.format == 'claude':
-            return self._encode_claude(messages, tools)
-        # ... format-specific encoding
-    
-    def _encode_harmony(self, messages, tools) -> EncodedPrompt:
-        # Match OpenAI's harmony format exactly
-        return EncodedPrompt(
-            system=self._build_harmony_system(tools),
-            conversation=self._build_harmony_conversation(messages)
-        )
-```
-
-### Key Insights for PlotLot
-1. **Format alignment boosts performance**: Using model's native encoding avoids lossy conversions
-2. **Tool priors are real**: If model trained with certain tool patterns, replicate them
-3. **Publish full harnesses for reproducibility**: PlotLot's evaluation harness should be open-source
-4. **First-party > third-party formats**: When a model ships its own format, use it directly
-
----
-
----
-
-# PAPER 27: 2603.29199 - AEC-Bench: A Multimodal Benchmark for Agentic Systems in Architecture, Engineering, and Construction
-
-**Authors:** Harsh Mankodiya, Chase Gallik, Theodoros Galanos, Andriy Mulyar
-**Date:** 31 Mar 2026 | cs.AI | 7,806 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **First multimodal benchmark for AEC agents**: Drawing understanding + cross-sheet reasoning + project-level coordination
-2. **Domain-specific foundation model harness evaluation**: Compares Claude Code, Codex, and other harnesses
-3. **Apache 2.0 release**: Full benchmark dataset, agent harness, evaluation code
-4. **Identifies harness design techniques that uniformly improve performance**
-
-### Architecture/Methodology
-- **Drawing understanding**: Parse construction drawings (plans, elevations, sections)
-- **Cross-sheet reasoning**: Correlate information across multiple drawing sheets
-- **Project-level coordination**: Multi-document, multi-discipline tasks
-
-### Key Insights
-- **Harness design matters more than model choice** for many AEC tasks
-- **Domain-specific tools** significantly boost performance over generic agents
-- **Cross-sheet reasoning** is a unique challenge (not present in code benchmarks)
-
-### Relationship to PlotLot
-- **Direct domain alignment**: AEC-Bench validates the need for land-dev-specific agent harnesses
-- **PlotLot as AEC-Bench candidate**: PlotLot's site analysis tools would slot into similar benchmark slots
-- **Drawing understanding → parcel maps**: PlotLot's parcel analysis needs analogous cross-sheet reasoning
-- **Multimodal input handling**: PlotLot should accept site plans, surveys, zoning maps as input
-
-### Key Insights for PlotLot
-1. **Domain benchmarks drive tool design**: Build PlotLot-Bench for land-dev
-2. **Cross-document reasoning is a first-class concern**: Zoning + environmental + subdivision are separate docs, need correlation
-3. **Harness beats model on specialized tasks**: Stop chasing bigger models; invest in better tool wrapping
-
----
-
-# PAPER 28: 2603.28088 - GEMS: Agent-Native Multimodal Generation with Memory and Skills
-
-**Authors:** Zefeng He, Siyuan Huang, Xiaoye Qu, Yafu Li, Tong Zhu, Yu Cheng, Yang Yang
-**Date:** 30 Mar 2026 | cs.CV | 15,118 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Agent Loop**: Structured multi-agent framework for closed-loop iterative improvement
-2. **Agent Memory**: Hierarchical persistent memory (factual states + compressed summaries)
-3. **Agent Skill**: Extensible collection of domain expertise with on-demand loading
-4. **Inspired by Claude Code** architecture
-
-### Key Results
-- **5 mainstream tasks + 4 downstream tasks**: Consistent performance gains
-- **6B Z-Image-Turbo model** surpasses SOTA Nano Banana 2 on GenEval2
-- **Demonstrates agent harness extends model capabilities** beyond original limits
-
-### Architecture
-```
-Multimodal Task
-       ↓
-┌─────────────────────────┐
-│  Agent Loop             │
-│  - Closed-loop optimize │
-└─────────────────────────┘
-       ↓
-┌─────────────────────────┐
-│  Agent Memory           │
-│  - Trajectory-level     │
-│  - Hierarchical storage │
-└─────────────────────────┘
-       ↓
-┌─────────────────────────┐
-│  Agent Skill            │
-│  - On-demand loading    │
-│  - Domain expertise     │
-└─────────────────────────┘
-```
-
-### Relationship to PlotLot
-- **Agent Memory → ContextPacket**: PlotLot already has persistent context; GEMS validates the design
-- **Agent Skill → Entitlement tools**: Each tool is a skill; on-demand loading prevents context bloat
-- **Closed-loop optimization**: When a tool fails, retry with refined parameters (matches Paper 25 DebugHarness)
-- **Hierarchical memory**: PlotLot's `decision_history` is a trajectory; GEMS shows this is the right structure
-
-### Key Insights for PlotLot
-1. **Lightweight models + good harness beat SOTA models**: Don't pay for Opus 4.6 if Sonnet 4.5 + GEMS-style harness suffices
-2. **Hierarchical memory saves tokens**: PlotLot's `decision_history` should compress old decisions
-3. **On-demand skill loading**: Don't load all 50 entitlement tools into context; load zoning only when zoning is needed
-4. **Closed-loop optimization is essential**: First-attempt is rarely correct; iterate
-
----
-
-# PAPER 29: 2603.26996 - FormalProofBench: Graduate-Level Math Proof Verification
-
-**Authors:** Nikil Ravi, Kexing Ying, Vasilii Nesterov, Rayan Krishnan, Elif Uskuplu, Bingyu Xia, Janitha Aswedige, Langston Nashold
-**Date:** 27 Mar 2026 | cs.AI, cs.CL, cs.LG, cs.PL | 430 KB
-**Venue:** ICLR 2026 Workshop: VerifAI-2
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Private benchmark for formally verified proofs**: Natural language + Lean 4 formal statement
-2. **Graduate-level math problems**: Qualifying exams, textbooks (analysis, algebra, probability, logic)
-3. **Agentic harness evaluation**: Tool-use, failure modes, cost, latency analysis
-4. **Best model achieves 33.5% accuracy**; rapid performance drop after
-
-### Architecture
-- **Lean 4 checker**: Formal verification of model output
-- **Natural language problem → formal proof**: Two-stage task
-- **Agentic harness**: Iterative refinement via Lean interaction
-
-### Key Results
-- **33.5% accuracy** (best model)
-- **Performance drops rapidly** beyond top performer
-- **Cost/latency analysis** provided
-
-### Relationship to PlotLot
-- **Verification pattern**: Like Lean 4 verifies proofs, PlotLot should verify EvidenceItem schemas
-- **Closed-loop with formal checker**: Use a formal tool (e.g., pandera, pydantic) to validate every tool output
-- **Cost/latency tracking**: PlotLot's deal-gate evaluation must track both metrics
-- **Failure mode analysis**: Understand *why* tools fail before optimizing them
-
-### Key Insights for PlotLot
-1. **Formal verification of outputs**: Adopt schema validation as a first-class concern
-2. **Cost-aware tool selection**: Some tools are expensive (Opus 4.6 calls); cheaper ones for routine checks
-3. **Failure mode taxonomy**: Build a "crash pattern library" for entitlement tools (Paper 25 + 29)
-4. **Iterative refinement**: First tool output is rarely final; allow N retries with feedback
-
----
-
-# PAPER 30: 2603.20380 - Herding CATs: ALARA for Agent Harness Engineering in Portable Composable Multi-Agent Teams
-
-**Authors:** Christopher J. Agostino, Nayan D'Souza
-**Date:** 20 Mar 2026 (v1), revised 15 May 2026 (v2) | cs.MA, cs.AI, cs.HC | 167 KB
-**Venue:** HAXD 2026, 8 pages, 6 figures
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **ALARA principle applied to context**: "As Low As Reasonably Achievable" — minimize context exposure
-2. **Context-Agent-Tool (CAT) data layer**: Interrelated plain-text files declaring tool access per agent
-3. **`npcsh` CLI**: Loads team, executes agent runs
-4. **Empirical validation**: 22 locally-hosted models (0.6B-35B), 115 tasks, ~2500 total executions
-
-### ALARA Principle
-- **Radiation safety analogy**: Minimize context exposure (don't dump everything)
-- **Tool access declared per agent**: Not global; each agent has minimal toolset
-- **Plain-text files**: Version-controllable, code-reviewable
-
-### Key Results
-- **22 models evaluated** across 5 task categories
-- **~2500 total executions** characterized
-- **Model families differ** in success patterns per task
-
-### Relationship to PlotLot
-- **Tool access per agent**: Zoning agent gets zoning tools; not fee calculator
-- **Plain-text CAT files**: Could be PlotLot's NLAH (Paper 21) for tool access
-- **ALARA for context**: Don't load all 30 EvidenceItems into agent; load only relevant subset
-- **CLI shell pattern**: `npcsh` is PlotLot's potential `plotlot run` entry point
-
-### Implementation Sketch
-```python
-# src/plotlot/harness/cat_layer.py
-class CATDataLayer:
-    def __init__(self, agents_dir: Path):
-        self.agents = self._load_agents(agents_dir)  # plain-text files
-    
-    def _load_agents(self, agents_dir: Path) -> dict[str, AgentSpec]:
-        agents = {}
-        for f in agents_dir.glob("*.cat"):
-            spec = parse_cat_file(f)
-            agents[spec.name] = spec
-        return agents
-    
-    def get_agent_toolset(self, agent_name: str, task: Task) -> set[str]:
-        spec = self.agents[agent_name]
-        # ALARA: minimal toolset for task
-        return spec.tools & task.relevant_tools
-    
-    def execute(self, agent_name: str, task: Task) -> Result:
-        toolset = self.get_agent_toolset(agent_name, task)
-        return self.agents[agent_name].run(task, toolset)
-```
-
-### Key Insights for PlotLot
-1. **Per-agent tool access declarations**: Stop having one global tool pool
-2. **Plain-text CAT files for version control**: Same pattern as NLAH (Paper 21)
-3. **ALARA for context**: Only load what's needed; reduce token waste
-4. **CLI shell for local execution**: PlotLot should have `plotlot run zoning-analysis <parcel>`
-
----
-
-# PAPER 31: 2603.20075 - Agentic Harness for Real-World Compilers (llvm-autofix)
-
-**Authors:** Yingwei Zheng, Cong Li, Shaohua Li, Yuqun Zhang, Zhendong Su
-**Date:** 20 Mar 2026 | cs.SE, cs.AI | 118 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **First agentic harness for compiler bug repair**: LLVM-specific
-2. **Agent-friendly LLVM tools**: Specialized tools, not generic code search
-3. **llvm-bench benchmark**: Reproducible LLVM bugs
-4. **llvm-autofix-mini**: Tailored minimal agent
-
-### Key Results
-- **60% performance decline** in frontier models on compiler bugs vs common bugs
-- **llvm-autofix-mini outperforms SOTA by ~22%**
-- Validates need for **specialized harnesses**
-
-### Architecture
-- **Domain-specific tools** (LLVM IR analysis, bug reproduction)
-- **Reproducible bug benchmark**
-- **Minimal agent** (less is more for compilers)
-
-### Relationship to PlotLot
-- **Domain specialization is critical**: Generic Claude/Codex fails on land-dev; PlotLot needs its own harness
-- **Minimal agent > complex agent**: Don't load all entitlement tools for a simple zoning question
-- **Domain-specific benchmark**: Build PlotLot-bench with reproducible land-dev tasks
-- **Specialized tools beat general**: A "zoning query" tool beats a generic "web search" for zoning info
-
-### Key Insights for PlotLot
-1. **Generic models fail on domain tasks**: PlotLot's value is its domain-specific harness
-2. **Build PlotLot-bench**: Reproducible land-dev tasks for continuous evaluation
-3. **Minimal agents for routine tasks**: Don't pull Opus 4.6 for "what's the zoning code"
-4. **Tool specialization matters more than model choice**
-
----
-
-# PAPER 32: 2603.19347 - Exploring the Agentic Frontier of Verilog Code Generation
-
-**Authors:** Patrick Yubeaton, Siddharth Garg, Chinmay Hegde
-**Date:** 19 Mar 2026 (v1), revised 30 Mar 2026 (v3) | cs.AR, cs.LG | 86 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **First systematic evaluation of agentic LLMs for Verilog**: Using CVDP benchmark
-2. **Open-source hardware design agent harnesses**: Model-agnostic baseline
-3. **Structured prompting + tool design analysis**: How do these affect performance?
-4. **Failure mode + tool usage analysis**: Open vs closed-source comparison
-
-### Key Results
-- **Naive agentic wrapping can DEGRADE performance** (vs optimized prompts)
-- **Structured harnesses match/exceed non-agentic baselines**
-- **Open-source models**: Higher crash rates + weaker tool output interpretation
-- **Qualitative examples** of successful and failed agent runs
-
-### Architecture
-- **CVDP benchmark**: Verilog generation tasks
-- **Multiple agent harnesses** with varying tool support
-- **Structured vs naive prompts**: A/B comparison
-
-### Relationship to PlotLot
-- **Naive agentic wrapping is dangerous**: Don't just wrap Claude with tools; design carefully
-- **Structured prompts > raw tool calls**: PlotLot's NLAH approach (Paper 21) is correct
-- **Tool output interpretation is hard**: Open-source models struggle here; consider Anthropic for critical tools
-- **Qualitative analysis matters**: Track *why* tools fail, not just success rate
-
-### Key Insights for PlotLot
-1. **Naive agentic wrapping can hurt**: Invest in harness design, not just tool wrapping
-2. **Structured prompts (NLAH) > raw calls**: Validates Paper 21 direction
-3. **Closed-source models better at tool interpretation**: Use Anthropic for complex entitlement tools
-4. **Qualitative failure analysis is essential**: Why did the zoning tool misclassify? Build a debugging practice
-
----
-
-# Cross-Paper Synthesis (Batch 2 - Updated)
-
----
-
-# PAPER 33: 2603.08616 - Coverage-Guided Multi-Agent Harness Generation for Java Library Fuzzing
-
-**Authors:** Nils Loose, Nico Winkel, Kristoffer Hempel, Felix Mächtle, Julian Hans, Thomas Eisenbarth
-**Date:** 9 Mar 2026 | cs.SE, cs.CR | 1,969 KB
-**Venue:** SBFT 2026 (ICSE Workshop)
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Multi-agent architecture for fuzz harness generation**: Five ReAct agents
-2. **Workflow decomposition**: Research → Synthesis → Compilation repair → Coverage analysis → Refinement
-3. **MCP-based on-demand queries**: Documentation, source code, callgraph fetched per-need (not preprocessed)
-4. **Method-targeted coverage**: Tracks coverage only during target method execution
-5. **Agent-guided termination**: Distinguishes productive refinement from diminishing returns
-
-### Five ReAct Agents
-1. **Research Agent**: Gathers API documentation, source code context
-2. **Synthesis Agent**: Writes initial harness code
-3. **Compilation Repair Agent**: Fixes build errors iteratively
-4. **Coverage Analysis Agent**: Identifies uncovered code paths
-5. **Refinement Agent**: Generates targeted improvements
-
-### Key Results
-- **26% median improvement** over OSS-Fuzz baselines
-- **5% improvement** over Jazzer AutoFuzz in package-scope coverage
-- **$3.20 and 10 minutes** per harness (practical for continuous workflows)
-- **3 bugs discovered** in projects already integrated into OSS-Fuzz
-- **7 target methods** in 6 widely-deployed Java libraries (115,000+ Maven dependents)
-
-### Relationship to PlotLot
-- **Multi-agent decomposition**: Zoning, environmental, subdivision could each be a specialized agent
-- **MCP on-demand queries**: PlotLot's MCP tools should be queried contextually, not pre-loaded
-- **Method-targeted coverage**: For each entitlement tool, track which zoning code paths are exercised
-- **Cost/latency tracking**: PlotLot's deal-gate needs to know tool cost before invocation
-
-### Key Insights for PlotLot
-1. **Multi-agent decomposition by domain**: Don't have one mega-agent; have specialist agents
-2. **MCP for on-demand context**: Don't preprocess; query as needed
-3. **Method-targeted coverage**: Track which regulatory paths are exercised
-4. **Diminishing returns detection**: Stop refining when coverage plateaus
-
----
-
-# PAPER 34: 2603.03329 - AutoHarness: Improving LLM Agents by Automatically Synthesizing a Code Harness
-
-**Authors:** Xinghua Lou, Miguel Lázaro-Gredilla, Antoine Dedieu, Carter Wendelken, Wolfgang Lehrach, Kevin P. Murphy
-**Date:** 10 Feb 2026 | cs.CL, cs.AI | 321 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **LLMs can self-synthesize their own code harnesses**: Eliminates manual harness writing
-2. **Iterative code refinement with environment feedback**: Few rounds → correct harness
-3. **Code-as-policy**: Generate entire policy in code (no LLM at decision time)
-4. **Smaller models + synthesized harness > larger models**: Gemini-2.5-Flash beats Gemini-2.5-Pro
-
-### Key Results
-- **78% of Gemini-2.5-Flash chess losses** were due to illegal moves (Kaggle GameArena)
-- **AutoHarness prevents ALL illegal moves** in 145 TextArena games
-- **Gemini-2.5-Flash + AutoHarness beats Gemini-2.5-Pro** on 16 TextArena 1-player games
-- **Cost-effective**: Smaller model + synthesized harness < Larger model raw
-
-### Architecture
-```
-Environment (game/API)
-       ↓
-LLM iteratively refines code harness
-       ↓
-Synthesized code harness
-       ↓
-Environment executes harness directly (no LLM at decision time)
-```
-
-### Relationship to PlotLot
-- **Code-as-policy for entitlement**: Generate the entire zoning check as code, not LLM calls
-- **Iterative refinement from environment feedback**: PlotLot's tool outputs drive harness improvement
-- **Smaller models + good harness**: Don't pay for Opus 4.6; Sonnet 4.5 + good harness wins
-- **Prevent "illegal moves"**: For PlotLot, "illegal" = submitting permit with invalid data
-
-### Key Insights for PlotLot
-1. **Auto-generate code harnesses**: Use LLM to write tool wrappers, then deploy as code
-2. **Code-as-policy for hot paths**: Zoning code check shouldn't call LLM at runtime
-3. **Environment-driven refinement**: Tool errors feed back to harness improvement
-4. **Cost-driven model selection**: Use cheaper models where possible; reserve Opus for hard cases
-
----
-
-# PAPER 35: 2602.16069 - The Limits of Long-Context Reasoning in Automated Bug Fixing
-
-**Authors:** Ravi Raju, Mengmeng Ji, Shubhangi Upasani, Bo Li, Urmish Thakker
-**Date:** 17 Feb 2026 (v1), revised 6 Mar 2026 (v2) | cs.SE, cs.LG | 473 KB
-**Venue:** ICLR 2026 ICBINB workshop
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Systematic evaluation of long-context debugging**: SWE-bench Verified as testbed
-2. **Counterintuitive finding**: Successful agentic trajectories stay under 20-30k tokens
-3. **Longer context correlates with LOWER success**: Decomposition beats raw long-context
-4. **64k token test**: Qwen3-Coder 7% resolve; GPT-5-nano 0% on inflated context
-
-### Key Results
-- **GPT-5-nano**: 31% resolve rate on 100 samples (with mini-SWE-agent)
-- **Deepseek-R1-0528**: Competitive results
-- **Successful trajectories**: <20-30k tokens
-- **Failure modes at 64k**: Hallucinated diffs, wrong files, malformed patches
-
-### Implications
-- **Long context ≠ better**: Models can't actually use 64k+ context effectively
-- **Decomposition wins**: Agentic workflows that break tasks into short steps outperform long-context single-shot
-- **Existing benchmarks are flawed**: Don't measure long-context reasoning, just decomposition quality
-
-### Relationship to PlotLot
-- **Decompose entitlement workflows**: Don't load all zoning + environmental + subdivision at once
-- **Short-context steps**: Each tool call should operate on focused, relevant context
-- **Don't trust 1M context window claims**: Operate as if effective context is 20-30k
-- **PlotLot's ContextPacket**: Should be carefully pruned; don't accumulate "just because we can"
-
-### Key Insights for PlotLot
-1. **Decomposition is essential**: Break entitlement analysis into short, focused steps
-2. **Effective context is 20-30k tokens**: Plan for this, not 1M context window
-3. **Token accumulation hurts**: Periodically summarize/prune ContextPacket
-4. **Tool output interpretation is the bottleneck**: Not raw context length
-
----
-
-# PAPER 36: 2602.11304 - CryptoAnalystBench: Failures in Multi-Tool Long-Form LLM Analysis
-
-**Authors:** Anushri Eswaran, Oleg Golev, Darshan Tank, Sidhant Rahi, Himanshu Tyagi
-**Date:** 11 Feb 2026 | cs.IR, cs.AI, cs.CR | 360 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **198 production crypto/DeFi queries**: Spanning 11 categories
-2. **Agentic harness with crypto/DeFi tools**: Multi-tool LLM analysis
-3. **Citation verification + LLM-as-judge rubric**: 4 success dimensions
-4. **7 higher-order error types**: Not captured by factuality checks
-
-### Four User-Defined Success Dimensions
-1. **Relevance**: Answer addresses the question
-2. **Temporal Relevance**: Data is current
-3. **Depth**: Sufficient detail
-4. **Data Consistency**: No contradictions
-
-### Seven Higher-Order Error Types
-- Multi-step reasoning failures
-- Cross-document inconsistency
-- Temporal misalignment
-- Tool output misinterpretation
-- Hallucinated sources
-- Citation fabrication
-- Aggregation errors
-
-### Key Results
-- **Failures persist in SOTA systems**: Frontier models still fail on these tasks
-- **High-stakes impact**: Misanalyses can compromise financial decisions
-- **Judge rubric improves over iterations**: But doesn't fully align with humans
-
-### Relationship to PlotLot
-- **Multi-tool integration failures**: When PlotLot combines zoning + environmental + subdivision, errors compound
-- **Citation verification**: Every EvidenceItem should cite its source
-- **Temporal relevance**: Zoning codes change; old data is wrong data
-- **Higher-order error taxonomy**: Build a "PlotLot failure modes" library
-
-### Key Insights for PlotLot
-1. **Multi-tool integration is hard**: Errors compound across tools
-2. **Citation as first-class**: Every EvidenceItem must trace to its source
-3. **Temporal awareness**: Track when zoning data was retrieved; refresh if stale
-4. **Error taxonomy is essential**: Build a library of "ways PlotLot can fail"
-
----
-
-# PAPER 37: 2601.10971 - AJAR: Adaptive Jailbreak Architecture for Red-Teaming
-
-**Authors:** Yipu Dou, Wang Yang
-**Date:** 16 Jan 2026 (v1), revised 19 Mar 2026 (v2) | cs.CR, cs.CL | 108 KB
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Jailbreak algorithms as MCP services**: Callable, composable
-2. **Auditor Agent orchestration**: Inside tool-aware runtime (Petri)
-3. **Three attack integrations**: Crescendo, ActorAttack, X-Teaming
-4. **Shared service interface**: Planning, prompt gen, optimization, evaluation, context control
-5. **Tool access reshapes attack surface**: Not uniformly larger
-
-### Key Results
-- **X-Teaming**: 65.0% → 76.0% ASR
-- **Crescendo**: 91.0% vs 87.5% (PyRIT baseline)
-- **Tool access effect varies**:
-  - ActorAttack: 51.0% → 56.0% (with tools)
-  - Crescendo: 91.0% → 78.0% (with tools, drops!)
-  - X-Teaming: 76.0% → 55.5% (with tools, drops!)
-- **Tool access can REDUCE attack success**: Not always enlarges surface
-
-### Architecture
-```
-Attack Algorithms (Crescendo, ActorAttack, X-Teaming)
-       ↓ exposed as
-MCP Services (planning, prompt_gen, optimization, evaluation, context)
-       ↓ orchestrated by
-Auditor Agent (Petri runtime)
-       ↓ tests
-LLM Under Test
-```
-
-### Relationship to PlotLot
-- **Red-teaming PlotLot**: Use AJAR to find vulnerabilities in entitlement tools
-- **MCP service architecture**: PlotLot's tools should be callable as MCP services (matches Paper 19)
-- **Tool access ≠ larger attack surface**: Careful tool design actually reduces some attack vectors
-- **Rollback-enabled transcript repair**: PlotLot should support conversation rollback for safety
-
-### Key Insights for PlotLot
-1. **Red-team PlotLot with AJAR**: Find vulnerabilities before attackers do
-2. **MCP service architecture**: Wrap tools as callable services (matches Papers 19, 24)
-3. **Tool access design matters**: Right tool design can REDUCE attack surface
-4. **Rollback is essential**: Support transcript rollback for safety recovery
-
----
-
-# PAPER 38: 2509.19349 - ShinkaEvolve: Open-Ended Sample-Efficient Program Evolution
-
-**Authors:** Robert Tjarko Lange, Yuki Imajuku, Edoardo Cetin
-**Date:** 17 Sep 2025 | cs.CL, cs.LG | 3,337 KB | 52 pages, 14 figures
-
-## TECHNICAL BREAKDOWN
-
-### Core Contributions
-1. **Open-source framework** for LLM-driven scientific discovery
-2. **Three key innovations**:
-   - Parent sampling (exploration vs exploitation balance)
-   - Code novelty rejection-sampling (efficient search)
-   - Bandit-based LLM ensemble selection
-3. **Sample efficiency**: 150 samples to discover SOTA circle packing
-
-### Key Results
-- **New SOTA circle packing** with only 150 samples
-- **Agentic harnesses for AIME math reasoning** (designed automatically)
-- **ALE-Bench improvements**: Competitive programming solutions improved
-- **Novel MoE load balancing loss** discovered
-- **Open-source** (unlike AlphaEvolve closed-source)
-
-### Architecture
-```
-LLM Ensemble (bandit-selected)
-       ↓
-Parent Sampling (exploration + exploitation)
-       ↓
-Code Novelty Rejection-Sampling
-       ↓
-Mutation/Selection Loop
-       ↓
-Evolved Programs
-```
-
-### Relationship to PlotLot
-- **Auto-evolve PlotLot tools**: Use ShinkaEvolve to optimize entitlement tool parameters
-- **Bandit-based model selection**: Choose between Opus 4.6 / Sonnet 4.5 / Haiku based on observed performance
-- **Sample efficiency**: Don't waste LLM calls; use novelty rejection-sampling
-- **Open-ended discovery**: Let PlotLot explore new entitlement strategies autonomously
-
-### Key Insights for PlotLot
-1. **Auto-evolve tools**: Use evolutionary search to optimize tool parameters
-2. **Bandit model selection**: Dynamically pick model per task type
-3. **Novelty rejection-sampling**: Don't re-explore dead ends
-4. **Sample efficiency matters**: Track tokens per decision; minimize waste
-
----
-
-## Papers in This Batch
-- 20-26 (First half): Meta-Harness, NLAH, AlphaLab, Runtime Governance, SkVM, DebugHarness, Harmony
-- 27-32 (Second half): AEC-Bench, GEMS, FormalProofBench, Herding CATs, llvm-autofix, Verilog
-- 33-38 (Third addition): Coverage-Guided Fuzzing, AutoHarness, Long-Context Limits, CryptoAnalystBench, AJAR, ShinkaEvolve
-
-## Common Themes (Expanded)
-1. **Harness as first-class engineering target** (20, 21, 22, 28, 30, 31): Stop hardcoding; treat harness as optimization/policy surface
-2. **Externalized governance** (23): Safety, rollback, human override in dedicated layer
-3. **Compilation/runtiming for skills** (24, 28): Skills are portable units; compile per-model, cache results
-4. **Dynamic debugging over static analysis** (25, 29): Live data queries + formal verification
-5. **Native format alignment** (26): Match model's expected encoding
-6. **Domain specialization** (27, 31, 32): Generic models fail; build domain-specific harnesses
-7. **ALARA context principle** (30): Minimize context exposure; per-agent tool access
-8. **Memory hierarchy** (28, 21): Hierarchical persistent memory + on-demand skill loading
-
-## PlotLot Implementation Roadmap (Updated)
-1. **Phase 1 (Immediate)**: Adopt NLAH-style markdown policies for PlotLot tools (Paper 21)
-2. **Phase 2 (Q3)**: Build runtime governance layer wrapping irreversible actions (Paper 23)
-3. **Phase 3 (Q3)**: Implement SkVM-style skill compilation for cross-model portability (Paper 24)
-4. **Phase 4 (Q3)**: Domain-specific harness (zoning agent, environmental agent, etc.) (Paper 27, 31)
-5. **Phase 5 (Q4)**: Meta-Harness outer loop for continuous harness improvement (Paper 20)
-6. **Phase 6 (Q4)**: DebugHarness pattern + formal verification of EvidenceItem (Paper 25, 29)
-7. **Phase 7 (Q4)**: Native format adapters per model (Paper 26)
-8. **Phase 8 (Q4)**: ALARA context + per-agent tool access (Paper 30)
-9. **Phase 9 (Q4)**: On-demand skill loading + hierarchical memory (Paper 28)
+4. **Hypothesis-driven debugging**: Don't randomly retry; form explicit hypotheses about what went wrong
+5. **Live state probing**: Don't trust cached data; verify against current state
+
+### 7. Cross-Paper Synthesis
+
+| Theme | Paper 20 (Meta-Harness) | Paper 22 (AlphaLab) | Paper 23 (Governance) | Paper 24 (SkVM) | Paper 25 (DebugHarness) |
+|-------|--------------------------|---------------------|----------------------|------------------|------------------------|
+| Harness as optimization target | ✓ | ✓ | | | |
+| Externalized governance | | | ✓ | | |
+| Skill compilation/caching | | | | ✓ | |
+| Dynamic debugging | | | | | ✓ |
+| Multi-agent decomposition | | ✓ | | | |
+| Domain adapters | | ✓ | | | |
+| Filesystem as state | ✓ | | | | |
+| Failure mode library | | | | | ✓ |
 
 ## File Status
-- **This file**: `agentic_harness_tracking/research_notes/ARXIV_PAPERS_TECHNICAL_BREAKDOWN2.md` (batch 2 active)
-- **Will become**: `education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_2.md` (when limit reached)
-- **Previous batch**: `education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_1.md` (Papers 18, 19)
-- **Papers processed so far in batch 2**: 13 of 127 remaining (20-32)
-- **Remaining after this batch**: 114 papers
+- **This file**: `agentic_harness_tracking/education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_2.md` (rewritten at deep level)
+- **Previous batch**: `education/ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_1.md` (committed, pushed)
+- **Papers in this batch**: 5 (20, 22, 23, 24, 25) at ~250-300 lines each
+- **Total progress**: 7 of 129 papers deeply analyzed (18, 19, 20, 22, 23, 24, 25)
 
 ## Ralph Loop Status
-- [x] Identify papers (Harness info.md scan complete: 129 unique IDs, 2 done, 127 remaining)
-- [x] Create batch 2 file
-- [x] Process papers 20-26 (first half)
-- [x] Process papers 27-32 (second half)
-- [ ] Continue processing until file size limit (target: ~30 papers or 50KB)
-- [ ] Move file to education/ as PART_2
-- [ ] Commit to feature branch
-- [ ] Push to dev
-- [ ] Create batch 3 file (ARXIV_PAPERS_TECHNICAL_BREAKDOWN3.md)
-- [ ] Repeat until all 127 papers processed
+- [x] Identify papers (Harness info.md scan: 129 unique IDs, 2 done, 127 remaining)
+- [x] PART_1: Papers 18, 19 deep (committed, pushed)
+- [x] PART_2 REWRITTEN: 5 papers at deep level (need to commit and push)
+- [x] Batch 3 in progress: Paper 21 NLAH deep
+- [ ] Commit PART_2 rewrite to feature branch
+- [ ] Push to feature branch
+- [ ] Continue with more deep papers in batch 3
+- [ ] Move to PART_4 for more papers
+- [ ] Repeat until all 127 papers deeply processed
