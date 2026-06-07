@@ -21,20 +21,23 @@ Each paper breakdown includes:
 
 | Batch | File | Papers | Lines | Pushed |
 |---|---|---|---|---|
+| **OBSIDIAN_1-35** | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_OBSIDIAN_1-35.md | 1-17 (obsidian ordering — the original 17) | 1,689 | ✓ |
 | PART_1 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_1.md | 18 (SoK Skills), 19 (MCP) | 647 | ✓ |
 | PART_2 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_2.md | 20, 22, 23, 24, 25 | 1,384 | ✓ |
 | PART_3 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_3.md | 21, 26, 27, 28, 29, 30, 31 | 2,079 | ✓ |
 | PART_4 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_4.md | 32, 33, 34, 35 | 921 | ✓ |
-| PART_5 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_5.md | 36-52 (17 papers) | 4,009 | ✓ |
-| PART_6 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_6.md | 53-69 (17 papers) | 4,397 | ✓ |
+| PART_5 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_5.md | 36-52 (17 papers) | 4,011 | ✓ |
+| PART_6 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_6.md | 53-69 (17 papers) | 4,305 | ✓ |
 | PART_7 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_7.md | 70-86 (17 papers) | 3,562 | ✓ |
 | PART_8 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_8.md | 87-103 (17 papers) | 3,015 | ✓ |
 | PART_9 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_9.md | 104-120 (17 papers) | 4,418 | ✓ |
 | PART_10 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_10.md | 121-137 (17 papers) | 6,045 | ✓ |
 | PART_11 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_11.md | 138-154 (17 papers) | 4,594 | ✓ |
-| **Total** | — | **129 papers** | **35,071 lines** | ✓ |
+| **Total** | — | **129/129 papers** | **36,670 lines** | ✓ |
 
-**Remaining:** 0 papers (corpus complete)
+**Folder location:** `education/` (top-level, single canonical location)
+
+**Note on numbering:** The Obsidian file (`ARXIV_PAPERS_TECHNICAL_BREAKDOWN_OBSIDIAN_1-35.md`) uses arxiv-ID ordering (oldest first), starting at Paper 1 (2408.01667 — Phishing Detection). The master index below uses corpus-ordering from `Harness info.md`. Both numbering systems cover the same 129 unique arxiv IDs.
 
 ## Master Index — All 52 Papers
 
