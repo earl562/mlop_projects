@@ -28,9 +28,10 @@ Each paper breakdown includes:
 | PART_5 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_5.md | 36-52 (17 papers) | 4,009 | ✓ |
 | PART_6 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_6.md | 53-69 (17 papers) | 4,397 | ✓ |
 | PART_7 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_7.md | 70-86 (17 papers) | 3,562 | ✓ |
-| **Total** | — | **69 papers** | **16,999 lines** | ✓ |
+| PART_8 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_8.md | 87-103 (17 papers) | 3,015 | ✓ |
+| **Total** | — | **86 papers** | **20,014 lines** | ✓ |
 
-**Remaining:** 60 papers (next batches: PART_8, PART_9, PART_10)
+**Remaining:** 43 papers (next batches: PART_9, PART_10)
 
 ## Master Index — All 52 Papers
 
@@ -105,6 +106,23 @@ Each paper breakdown includes:
 | 84 | 2602.02007v3 | xMemory: Beyond RAG for Agent Memory | PART_7 | 198 |
 | 85 | 2602.08004v1 | Agent Skills Marketplace Analysis (40K skills) | PART_7 | 199 |
 | 86 | 2602.08603v1 | OSCAR: Optimization-Steered Agentic Planning | PART_7 | 198 |
+| 87 | 2602.10498v1 | When Skills Lie: Hidden-Comment Injection | PART_8 | 175 |
+| 88 | 2602.10652v1 | UMEM: Unified Memory Extraction/Management | PART_8 | 205 |
+| 89 | 2602.11304v1 | CryptoAnalystBench: Multi-Tool Analyst Failures | PART_8 | 205 |
+| 90 | 2602.12670v3 | SkillsBench: How Well Agent Skills Work | PART_8 | 210 |
+| 91 | 2602.19008v1 | Canonical Path Deviation (Reliability Failures) | PART_8 | 215 |
+| 92 | 2602.22680v2 | Personalized LLM-Powered Agents (Survey) | PART_8 | 180 |
+| 93 | 2603.01493v1 | PhotoBench: Personalized Intent Retrieval | PART_8 | 185 |
+| 94 | 2603.02176v1 | AgentSkillOS: Skill Orchestration at Scale | PART_8 | 200 |
+| 95 | 2603.02239v1 | ERI Benchmark: Engineering Reasoning | PART_8 | 195 |
+| 96 | 2603.03212v1 | NeuroSkill: BCI-Based State of Mind Skills | PART_8 | 165 |
+| 97 | 2603.05344v3 | OPENDEV: Terminal AI Coding Agent | PART_8 | 200 |
+| 98 | 2603.07379v1 | SoK: Agentic RAG (POMDP Formalization) | PART_8 | 205 |
+| 99 | 2603.08616v1 | Coverage-Guided Multi-Agent Fuzz Harness (Java) | PART_8 | 210 |
+| 100 | 2603.10664v1 | Terminal Is All You Need (HCI Design) | PART_8 | 175 |
+| 101 | 2603.12658v1 | Continual Learning in LLMs (Survey) | PART_8 | 190 |
+| 102 | 2603.18897v1 | PASTE: Pattern-Aware Speculative Tool Execution | PART_8 | 175 |
+| 103 | 2603.19347v3 | Agentic Frontier of Verilog Code Generation | PART_8 | 195 |
 
 ## Theme Clusters
 
@@ -197,7 +215,7 @@ Reasoning, software engineering, long context.
 ## Next Batches
 
 - **PART_7:** Papers 70-86 (17 papers) ✓
-- **PART_8:** Papers 87-103 (17 papers)
+- **PART_8:** Papers 87-103 (17 papers) ✓
 - **PART_9:** Papers 104-120 (17 papers)
 - **PART_10:** Papers 121-129 (9 papers)
 
@@ -310,4 +328,56 @@ Four different memory designs:
 8. **Building for long context?** Start with Paper 52, Paper 64 (RLMs), Paper 77 (Pced).
 9. **Building for real-world usage?** Start with Paper 69 (SWE-chat), Paper 58 (SWE-Exp), Paper 82 (RSE).
 10. **Optimizing a harness?** Start with Paper 73 (ShinkaEvolve), Paper 79 (Cognitive Load), Paper 86 (OSCAR).
+
+## PART_8 Synthesis: Cross-Cutting Themes
+
+The 17 papers in PART_8 cluster into 7 themes with direct implications for PlotLot:
+
+### Theme 1: Skill Security and Supply Chain (Papers 87, 90, 94)
+- **Hidden-Comment Injection (87):** Markdown attack surface; 73% → 4% with defensive prompt
+- **SkillsBench (90):** +16.2pp from curated skills; 16/84 negative deltas
+- **AgentSkillOS (94):** Capability tree + DAG; +18-26 quality
+
+**PlotLot recommendation:** Structured skill library (AgentSkillOS) with curated expert skills (SkillsBench) defended against injection (Hidden-Comment).
+
+### Theme 2: Memory Evolution (Papers 88, 91, 101, 102)
+- **UMEM (88):** Joint extraction-management; +10.67% on multi-turn
+- **Canonical Path (91):** Stochastic drift; +8.8pp from monitor
+- **Continual Learning (101):** Three methods (rehearsal, regularization, architecture)
+- **PASTE (102):** Speculative tool execution; 48.5% latency reduction
+
+**PlotLot recommendation:** Memory that learns (UMEM), monitors drift (Canonical Path), updates without forgetting (Continual Learning), speculates (PASTE).
+
+### Theme 3: Multi-Tool and Multi-Source Reasoning (Papers 89, 93, 98)
+- **CryptoAnalystBench (89):** 7 higher-order error types
+- **PhotoBench (93):** Modality gap + source fusion paradox
+- **SoK Agentic RAG (98):** POMDP; 4 systemic risks
+
+**PlotLot recommendation:** Multi-source as POMDP (SoK). Detect 7 error types (CryptoAnalystBench). Multi-source profiling (PhotoBench).
+
+### Theme 4: Harness Structure (Papers 97, 99, 100, 103)
+- **OPENDEV (97):** Dual-agent; adaptive compaction
+- **Java Fuzz (99):** 5 specialized agents; MCP; +26% coverage
+- **Terminal (100):** Three design properties
+- **Verilog (103):** Structured > naive wrapping
+
+**PlotLot recommendation:** Structured harness with explicit phases. 5-agent pattern (99) for complex, dual-agent (97) for simple.
+
+### Theme 5: Domain Benchmarks (Papers 89, 90, 95)
+- **CryptoAnalystBench (89):** 198 queries, 11 categories
+- **SkillsBench (90):** 86 tasks, 11 domains
+- **ERI (95):** 57,750 records, 9 fields
+
+**PlotLot recommendation:** Build PlotLot-specific benchmark with 200+ queries, 5-10 domains, deterministic verifiers, multi-judge.
+
+### Theme 6: Personalization and State (Papers 92, 96)
+- **PLA Survey (92):** Four capabilities
+- **NeuroSkill (96):** State of mind + skills
+
+**PlotLot recommendation:** Implement four PLA capabilities. Use behavior signals for coarse state-aware skill triggers.
+
+### Theme 7: Test-Time Compute (Paper 102)
+- **PASTE (102):** Speculative tool execution; 48.5% latency reduction
+
+**PlotLot recommendation:** Speculate on common multi-step workflows.
 
