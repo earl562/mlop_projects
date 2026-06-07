@@ -29,9 +29,10 @@ Each paper breakdown includes:
 | PART_6 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_6.md | 53-69 (17 papers) | 4,397 | ✓ |
 | PART_7 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_7.md | 70-86 (17 papers) | 3,562 | ✓ |
 | PART_8 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_8.md | 87-103 (17 papers) | 3,015 | ✓ |
-| **Total** | — | **86 papers** | **20,014 lines** | ✓ |
+| PART_9 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_9.md | 104-120 (17 papers) | 4,418 | ✓ |
+| **Total** | — | **103 papers** | **24,432 lines** | ✓ |
 
-**Remaining:** 43 papers (next batches: PART_9, PART_10)
+**Remaining:** 26 papers (next batches: PART_10, PART_11)
 
 ## Master Index — All 52 Papers
 
@@ -123,6 +124,23 @@ Each paper breakdown includes:
 | 101 | 2603.12658v1 | Continual Learning in LLMs (Survey) | PART_8 | 190 |
 | 102 | 2603.18897v1 | PASTE: Pattern-Aware Speculative Tool Execution | PART_8 | 175 |
 | 103 | 2603.19347v3 | Agentic Frontier of Verilog Code Generation | PART_8 | 195 |
+| 104 | 2603.20075v1 | llvm-autofix: Agentic Harness for Real-World Compilers | PART_9 | 215 |
+| 105 | 2603.20939v1 | VARS: Vector-Adapted Retrieval Scoring (User Prefs) | PART_9 | 240 |
+| 106 | 2603.26778v1 | TED: Training-Free Experience Distillation | PART_9 | 270 |
+| 107 | 2603.26996v1 | FormalProofBench: Graduate-Level Lean 4 Proofs | PART_9 | 255 |
+| 108 | 2603.27813v1 | MuSEAgent: Multimodal Stateful Experiences | PART_9 | 240 |
+| 109 | 2604.02334v1 | Holos: Web-Scale Multi-Agent System (Agentic Web) | PART_9 | 270 |
+| 110 | 2604.08756v1 | Artifacts as Memory Beyond the Agent Boundary | PART_9 | 235 |
+| 111 | 2604.11811v1 | M*: Every Task Deserves Its Own Memory Harness | PART_9 | 250 |
+| 112 | 2604.12064v1 | LLM-Redactor: 8 Privacy Techniques for LLM Requests | PART_9 | 270 |
+| 113 | 2604.12162v1 | AlphaEval: Production-Grounded Agent Evaluation | PART_9 | 260 |
+| 114 | 2604.13018v1 | AiScientist: Long-Horizon ML Research Engineering | PART_9 | 280 |
+| 115 | 2604.13282v1 | Agent4MR: Physics-Aware MR Sequence Development | PART_9 | 235 |
+| 116 | 2604.13318v1 | WebXSkill: Executable Skills for Web Agents | PART_9 | 215 |
+| 117 | 2604.13346v1 | AgentSPEX: Workflow Spec Language + Harness | PART_9 | 285 |
+| 118 | 2604.13630v1 | SafeHarness: Lifecycle-Integrated Security | PART_9 | 280 |
+| 119 | 2604.13759v1 | Cognitive Companion: Parallel Reasoning Monitoring | PART_9 | 220 |
+| 120 | 2604.14004v1 | Memory Transfer Learning (Cross-Domain Coding) | PART_9 | 230 |
 
 ## Theme Clusters
 
@@ -216,8 +234,10 @@ Reasoning, software engineering, long context.
 
 - **PART_7:** Papers 70-86 (17 papers) ✓
 - **PART_8:** Papers 87-103 (17 papers) ✓
-- **PART_9:** Papers 104-120 (17 papers)
-- **PART_10:** Papers 121-129 (9 papers)
+- **PART_9:** Papers 104-120 (17 papers) ✓
+- **PART_10:** Papers 121-137 (17 papers)
+- **PART_11:** Papers 138-154 (17 papers)
+- **PART_12:** Papers 155-165 (11 papers; final 11 papers with possible overlap)
 
 ## PART_6 Synthesis: Cross-Cutting Themes
 
@@ -377,7 +397,66 @@ The 17 papers in PART_8 cluster into 7 themes with direct implications for PlotL
 **PlotLot recommendation:** Implement four PLA capabilities. Use behavior signals for coarse state-aware skill triggers.
 
 ### Theme 7: Test-Time Compute (Paper 102)
-- **PASTE (102):** Speculative tool execution; 48.5% latency reduction
 
 **PlotLot recommendation:** Speculate on common multi-step workflows.
+
+## PART_9 Synthesis: Cross-Cutting Themes
+
+The 17 papers in PART_9 cluster into 8 themes with direct implications for PlotLot:
+
+### Theme 1: Domain-Specific Agents (Papers 104, 115, 116)
+- **llvm-autofix (104):** LLVM harness + llvm-bench; 60% decline in frontier models; 22% recovery via tooling
+- **Agent4MR (115):** PyPulseq + physics validator; 92% success on spin-echo EPI; outperforms human developers
+- **WebXSkill (116):** Executable skills + URL graph; +9.8-12.9 points on WebArena/WebVoyager
+
+**PlotLot recommendation:** Build a vertical site-feasibility agent with zoning-specific tools (parcel facts, ordinance retrieval, dimensional calculator, conflict resolver) and a held-out site-feasibility benchmark.
+
+### Theme 2: Experience and Memory Banks (Papers 105, 106, 108, 111, 120)
+- **VARS (105):** Dual-vector user representation; weak scalar rewards; +9pp task success
+- **TED (106):** In-context experience distillation; 5x compute reduction; 0.627 → 0.702
+- **MuSEAgent (108):** Atomic decisions + hindsight extraction; +5-6pp over trajectory retrieval
+- **M* (111):** Auto-discover task-specific memory via code evolution; +7-9pp
+- **MTL (120):** Cross-domain transfer; +3.7% avg; abstraction > specificity
+
+**PlotLot recommendation:** Build a PlotLot experience bank that prefers **abstractions** (e.g., "in PD districts, the PD ordinance supersedes base zoning") over **concrete traces** (e.g., specific past reports).
+
+### Theme 3: Verification as a First-Class Concern (Papers 107, 117, 118)
+- **FormalProofBench (107):** Lean 4 as verifier; 33.5% best accuracy; 5 failure modes
+- **AgentSPEX (117):** Workflow spec + verification; +2-5pp on most benchmarks
+- **SafeHarness (118):** 4-layer security (filter, verify, privilege, rollback); 38% UBR reduction, 42% ASR reduction
+
+**PlotLot recommendation:** Verification-first design. The deterministic dimensional calculator is the analog of Lean 4. SafeHarness's L2 verification (claim provenance) is a direct fit for evidence-backed reports.
+
+### Theme 4: Privacy and Security as a System (Papers 112, 118)
+- **LLM-Redactor (112):** 8 techniques; A+B+C is best; 0% exact PII leak
+- **SafeHarness (118):** 4-layer lifecycle security; cross-layer mechanisms
+
+**PlotLot recommendation:** Implement security as a **lifecycle system** with privacy-preserving LLM access (LLM-Redactor pattern) plus 4-layer security (SafeHarness pattern).
+
+### Theme 5: Production Evaluation (Papers 104, 107, 113)
+- **llvm-autofix (104):** 60% decline on compiler bugs vs general code
+- **FormalProofBench (107):** Graduate-level math much harder than undergrad
+- **AlphaEval (113):** 10-15 point gap between lab and production scores
+
+**PlotLot recommendation:** Build a PlotLot production benchmark from real analyst tasks. Use the requirement-to-benchmark construction framework from AlphaEval.
+
+### Theme 6: Long-Horizon and Workflow Spec (Papers 114, 117)
+- **AiScientist (114):** Hierarchical orchestration + File-as-Bus; 31.82 point ablation when File-as-Bus removed
+- **AgentSPEX (117):** Workflow spec language; +2-5pp on most benchmarks
+
+**PlotLot recommendation:** Adopt a hybrid: File-as-Bus for the workspace (AiScientist) + workflow spec for the stages (AgentSPEX).
+
+### Theme 7: Memory Evolution and Compression (Papers 106, 108, 109, 111)
+- **TED (106):** Experience compression (merge, rewrite, remove)
+- **MuSEAgent (108):** Quality-filtered experience bank
+- **M* (111):** Reflective code evolution of memory programs
+- **Holos (109):** Nuwa engine for high-efficiency agent generation
+
+**PlotLot recommendation:** Build a PlotLot memory manager that prunes old, low-utility, or duplicated experiences.
+
+### Theme 8: Monitoring and Self-Repair (Papers 118, 119)
+- **SafeHarness (118):** Anomaly tracking with cross-layer escalation
+- **Cognitive Companion (119):** Parallel monitoring; 52-62% loop reduction; zero overhead probe
+
+**PlotLot recommendation:** Add a Cognitive Companion to PlotLot's harness. The Probe-based variant is particularly attractive for zero overhead.
 
