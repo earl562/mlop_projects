@@ -27,9 +27,10 @@ Each paper breakdown includes:
 | PART_4 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_4.md | 32, 33, 34, 35 | 921 | ✓ |
 | PART_5 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_5.md | 36-52 (17 papers) | 4,009 | ✓ |
 | PART_6 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_6.md | 53-69 (17 papers) | 4,397 | ✓ |
-| **Total** | — | **52 papers** | **13,437 lines** | ✓ |
+| PART_7 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_7.md | 70-86 (17 papers) | 3,562 | ✓ |
+| **Total** | — | **69 papers** | **16,999 lines** | ✓ |
 
-**Remaining:** 77 papers (next batches: PART_7, PART_8, PART_9, PART_10)
+**Remaining:** 60 papers (next batches: PART_8, PART_9, PART_10)
 
 ## Master Index — All 52 Papers
 
@@ -87,6 +88,23 @@ Each paper breakdown includes:
 | 67 | 2602.03786v2 | AOrchestra: Dynamic Sub-Agent Creation | PART_6 | 311 |
 | 68 | 2604.13151v1 | Exploration/Exploitation Errors Measurable | PART_6 | 244 |
 | 69 | 2604.20779v1 | SWE-chat: Real-World Coding Agent Usage | PART_6 | 225 |
+| 70 | 2507.18755v1 | Engineering Agent (Neuro-Symbolic Test Repair) | PART_7 | 246 |
+| 71 | 2508.00007v1 | Agent Network Protocol (ANP) | PART_7 | 227 |
+| 72 | 2508.20465v1 | On the Possibility of Deep Alignment | PART_7 | 116 |
+| 73 | 2509.19349v1 | ShinkaEvolve: Sample-Efficient Program Evolution | PART_7 | 184 |
+| 74 | 2512.04535v2 | GTM: Generalist Tool Model (Tool Simulator) | PART_7 | 195 |
+| 75 | 2601.03204v1 | InfiAgent: Infinite-Horizon State Externalization | PART_7 | 191 |
+| 76 | 2601.07372v1 | Engram: Conditional Memory via Scalable Lookup | PART_7 | 175 |
+| 77 | 2601.08670v1 | Pced: Parallel Context-of-Experts Decoding | PART_7 | 188 |
+| 78 | 2601.08773v1 | Reliable Graph-RAG for Codebases (AST vs LLM) | PART_7 | 195 |
+| 79 | 2601.20412v1 | Cognitive Load Framework (ToolLoad-Bench) | PART_7 | 196 |
+| 80 | 2601.21123v2 | CUA-Skill: Computer-Using Agent Skill Base | PART_7 | 195 |
+| 81 | 2601.21545v1 | ShardMemo: Masked MoE for Sharded Memory | PART_7 | 200 |
+| 82 | 2601.21684v1 | RSE: Recycling Search Experience | PART_7 | 198 |
+| 83 | 2601.22773v3 | Safety Case Construction for AI Systems | PART_7 | 195 |
+| 84 | 2602.02007v3 | xMemory: Beyond RAG for Agent Memory | PART_7 | 198 |
+| 85 | 2602.08004v1 | Agent Skills Marketplace Analysis (40K skills) | PART_7 | 199 |
+| 86 | 2602.08603v1 | OSCAR: Optimization-Steered Agentic Planning | PART_7 | 198 |
 
 ## Theme Clusters
 
@@ -178,7 +196,7 @@ Reasoning, software engineering, long context.
 
 ## Next Batches
 
-- **PART_7:** Papers 70-86 (17 papers)
+- **PART_7:** Papers 70-86 (17 papers) ✓
 - **PART_8:** Papers 87-103 (17 papers)
 - **PART_9:** Papers 104-120 (17 papers)
 - **PART_10:** Papers 121-129 (9 papers)
@@ -230,4 +248,66 @@ HTNs as procedural knowledge — 20B + HTN beats 120B without. The "constraints 
 - **Exp/Exp Errors** — Diagnostic metrics for reasoning process
 
 **PlotLot recommendation:** "Clarify-then-recommend" UX with EIG-based questioning. Track exploration/exploitation errors in production.
+
+## PART_7 Synthesis: Cross-Cutting Themes
+
+The 17 papers in PART_7 cluster into 7 themes with direct implications for PlotLot:
+
+### Theme 1: Harness Optimization as a Search Problem (Papers 73, 79, 86)
+Three approaches to optimizing the harness itself:
+- **ShinkaEvolve (73):** Evolutionary search with LLM mutations; 30× sample efficiency
+- **Cognitive Load (79):** Parametric load adjustment; capability boundary mapping
+- **OSCAR (86):** Offline-online paradigm with MILP-derived optimal trajectories; 10× data efficiency
+
+**PlotLot recommendation:** Build a harness optimization layer combining load-aware routing (79), evolutionary search (73), and golden library steering (86).
+
+### Theme 2: Memory Architectures (Papers 75, 76, 81, 84)
+Four different memory designs:
+- **InfiAgent (75):** File-centric state, bounded context; 20B competitive with proprietary
+- **Engram (76):** N-gram lookup at model level; +12.8pp on NIAH
+- **ShardMemo (81):** Tiered memory, masked MoE routing; +6.87 F1 with 20% latency reduction
+- **xMemory (84):** Decoupling-to-aggregation; +8.5 F1 with 27% token reduction
+
+**PlotLot recommendation:** Hybrid memory: InfiAgent file state + ShardMemo tiers + xMemory hierarchy.
+
+### Theme 3: RAG and Retrieval Innovations (Papers 77, 78)
+- **Pced (77):** Per-document forward pass, contrastive decoding; recovers most joint quality
+- **Graph-RAG (78):** AST-derived KG beats LLM-extracted; 6pp correctness, 50× cost
+
+**PlotLot recommendation:** Replace long-context RAG with Pced parallel per-source forward. Build DKB via Tree-sitter for codebase queries.
+
+### Theme 4: Skills at Scale (Papers 80, 85)
+- **CUA-Skill (80):** Large-scale skill library; 57.5% on WindowsAgentArena; +15.7pp over vanilla
+- **Agent Skills Marketplace (85):** 40,285 skills analyzed; 70% intent-level redundancy; 38% SWE supply vs 24% adoption
+
+**PlotLot recommendation:** Build PlotLot skill library per CUA-Skill design. Target under-served categories from Marketplace analysis.
+
+### Theme 5: Multi-Agent Communication (Paper 71)
+- **ANP (71):** Three-layer protocol with DID-based identity and meta-protocol negotiation
+
+**PlotLot recommendation:** Use ANP for external agent integration (county assessors, title companies); MCP for internal.
+
+### Theme 6: Governance and Safety (Papers 72, 83)
+- **Deep Alignment (72):** Theoretical; three-level constraint hierarchy (reward, enforcement, endogenous)
+- **Safety Case (83):** GSN-based templates; claim/argument/evidence structures
+
+**PlotLot recommendation:** Build safety case per Paper 83 templates. Use Paper 23 runtime governance for level 2 constraints.
+
+### Theme 7: Test-Time Compute (Paper 82)
+- **RSE (82):** Experience bank for positive/negative recycling; +7.5pp on HMMT24
+
+**PlotLot recommendation:** Add experience bank to reasoning layer for cumulative search.
+
+## How to Use This Survey (Updated)
+
+1. **Building a skill?** Start with Paper 18 (formal definition), Paper 24 (compilation), Paper 80 (CUA-Skill library), Paper 85 (marketplace strategy).
+2. **Building a tool?** Start with Paper 19 (MCP schema), Paper 34 (tool creation), Paper 71 (ANP for external).
+3. **Building governance?** Start with Paper 23 (policy), Paper 32 (PermissionBridge), Paper 35 (audit), Paper 83 (safety case).
+4. **Building a memory system?** Start with Paper 21 (NLAH), Paper 28 (GEMS), Paper 56 (Mem0), Paper 63 (MemVerse), Paper 65 (MemRL), Paper 75 (InfiAgent), Paper 81 (ShardMemo), Paper 84 (xMemory).
+5. **Building a multi-agent system?** Start with Paper 22 (AlphaLab), Paper 30 (SGH), Paper 32 (SemaClaw), Paper 55 (Orchestration), Paper 67 (AOrchestra), Paper 71 (ANP).
+6. **Evaluating your system?** Start with Paper 27 (AEC-Bench), Paper 33 (ClawGUI-Eval), Paper 57 (SOP-Bench), Paper 66 (Terminal-Bench), Paper 79 (Cognitive Load).
+7. **Debugging failures?** Start with Paper 25 (DebugHarness), Paper 68 (Exp/Exp Errors), Paper 70 (Engineering Agent's symbolic feedback).
+8. **Building for long context?** Start with Paper 52, Paper 64 (RLMs), Paper 77 (Pced).
+9. **Building for real-world usage?** Start with Paper 69 (SWE-chat), Paper 58 (SWE-Exp), Paper 82 (RSE).
+10. **Optimizing a harness?** Start with Paper 73 (ShinkaEvolve), Paper 79 (Cognitive Load), Paper 86 (OSCAR).
 
