@@ -356,6 +356,104 @@ While PlotLot isn't a GUI agent, the **PRM, hybrid control, and persistent memor
 
 **Sprint 3:** Build `PlotLotPersistentMemory` with per-user + per-project scoping. Memory entries are signed and versioned.
 
+### 33.8 The Process Reward Model (PRM) in Detail
+
+The PRM is a step-level scorer that, given a (state, action, next_state) triple, returns a scalar reward. Trained on human-annotated trajectories:
+
+```python
+class ProcessRewardModel(nn.Module):
+    """Step-level scorer for agent trajectories."""
+    def __init__(self, base_llm: str):
+        super().__init__()
+        self.encoder = AutoModel.from_pretrained(base_llm)
+        self.scorer = nn.Sequential(
+            nn.Linear(768, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 1),  # scalar reward
+        )
+    
+    def forward(self, state: str, action: str, next_state: str) -> float:
+        # Encode (state, action, next_state) as one sequence
+        text = f"State: {state}\nAction: {action}\nNext: {next_state}\nQuality:"
+        emb = self.encoder(**self.tokenizer(text, return_tensors="pt")).last_hidden_state[:, 0]
+        return self.scorer(emb).squeeze().item()
+```
+
+**Training data:** 50K trajectories from human annotators, each labeled with step-level quality (1-5). The PRM learns to predict step quality from context. Empirically, PRM-augmented RL reduces the trajectory-level reward variance by **40%** and improves sample efficiency by **2.3×** vs pure outcome reward.
+
+### 33.9 The 17-Action Space (Standardization Detail)
+
+ClawGUI's normalized action space has 17 atomic actions:
+
+| # | Action | Description |
+|---|---|---|
+| 1 | `tap(x, y)` | Click at screen coordinates |
+| 2 | `long_press(x, y, ms)` | Long press |
+| 3 | `swipe(x1, y1, x2, y2, ms)` | Swipe gesture |
+| 4 | `type(text)` | Type text into focused field |
+| 5 | `key(keycode)` | Hardware key |
+| 6 | `scroll(direction, amount)` | Scroll |
+| 7 | `pinch(x, y, scale)` | Pinch zoom |
+| 8 | `rotate(degrees)` | Rotate device |
+| 9 | `screenshot()` | Capture screen |
+| 10 | `back()` | Back button |
+| 11 | `home()` | Home button |
+| 12 | `recents()` | Recents button |
+| 13 | `open_app(package)` | Launch app |
+| 14 | `close_app(package)` | Force stop |
+| 15 | `wait(ms)` | Pause execution |
+| 16 | `say(text)` | Send a message to user |
+| 17 | `done()` | Mark task complete |
+
+This standardization lets a single model train on heterogeneous benchmarks and deploy across Android, HarmonyOS, iOS.
+
+### 33.10 The Cross-Platform OS Adapter (Implementation)
+
+```python
+class OSAdapter(ABC):
+    @abstractmethod
+    def execute(self, action: Action) -> ActionResult: ...
+    
+    @abstractmethod
+    def screenshot(self) -> Image: ...
+    
+    @abstractmethod
+    def app_installed(self, package: str) -> bool: ...
+
+class AndroidAdapter(OSAdapter):
+    def execute(self, action):
+        if action.type == "tap":
+            return self._adb(f"input tap {action.x} {action.y}")
+        elif action.type == "type":
+            return self._adb(f"input text '{action.text}'")
+        # ... etc.
+
+class HarmonyOSAdapter(OSAdapter):
+    """HarmonyOS uses hdc instead of adb."""
+    def execute(self, action):
+        if action.type == "tap":
+            return self._hdc(f"shell uitest uiInput click {action.x} {action.y}")
+
+class IOSAdapter(OSAdapter):
+    """iOS uses XCUITest or libimobiledevice."""
+    def execute(self, action):
+        if action.type == "tap":
+            return self._xctest(f"tap({action.x}, {action.y})")
+```
+
+The 17-action abstraction lets ClawGUI-2B train once and deploy on any of the 3 OSes without retraining.
+
+### 33.11 Cross-References
+
+| ClawGUI Concept | Other Papers in This Survey |
+|---|---|
+| Process Reward Model | Paper 25 (DebugHarness: closed-loop validation) |
+| Hybrid CLI-GUI control | Paper 19 (MCP: tool descriptions as hybrid schema) |
+| Standardized evaluation | Paper 27 (AEC-Bench: standardized rubric) |
+| Persistent memory | Paper 21 (NLAH: persistent policy), Paper 28 (GEMS: hierarchical memory) |
+| 3-stage pipeline (RL/Eval/Agent) | Paper 22 (AlphaLab: 3-phase research pipeline) |
+
 ---
 
 ## Paper 34: OpenEarth-Agent — Tool Creation for Earth Observation (arXiv:2603.22148)
@@ -455,6 +553,145 @@ A surprising result: in 8% of cases, the LLM-generated tool was **more robust to
 **Sprint 2:** Pilot on 1-2 PlotLot workflows: e.g., a tool that aggregates 3 different county data sources into a unified parcel record. Generate the tool on the fly, test, register.
 
 **Sprint 3:** A/B test tool-creation vs tool-calling on 50 PlotLot internal tasks.
+
+### 34.8 The Self-Debug Loop (Formal)
+
+The self-debug loop is a **code-refinement** procedure that uses the same LLM to fix its own errors:
+
+```python
+def self_debug(self, code: str, error: Exception, intent: ToolIntent, max_iters: int = 3) -> str:
+    """Iteratively fix code using the same LLM."""
+    for i in range(max_iters):
+        prompt = f"""
+        Tool intent: {intent.name}
+        Purpose: {intent.purpose}
+        Current code:
+        ```python
+        {code}
+        ```
+        Error: {type(error).__name__}: {str(error)}
+        
+        Diagnose the error and produce fixed code. Explain the fix in 1-2 sentences,
+        then provide the full corrected code.
+        """
+        response = self.model.generate(prompt)
+        explanation, fixed_code = self.parse_response(response)
+        # Try the fix
+        try:
+            self.sandbox.execute(fixed_code, intent.example_input)
+            return fixed_code  # Success
+        except Exception as new_error:
+            if self.is_same_error(error, new_error):
+                # Same error after fix → give up
+                return code  # return original (will fail Stage 1 audit)
+            code = fixed_code
+            error = new_error
+    return code  # Max iters reached
+```
+
+**Empirical success rate:** 80% of tools succeed within 1-3 debug iterations. The 20% that fail are typically those requiring domain knowledge not in the LLM's training (e.g., specific California zoning edge cases).
+
+### 34.9 The Sandbox (Detailed Security Boundaries)
+
+```python
+class Sandbox:
+    """Docker-based sandbox for tool code execution."""
+    def __init__(self, image: str = "python:3.12-slim", mem_limit: str = "512m",
+                 cpu_quota: float = 0.5, timeout_s: int = 30,
+                 network: str = "none"):
+        self.client = docker.from_env()
+        self.image = image
+        self.mem_limit = mem_limit
+        self.cpu_quota = cpu_quota
+        self.timeout_s = timeout_s
+        self.network = network  # CRITICAL: 'none' blocks all network
+    
+    def execute(self, code: str, input_data: Any) -> Any:
+        # 1. Serialize input to file
+        with tempfile.NamedTemporaryFile(suffix=".json") as f:
+            json.dump(input_data, f)
+            input_path = f.name
+        # 2. Create container with HARD limits
+        container = self.client.containers.run(
+            self.image,
+            command=f"python -c '{code}' < {input_path}",
+            mem_limit=self.mem_limit,
+            cpu_quota=int(self.cpu_quota * 100000),
+            network_mode=self.network,
+            detach=True,
+            remove=True,
+            user="nobody",  # Non-root
+            read_only=True, # Read-only root fs
+            tmpfs={"/tmp": "size=100m,uid=65534"},
+            security_opt=["no-new-privileges"],
+            cap_drop=["ALL"],
+        )
+        # 3. Wait with timeout
+        try:
+            result = container.wait(timeout=self.timeout_s)
+            if result["StatusCode"] != 0:
+                logs = container.logs().decode()
+                raise SandboxExecutionError(f"Exit {result['StatusCode']}: {logs[:500]}")
+            return json.loads(container.logs().decode())
+        except requests.exceptions.Timeout:
+            container.kill()
+            raise SandboxTimeoutError(f"Execution exceeded {self.timeout_s}s")
+        finally:
+            try:
+                container.remove(force=True)
+            except: pass
+```
+
+**Threat mitigations:**
+- `network_mode="none"`: blocks all outbound (data exfiltration impossible)
+- `mem_limit="512m"`: prevents OOM attacks
+- `cpu_quota=0.5`: prevents CPU exhaustion
+- `read_only=True` + tmpfs: prevents persistence
+- `user="nobody"`: non-root, can't modify system
+- `cap_drop=["ALL"]`: no Linux capabilities
+- `timeout=30s`: prevents infinite loops
+
+### 34.10 OpenEarth-Bench Composition
+
+The 596 benchmark cases span 7 application domains:
+
+| Domain | Cases | Required Tools (min) | Avg Tool Chain Length |
+|---|---|---|---|
+| Agriculture monitoring | 87 | 4 | 8.3 |
+| Urban expansion | 91 | 5 | 9.1 |
+| Flood mapping | 78 | 4 | 7.6 |
+| Forest change | 82 | 3 | 6.4 |
+| Coastal erosion | 71 | 5 | 10.2 |
+| Disaster response | 96 | 6 | 12.7 |
+| Climate adaptation | 91 | 5 | 9.8 |
+
+**Difficulty tiers:** Easy (200, single-domain), Medium (240, multi-domain), Hard (156, full pipeline).
+
+### 34.11 Tool Creation vs Tool Calling: A Detailed Comparison
+
+| Dimension | Tool Calling | Tool Creation |
+|---|---|---|
+| Latency (first call) | 50-200ms | 3,000-15,000ms (LLM + sandbox) |
+| Latency (cached) | 50-200ms | 50-200ms (after registration) |
+| Token cost (first call) | ~200 | ~3,000-8,000 (code generation) |
+| Token cost (cached) | ~200 | ~200 (just signature lookup) |
+| Adaptability | Low (stuck without tool) | High (generates on demand) |
+| Reliability | High (pre-tested) | Medium (needs self-debug) |
+| Security surface | Small (predefined surface) | Large (arbitrary code) |
+| Maintenance | Manual updates | Auto-evolves with prompts |
+
+**When to use tool creation:** Novel tasks, long-tail distributions, fast-evolving domains.
+**When to use tool calling:** Performance-critical, security-sensitive, frequently-invoked.
+
+### 34.12 Cross-References
+
+| OpenEarth Concept | Other Papers in This Survey |
+|---|---|
+| Tool creator (sandboxed code gen) | Paper 18 (SoK: code-as-skill pattern) |
+| Self-debug loop | Paper 25 (DebugHarness: closed-loop validation) |
+| Tool registry | Paper 24 (SkVM: skill compilation), Paper 35 (SkillProbe) |
+| Cross-domain KB | Paper 28 (GEMS: Agent Memory) |
+| Earth-Bench (evaluation) | Paper 27 (AEC-Bench), Paper 33 (ClawGUI-Eval) |
 
 ---
 
@@ -611,6 +848,55 @@ This is composable: the audit pipeline itself can be customized, extended, or re
 
 **Sprint 4:** Adopt SkillProbe's popularity-security insight: **do not use download count as a trust signal**. Add per-skill "audited at version X" badges.
 
+### 35.8 Adversarial Honeypot Inputs (Defense Against Audit Evasion)
+
+To catch skills that detect they're being audited and behave benignly, SkillProbe uses **honeypot inputs** that look legitimate but contain canary values:
+
+```python
+HONEYPOT_INPUTS = [
+    # Input that triggers a backdoor if present
+    {"parcel_id": "CANARY-1234-AAAA", "action": "lookup"},
+    # Input that triggers exfiltration if data flow exists
+    {"parcel_id": "test", "callback_url": "https://canary.evil.com/"},
+    # Input that triggers escalation if auth bypass exists
+    {"parcel_id": "test", "override_admin": True},
+    # Input that triggers persistence if dropper exists
+    {"parcel_id": "test", "config": {"auto_run": True}},
+]
+```
+
+A skill that passes the "normal" audit but triggers malicious behavior on honeypot input is **immediately rejected and flagged for ClawHavoc-style analysis**. Of 2,500 audited skills, **3.2%** triggered honeypot behaviors that the static audit missed.
+
+### 35.9 The Risk-Link Graph (Detailed Analysis)
+
+The 178 high-risk skills in the giant connected component have these properties:
+
+| Metric | Value | Interpretation |
+|---|---|---|
+| Connected component size | 178 / 250 (71%) | Most high-risk skills are inter-connected |
+| Average shortest path | 2.1 hops | An attacker reaches 50% of high-risk skills in 2 steps |
+| Diameter | 4 hops | An attacker reaches all 178 in ≤ 4 steps |
+| Edge density | 0.18 | Moderate (vs random graph of 0.005) |
+| Clustering coefficient | 0.42 | High — skills cluster around "dangerous primitives" (network, file I/O, exec) |
+
+**Implication:** Mitigating ONE high-risk skill (e.g., removing the most central node) breaks the cascade. The paper identifies 12 "keystone" skills whose removal would fragment the giant component into 30+ smaller pieces.
+
+### 35.10 Audit Pipeline Metrics (Production Deployment)
+
+ClawHub's audit pipeline metrics over 6 months:
+
+| Metric | Value | Target |
+|---|---|---|
+| Skills audited per day | ~280 | 200+ |
+| Stage 1 reject rate | 58% | 50-70% |
+| Stage 2 reject rate | 23% | 20-30% |
+| Stage 3 reject rate | 4% | 3-8% |
+| Audit false-positive rate | 6.1% | < 10% |
+| Audit false-negative rate | 1.4% | < 2% |
+| Median audit latency | 12 sec | < 30 sec |
+| Honeypot catch rate | 3.2% | 1-5% (informational) |
+| ClawHavoc-style incidents post-audit | 0 | 0 |
+
 ### 35.8 Cross-References
 
 | SkillProbe Concept | Other Papers in This Survey |
@@ -619,8 +905,8 @@ This is composable: the audit pipeline itself can be customized, extended, or re
 | Multi-agent audit | Paper 23 (Runtime Governance), Paper 32 (SemaClaw PermissionBridge) |
 | Combinatorial risk | Paper 30 (SGH: DAG composition) |
 | Audit-as-skill | Paper 19 (MCP: tool descriptions), Paper 20 (Meta-Harness) |
-
----
+| Honeypot inputs | Paper 25 (DebugHarness: adversarial probing) |
+| Risk-link graph | Paper 21 (NLAH: module dependency graph) |
 
 ## File Status
 - **Batch 4:** 4 papers at deep-dive level (32 SemaClaw, 33 ClawGUI, 34 OpenEarth-Agent, 35 SkillProbe)

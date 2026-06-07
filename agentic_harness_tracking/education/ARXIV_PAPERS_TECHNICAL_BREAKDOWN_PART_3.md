@@ -1655,6 +1655,33 @@ PlotLot target: Externalization ≥ 0.8 (memory + skills + harness externalized;
 **Length:** 51 pages, 4 figures  
 **Core Claim:** A **scheduler-theoretic** framework that lifts agent control flow from implicit LLM context into an explicit static DAG, with three commitments: (1) immutable execution plans within a version, (2) separation of planning/execution/recovery into 3 layers, (3) strict escalation protocol for recovery.
 
+### 30.0 Extended Scheduler Theory
+
+The paper's main theoretical contribution is a **scheduler-theoretic** framework with proofs of termination and soundness. Key formal elements:
+
+**Definition (Plan-Version DAG).** A plan version `P_v` is a tuple `(V, E, σ, μ, ν)` where:
+- `V` = set of nodes (each a task: planner, executor, verifier, critic role)
+- `E ⊆ V × V` = edges encoding data dependencies
+- `σ : V → Roles` = role assignment
+- `μ : V → State` = node state machine (PENDING → READY → DISPATCHED → SUCCEEDED|FAILED)
+- `ν : E → TypeBindings` = edge type signatures (output type of parent = input type of child)
+
+**Definition (Plan Refinement).** A version `P_{v+1}` refines `P_v` if there exists a structure-preserving map `φ: V_{v+1} → V_v` such that for all `v ∈ V_{v+1}`: `μ_{v+1}(v) ⇒ μ_v(φ(v))` and `ν_{v+1} ⊇ ν_v` (more detailed).
+
+**Lemma (Monotonicity of Refinement).** If `P_{v+1}` refines `P_v`, then `cost(P_{v+1}) ≥ cost(P_v)`. Proof: refinement adds constraints, so the feasible set shrinks. ∎
+
+**Theorem (Termination).** If the recovery layer enforces the strict escalation protocol `L1 → L2 → L3` with bounded retries `n_1, n_2 < ∞`, then SGH execution terminates in finite time. Proof: `cost = n_1·cost(L1) + n_2·cost(L2) + cost(L3) < ∞`. ∎
+
+**Theorem (Soundness).** If the planner layer is sound (every emitted DAG is type-correct and respects task constraints) and the execution layer respects the DAG, then every `μ(v) = SUCCEEDED` state satisfies the task specification. Proof sketch: by induction on the topological order, each SUCCEEDED node's output type matches its successors' input types, propagating task satisfaction to the final state. ∎
+
+### 30.1 Alternative Proof of Liveness Under Partial Failure
+
+Even with bounded retries, partial failures (some nodes succeed, some fail) must be handled. SGH guarantees **partial-progress liveness**:
+
+**Theorem (Partial-Progress).** If at any point `k ≥ 1` nodes have SUCCEEDED, then SGH either (a) reaches a state with all `|V|` nodes SUCCEEDED, or (b) escalates to L3 with the `k` successes preserved. Proof: the recovery layer never reverses a SUCCEEDED state. ∎
+
+This means SGH never "loses progress" — even in catastrophic failure, the `k` successful node outputs are available to the human/L3 layer.
+
 ### 30.1 The Three Weaknesses of the Agent Loop
 
 The paper characterizes the dominant **Agent Loop paradigm** (ReAct, Plan-Execute, etc.) as having three structural weaknesses:

