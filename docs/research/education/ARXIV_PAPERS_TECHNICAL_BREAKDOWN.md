@@ -30,9 +30,10 @@ Each paper breakdown includes:
 | PART_7 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_7.md | 70-86 (17 papers) | 3,562 | ✓ |
 | PART_8 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_8.md | 87-103 (17 papers) | 3,015 | ✓ |
 | PART_9 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_9.md | 104-120 (17 papers) | 4,418 | ✓ |
-| **Total** | — | **103 papers** | **24,432 lines** | ✓ |
+| PART_10 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_10.md | 121-137 (17 papers) | 6,045 | ✓ |
+| **Total** | — | **120 papers** | **30,477 lines** | ✓ |
 
-**Remaining:** 26 papers (next batches: PART_10, PART_11)
+**Remaining:** 9 papers (next batches: PART_11)
 
 ## Master Index — All 52 Papers
 
@@ -141,6 +142,23 @@ Each paper breakdown includes:
 | 118 | 2604.13630v1 | SafeHarness: Lifecycle-Integrated Security | PART_9 | 280 |
 | 119 | 2604.13759v1 | Cognitive Companion: Parallel Reasoning Monitoring | PART_9 | 220 |
 | 120 | 2604.14004v1 | Memory Transfer Learning (Cross-Domain Coding) | PART_9 | 230 |
+| 121 | 2604.14228v1 | Dive into Claude Code (Design Space) | PART_10 | 369 |
+| 122 | 2604.15034v2 | Autogenesis (Self-Evolving Agent Protocol) | PART_10 | 223 |
+| 123 | 2604.18071v1 | Architectural Design Decisions (70 Projects) | PART_10 | 535 |
+| 124 | 2604.21003v2 | The Last Harness You'll Ever Build | PART_10 | 202 |
+| 125 | 2604.25850v4 | AHE (Observability-Driven Harness Evolution) | PART_10 | 244 |
+| 126 | 2605.02092v1 | NORA (Spatial Data Science Agent) | PART_10 | 250 |
+| 127 | 2605.03042v1 | ARIS (Adversarial Multi-Agent Research) | PART_10 | 249 |
+| 128 | 2605.05258v1 | PARNESS (Paper Harness for Science) | PART_10 | 274 |
+| 129 | 2605.05538v1 | AgenticRAG (Enterprise Retrieval) | PART_10 | 441 |
+| 130 | 2605.08520v1 | FlashEvolve (Async Self-Evolution) | PART_10 | 250 |
+| 131 | 2605.08741v1 | OPHSD (On-Policy Harness Self-Distillation) | PART_10 | 376 |
+| 132 | 2605.09650v1 | Workspace Optimization (DreamTeam) | PART_10 | 395 |
+| 133 | 2605.09942v1 | HAGE (RL-Driven Weighted Graph Memory) | PART_10 | 475 |
+| 134 | 2605.09965v2 | Generalist Game Players (4 Pillars, 5 Levels) | PART_10 | 439 |
+| 135 | 2605.09998v1 | Continual Harness (Pokemon Self-Improvement) | PART_10 | 555 |
+| 136 | 2605.10966v1 | MMTB (Multimedia Terminal Benchmark) | PART_10 | 362 |
+| 137 | 2605.11665v1 | Nautilus (Plug-and-Play Robot Learning) | PART_10 | 217 |
 
 ## Theme Clusters
 
@@ -235,9 +253,9 @@ Reasoning, software engineering, long context.
 - **PART_7:** Papers 70-86 (17 papers) ✓
 - **PART_8:** Papers 87-103 (17 papers) ✓
 - **PART_9:** Papers 104-120 (17 papers) ✓
-- **PART_10:** Papers 121-137 (17 papers)
-- **PART_11:** Papers 138-154 (17 papers)
-- **PART_12:** Papers 155-165 (11 papers; final 11 papers with possible overlap)
+- **PART_10:** Papers 121-137 (17 papers) ✓
+- **PART_11:** Papers 138-154 (17 papers) — final batch
+- **PART_12:** Not needed (no remaining papers)
 
 ## PART_6 Synthesis: Cross-Cutting Themes
 
@@ -459,4 +477,84 @@ The 17 papers in PART_9 cluster into 8 themes with direct implications for PlotL
 - **Cognitive Companion (119):** Parallel monitoring; 52-62% loop reduction; zero overhead probe
 
 **PlotLot recommendation:** Add a Cognitive Companion to PlotLot's harness. The Probe-based variant is particularly attractive for zero overhead.
+
+## PART_10 Synthesis: Cross-Cutting Themes
+
+The 17 papers in PART_10 cluster into 9 themes with direct implications for PlotLot:
+
+### Theme 1: Harness Architecture as Reference Implementation (Papers 121, 123)
+- **Claude Code (121):** Simple loop + 7 permission modes, 5-layer compaction, 4 extensibility mechanisms, sub-agent delegation with worktree isolation.
+- **Architectural Design Decisions (123):** Empirical study of 70 projects; 5 recurring dimensions (subagent, context, tools, safety, orchestration); 5 architectural patterns; **audit gap finding** (~40% no audit, ~5% tamper-evident).
+
+**PlotLot recommendation:** Adopt Claude Code's permission system design as a reference. Ship tamper-evident audit by default — this is a public differentiator (per Paper 123's audit gap finding). Use the 5 dimensions as a design review rubric.
+
+### Theme 2: Self-Evolving and Self-Improving Harnesses (Papers 122, 125, 130, 135)
+- **Autogenesis (122):** Self-evolving agent protocol; agents modify their own behavior.
+- **AHE (125):** Observability-driven harness evolution; ~5x harness change magnitude.
+- **FlashEvolve (130):** Asynchronous evolution; 3.5-4.9x throughput via async workers + queue; language-space staleness is repairable.
+- **Continual Harness (135):** Online reset-free adaptation; first AI to complete Pokemon Blue/Yellow Legacy/Crystal without a lost battle; recovers most of the gap to hand-engineered expert harness.
+
+**PlotLot recommendation:** Build a PlotLot self-evolution layer combining observability (AHE), throughput (FlashEvolve), and online adaptation (Continual Harness). The audit log (Theme 1) is the observability substrate.
+
+### Theme 3: Domain-Verticalized Agents (Papers 126, 127, 132, 137)
+- **NORA (126):** Spatial data science agent; 21 skills; 0.91 spatial task accuracy.
+- **ARIS (127):** Adversarial multi-agent research; ~30% quality boost over single-agent.
+- **Workspace Optimization / DreamTeam (132):** ARC-AGI-3 agent; 36% → 38.4% with 31% fewer actions; workspace is the "trainable" substrate.
+- **Nautilus (137):** Plug-and-play robot learning; one prompt → entire pipeline.
+
+**PlotLot recommendation:** PlotLot IS this pattern. Adopt NORA's 21-skill architecture. Use ARIS's adversarial review for report quality. Apply workspace optimization to the parcel/ordinance/report substrate. Provide one-prompt onboarding like Nautilus.
+
+### Theme 4: Declarative Workflows and DAG Kernels (Papers 124, 128)
+- **Last Harness (124):** Minimal-core, max-extensibility philosophy.
+- **PARNESS (128):** End-to-end scientific research as a DAG; declarative workflow.
+
+**PlotLot recommendation:** Use a thin DAG kernel (PARNESS-style) for the top-level report pipeline. Allow per-stage extensibility (Last Harness style) so users can add custom stages.
+
+### Theme 5: Adversarial Verification and Review (Papers 127, 128)
+- **ARIS (127):** Adversarial multi-agent collaboration; multiple models critique each other.
+- **PARNESS (128):** Verifier-in-the-loop; reproducibility checks.
+
+**PlotLot recommendation:** Add a reviewer agent that uses a different model (or a different prompt) to critique each report. The deterministic dimensional calculator is a strong first-pass verifier; the reviewer agent is a second-pass.
+
+### Theme 6: Agentic Retrieval and Knowledge Access (Papers 129, 134)
+- **AgenticRAG (129):** 4 tools (search, find, open, summarize); 5.9× improvement over single-shot RAG; 49.6% recall@1 on BRIGHT, 0.96 factuality on WixQA, 92% on FinanceBench.
+- **Generalist Game Players (134):** Cross-game transfer; 4 pillars, 5 trade-offs, 5-level roadmap.
+
+**PlotLot recommendation:** Replace single-shot ordinance retrieval with agentic retrieval (AgenticRAG pattern). Use the 4-tool design (search, find, open, summarize) for ordinance navigation. Adopt the 4-pillar / 5-level roadmap for PlotLot's product strategy.
+
+### Theme 7: Harness Internalization and Distillation (Papers 131, 132)
+- **OPHSD (131):** On-policy harness self-distillation; +10.83% over OPSD on HMMT25; harness benefits are internalized; re-attaching the harness at inference is unnecessary.
+- **Workspace Optimization (132):** The workspace is the "trainable" substrate; artifacts = parameters, evidence = data, counterexamples = losses, feedback = gradients.
+
+**PlotLot recommendation:** Use the full PlotLot harness to generate high-quality training data. Distill into a smaller model (OPHSD pattern). The smaller model achieves most of the harness's quality at 10% of the inference cost. Adopt workspace optimization for the parcel/ordinance/report substrate.
+
+### Theme 8: Memory Evolution and Multi-Relational Graphs (Papers 132, 133)
+- **Workspace Optimization (132):** Counterexamples as the loss function; versioned artifacts.
+- **HAGE (133):** Weighted multi-relational memory graph; RL-driven routing; +7 points over Mem0; 5 relation types (causal, temporal, semantic, spatial, episodic).
+
+**PlotLot recommendation:** Build a HAGE-style memory with 5 relation types for the parcel/ordinance/report substrate. Use the routing network to focus on relevant edges per query. Counterexamples (analyst revisions) drive workspace updates.
+
+### Theme 9: New Modalities and Multimedia (Papers 134, 136)
+- **Generalist Game Players (134):** Cross-game transfer; 4 pillars (Dataset, Model, Harness, Benchmark).
+- **MMTB (136):** 105 tasks, 5 meta-categories; Terminus-MM extends Terminus-KIRA with audio + video perception; 31% → 58% with multimedia; Claude-Sonnet-4 reaches 68%.
+
+**PlotLot recommendation:** Add multimedia perception to PlotLot for analyzing public hearing recordings, site walkthrough videos, and ordinance PDFs with figures. The 27pp quality boost is one of the largest single-feature improvements in the benchmark literature.
+
+## How to Use This Survey (Updated for PART_10)
+
+1. **Building a skill?** Start with Paper 18, Paper 24, Paper 80, Paper 85, **Paper 121 (Claude Code)**, **Paper 123 (Audit Gap)**.
+2. **Building a tool?** Start with Paper 19, Paper 34, Paper 71, **Paper 129 (AgenticRAG)**.
+3. **Building governance?** Start with Paper 23, Paper 32, Paper 35, Paper 83, **Paper 121 (Claude Code permissions)**, **Paper 123 (Tamper-evident audit)**.
+4. **Building a memory system?** Start with Paper 21, Paper 28, Paper 56, Paper 63, Paper 65, Paper 75, Paper 81, Paper 84, **Paper 133 (HAGE)**.
+5. **Building a multi-agent system?** Start with Paper 22, Paper 30, Paper 32, Paper 55, Paper 67, Paper 71, **Paper 127 (ARIS adversarial)**.
+6. **Evaluating your system?** Start with Paper 27, Paper 33, Paper 57, Paper 66, Paper 79, **Paper 113 (AlphaEval)**, **Paper 136 (MMTB)**.
+7. **Debugging failures?** Start with Paper 25, Paper 68, Paper 70, **Paper 132 (Workspace counterexamples)**.
+8. **Building for long context?** Start with Paper 52, Paper 64, Paper 77, **Paper 121 (compaction pipeline)**.
+9. **Building for real-world usage?** Start with Paper 69, Paper 58, Paper 82, **Paper 135 (Continual Harness)**.
+10. **Optimizing a harness?** Start with Paper 73, Paper 79, Paper 86, **Paper 122 (Autogenesis)**, **Paper 125 (AHE)**, **Paper 130 (FlashEvolve)**.
+11. **Internalizing a harness into a model?** Start with **Paper 131 (OPHSD)**.
+12. **Building a verticalized agent?** Start with Paper 22, **Paper 126 (NORA)**, **Paper 127 (ARIS)**, **Paper 132 (DreamTeam)**, **Paper 137 (Nautilus)**.
+13. **Adding multimedia perception?** Start with **Paper 136 (MMTB, Terminus-MM)**.
+14. **Designing for cross-game / cross-jurisdiction transfer?** Start with **Paper 134 (Generalist Game Players, 5-level roadmap)**.
+15. **Building for self-improvement?** Start with **Paper 122 (Autogenesis)**, **Paper 125 (AHE)**, **Paper 130 (FlashEvolve)**, **Paper 135 (Continual Harness)**.
 
