@@ -31,9 +31,10 @@ Each paper breakdown includes:
 | PART_8 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_8.md | 87-103 (17 papers) | 3,015 | ✓ |
 | PART_9 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_9.md | 104-120 (17 papers) | 4,418 | ✓ |
 | PART_10 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_10.md | 121-137 (17 papers) | 6,045 | ✓ |
-| **Total** | — | **120 papers** | **30,477 lines** | ✓ |
+| PART_11 | ARXIV_PAPERS_TECHNICAL_BREAKDOWN_PART_11.md | 138-154 (17 papers) | 4,594 | ✓ |
+| **Total** | — | **129 papers** | **35,071 lines** | ✓ |
 
-**Remaining:** 9 papers (next batches: PART_11)
+**Remaining:** 0 papers (corpus complete)
 
 ## Master Index — All 52 Papers
 
@@ -159,6 +160,23 @@ Each paper breakdown includes:
 | 135 | 2605.09998v1 | Continual Harness (Pokemon Self-Improvement) | PART_10 | 555 |
 | 136 | 2605.10966v1 | MMTB (Multimedia Terminal Benchmark) | PART_10 | 362 |
 | 137 | 2605.11665v1 | Nautilus (Plug-and-Play Robot Learning) | PART_10 | 217 |
+| 138 | 2605.11671 | Cochise (Reference Pen-Testing Harness) | PART_11 | 333 |
+| 139 | 2605.11732 | AgentDisCo (Disentangled Deep Research) | PART_11 | 292 |
+| 140 | 2605.12129 | It's Not the Size (Harness Design Determines Stability) | PART_11 | 292 |
+| 141 | 2605.12239 | Harness Engineering as Categorical Architecture | PART_11 | 294 |
+| 142 | 2605.13357 | AI Harness Engineering (Runtime Substrate) | PART_11 | 389 |
+| 143 | 2605.13821 | AEvo (Harnessing Agentic Evolution) | PART_11 | 232 |
+| 144 | 2605.14186 | Metacognitive Harness (Test-Time Scaling) | PART_11 | 238 |
+| 145 | 2605.14271 | HarnessAudit (Safety Auditing) | PART_11 | 275 |
+| 146 | 2605.14421 | MemLineage (Cryptographic Memory Defense) | PART_11 | 336 |
+| 147 | 2605.14431 | FuzzAgent (Evolutionary Library Fuzzing) | PART_11 | 286 |
+| 148 | 2605.14497 | ROAD (Bi-Level Data Mixing for Offline-to-Online RL) | PART_11 | 195 |
+| 149 | 2605.14786 | Known By Their Actions (Browser Agent Fingerprinting) | PART_11 | 237 |
+| 150 | 2605.15040 | Orchard (Open-Source Agentic Modeling Framework) | PART_11 | 257 |
+| 151 | 2605.15132 | APWA (Distributed Agentic Workflows) | PART_11 | 217 |
+| 152 | 2605.15184 | Is Grep All You Need (Harness Reshapes Search) | PART_11 | 166 |
+| 153 | 2605.15187 | Articraft (Agentic 3D Asset Generation) | PART_11 | 239 |
+| 154 | 2605.15188 | FutureSim (Replaying World Events for Adaptive Agents) | PART_11 | 295 |
 
 ## Theme Clusters
 
@@ -254,7 +272,7 @@ Reasoning, software engineering, long context.
 - **PART_8:** Papers 87-103 (17 papers) ✓
 - **PART_9:** Papers 104-120 (17 papers) ✓
 - **PART_10:** Papers 121-137 (17 papers) ✓
-- **PART_11:** Papers 138-154 (17 papers) — final batch
+- **PART_11:** Papers 138-154 (17 papers) ✓ — final batch (corpus complete)
 - **PART_12:** Not needed (no remaining papers)
 
 ## PART_6 Synthesis: Cross-Cutting Themes
@@ -557,4 +575,98 @@ The 17 papers in PART_10 cluster into 9 themes with direct implications for Plot
 13. **Adding multimedia perception?** Start with **Paper 136 (MMTB, Terminus-MM)**.
 14. **Designing for cross-game / cross-jurisdiction transfer?** Start with **Paper 134 (Generalist Game Players, 5-level roadmap)**.
 15. **Building for self-improvement?** Start with **Paper 122 (Autogenesis)**, **Paper 125 (AHE)**, **Paper 130 (FlashEvolve)**, **Paper 135 (Continual Harness)**.
+
+## PART_11 Synthesis: Cross-Cutting Themes
+
+The 17 papers in PART_11 (the final batch, completing the 129-paper corpus) cluster into 9 themes with direct implications for PlotLot:
+
+### Theme 1: Evolutionary Loops as a Universal Pattern (Papers 143, 147, 148)
+
+Three papers in this batch all implement the *evolutionary loop pattern*: a system that runs multiple rounds, observes the outcome of each round, and adapts the next round's behavior based on the observation. FuzzAgent evolves harnesses via MAP-Elites to maximize coverage. ROAD evolves data mix ratios via a multi-armed bandit to balance stability and adaptation. AEvo evolves agent prompts via evolutionary search.
+
+**PlotLot recommendation:** Wrap every component that has hyperparameters (data mix, prompt template, retrieval algorithm) in an evolutionary loop. The "set hyperparameters once, train, evaluate" pattern is suboptimal; a continuous adaptation pattern is the state of the art.
+
+### Theme 2: Runtime Evidence Beats LLM-as-Judge (Papers 138, 141, 146, 150, 152)
+
+FuzzAgent's *runtime-evidence oracle* (compile the harness, run it, capture coverage) is more reliable than LLM-as-judge. The same insight appears in Cochise (the GOAD testbed is a runtime oracle for pen-testing), MemLineage (the Merkle log is runtime evidence for memory safety), and Orchard Env (the checkpoint/restore is runtime evidence for state).
+
+**PlotLot recommendation:** Replace LLM-as-judge with deterministic runtime evidence wherever possible. The agent's output, the model's confidence, the tool's result, the sandbox's state — all of these are runtime evidence. LLM-as-judge should be a *fallback*, not a primary signal.
+
+### Theme 3: The Bi-Level Optimization Pattern (Papers 144, 147, 148, 151)
+
+ROAD's bi-level formulation (outer = choose the mix; inner = train on the mix) is a pattern that appears in many systems: FuzzAgent's outer = choose the mutation; inner = evaluate. APWA's outer = decompose the query; inner = execute. MemLineage's outer = enforce the gate; inner = the memory access. Metacognitive Harness (Paper 144) is outer = monitor the agent's confidence; inner = the standard agent loop.
+
+**PlotLot recommendation:** Identify the meta-decisions in PlotLot's pipeline (which model to use, which data to mix, which agent to dispatch) and implement bi-level optimization. The outer level should be a bandit or an evolutionary search; the inner level should be the standard training or inference loop.
+
+### Theme 4: The Distributed Orchestrator Pattern (Paper 151)
+
+APWA's distributed architecture (decomposer → scheduler → worker pool → aggregator) is the right pattern for *throughput-bound* workloads. The centralized orchestrator pattern is the right pattern for *coordination-bound* workloads. The choice depends on the workload's *parallelizability*.
+
+**PlotLot recommendation:** PlotLot's batch evaluation is parallelizable (APWA's pattern); PlotLot's interactive chat is not (centralized pattern). PlotLot's pipeline should support *both* and route workloads to the appropriate architecture.
+
+### Theme 5: The Programmatic Representation Pattern (Papers 140, 153)
+
+Articraft's *programmatic representation* (the asset is a Python program, not a 3D mesh) is a pattern that generalizes: any structured output (code, math, dialogue with state, configuration) is better represented as a program than as a raw output. The program is composable, editable, verifiable, and compact. Paper 140 (It's Not the Size) reinforces this: harness design matters more than model size; the harness IS the program the model runs in.
+
+**PlotLot recommendation:** PlotLot's data generation should produce *programs* (or structured representations), not raw outputs. The harness should validate the program, not the output. This enables the credit-assignment SFT pattern (learn from productive segments of programs) and the test-based validation pattern.
+
+### Theme 6: The Privacy Attack Surface is Real (Paper 149)
+
+The browser agent fingerprinting paper demonstrates that an agent's *actions and timings* are sufficient to identify the underlying model with up to 96% F1. This is a serious privacy attack: any website can determine which LLM is powering an agent.
+
+**PlotLot recommendation:** If PlotLot deploys browser-facing agents, they are vulnerable. Implement timing normalization (mean 1.5s, std 0.5s), action obfuscation (strip exact coordinates), and consider model rotation. The only robust defense is a structural change (differential privacy on actions).
+
+### Theme 7: The Calibration Crisis (Paper 154)
+
+FutureSim reveals that frontier agents are *systematically overconfident*: they assign 90% confidence to predictions where their actual accuracy is 62%. This is not a bug; it is a structural property of how LLMs are trained.
+
+**PlotLot recommendation:** PlotLot's evaluation should measure calibration (Brier score, ECE) explicitly. PlotLot's decision-making systems should recalibrate LLM probabilities before using them. PlotLot's users should be warned when an agent is operating outside its calibrated range.
+
+### Theme 8: The Environment Layer as Kernel (Papers 142, 150, 151)
+
+Orchard Env's *first-class environment layer* is a pattern that generalizes: any agentic system needs a *kernel* that provides the primitives (sandbox lifecycle, state management, checkpoint/restore). APWA's worker pool is a kernel. AI Harness Engineering (Paper 142) explicitly calls the harness a "runtime substrate."
+
+**PlotLot recommendation:** PlotLot's environment should be a first-class component, not a utility. The API should be small (create, step, reset, close, checkpoint, restore) and the implementation should be pluggable (Docker, Kubernetes, Firecracker).
+
+### Theme 9: The Harness as Audit Trail (Papers 138, 142, 145, 146, 147)
+
+MemLineage (memory defense), HarnessAudit (safety audit), FuzzAgent (crash triage), Cochise (pen-testing logs), and Orchard Env (checkpoint/restore) all treat the *harness* as the *audit trail*. Every action the agent takes, every state transition, every decision is logged. The audit trail is what makes the system debuggable, reproducible, and auditable.
+
+**PlotLot recommendation:** PlotLot's harness should log every action, every state transition, every decision. The logs should be queryable, structured, and tamper-evident. The audit trail is the only way to debug a system that has 10^6 lines of training code, 10^9 parameters, and 10^12 tokens of data.
+
+## How to Use This Survey (Updated for PART_11)
+
+1. **Building a skill?** Start with Paper 18, Paper 24, Paper 80, Paper 85, Paper 121, Paper 123.
+2. **Building a tool?** Start with Paper 19, Paper 34, Paper 71, Paper 129.
+3. **Building governance?** Start with Paper 23, Paper 32, Paper 35, Paper 83, Paper 121, Paper 123, **Paper 145 (HarnessAudit)**, **Paper 146 (MemLineage)**.
+4. **Building a memory system?** Start with Paper 21, Paper 28, Paper 56, Paper 63, Paper 65, Paper 75, Paper 81, Paper 84, Paper 133, **Paper 146 (MemLineage)**.
+5. **Building a multi-agent system?** Start with Paper 22, Paper 30, Paper 32, Paper 55, Paper 67, Paper 71, Paper 127, **Paper 139 (AgentDisco)**, **Paper 151 (APWA)**.
+6. **Evaluating your system?** Start with Paper 27, Paper 33, Paper 57, Paper 66, Paper 79, Paper 113, Paper 136, **Paper 140 (Harness Design)**, **Paper 152 (Grep vs Vector)**, **Paper 154 (FutureSim)**.
+7. **Debugging failures?** Start with Paper 25, Paper 68, Paper 70, Paper 132, **Paper 138 (Cochise)**, **Paper 145 (HarnessAudit)**.
+8. **Building for long context?** Start with Paper 52, Paper 64, Paper 77, Paper 121.
+9. **Building for real-world usage?** Start with Paper 69, Paper 58, Paper 82, Paper 135, **Paper 149 (Browser Agent Fingerprinting)**.
+10. **Optimizing a harness?** Start with Paper 73, Paper 79, Paper 86, Paper 122, Paper 125, Paper 130, **Paper 141 (Categorical Architecture)**, **Paper 142 (AI Harness Engineering)**, **Paper 143 (AEvo)**, **Paper 147 (FuzzAgent)**.
+11. **Internalizing a harness into a model?** Start with Paper 131.
+12. **Building a verticalized agent?** Start with Paper 22, Paper 126, Paper 127, Paper 132, Paper 137, **Paper 150 (Orchard)**, **Paper 153 (Articraft)**.
+13. **Adding multimedia perception?** Start with Paper 136.
+14. **Designing for cross-game / cross-jurisdiction transfer?** Start with Paper 134.
+15. **Building for self-improvement?** Start with Paper 122, Paper 125, Paper 130, Paper 135, **Paper 144 (Metacognitive Harness)**, **Paper 148 (ROAD)**.
+16. **Building for browser-facing agents?** Start with **Paper 149 (Browser Agent Fingerprinting)**.
+17. **Building for privacy?** Start with Paper 112, Paper 118, **Paper 149 (Browser Agent Fingerprinting)**.
+18. **Building a harness runtime?** Start with **Paper 141 (Categorical Architecture)**, **Paper 142 (AI Harness Engineering)**, **Paper 150 (Orchard Env)**, **Paper 151 (APWA)**.
+19. **Building for calibration and uncertainty?** Start with **Paper 144 (Metacognitive Harness)**, **Paper 154 (FutureSim)**.
+20. **Building for distributed throughput?** Start with **Paper 151 (APWA)**.
+
+## Corpus Complete
+
+**129/129 papers covered** across 11 batches and 35,071 lines. The full corpus is available in:
+
+- `/Users/earlperry/Desktop/Projects/plotlot-v2/docs/research/education/` (master + 11 parts)
+- `github.com:earl562/plotlot-v2`, branch `dev` (fast-forwarded to the latest commit).
+
+Future research should focus on:
+- **Implementation.** The corpus identifies the *what*; implementation determines the *how*.
+- **Benchmarking.** Build PlotLot-specific benchmarks following AlphaEval, Terminal-Bench, and SkillsBench patterns.
+- **Production deployment.** The 10-15 point gap between lab and production scores (AlphaEval) is the single largest unknown.
+- **Continuous evolution.** The corpus identifies evolutionary patterns (AEvo, FuzzAgent, ROAD); PlotLot should adopt them.
 
