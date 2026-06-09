@@ -58,7 +58,8 @@ class VoiceAgent:
     def start_outbound(self, lead_id: str) -> CallSession:
         lead = self._leads.get(lead_id)
         cid = f"call-{lead_id}-{datetime.now(timezone.utc).strftime('%H%M%S')}"
-        session = CallSession(call_id=cid, lead_id=lead_id, lead_name=lead.owner_name if lead else "", direction="outbound")
+        offer = lead.estimated_offer if lead and lead.estimated_offer > 0 else 1000
+        session = CallSession(call_id=cid, lead_id=lead_id, lead_name=lead.owner_name if lead else "", direction="outbound", offer_amount=offer)
         self._sessions[cid] = session
         session.add_transcript("agent", f"Calling {lead.owner_name} at {lead.owner_phones[0] if lead and lead.owner_phones else 'unknown'}")
         return session
@@ -100,9 +101,13 @@ class VoiceAgent:
             session.current_phase = "second_hold"
             return SECOND_HOLD_MESSAGE
         elif phase == "second_hold":
-            session.current_phase = "close"
+            session.current_phase = "offer"
             lead = self._get_lead(session)
-            return f"Our offer for your property is ${session.offer_amount:,.0f}. {self._negotiation_tip(lead)}"
+            offer = session.offer_amount if session.offer_amount > 0 else (lead.estimated_offer if hasattr(lead, 'estimated_offer') else 1000)
+            return f"Our offer for your property is ${offer:,.0f}. {self._negotiation_tip(lead)}"
+        elif phase == "offer":
+            session.current_phase = "close"
+            return "We can send the paperwork today if you're ready to move forward. What do you think?"
         elif phase == "close":
             session.status = "completed"
             session.end_time = datetime.now(timezone.utc).isoformat()

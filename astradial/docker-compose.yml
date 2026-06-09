@@ -1,0 +1,32 @@
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: plotlot
+      MYSQL_DATABASE: astradial
+      MYSQL_USER: astradial
+      MYSQL_PASSWORD: plotlot
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/astradial/astradial:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: mysql://astradial:plotlot@db:3306/astradial
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_SECRET: plotlot-voice-agent-secret-key-2026
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+volumes:
+  db_data:
