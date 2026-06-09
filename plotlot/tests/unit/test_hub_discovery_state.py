@@ -16,7 +16,6 @@ Fix:
 
 from __future__ import annotations
 
-import pytest
 
 from plotlot.property.hub_discovery import _expand_state, _score_dataset
 

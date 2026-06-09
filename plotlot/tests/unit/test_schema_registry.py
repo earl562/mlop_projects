@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
 from plotlot.property.schemas.registry import (

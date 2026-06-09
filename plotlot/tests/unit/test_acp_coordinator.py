@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from plotlot.core.errors import NoAdapterError
 from plotlot.core.types import ChunkMetadata, TextChunk
