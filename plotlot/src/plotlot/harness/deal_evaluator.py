@@ -68,42 +68,37 @@ def score_deal(
     owner_occupied: bool,
     mls_failed: bool,
 ) -> int:
-    """Score a deal 0-10 based on acquisition criteria.
+    """Deal quality score 0-10. Used to RANK and PRIORITIZE leads.
 
-    Scoring:
-    - Large lot (>0.5 acre): +2
-    - Value gap (assessed < 50% est): +2
-    - Multi-unit potential (2+ units): +2
-    - Zoning compliant: +1
-    - Utilities: +1
-    - No environmental flags: +1
-    - MLS previously failed (motivated seller): +1
-    - Non-owner-occupied (less emotional): +1
-    - Low last sale (paid less than assessed): +1
+    This is NOT confidence. It measures how attractive the deal is:
+    - Profit potential (value gap): up to 3 pts
+    - Development potential (units): up to 3 pts
+    - Seller motivation (MLS failed, non-owner): up to 2 pts
+    - Lot size premium: up to 2 pts
+    
+    Higher = contact first. If zoning fails: 0 = skip.
     """
+    if not zoning_compliant or max_units < 1:
+        return 0
     score = 0
-    if lot_acres >= 0.5:
-        score += 2
-    elif lot_acres >= 0.25:
-        score += 1
-    if assessed_value > 0 and est_value > 0 and assessed_value < est_value * 0.5:
-        score += 2
-    if max_units >= 3:
-        score += 2
-    elif max_units >= 2:
-        score += 1
-    if zoning_compliant:
-        score += 1
-    if utilities:
-        score += 1
-    if environmental_flags == 0:
-        score += 1
-    if mls_failed:
-        score += 1
-    if not owner_occupied:
-        score += 1
-    if last_sale_amount > 0 and assessed_value > 0 and last_sale_amount < assessed_value:
-        score += 1
+    # Profit potential: value gap between assessed and market
+    if assessed_value > 0 and est_value > 0:
+        gap = (est_value - assessed_value) / max(assessed_value, 1)
+        if gap > 2.0: score += 3
+        elif gap > 1.0: score += 2
+        elif gap > 0.5: score += 1
+    elif assessed_value > 0:
+        score += 1  # At least has assessed value
+    # Development potential: more units = better deal
+    if max_units >= 10: score += 3
+    elif max_units >= 4: score += 2
+    elif max_units >= 2: score += 1
+    # Seller motivation
+    if mls_failed: score += 1
+    if not owner_occupied: score += 1
+    # Lot size premium
+    if lot_acres >= 5: score += 2
+    elif lot_acres >= 1: score += 1
     return min(10, score)
 
 
