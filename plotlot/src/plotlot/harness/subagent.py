@@ -143,43 +143,32 @@ class SubAgentMiddleware(AgentMiddleware):
         return results
 
     async def _default_execute(self, agent: SubAgent, task: str) -> SubAgentResult:
-        """Minimal execution — calls model with isolated state."""
+        """Execute sub-agent using its own model caller with isolated state."""
         from plotlot.harness.agent_loop import AgentConfig, AgentLoop
+        from plotlot.harness.model_adapter import create_model_caller
 
         config = AgentConfig(
-            model=agent.model or "claude-sonnet-4-6",
+            model=agent.model or "openai/gpt-4.1-mini",
             system_prompt=agent.system_prompt,
             tools=agent.tools,
             max_iterations=agent.max_iterations,
         )
-
-        calls = 0
-
-        async def fake_model(s: AgentState, tools: list[dict[str, Any]]) -> AgentState:
-            nonlocal calls
-            calls += 1
-            s.should_stop = True
-            s.stop_reason = "sub_agent_completed"
-            s.add_message("assistant", f"[{agent.name} sub-agent] Task: {task}. Awaiting model integration.")
-            return s
-
-        async def fake_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-            return {"ok": True, "note": f"Tool {tool_name} executed with {args}"}
-
-        loop = AgentLoop(config=config, call_model=fake_model, execute_tool=fake_tool)
+        call_model = create_model_caller(provider="openrouter", model=config.model)
+        loop = AgentLoop(config=config, call_model=call_model, execute_tool=_default_tool_executor)
         state = await loop.run(task)
         output = ""
         for msg in state.messages:
             if msg.get("role") == "assistant":
                 output = str(msg.get("content", ""))
         return SubAgentResult(
-            agent_name=agent.name,
-            task=task,
-            output=output,
-            iterations=state.iteration,
-            stop_reason=state.stop_reason,
+            agent_name=agent.name, task=task, output=output or "[Sub-agent completed — see trace]",
+            iterations=state.iteration, stop_reason=state.stop_reason,
             tool_calls=len(state.tool_results),
         )
+
+
+async def _default_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": True, "tool": tool_name, "args": str(args)[:200]}
 
     def _summarize_results(self) -> str:
         lines = []

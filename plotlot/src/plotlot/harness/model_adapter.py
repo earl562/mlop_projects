@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Awaitable, Callable
@@ -119,25 +120,34 @@ def _create_openai_compatible_caller(
         if tools:
             kwargs["tools"] = _normalize_tools(tools)
             kwargs["tool_choice"] = "auto"
-        try:
-            if provider == "openrouter":
-                kwargs["extra_headers"] = {"HTTP-Referer": "https://plotlot.ai", "X-Title": "PlotLot Agent Harness"}
-            resp = await client.chat.completions.create(**kwargs)
-            choice = resp.choices[0]
-            msg = choice.message
-            if msg.content:
-                state.add_message("assistant", msg.content)
-            if msg.tool_calls:
-                for tc in msg.tool_calls:
-                    args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                    state.add_tool_call(tc.function.name, args, tc.id)
-            if choice.finish_reason == "stop" and not msg.tool_calls:
-                state.should_stop = True
-                state.stop_reason = "model_stopped"
-        except Exception as e:
-            state.add_message("system", f"Model error ({type(e).__name__}): {e}")
-            state.should_stop = True
-            state.stop_reason = f"model_error: {type(e).__name__}"
+        if provider == "openrouter":
+            kwargs["extra_headers"] = {"HTTP-Referer": "https://plotlot.ai", "X-Title": "PlotLot Agent Harness"}
+        last_error = None
+        for attempt in range(3):
+            try:
+                resp = await client.chat.completions.create(**kwargs)
+                choice = resp.choices[0]
+                msg = choice.message
+                if msg.content:
+                    state.add_message("assistant", msg.content)
+                if msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                        state.add_tool_call(tc.function.name, args, tc.id)
+                if choice.finish_reason == "stop" and not msg.tool_calls:
+                    state.should_stop = True
+                    state.stop_reason = "model_stopped"
+                return state
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                retryable = any(kw in err_str for kw in ("rate", "timeout", "server", "overloaded", "capacity", "429", "503", "502"))
+                if not retryable or attempt == 2:
+                    break
+                await asyncio.sleep(2 ** attempt)
+        state.add_message("system", f"Model error after {attempt+1} attempts ({type(last_error).__name__}): {last_error}")
+        state.should_stop = True
+        state.stop_reason = f"model_error: {type(last_error).__name__}" if last_error else "model_error"
         return state
     return _call
 
