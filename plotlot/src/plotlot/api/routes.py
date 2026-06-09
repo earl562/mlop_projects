@@ -282,6 +282,49 @@ async def analyze_stream(request: AnalyzeRequest):
             finally:
                 await session.close()
 
+            # ACP: on-demand ingestion when municipality has no indexed data
+            if not search_results:
+                from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": f"No data found for {municipality} — ingesting now…",
+                    },
+                )
+                async for progress in run_on_demand_ingestion(
+                    IngestRequest(
+                        municipality=municipality,
+                        state=state,
+                        county=county,
+                        trigger="search_miss",
+                    )
+                ):
+                    yield _sse_event("ingestion_progress", progress.model_dump())
+
+                # Re-run search after ingestion (may still be empty if ingestion failed)
+                session = await get_session()
+                try:
+                    search_results = await hybrid_search(
+                        session, municipality, search_query, limit=15
+                    )
+                finally:
+                    await session.close()
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": (
+                            f"Ingestion complete — found {len(search_results)} sections"
+                            if search_results
+                            else "Ingestion complete — proceeding with limited data"
+                        ),
+                        "complete": True,
+                    },
+                )
+
             yield _sse_event(
                 "status",
                 {

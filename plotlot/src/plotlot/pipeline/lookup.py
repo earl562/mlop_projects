@@ -204,9 +204,13 @@ async def lookup_address(address: str) -> ZoningReport | None:
         else:
             logger.warning("No property record found for %s in %s County", address, county)
 
-        # Step 3: Hybrid search — use actual zoning code if we have it, else municipality
+        # Step 3: Hybrid search — use actual zoning code if we have it, else generic
+        # zoning terms. Falling back to the municipality name (e.g. "San Jose") returns
+        # 0 results because the name has no semantic overlap with ordinance text.
         search_query = (
-            prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+            prop_record.zoning_code
+            if prop_record and prop_record.zoning_code
+            else "zoning district residential density setbacks height limits parking"
         )
         session = await get_session()
         try:

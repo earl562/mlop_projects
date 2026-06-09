@@ -97,6 +97,23 @@ class NvidiaCreditsExhaustedError(FatalError):
         )
 
 
+class NoAdapterError(FatalError):
+    """No ingestion adapter found for the requested municipality.
+
+    Raised by ingestion/adapters/registry.py when neither the PDF registry
+    nor live Municode discovery can locate a source for the given municipality
+    and state.
+    """
+
+    def __init__(self, municipality: str, state: str) -> None:
+        self.municipality = municipality
+        self.state = state
+        super().__init__(
+            f"No ingestion adapter found for {municipality!r}, {state!r}. "
+            "Check Municode coverage or add a PDF/HTML adapter entry."
+        )
+
+
 # --- Degraded errors (partial results possible) ---
 
 

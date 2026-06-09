@@ -204,7 +204,7 @@ class Settings(BaseSettings):
 
     # ArcGIS Hub
     arcgis_hub_api_url: str = "https://hub.arcgis.com/api/v3/datasets"
-    hub_discovery_timeout: float = 10.0
+    hub_discovery_timeout: float = 20.0
     hub_cache_ttl_hours: int = 168  # 7 days
 
     # Logging

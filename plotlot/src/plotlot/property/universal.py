@@ -22,7 +22,7 @@ from plotlot.property.base import PropertyProvider
 from plotlot.property.field_mapper import ACRES_TO_SQFT, SQ_METERS_TO_SQFT, map_fields
 from plotlot.property.hub_discovery import discover_datasets
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
-from plotlot.storage.firestore import (
+from plotlot.property.schemas import (
     get_county_cache,
     get_field_mapping,
     save_county_cache,
