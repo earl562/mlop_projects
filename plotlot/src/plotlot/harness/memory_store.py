@@ -1,7 +1,7 @@
-"""Tiered memory system for the PlotLot agent harness.
+"""Tiered memory system — in-memory + optional PostgreSQL persistence.
 
 Four tiers: WORKING (in-context), SHORT_TERM (AGENTS.md), MEDIUM_TERM (per-user DB),
-LONG_TERM (org-level vector/graph). In-memory backend with Postgres-ready interface.
+LONG_TERM (org-level vector/graph).
 
 Per GTM Agent blog: edit diffs → structured observations → compaction.
 Per Your harness, your memory: memory is not a plugin — it IS the harness.
@@ -33,13 +33,13 @@ class MemoryEntry:
     tier: MemoryTier
     user_id: str | None = None
     project_id: str | None = None
-    source: str = "unknown"  # edit_diff, explicit_remember, dreaming, system
+    source: str = "unknown"
     created_at: float = field(default_factory=time.time)
     access_count: int = 0
 
 
 class MemoryStore:
-    """Tiered memory with in-memory backend (Postgres-ready interface)."""
+    """Tiered memory with in-memory backend + optional PostgreSQL persistence."""
 
     def __init__(self):
         self._entries: dict[str, list[MemoryEntry]] = defaultdict(list)
@@ -49,14 +49,7 @@ class MemoryStore:
         namespace = self._namespace(entry.tier, entry.user_id, entry.project_id)
         self._entries[namespace].append(entry)
 
-    def retrieve(
-        self,
-        tier: MemoryTier,
-        user_id: str | None = None,
-        project_id: str | None = None,
-        key_prefix: str | None = None,
-        limit: int = 10,
-    ) -> list[MemoryEntry]:
+    def retrieve(self, tier: MemoryTier, user_id: str | None = None, project_id: str | None = None, key_prefix: str | None = None, limit: int = 10) -> list[MemoryEntry]:
         namespace = self._namespace(tier, user_id, project_id)
         entries = self._entries.get(namespace, [])
         if key_prefix:
@@ -72,7 +65,6 @@ class MemoryStore:
         return self._observations.get(user_id, [])[-limit:]
 
     def compact(self, user_id: str) -> int:
-        """Weekly compaction: merge duplicate keys, keep latest value."""
         obs = self._observations.get(user_id, [])
         seen: dict[str, dict[str, Any]] = {}
         for o in obs:
@@ -82,6 +74,41 @@ class MemoryStore:
         before = len(obs)
         self._observations[user_id] = list(seen.values())
         return before - len(self._observations[user_id])
+
+    async def save_to_db(self, user_id: str, project_id: str) -> int:
+        """Persist observations to PostgreSQL. Falls back gracefully."""
+        try:
+            from plotlot.storage.db import get_session
+            from sqlalchemy import text
+            count = 0
+            async with get_session() as session:
+                for obs in self._observations.get(user_id, []):
+                    await session.execute(
+                        text("INSERT INTO harness_memory (user_id, project_id, key, value, source, created_at) VALUES (:uid, :pid, :k, :v, :src, NOW()) ON CONFLICT (user_id, key) DO UPDATE SET value = :v, source = :src, created_at = NOW()"),
+                        {"uid": user_id, "pid": project_id or "", "k": obs["key"], "v": str(obs["value"])[:1000], "src": obs.get("source", "unknown")},
+                    )
+                    count += 1
+                await session.commit()
+            return count
+        except Exception:
+            return 0
+
+    async def load_from_db(self, user_id: str, project_id: str) -> int:
+        """Load observations from PostgreSQL. Returns count of loaded rows."""
+        try:
+            from plotlot.storage.db import get_session
+            from sqlalchemy import text
+            async with get_session() as session:
+                result = await session.execute(
+                    text("SELECT key, value, source, created_at FROM harness_memory WHERE user_id = :uid AND (project_id = :pid OR project_id = '') ORDER BY created_at DESC LIMIT 100"),
+                    {"uid": user_id, "pid": project_id or ""},
+                )
+                rows = result.fetchall()
+                for row in rows:
+                    self._observations[user_id].append({"key": row[0], "value": row[1], "source": row[2], "at": str(row[3])})
+                return len(rows)
+        except Exception:
+            return 0
 
     def _namespace(self, tier: MemoryTier, user_id: str | None, project_id: str | None) -> str:
         uid = user_id or "_global"
@@ -114,13 +141,6 @@ class MemoryMiddleware(AgentMiddleware):
     async def after_agent(self, state: AgentState) -> AgentState:
         for msg in state.messages:
             if msg.get("role") == "assistant" and len(msg.get("content", "")) > 50:
-                self._store.store(MemoryEntry(
-                    key="last_analysis",
-                    value=msg["content"][:500],
-                    tier=MemoryTier.SHORT_TERM,
-                    user_id=self._user_id,
-                    project_id=self._project_id,
-                    source="agent_output",
-                ))
+                self._store.store(MemoryEntry(key="last_analysis", value=msg["content"][:500], tier=MemoryTier.SHORT_TERM, user_id=self._user_id, project_id=self._project_id, source="agent_output"))
                 break
         return state

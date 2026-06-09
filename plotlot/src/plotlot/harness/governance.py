@@ -125,12 +125,20 @@ DANGEROUS_COMMANDS = {"rm -rf /", "sudo ", "chmod 777 /", "mkfs.", "dd if=", ":(
 
 
 def check_pii(text: str) -> list[str]:
-    """Stub PII detection — replace with production PIIMiddleware."""
+    """Detect PII in text. Returns list of PII type descriptions found."""
+    import re
     found: list[str] = []
-    for pattern in ["\\b\\d{3}-\\d{2}-\\d{4}\\b", "\\b\\d{16}\\b", "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"]:
-        import re
+    patterns: list[tuple[str, str]] = [
+        (r"\b\d{3}-\d{2}-\d{4}\b", "SSN"),           # 123-45-6789
+        (r"\b\d{3}-\d{3}-\d{4}\b", "Phone"),          # 555-123-4567
+        (r"\b\d{13,19}\b", "Credit Card"),            # 16-digit card numbers
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "Email"),
+        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "IP Address"),
+        (r"(?i)\b(api[_-]?key|secret|token|password)\s*[:=]\s*\S+", "Credential"),
+    ]
+    for pattern, label in patterns:
         if re.search(pattern, text):
-            found.append(pattern)
+            found.append(label)
     return found
 
 
