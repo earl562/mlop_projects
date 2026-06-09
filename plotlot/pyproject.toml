@@ -31,6 +31,7 @@ dependencies = [
     "aiosmtplib>=3.0",
     "email-validator>=2.0",
     "pypdf>=6.12.2",
+    "fastmcp>=3.4.0",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +58,7 @@ plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
 plotlot-api = "plotlot.api.main:run"
 plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
+plotlot-mcp = "plotlot.mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]

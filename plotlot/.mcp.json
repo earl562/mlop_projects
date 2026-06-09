@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "plotlot": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "plotlot-mcp"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}",
+        "NVIDIA_API_KEY": "${NVIDIA_API_KEY}",
+        "GEOCODIO_API_KEY": "${GEOCODIO_API_KEY}",
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}

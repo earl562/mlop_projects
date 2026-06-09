@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from plotlot.property.models import CountyCache, FieldMapping
+from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
 from plotlot.storage.db import get_session
 from plotlot.storage.models import CountySchema
 
@@ -167,8 +167,6 @@ async def save_field_mapping(mapping: FieldMapping) -> None:
 
 def _row_to_county_cache(row: CountySchema) -> CountyCache:
     """Convert a CountySchema ORM row into a CountyCache Pydantic model."""
-    from plotlot.property.models import DatasetInfo
-
     return CountyCache(
         county_key=row.county_key,
         state=row.state,
