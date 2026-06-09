@@ -1252,7 +1252,7 @@ async def _execute_lookup_property(
         return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
 
 
-async def _execute_zoning_search(municipality: str, query: str) -> str:
+async def _execute_zoning_search(municipality: str, query: str, session_id: str = "") -> str:
     """Search the local zoning ordinance database via hybrid RAG.
 
     Uses the same hybrid_search (vector + full-text + RRF fusion) and
@@ -1269,10 +1269,35 @@ async def _execute_zoning_search(municipality: str, query: str) -> str:
 
         if not results:
             span.set_outputs({"result_count": 0, "status": "no_results"})
+            # Anti-hallucination contract: echo the zoning code already established
+            # this session and tell the agent exactly how to present a coverage gap
+            # without fabricating contacts, URLs, or "could not be retrieved" wording.
+            known_zoning_code = ""
+            if session_id:
+                ctx = _sessions.get_property_context(session_id)
+                if ctx:
+                    known_zoning_code = str(ctx.get("zoning_code") or "")
+            if known_zoning_code:
+                guidance = (
+                    f"The zoning code ({known_zoning_code}) is already confirmed for this parcel "
+                    "from lookup_property_info — STATE IT PLAINLY. Its dimensional standards are "
+                    f"simply not yet indexed in the PlotLot database for {municipality}. Tell the "
+                    "user that and offer to ingest the ordinance. Do NOT say the zoning could not "
+                    "be retrieved, and NEVER fabricate phone numbers, office names, URLs, or "
+                    "numeric zoning values."
+                )
+            else:
+                guidance = (
+                    f"No indexed ordinance text for {municipality}. Report this honestly and offer "
+                    "to ingest the municipality's ordinance or run a web_search. NEVER fabricate "
+                    "phone numbers, office names, URLs, or numeric zoning values."
+                )
             return json.dumps(
                 {
                     "status": "no_results",
                     "message": f"No ordinance sections found for '{query}' in {municipality}",
+                    "known_zoning_code": known_zoning_code,
+                    "presentation_guidance": guidance,
                 }
             )
 
@@ -1838,6 +1863,7 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
         return await _execute_zoning_search(
             args.get("municipality", ""),
             args.get("query", ""),
+            session_id=session_id,
         )
     elif name == "search_municode_live":
         return await _execute_municode_live_search(

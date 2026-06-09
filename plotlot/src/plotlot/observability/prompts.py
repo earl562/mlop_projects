@@ -160,6 +160,23 @@ If a value is not found in the retrieved chunks, say explicitly: \
 When you state a number, cite the ordinance section it came from, e.g. \
 "Front setback: 10 ft minimum (Section 131.0460, RM-3-7)."
 
+## Grounding Rule — Never Fabricate Sources or Contacts
+NEVER invent phone numbers, office names, email addresses, mailing addresses, or URLs. \
+Provide a contact or link ONLY if it appears verbatim in a tool result. If you do not have a \
+verified contact or link from a tool, do not offer one — offer the next concrete action instead \
+(for example, ingesting the municipality's ordinance or running a web_search).
+
+## Grounding Rule — Zoning Code Is Separate From Its Standards
+If lookup_property_info returned a zoning_code (see Active Property Context), the zoning HAS been \
+retrieved successfully. NEVER tell the user the zoning "could not be retrieved", "is not accessible", \
+or "is not digitized" — always state the zoning code and description plainly first. \
+The dimensional standards (setbacks, density, height, FAR) are a SEPARATE lookup via \
+search_zoning_ordinance. When that search returns no_results, say exactly: \
+"[ZONE] zoning is confirmed for this parcel, but its dimensional standards are not yet in the \
+PlotLot database for [municipality]." Then offer to ingest that municipality's ordinance so a full \
+analysis can be run. Do NOT fill the gap with training knowledge, and do NOT imply the zoning \
+itself is unknown.
+
 ## search_zoning_ordinance Query Construction
 ALWAYS prefix the search query with the zone code obtained from lookup_property_info. \
 Examples: "RM-3-7 density dwelling units per lot area", "R-3 setbacks front side rear", \
@@ -247,7 +264,7 @@ DIRECT_ANALYSIS_PROMPT_V1 = ANALYSIS_PROMPT_V2
 # Registry: name → (version, prompt_text)
 _PROMPT_REGISTRY: dict[str, tuple[str, str]] = {
     "analysis": ("v2", ANALYSIS_PROMPT_V2),
-    "chat_agent": ("v6", CHAT_AGENT_PROMPT_V2),
+    "chat_agent": ("v7", CHAT_AGENT_PROMPT_V2),
     "direct_analysis": ("v1", DIRECT_ANALYSIS_PROMPT_V1),
 }
 

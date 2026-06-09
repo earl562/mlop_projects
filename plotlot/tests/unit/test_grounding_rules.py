@@ -122,7 +122,28 @@ def test_chat_prompt_requires_section_citation():
     assert "section" in prompt.lower() or "cite" in prompt.lower()
 
 
-def test_chat_prompt_version_is_v6():
+def test_chat_prompt_version_is_v7():
     from plotlot.observability.prompts import get_prompt_version
 
-    assert get_prompt_version("chat_agent") == "v6"
+    assert get_prompt_version("chat_agent") == "v7"
+
+
+def test_chat_prompt_forbids_fabricating_contacts_and_urls():
+    """Regression: agent fabricated a Clark County phone number for un-indexed RS20."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent").lower()
+    assert "phone number" in prompt
+    assert "url" in prompt
+    # Must forbid invention of contacts/links
+    assert "never invent" in prompt or "never fabricate" in prompt
+
+
+def test_chat_prompt_forbids_zoning_not_retrieved_when_code_known():
+    """When a zoning_code is known, the agent must not claim zoning was unavailable."""
+    from plotlot.observability.prompts import get_active_prompt
+
+    prompt = get_active_prompt("chat_agent").lower()
+    assert "could not be retrieved" in prompt  # the forbidden phrasing is named
+    assert "not yet in the plotlot database" in prompt  # the honest alternative
+    assert "ingest" in prompt  # offers the remedy
