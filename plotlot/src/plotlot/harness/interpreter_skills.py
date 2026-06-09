@@ -166,6 +166,14 @@ PERMIT_REGISTRY: dict[str, list[dict[str, Any]]] = {
         {"permit": "Traffic Impact Study", "agency": "Transportation Department", "required": True, "timeline_weeks": 8},
         {"permit": "Sign Permit", "agency": "Planning Department", "required": True, "timeline_weeks": 2},
     ],
+    "industrial": [
+        {"permit": "Building Permit", "agency": "Building Department", "required": True, "timeline_weeks": 3},
+        {"permit": "Zoning Permit", "agency": "Planning Department", "required": True, "timeline_weeks": 2},
+        {"permit": "Site Development Permit", "agency": "Planning Department", "required": True, "timeline_weeks": 6},
+        {"permit": "Industrial Waste Permit", "agency": "Environmental Department", "required": True, "timeline_weeks": 8},
+        {"permit": "Fire Safety Permit", "agency": "Fire Department", "required": True, "timeline_weeks": 3},
+        {"permit": "Stormwater Permit", "agency": "Public Works", "required": True, "timeline_weeks": 6},
+    ],
 }
 
 
