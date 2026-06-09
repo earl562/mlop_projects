@@ -120,24 +120,24 @@ class CompAnalyzer:
         return sorted(comps, key=lambda c: c.sale_date, reverse=True)[:20]
 
     def _find_new_build_comps(self, county: str) -> list[NewBuildComp]:
-        """Find built properties for new construction pricing reference.
+        """Find REAL built properties for construction pricing reference.
 
-        Uses all properties with building data in the county as pricing proxies.
-        Falls back to est_value and assessed_value when sale data is unavailable.
+        Filters: sqft >= 800, beds >= 1, baths >= 1 (actual houses, not sheds).
+        Uses sale price when available, falls back to est_value.
         """
         comps: list[NewBuildComp] = []
-        twelve_months_ago = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
         for lead in self._all_leads:
             if lead.get("County", "").strip() != county:
                 continue
             sqft = float(lead.get("Building Sqft", 0) or 0)
-            if sqft <= 100:
+            beds = int(float(lead.get("Bedrooms", 0) or 0))
+            baths = int(float(lead.get("Total Bathrooms", 0) or 0))
+            if sqft < 800 or beds < 1 or baths < 1:
                 continue
             sale_date = lead.get("Last Sale Recording Date", "").strip()
             sale_amount = float(lead.get("Last Sale Amount", 0) or 0)
             est_val = float(lead.get("Est Value", 0) or 0)
             assessed = float(lead.get("Total Assessed Value", 0) or 0)
-            # Use actual sale if available, otherwise estimate from assessed/est_value
             price = sale_amount if sale_amount > 0 else (est_val if est_val > 0 else assessed)
             if price <= 0:
                 continue
@@ -154,12 +154,12 @@ class CompAnalyzer:
                 sale_date=sale_date or "N/A",
                 sqft=sqft,
                 price_per_sqft=price / sqft if sqft > 0 else 0,
-                bedrooms=int(lead.get("Bedrooms", 0) or 0),
-                bathrooms=int(float(lead.get("Total Bathrooms", 0) or 0)),
-                lot_acres=lot / 43560.0,
-                source="assessor_proxy" if not sale_amount else "tax_assessor",
+                bedrooms=beds,
+                bathrooms=baths,
+                lot_acres=lot / 43560.0 if lot > 0 else 0,
+                source="sale_record" if sale_amount > 0 else "assessed_value",
             ))
-        return sorted(comps, key=lambda c: c.sale_date, reverse=True)[:20]
+        return sorted(comps, key=lambda c: c.build_year, reverse=True)[:20]
 
     def _calculate_metrics(self, land_comps: list[LandComp], new_build_comps: list[NewBuildComp]) -> CompAnalysis:
         result = CompAnalysis(land_comps=land_comps, new_build_comps=new_build_comps)
