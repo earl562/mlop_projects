@@ -140,7 +140,9 @@ async def test_get_county_cache_returns_none_when_row_missing():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("unknown county")
 
     assert result is None
@@ -161,7 +163,9 @@ async def test_get_county_cache_returns_cache_when_fresh():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("test county")
 
     assert result is not None
@@ -182,7 +186,9 @@ async def test_get_county_cache_returns_none_when_expired():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("test county")
 
     assert result is None
@@ -194,7 +200,9 @@ async def test_get_county_cache_returns_none_on_db_error():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("test county")
 
     assert result is None
@@ -212,7 +220,9 @@ async def test_save_county_cache_executes_upsert():
     mock_session.execute = AsyncMock()
     mock_session.commit = AsyncMock()
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         await save_county_cache(cache)
 
     mock_session.execute.assert_called_once()
@@ -227,7 +237,9 @@ async def test_save_county_cache_noop_on_db_error():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(side_effect=RuntimeError("db offline"))
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         # Must not raise
         await save_county_cache(cache)
 
@@ -247,7 +259,9 @@ async def test_save_county_cache_handles_none_datasets():
     mock_session.execute = AsyncMock()
     mock_session.commit = AsyncMock()
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         await save_county_cache(cache)
 
     mock_session.execute.assert_called_once()
@@ -268,7 +282,9 @@ async def test_get_field_mapping_returns_mapping_when_present():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_field_mapping("test county")
 
     assert result is not None
@@ -285,7 +301,9 @@ async def test_get_field_mapping_returns_none_when_row_missing():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_field_mapping("unknown county")
 
     assert result is None
@@ -300,7 +318,9 @@ async def test_get_field_mapping_returns_none_when_column_null():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_field_mapping("test county")
 
     assert result is None
@@ -312,7 +332,9 @@ async def test_get_field_mapping_returns_none_on_db_error():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(side_effect=RuntimeError("db offline"))
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_field_mapping("test county")
 
     assert result is None
@@ -330,7 +352,9 @@ async def test_save_field_mapping_executes_upsert():
     mock_session.execute = AsyncMock()
     mock_session.commit = AsyncMock()
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         await save_field_mapping(mapping)
 
     mock_session.execute.assert_called_once()
@@ -345,7 +369,9 @@ async def test_save_field_mapping_noop_on_db_error():
     mock_session.__aexit__ = AsyncMock(return_value=False)
     mock_session.execute = AsyncMock(side_effect=RuntimeError("db offline"))
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         # Must not raise
         await save_field_mapping(mapping)
 
@@ -372,7 +398,9 @@ async def test_save_field_mapping_preserves_all_mapping_fields():
 
     mock_session.execute = capture_execute
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         await save_field_mapping(mapping)
 
     # Verify it didn't raise and commit was called
@@ -396,7 +424,9 @@ async def test_get_county_cache_not_expired_at_exact_ttl_boundary():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("test county")
 
     assert result is None
@@ -417,7 +447,9 @@ async def test_get_county_cache_fresh_just_under_ttl():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)):
+    with patch(
+        "plotlot.property.schemas.registry.get_session", AsyncMock(return_value=mock_session)
+    ):
         result = await get_county_cache("test county")
 
     assert result is not None

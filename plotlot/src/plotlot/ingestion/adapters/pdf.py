@@ -211,7 +211,11 @@ def _chunk_text(
         else:
             if current:
                 chunks.append(current)
-            tail = current[-overlap:] if (overlap > 0 and len(current) > overlap) else (current if overlap > 0 else "")
+            tail = (
+                current[-overlap:]
+                if (overlap > 0 and len(current) > overlap)
+                else (current if overlap > 0 else "")
+            )
             current = f"{tail}{separator}{para}".strip() if tail else para
 
     if current:

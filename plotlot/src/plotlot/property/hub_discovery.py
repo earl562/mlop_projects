@@ -20,19 +20,57 @@ logger = logging.getLogger(__name__)
 # Map 2-letter state abbreviations → full lowercase names for Hub metadata matching.
 # Dataset metadata typically contains "Nevada" or "Clark County, Nevada", not "NV".
 _STATE_FULL_NAMES: dict[str, str] = {
-    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas",
-    "ca": "california", "co": "colorado", "ct": "connecticut", "de": "delaware",
-    "fl": "florida", "ga": "georgia", "hi": "hawaii", "id": "idaho",
-    "il": "illinois", "in": "indiana", "ia": "iowa", "ks": "kansas",
-    "ky": "kentucky", "la": "louisiana", "me": "maine", "md": "maryland",
-    "ma": "massachusetts", "mi": "michigan", "mn": "minnesota", "ms": "mississippi",
-    "mo": "missouri", "mt": "montana", "ne": "nebraska", "nv": "nevada",
-    "nh": "new hampshire", "nj": "new jersey", "nm": "new mexico", "ny": "new york",
-    "nc": "north carolina", "nd": "north dakota", "oh": "ohio", "ok": "oklahoma",
-    "or": "oregon", "pa": "pennsylvania", "ri": "rhode island", "sc": "south carolina",
-    "sd": "south dakota", "tn": "tennessee", "tx": "texas", "ut": "utah",
-    "vt": "vermont", "va": "virginia", "wa": "washington", "wv": "west virginia",
-    "wi": "wisconsin", "wy": "wyoming", "dc": "district of columbia",
+    "al": "alabama",
+    "ak": "alaska",
+    "az": "arizona",
+    "ar": "arkansas",
+    "ca": "california",
+    "co": "colorado",
+    "ct": "connecticut",
+    "de": "delaware",
+    "fl": "florida",
+    "ga": "georgia",
+    "hi": "hawaii",
+    "id": "idaho",
+    "il": "illinois",
+    "in": "indiana",
+    "ia": "iowa",
+    "ks": "kansas",
+    "ky": "kentucky",
+    "la": "louisiana",
+    "me": "maine",
+    "md": "maryland",
+    "ma": "massachusetts",
+    "mi": "michigan",
+    "mn": "minnesota",
+    "ms": "mississippi",
+    "mo": "missouri",
+    "mt": "montana",
+    "ne": "nebraska",
+    "nv": "nevada",
+    "nh": "new hampshire",
+    "nj": "new jersey",
+    "nm": "new mexico",
+    "ny": "new york",
+    "nc": "north carolina",
+    "nd": "north dakota",
+    "oh": "ohio",
+    "ok": "oklahoma",
+    "or": "oregon",
+    "pa": "pennsylvania",
+    "ri": "rhode island",
+    "sc": "south carolina",
+    "sd": "south dakota",
+    "tn": "tennessee",
+    "tx": "texas",
+    "ut": "utah",
+    "vt": "vermont",
+    "va": "virginia",
+    "wa": "washington",
+    "wv": "west virginia",
+    "wi": "wisconsin",
+    "wy": "wyoming",
+    "dc": "district of columbia",
 }
 
 
@@ -79,16 +117,24 @@ _ZONING_NAME_KEYWORDS = {"zoning", "zone", "land use", "landuse", "planning"}
 # ---------------------------------------------------------------------------
 _STATE_SERVERS: dict[str, list[str]] = {
     "nc": ["https://services.nconemap.gov/secure/rest/services"],  # NC1Map statewide parcels
-    "fl": ["https://ca.dep.state.fl.us/arcgis/rest/services"],     # FL DEP (county parcels)
+    "fl": ["https://ca.dep.state.fl.us/arcgis/rest/services"],  # FL DEP (county parcels)
     "wa": ["https://gismaps.kingcounty.gov/arcgis/rest/services"],  # King County WA
-    "pa": ["https://gis.penndot.gov/arcgis/rest/services"],         # PA DOT
+    "pa": ["https://gis.penndot.gov/arcgis/rest/services"],  # PA DOT
 }
 
 # Service-folder keywords that suggest parcel or zoning data.
 # Used when crawling an ArcGIS server tree to skip irrelevant folders.
 _RELEVANT_FOLDER_KEYWORDS = {
-    "parcel", "property", "assessor", "appraisal", "cadastral",
-    "zoning", "planning", "landuse", "land_use", "land use",
+    "parcel",
+    "property",
+    "assessor",
+    "appraisal",
+    "cadastral",
+    "zoning",
+    "planning",
+    "landuse",
+    "land_use",
+    "land use",
 }
 
 # ---------------------------------------------------------------------------
@@ -107,12 +153,12 @@ _COUNTY_URL_PATTERNS: list[str] = [
     # county only in subdomain
     "https://gis.{county}county.gov/arcgis/rest/services",
     "https://maps.{county}county.gov/arcgis/rest/services",
-    "https://gismaps.{county}county.gov/arcgis/rest/services",    # King County WA
+    "https://gismaps.{county}county.gov/arcgis/rest/services",  # King County WA
     "https://arcgis.{county}county.gov/arcgis/rest/services",
     # bare county name  (Maricopa AZ → gis.maricopa.gov)
     "https://gis.{county}.gov/arcgis/rest/services",
     "https://maps.{county}.gov/arcgis/rest/services",
-    "https://gis.{county}{state}.gov/arcgis/rest/services",       # variant
+    "https://gis.{county}{state}.gov/arcgis/rest/services",  # variant
     # co.county.state.us  (common midwest/rural pattern)
     "https://gis.co.{county}.{state}.us/arcgis/rest/services",
     "https://maps.co.{county}.{state}.us/arcgis/rest/services",
@@ -168,7 +214,10 @@ async def discover_datasets(
         Tuple of (parcels_dataset, zoning_dataset). Either may be None.
     """
     parcels, zoning = await _discover_pair(
-        lat, lng, county, state,
+        lat,
+        lng,
+        county,
+        state,
         validate_coverage=validate_coverage,
         place_hint=place_hint,
     )
@@ -189,7 +238,10 @@ async def _discover_pair(
     async def find(dataset_type: str) -> DatasetInfo | None:
         # Stage 1: ArcGIS Hub
         result = await _search_hub(
-            lat, lng, county, state,
+            lat,
+            lng,
+            county,
+            state,
             dataset_type=dataset_type,
             validate_coverage=validate_coverage,
             place_hint=place_hint,
@@ -199,14 +251,22 @@ async def _discover_pair(
 
         # Stage 2: State-level ArcGIS servers (Option 2)
         result = await _search_state_servers(
-            lat, lng, county, state, dataset_type=dataset_type,
+            lat,
+            lng,
+            county,
+            state,
+            dataset_type=dataset_type,
         )
         if result:
             return result
 
         # Stage 3: County URL pattern probing (Option 3)
         result = await _probe_county_url_patterns(
-            lat, lng, county, state, dataset_type=dataset_type,
+            lat,
+            lng,
+            county,
+            state,
+            dataset_type=dataset_type,
         )
         return result
 
@@ -481,7 +541,9 @@ def _score_dataset(
         score += 5.0
     if place_lower and place_lower in jurisdiction_lower:
         score += 4.0
-    if state_lower and (state_lower in jurisdiction_lower or state_full_lower in jurisdiction_lower):
+    if state_lower and (
+        state_lower in jurisdiction_lower or state_full_lower in jurisdiction_lower
+    ):
         score += 1.0
 
     # Sub-area penalty — any hit disqualifies the dataset vs. county-wide ones.
@@ -673,9 +735,7 @@ async def _search_state_servers(
         dataset_type,
     )
     for server_url in servers:
-        result = await _probe_arcgis_server(
-            server_url, county, state, dataset_type, lat, lng
-        )
+        result = await _probe_arcgis_server(server_url, county, state, dataset_type, lat, lng)
         if result:
             return result
 
@@ -709,8 +769,7 @@ async def _probe_county_url_patterns(
                 break
 
     candidate_urls = [
-        pat.format(county=county_slug, state=state_slug)
-        for pat in _COUNTY_URL_PATTERNS
+        pat.format(county=county_slug, state=state_slug) for pat in _COUNTY_URL_PATTERNS
     ]
 
     # Quick HEAD probe — skip URLs that don't return 200 at the root
@@ -744,9 +803,7 @@ async def _probe_county_url_patterns(
         live_urls[:3],
     )
     for server_url in live_urls:
-        result = await _probe_arcgis_server(
-            server_url, county, state, dataset_type, lat, lng
-        )
+        result = await _probe_arcgis_server(server_url, county, state, dataset_type, lat, lng)
         if result:
             return result
 

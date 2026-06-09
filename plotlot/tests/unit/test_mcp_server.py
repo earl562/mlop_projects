@@ -343,7 +343,15 @@ async def test_search_zoning_result_has_all_fields():
         result = await search_zoning("Fremont", "density")
 
     r = result["results"][0]
-    for fld in ("section", "section_title", "chapter", "zone_codes", "score", "chunk_text", "source_url"):
+    for fld in (
+        "section",
+        "section_title",
+        "chapter",
+        "zone_codes",
+        "score",
+        "chunk_text",
+        "source_url",
+    ):
         assert fld in r, f"missing field: {fld}"
 
 
@@ -482,9 +490,15 @@ async def test_get_comparable_sales_result_fields():
         result = await get_comparable_sales(37.5, -122.0)
 
     for fld in (
-        "lat", "lng", "state", "comparable_count",
-        "median_price_per_acre", "estimated_land_value",
-        "adv_per_unit", "confidence", "comparables",
+        "lat",
+        "lng",
+        "state",
+        "comparable_count",
+        "median_price_per_acre",
+        "estimated_land_value",
+        "adv_per_unit",
+        "confidence",
+        "comparables",
     ):
         assert fld in result, f"missing field: {fld}"
 
@@ -512,11 +526,13 @@ async def test_tool_input_schemas_present():
 
 def test_run_function_exists():
     from plotlot.mcp.server import run
+
     assert callable(run)
 
 
 def test_mcp_json_exists():
     from pathlib import Path
+
     mcp_json = Path(__file__).parents[2] / ".mcp.json"
     assert mcp_json.exists(), f".mcp.json not found at {mcp_json}"
 
@@ -524,6 +540,7 @@ def test_mcp_json_exists():
 def test_mcp_json_has_plotlot_server():
     import json
     from pathlib import Path
+
     mcp_json = Path(__file__).parents[2] / ".mcp.json"
     config = json.loads(mcp_json.read_text())
     assert "mcpServers" in config

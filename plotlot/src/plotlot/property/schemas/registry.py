@@ -32,7 +32,7 @@ async def get_county_cache(county_key: str) -> CountyCache | None:
     - any database error
     """
     try:
-        async with (await get_session()) as session:
+        async with await get_session() as session:
             row = await session.get(CountySchema, county_key)
             if row is None:
                 return None
@@ -55,7 +55,7 @@ async def get_county_cache(county_key: str) -> CountyCache | None:
 async def save_county_cache(cache: CountyCache) -> None:
     """Upsert county cache into PostgreSQL.  No-op on any database error."""
     try:
-        async with (await get_session()) as session:
+        async with await get_session() as session:
             stmt = (
                 insert(CountySchema)
                 .values(
@@ -72,9 +72,7 @@ async def save_county_cache(cache: CountyCache) -> None:
                         else None
                     ),
                     field_mapping=(
-                        cache.field_mapping.model_dump(mode="json")
-                        if cache.field_mapping
-                        else None
+                        cache.field_mapping.model_dump(mode="json") if cache.field_mapping else None
                     ),
                     ttl_hours=cache.ttl_hours,
                     last_verified=cache.last_verified,
@@ -117,11 +115,9 @@ async def get_field_mapping(county_key: str) -> FieldMapping | None:
     or any database error occurs.
     """
     try:
-        async with (await get_session()) as session:
+        async with await get_session() as session:
             result = await session.execute(
-                select(CountySchema.field_mapping).where(
-                    CountySchema.county_key == county_key
-                )
+                select(CountySchema.field_mapping).where(CountySchema.county_key == county_key)
             )
             row = result.one_or_none()
             if row is None or row[0] is None:
@@ -139,7 +135,7 @@ async def save_field_mapping(mapping: FieldMapping) -> None:
     field_mapping column is populated.  No-op on any database error.
     """
     try:
-        async with (await get_session()) as session:
+        async with await get_session() as session:
             stmt = (
                 insert(CountySchema)
                 .values(

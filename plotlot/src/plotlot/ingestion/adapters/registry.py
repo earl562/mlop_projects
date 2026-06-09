@@ -70,9 +70,7 @@ async def resolve_adapter(
     # 2. Live Municode discovery
     config = await _try_municode(municipality, state, county)
     if config is not None:
-        logger.info(
-            "registry_hit adapter=municode municipality=%s state=%s", municipality, state
-        )
+        logger.info("registry_hit adapter=municode municipality=%s state=%s", municipality, state)
         return MunicodeAdapter(config)
 
     raise NoAdapterError(municipality, state)
@@ -112,9 +110,7 @@ async def _try_municode(
     try:
         from plotlot.ingestion.discovery import discover_municode_authority_for_name
 
-        return await discover_municode_authority_for_name(
-            municipality, state, county=county
-        )
+        return await discover_municode_authority_for_name(municipality, state, county=county)
     except Exception as exc:
         logger.warning(
             "municode_discovery_failed municipality=%s state=%s error=%s",

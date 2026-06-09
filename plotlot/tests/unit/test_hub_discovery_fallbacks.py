@@ -84,12 +84,8 @@ async def test_probe_arcgis_server_finds_parcel_layer() -> None:
         "folders": ["Assessor"],
         "services": [],
     }
-    folder_data = {
-        "services": [{"name": "Assessor/Parcels", "type": "MapServer"}]
-    }
-    service_data = {
-        "layers": [{"id": 0, "name": "Parcel Fabric", "type": "Feature Layer"}]
-    }
+    folder_data = {"services": [{"name": "Assessor/Parcels", "type": "MapServer"}]}
+    service_data = {"layers": [{"id": 0, "name": "Parcel Fabric", "type": "Feature Layer"}]}
     layer_data = {
         "name": "Parcel Fabric",
         "fields": [
@@ -116,9 +112,7 @@ async def test_probe_arcgis_server_finds_parcel_layer() -> None:
 
     with (
         patch("plotlot.property.hub_discovery.httpx.AsyncClient") as mock_cls,
-        patch(
-            "plotlot.property.hub_discovery._has_coverage", new=AsyncMock(return_value=True)
-        ),
+        patch("plotlot.property.hub_discovery._has_coverage", new=AsyncMock(return_value=True)),
     ):
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -158,9 +152,7 @@ async def test_probe_arcgis_server_skips_no_coverage() -> None:
 
     with (
         patch("plotlot.property.hub_discovery.httpx.AsyncClient") as mock_cls,
-        patch(
-            "plotlot.property.hub_discovery._has_coverage", new=AsyncMock(return_value=False)
-        ),
+        patch("plotlot.property.hub_discovery._has_coverage", new=AsyncMock(return_value=False)),
     ):
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -188,9 +180,7 @@ async def test_probe_arcgis_server_skips_no_coverage() -> None:
 @pytest.mark.asyncio
 async def test_search_state_servers_returns_none_for_unknown_state() -> None:
     """State without an entry in _STATE_SERVERS returns None immediately."""
-    result = await _search_state_servers(
-        _LAT, _LNG, "SomeCounty", "ZZ", dataset_type="parcels"
-    )
+    result = await _search_state_servers(_LAT, _LNG, "SomeCounty", "ZZ", dataset_type="parcels")
     assert result is None
 
 
@@ -203,9 +193,7 @@ async def test_search_state_servers_calls_probe_for_known_state() -> None:
         "plotlot.property.hub_discovery._probe_arcgis_server",
         new=AsyncMock(return_value=expected),
     ) as mock_probe:
-        result = await _search_state_servers(
-            _LAT, _LNG, _COUNTY, "NC", dataset_type="parcels"
-        )
+        result = await _search_state_servers(_LAT, _LNG, _COUNTY, "NC", dataset_type="parcels")
 
     assert result is expected
     mock_probe.assert_called_once()
@@ -327,9 +315,7 @@ async def test_probe_county_url_patterns_slug_generation() -> None:
         mock_client.get = AsyncMock(side_effect=_live)
         mock_cls.return_value = mock_client
 
-        await _probe_county_url_patterns(
-            _LAT, _LNG, "Los Angeles", "CA", dataset_type="parcels"
-        )
+        await _probe_county_url_patterns(_LAT, _LNG, "Los Angeles", "CA", dataset_type="parcels")
 
     # At least one URL should contain "losangeles" (spaces removed)
     assert any("losangeles" in url for url in slugs_seen), (

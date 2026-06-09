@@ -54,22 +54,14 @@ def _prop_record_with_zoning_code() -> PropertyRecord:
 def test_search_query_uses_zoning_code_when_present() -> None:
     """When a zoning code is available, it should be used as the search query."""
     prop = _prop_record_with_zoning_code()
-    search_query = (
-        prop.zoning_code
-        if prop and prop.zoning_code
-        else _GENERIC_ZONING_TERMS
-    )
+    search_query = prop.zoning_code if prop and prop.zoning_code else _GENERIC_ZONING_TERMS
     assert search_query == "RS-1"
 
 
 def test_search_query_falls_back_to_generic_terms_not_municipality_name() -> None:
     """When no zoning code, query must NOT be the municipality name."""
     prop = _prop_record_no_zoning_code()
-    search_query = (
-        prop.zoning_code
-        if prop and prop.zoning_code
-        else _GENERIC_ZONING_TERMS
-    )
+    search_query = prop.zoning_code if prop and prop.zoning_code else _GENERIC_ZONING_TERMS
     assert search_query != "San Jose", (
         "Regression: municipality name as query returns 0 results from hybrid_search"
     )
@@ -117,8 +109,14 @@ async def test_lookup_uses_generic_query_not_municipality_when_no_zoning_code() 
     with (
         patch("plotlot.pipeline.lookup.geocode_address", new_callable=AsyncMock) as mock_geocode,
         patch("plotlot.pipeline.lookup.lookup_property", new_callable=AsyncMock) as mock_prop,
-        patch("plotlot.pipeline.lookup.get_session", new_callable=AsyncMock, return_value=fake_session),
-        patch("plotlot.pipeline.lookup.hybrid_search", new_callable=AsyncMock, return_value=[fake_chunk]) as mock_search,
+        patch(
+            "plotlot.pipeline.lookup.get_session", new_callable=AsyncMock, return_value=fake_session
+        ),
+        patch(
+            "plotlot.pipeline.lookup.hybrid_search",
+            new_callable=AsyncMock,
+            return_value=[fake_chunk],
+        ) as mock_search,
         patch("plotlot.pipeline.lookup._agentic_analysis", new_callable=AsyncMock) as mock_analysis,
         patch("plotlot.pipeline.lookup.log_params"),
         patch("plotlot.pipeline.lookup.start_run"),

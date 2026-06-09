@@ -161,18 +161,14 @@ class TestMunicodeAdapter:
         expected_chunks = [_make_chunk()]
 
         with (
-            patch(
-                "plotlot.ingestion.adapters.municode.MunicodeScraper"
-            ) as MockScraper,
+            patch("plotlot.ingestion.adapters.municode.MunicodeScraper") as MockScraper,
             patch(
                 "plotlot.ingestion.adapters.municode.chunk_sections",
                 return_value=expected_chunks,
             ) as mock_chunk,
         ):
             mock_instance = MockScraper.return_value
-            mock_instance.scrape_zoning_chapter = AsyncMock(
-                return_value=[expected_section]
-            )
+            mock_instance.scrape_zoning_chapter = AsyncMock(return_value=[expected_section])
 
             adapter = MunicodeAdapter(config)
             result = await adapter.fetch_chunks()
@@ -185,9 +181,7 @@ class TestMunicodeAdapter:
         config = _make_municode_config()
 
         with (
-            patch(
-                "plotlot.ingestion.adapters.municode.MunicodeScraper"
-            ) as MockScraper,
+            patch("plotlot.ingestion.adapters.municode.MunicodeScraper") as MockScraper,
             patch(
                 "plotlot.ingestion.adapters.municode.chunk_sections",
                 return_value=[],
@@ -714,9 +708,7 @@ class TestResolveAdapter:
         ) as mock_try:
             await resolve_adapter("Unincorporated Miami-Dade", "FL", county="miami_dade")
 
-        mock_try.assert_awaited_once_with(
-            "Unincorporated Miami-Dade", "FL", "miami_dade"
-        )
+        mock_try.assert_awaited_once_with("Unincorporated Miami-Dade", "FL", "miami_dade")
 
     async def test_pdf_registry_takes_priority_over_municode(self):
         """A municipality in _PDF_REGISTRY should not trigger Municode discovery."""

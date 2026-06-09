@@ -146,12 +146,8 @@ async def _spatial_zoning(url: str, lat: float, lng: float) -> tuple[str, str]:
 
         # Las Vegas layer uses ZONE + DESCRIPTIO
         # Clark County layer uses ZNCLASS + Description
-        code = (
-            str(attrs.get("ZONE") or attrs.get("ZNCLASS") or "").strip()
-        )
-        desc = (
-            str(attrs.get("DESCRIPTIO") or attrs.get("Description") or "").strip()
-        )
+        code = str(attrs.get("ZONE") or attrs.get("ZNCLASS") or "").strip()
+        desc = str(attrs.get("DESCRIPTIO") or attrs.get("Description") or "").strip()
         return code, desc
     except Exception:
         logger.warning("Clark County zoning spatial query failed: %s", url, exc_info=True)
