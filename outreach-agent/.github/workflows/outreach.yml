@@ -1,0 +1,84 @@
+name: Daily Outreach Campaign
+
+on:
+  schedule:
+    - cron: '0 12-16 * * *'  # Runs every hour from 12:00 to 16:00 UTC (8:00am-12:00pm EDT)
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  outreach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          cd outreach-agent
+          pip install uv
+          uv sync
+          
+      - name: Set up Google OAuth credentials
+        env:
+          GMAIL_CREDENTIALS_JSON: ${{ secrets.GMAIL_CREDENTIALS_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: |
+          # Create credentials.json and token.json from secrets if they exist
+          cd outreach-agent
+          if [ -n "$GMAIL_CREDENTIALS_JSON" ]; then
+            echo "$GMAIL_CREDENTIALS_JSON" > credentials.json
+            echo "✓ Created credentials.json"
+          fi
+          if [ -n "$GMAIL_TOKEN_JSON" ]; then
+            echo "$GMAIL_TOKEN_JSON" > token.json
+            echo "✓ Created token.json"
+          fi
+          
+      - name: Set up environment variables
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HUNTER_API_KEY: ${{ secrets.HUNTER_API_KEY }}
+          GMAIL_CREDENTIALS_PATH: credentials.json
+          GMAIL_TOKEN_PATH: token.json
+          OUTREACH_FROM_EMAIL: ${{ secrets.OUTREACH_FROM_EMAIL }}
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          EVENTBRITE_API_KEY: ${{ secrets.EVENTBRITE_API_KEY }}
+          DATABASE_URL: sqlite+aiosqlite:///./outreach.db
+          PLOTLOT_DEMO_URL: https://plotlot.app
+          PLOTLOT_COUNTIES: Miami-Dade, Broward, Palm Beach, Monroe
+          MAX_EMAILS_PER_RUN: 60  # 5 runs per day * 60 = 300 max emails per day
+        run: |
+          # Create .env file from secrets
+          cd outreach-agent
+          cat > .env << EOL
+          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+          HUNTER_API_KEY=${HUNTER_API_KEY}
+          GMAIL_CREDENTIALS_PATH=credentials.json
+          GMAIL_TOKEN_PATH=token.json
+          OUTREACH_FROM_EMAIL=${OUTREACH_FROM_EMAIL}
+          TWITTER_API_KEY=${TWITTER_API_KEY}
+          TWITTER_API_SECRET=${TWITTER_API_SECRET}
+          TWITTER_ACCESS_TOKEN=${TWITTER_ACCESS_TOKEN}
+          TWITTER_ACCESS_SECRET=${TWITTER_ACCESS_SECRET}
+          TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN}
+          BRAVE_API_KEY=${BRAVE_API_KEY}
+          EVENTBRITE_API_KEY=${EVENTBRITE_API_KEY}
+          DATABASE_URL=sqlite+aiosqlite:///./outreach.db
+          PLOTLOT_DEMO_URL=https://plotlot.app
+          PLOTLOT_COUNTIES=Miami-Dade, Broward, Palm Beach, Monroe
+          MAX_EMAILS_PER_RUN=60
+          EOL
+          
+      - name: Run outreach agent
+        working-directory: ./outreach-agent
+        run: |
+          uv run outreach run --goal "Run the full outreach cycle to send emails to general contractors, land developers, and new construction builders in South Florida"

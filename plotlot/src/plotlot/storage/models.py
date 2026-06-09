@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Boolean,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
@@ -560,15 +561,15 @@ class EvalRun(Base):
     metrics_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
-
-
 class EvalCaseResult(Base):
     """Per-case result for trajectory-aware eval scoring."""
 
     __tablename__ = "eval_case_results"
 
     id = Column(String(36), primary_key=True, default=_uuid)
-    eval_run_id = Column(String(36), ForeignKey("eval_runs.id"), nullable=False, index=True)
+    eval_run_id = Column(
+        String(36), ForeignKey("eval_runs.id"), nullable=False, index=True
+    )
     gold_set_case_id = Column(
         String(36), ForeignKey("gold_set_cases.id"), nullable=False, index=True
     )
@@ -577,3 +578,162 @@ class EvalCaseResult(Base):
     evidence_metrics_json = Column(JSON, nullable=False, default=dict)
     trajectory_metrics_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WebhookTenant(Base):
+    """CRM tenant configuration for webhook-based integration."""
+
+    __tablename__ = "webhook_tenants"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    tenant_id = Column(String(100), nullable=False, unique=True, index=True)
+    name = Column(String(200), nullable=False)
+    shared_secret_enc = Column(Text, nullable=False)
+    callback_url = Column(String(500), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebhookExchange(Base):
+    """Tracks individual webhook exchanges for audit and debugging."""
+
+    __tablename__ = "webhook_exchanges"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    tenant_id = Column(
+        String(36), ForeignKey("webhook_tenants.id"), nullable=False, index=True
+    )
+    analysis_run_id = Column(
+        String(36), ForeignKey("analysis_runs.id"), nullable=False, index=True
+    )
+    inbound_webhook_id = Column(String(100), nullable=True)
+    outbound_webhook_id = Column(String(100), nullable=True)
+    status = Column(
+        String(20), nullable=False, default="pending"
+    )
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class Deal(Base):
+    __tablename__ = "deals"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    site_id = Column(String(36), ForeignKey("sites.id"), nullable=True, index=True)
+    title = Column(String(300), nullable=False)
+    description = Column(Text, nullable=True)
+    deal_type = Column(String(50), nullable=False, default="acquisition")
+    owner_name = Column(String(300), nullable=True)
+    owner_email = Column(String(300), nullable=True)
+    owner_phone = Column(String(50), nullable=True)
+    owner_address = Column(String(300), nullable=True)
+    owner_type = Column(String(50), nullable=True, default="individual")
+    property_address = Column(String(300), nullable=False, index=True)
+    parcel_id = Column(String(120), nullable=True, index=True)
+    county = Column(String(100), nullable=True)
+    municipality = Column(String(200), nullable=True)
+    zoning_district = Column(String(100), nullable=True)
+    lot_size_sqft = Column(Float, nullable=True)
+    max_units_residential = Column(Integer, nullable=True)
+    max_units_commercial = Column(Integer, nullable=True)
+    max_units_industrial = Column(Integer, nullable=True)
+    max_units_datacenter = Column(Integer, nullable=True)
+    feasibility_score = Column(Float, nullable=True)
+    feasibility_json = Column(JSON, nullable=False, default=dict)
+    asking_price = Column(Float, nullable=True)
+    offer_price = Column(Float, nullable=True)
+    expected_close_date = Column(DateTime(timezone=True), nullable=True)
+    stage = Column(String(50), nullable=False, default="lead", index=True)
+    stage_entered_at = Column(DateTime(timezone=True), nullable=True)
+    crm_sync_json = Column(JSON, nullable=False, default=dict)
+    source = Column(String(100), nullable=True, default="manual")
+    source_detail = Column(String(300), nullable=True)
+    status = Column(String(50), nullable=False, default="active", index=True)
+    is_deleted = Column(Boolean, default=False, index=True)
+    assigned_to_user_id = Column(String, nullable=True, index=True)
+    created_by_user_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DealStageHistory(Base):
+    __tablename__ = "deal_stage_history"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    deal_id = Column(String(36), ForeignKey("deals.id"), nullable=False, index=True)
+    from_stage = Column(String(50), nullable=False)
+    to_stage = Column(String(50), nullable=False)
+    transitioned_at = Column(DateTime(timezone=True), server_default=func.now())
+    transitioned_by_user_id = Column(String, nullable=True)
+    trigger_type = Column(String(50), nullable=False, default="manual")
+    trigger_detail = Column(String(300), nullable=True)
+    deal_data_snapshot = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class OutreachActivity(Base):
+    __tablename__ = "outreach_activities"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    deal_id = Column(String(36), ForeignKey("deals.id"), nullable=False, index=True)
+    activity_type = Column(String(50), nullable=False)
+    direction = Column(String(20), nullable=False, default="outbound")
+    subject = Column(String(500), nullable=True)
+    body = Column(Text, nullable=True)
+    call_duration_seconds = Column(Integer, nullable=True)
+    call_recording_url = Column(String, nullable=True)
+    transcript = Column(Text, nullable=True)
+    transcript_summary = Column(Text, nullable=True)
+    meeting_start_time = Column(DateTime(timezone=True), nullable=True)
+    meeting_end_time = Column(DateTime(timezone=True), nullable=True)
+    meeting_location = Column(String(300), nullable=True)
+    calendar_event_id = Column(String(200), nullable=True)
+    sentiment = Column(String(20), nullable=True)
+    sentiment_score = Column(Float, nullable=True)
+    call_outcome = Column(String(50), nullable=True)
+    was_automated = Column(Boolean, default=False)
+    automation_source = Column(String(100), nullable=True)
+    from_address = Column(String(300), nullable=True)
+    to_address = Column(String(300), nullable=True)
+    from_name = Column(String(200), nullable=True)
+    to_name = Column(String(200), nullable=True)
+    opened_at = Column(DateTime(timezone=True), nullable=True)
+    clicked_at = Column(DateTime(timezone=True), nullable=True)
+    replied_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(50), nullable=False, default="draft")
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    evidence_id = Column(String(36), ForeignKey("evidence_items.id"), nullable=True, index=True)
+    created_by_user_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ConnectorSyncSettings(Base):
+    __tablename__ = "connector_sync_settings"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    connector_account_id = Column(String(36), ForeignKey("connector_accounts.id"), nullable=False, index=True)
+    direction = Column(String(20), nullable=False, default="bidirectional")
+    sync_deals = Column(Boolean, default=True)
+    sync_contacts = Column(Boolean, default=True)
+    sync_companies = Column(Boolean, default=True)
+    sync_activities = Column(Boolean, default=True)
+    sync_custom_objects = Column(JSON, nullable=False, default=list)
+    field_mappings_json = Column(JSON, nullable=False, default=dict)
+    stage_filter = Column(JSON, nullable=False, default=list)
+    deal_filter_criteria = Column(JSON, nullable=False, default=dict)
+    sync_frequency_minutes = Column(Integer, default=15)
+    last_sync_at = Column(DateTime(timezone=True), nullable=True)
+    conflict_resolution = Column(String(50), default="timestamp_wins")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

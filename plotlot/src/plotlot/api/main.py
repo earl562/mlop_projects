@@ -24,6 +24,7 @@ from plotlot.api.auth import get_current_user
 from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
 from plotlot.api.chat import router as chat_router
 from plotlot.api.approvals import router as approvals_router
+from plotlot.api.deals_routes import router as deals_router
 from plotlot.api.workspaces import router as workspaces_router
 from plotlot.api.analyses import router as analyses_router
 from plotlot.api.tools import router as tools_router
@@ -199,7 +200,7 @@ app.include_router(router)
 app.include_router(billing_router)
 app.include_router(chat_router)
 app.include_router(approvals_router)
-app.include_router(workspaces_router)
+app.include_router(deals_router)
 app.include_router(analyses_router)
 app.include_router(tools_router)
 app.include_router(evidence_router)
@@ -213,6 +214,11 @@ app.include_router(render_router)
 from plotlot.api.documents import router as documents_router  # noqa: E402
 
 app.include_router(documents_router)
+
+# Webhook-based agent harness integration (CRM-agnostic)
+from plotlot.api.webhooks import router as webhooks_router  # noqa: E402
+
+app.include_router(webhooks_router)
 
 
 # ---------------------------------------------------------------------------

@@ -949,6 +949,180 @@ export async function disconnectEmailConnector(sessionId: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// Acquisition — Deals, Pipeline, Outreach
+// ---------------------------------------------------------------------------
+
+export interface DealData {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  site_id?: string | null;
+  title: string;
+  description?: string;
+  deal_type: string;
+  property_address: string;
+  owner_name?: string;
+  owner_email?: string;
+  owner_phone?: string;
+  asking_price?: number;
+  offer_price?: number;
+  feasibility_score?: number;
+  stage: string;
+  status: string;
+  is_deleted: boolean;
+  assigned_to_user_id?: string;
+  source?: string;
+  stage_entered_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  outreach_activities?: OutreachActivityData[];
+  stage_history?: StageHistoryData[];
+}
+
+export interface StageHistoryData {
+  id: string;
+  deal_id: string;
+  from_stage: string;
+  to_stage: string;
+  transitioned_at?: string;
+  transitioned_by_user_id?: string;
+  trigger_type: string;
+}
+
+export interface OutreachActivityData {
+  id: string;
+  deal_id: string;
+  activity_type: "email" | "call" | "meeting";
+  direction?: string;
+  subject?: string;
+  body?: string;
+  call_outcome?: string;
+  call_duration_seconds?: number;
+  sentiment?: string;
+  to_address?: string;
+  to_name?: string;
+  status?: string;
+  created_at?: string;
+}
+
+export interface PipelineMetricsData {
+  total_deals: number;
+  stage_distribution: Record<string, number>;
+  total_pipeline_value: number;
+}
+
+export interface ConnectorData {
+  id: string;
+  workspace_id: string;
+  provider: string;
+  auth_type: string;
+  scopes: string[];
+  status: string;
+  created_at?: string;
+}
+
+export async function listDeals(workspaceId?: string): Promise<DealData[]> {
+  const params = new URLSearchParams();
+  if (workspaceId) params.set("workspace_id", workspaceId);
+  const response = await fetch(`${API_BASE}/api/v1/deals?${params.toString()}`);
+  if (!response.ok) throw new Error("Failed to load deals");
+  const data = await response.json();
+  return data.items || [];
+}
+
+export async function createDeal(payload: Partial<DealData>): Promise<DealData> {
+  const response = await fetch(`${API_BASE}/api/v1/deals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Create failed" }));
+    throw new Error(err.detail || "Failed to create deal");
+  }
+  return response.json();
+}
+
+export async function getDeal(dealId: string): Promise<DealData> {
+  const response = await fetch(`${API_BASE}/api/v1/deals/${dealId}`);
+  if (!response.ok) throw new Error("Failed to load deal");
+  return response.json();
+}
+
+export async function updateDeal(dealId: string, payload: Partial<DealData>): Promise<DealData> {
+  const response = await fetch(`${API_BASE}/api/v1/deals/${dealId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("Failed to update deal");
+  return response.json();
+}
+
+export async function deleteDeal(dealId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/deals/${dealId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to delete deal");
+}
+
+export async function transitionDeal(
+  dealId: string,
+  toStage: string,
+  userId?: string,
+): Promise<DealData> {
+  const response = await fetch(`${API_BASE}/api/v1/deals/${dealId}/transition`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to_stage: toStage, user_id: userId }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Transition failed" }));
+    throw new Error(err.detail || "Failed to transition deal");
+  }
+  return response.json();
+}
+
+export async function getPipelineMetrics(workspaceId?: string): Promise<PipelineMetricsData> {
+  const params = new URLSearchParams();
+  if (workspaceId) params.set("workspace_id", workspaceId);
+  const response = await fetch(`${API_BASE}/api/v1/deals/metrics?${params.toString()}`);
+  if (!response.ok) throw new Error("Failed to load metrics");
+  return response.json();
+}
+
+export async function logOutreach(
+  dealId: string,
+  payload: Partial<OutreachActivityData>,
+): Promise<OutreachActivityData> {
+  const response = await fetch(`${API_BASE}/api/v1/deals/${dealId}/outreach`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Log outreach failed" }));
+    throw new Error(err.detail || "Failed to log outreach");
+  }
+  return response.json();
+}
+
+export async function getOutreachMetrics(): Promise<{ total_activities: number; emails: number; calls: number; meetings: number; interested_calls: number }> {
+  const response = await fetch(`${API_BASE}/api/v1/outreach/metrics`);
+  if (!response.ok) throw new Error("Failed to load outreach metrics");
+  return response.json();
+}
+
+export async function listConnectors(workspaceId?: string): Promise<ConnectorData[]> {
+  const params = new URLSearchParams();
+  if (workspaceId) params.set("workspace_id", workspaceId);
+  const response = await fetch(`${API_BASE}/api/v1/connectors?${params.toString()}`);
+  if (!response.ok) throw new Error("Failed to load connectors");
+  const data = await response.json();
+  return data.items || [];
+}
+
+// ---------------------------------------------------------------------------
 // Phase 6 — Data Center Site Selection
 // ---------------------------------------------------------------------------
 

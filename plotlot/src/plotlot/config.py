@@ -188,6 +188,11 @@ class Settings(BaseSettings):
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     connector_encryption_key: str = ""
 
+    # Webhook integration for CRM-agnostic agent harness
+    webhook_signature_header: str = "X-PlotLot-Signature"
+    webhook_timestamp_header: str = "X-PlotLot-Timestamp"
+    webhook_timestamp_tolerance_seconds: int = 300
+
     # Google Workspace (Sheets/Docs creation)
     google_client_id: str = ""
     google_client_secret: str = ""
