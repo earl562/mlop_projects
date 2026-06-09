@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -605,12 +606,13 @@ async def _probe_arcgis_server(
     """
     from datetime import datetime, timezone
 
-    async def _get_json(url: str, params: dict | None = None) -> dict | None:
+    async def _get_json(url: str, params: dict | None = None) -> dict[str, Any] | None:
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.get(url, params={"f": "json", **(params or {})})
                 resp.raise_for_status()
-                return resp.json()
+                result: dict[str, Any] = resp.json()
+                return result
         except Exception:
             logger.debug("ArcGIS probe failed: %s", url)
             return None
