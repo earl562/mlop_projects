@@ -120,37 +120,44 @@ class CompAnalyzer:
         return sorted(comps, key=lambda c: c.sale_date, reverse=True)[:20]
 
     def _find_new_build_comps(self, county: str) -> list[NewBuildComp]:
-        """Find recently built homes in the same county. Uses assessed value + lot data."""
+        """Find built properties for new construction pricing reference.
+
+        Uses all properties with building data in the county as pricing proxies.
+        Falls back to est_value and assessed_value when sale data is unavailable.
+        """
         comps: list[NewBuildComp] = []
-        six_months_ago = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
+        twelve_months_ago = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
         for lead in self._all_leads:
             if lead.get("County", "").strip() != county:
                 continue
-            sale_date = lead.get("Last Sale Recording Date", "").strip()
-            if sale_date < six_months_ago:
-                continue
-            sale_amount = float(lead.get("Last Sale Amount", 0) or 0)
             sqft = float(lead.get("Building Sqft", 0) or 0)
-            if sale_amount <= 0 or sqft <= 100:
+            if sqft <= 100:
                 continue
+            sale_date = lead.get("Last Sale Recording Date", "").strip()
+            sale_amount = float(lead.get("Last Sale Amount", 0) or 0)
+            est_val = float(lead.get("Est Value", 0) or 0)
             assessed = float(lead.get("Total Assessed Value", 0) or 0)
+            # Use actual sale if available, otherwise estimate from assessed/est_value
+            price = sale_amount if sale_amount > 0 else (est_val if est_val > 0 else assessed)
+            if price <= 0:
+                continue
             lot = float(lead.get("Lot Size Sqft", 0) or 0)
-            land_cost = assessed * 0.25  # land typically ~25% of assessed value
+            land_cost = assessed * 0.25 if assessed > 0 else price * 0.20
             year = int(lead.get("Effective Year Built", 0) or 0)
             comps.append(NewBuildComp(
                 address=lead.get("Property Address", "").strip(),
                 county=county,
                 build_year=year,
                 land_cost=land_cost,
-                construction_cost=max(0, sale_amount - land_cost),
-                sale_price=sale_amount,
-                sale_date=sale_date,
+                construction_cost=max(0, price - land_cost),
+                sale_price=price,
+                sale_date=sale_date or "N/A",
                 sqft=sqft,
-                price_per_sqft=sale_amount / sqft if sqft > 0 else 0,
+                price_per_sqft=price / sqft if sqft > 0 else 0,
                 bedrooms=int(lead.get("Bedrooms", 0) or 0),
                 bathrooms=int(float(lead.get("Total Bathrooms", 0) or 0)),
                 lot_acres=lot / 43560.0,
-                source="tax_assessor",
+                source="assessor_proxy" if not sale_amount else "tax_assessor",
             ))
         return sorted(comps, key=lambda c: c.sale_date, reverse=True)[:20]
 
