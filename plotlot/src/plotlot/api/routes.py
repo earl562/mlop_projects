@@ -20,7 +20,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
-from plotlot.pipeline.lookup import _agentic_analysis, PIPELINE_VERSION
+from plotlot.pipeline.lookup import _agentic_analysis, GENERIC_ZONING_QUERY, PIPELINE_VERSION
 from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
 from plotlot.observability.prompts import log_prompt_to_run
 from plotlot.storage.db import get_session
@@ -274,7 +274,9 @@ async def analyze_stream(request: AnalyzeRequest):
                 },
             )
             search_query = (
-                prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+                prop_record.zoning_code
+                if prop_record and prop_record.zoning_code
+                else GENERIC_ZONING_QUERY
             )
             session = await get_session()
             try:

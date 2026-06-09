@@ -47,7 +47,15 @@ def test_mcp_server_has_name():
 
 
 def test_mcp_server_has_version():
-    assert mcp.version == "2.0.0"
+    assert mcp.version == "2.1.0"
+
+
+def test_mcp_instructions_have_grounding_rules():
+    """Server instructions must forbid fabrication (anti-hallucination contract)."""
+    instr = (mcp.instructions or "").lower()
+    assert "never invent" in instr
+    assert "data_status" in instr
+    assert "presentation_guidance" in instr
 
 
 async def test_all_five_tools_registered():
@@ -238,6 +246,97 @@ async def test_run_full_analysis_missing_optional_fields():
     assert result["municipality"] == "Empty Town"
     assert result["max_units"] is None
     assert result["max_land_price"] is None
+
+
+# ── run_full_analysis: data_status anti-hallucination contract ────────────────
+
+
+async def test_run_full_analysis_full_coverage_data_status():
+    """When numeric standards are present, coverage is 'full'."""
+    raw = dict(_FULL_RAW, sources=["12.3 — Residential Density"])
+    with (
+        patch("plotlot.mcp.server.lookup_address", AsyncMock(return_value=MagicMock())),
+        patch("plotlot.mcp.server.asdict", return_value=raw),
+    ):
+        result = await run_full_analysis("123 Main St, Fremont CA")
+
+    ds = result["data_status"]
+    assert ds["coverage"] == "full"
+    assert ds["zoning_district_found"] is True
+    assert ds["dimensional_standards_found"] is True
+    assert ds["max_units_computed"] is True
+    assert "presentation_guidance" in result
+
+
+async def test_run_full_analysis_zoning_only_coverage_and_guidance():
+    """Zoning code present but NO dimensional standards → 'zoning_only' + honest guidance.
+
+    This is the Las Vegas / un-ingested-city case that previously caused the agent
+    to hallucinate a 'could not be retrieved' message with a fake phone number.
+    """
+    raw = {
+        "municipality": "Las Vegas",
+        "county": "Clark",
+        "zoning_district": "RS20",
+        "zoning_description": "Residential Single-Family 20",
+        "confidence": "low",
+        "numeric_params": {
+            "max_density_units_per_acre": None,
+            "min_lot_area_per_unit_sqft": None,
+            "far": None,
+            "max_height_ft": None,
+            "setback_front_ft": None,
+            "setback_side_ft": None,
+            "setback_rear_ft": None,
+            "property_type": "single_family",
+        },
+        "density_analysis": {"max_units": 0, "governing_constraint": "insufficient_data"},
+        "pro_forma": None,
+        "sources": [],
+    }
+    with (
+        patch("plotlot.mcp.server.lookup_address", AsyncMock(return_value=MagicMock())),
+        patch("plotlot.mcp.server.asdict", return_value=raw),
+    ):
+        result = await run_full_analysis("2975 Montessouri St, Las Vegas, NV 89117")
+
+    # The zoning district MUST be surfaced — not hidden behind a "not found" message.
+    assert result["zoning_district"] == "RS20"
+    ds = result["data_status"]
+    assert ds["coverage"] == "zoning_only"
+    assert ds["zoning_district_found"] is True
+    assert ds["dimensional_standards_found"] is False
+    assert ds["max_units_computed"] is False
+
+    guidance = result["presentation_guidance"].lower()
+    assert "rs20" in guidance  # district echoed so the agent states it
+    assert "not" in guidance and "fabricate" in guidance  # forbids invention
+    assert "ingest_municipality" in guidance  # offers the remedy
+
+
+async def test_run_full_analysis_no_zoning_coverage_none():
+    """No zoning district resolved at all → coverage 'none', no invented code."""
+    raw = {
+        "municipality": "Nowhere",
+        "county": "Nowhere",
+        "zoning_district": "",
+        "zoning_description": "",
+        "confidence": "low",
+        "numeric_params": None,
+        "density_analysis": None,
+        "pro_forma": None,
+        "sources": [],
+    }
+    with (
+        patch("plotlot.mcp.server.lookup_address", AsyncMock(return_value=MagicMock())),
+        patch("plotlot.mcp.server.asdict", return_value=raw),
+    ):
+        result = await run_full_analysis("999 Nowhere Rd")
+
+    ds = result["data_status"]
+    assert ds["coverage"] == "none"
+    assert ds["zoning_district_found"] is False
+    assert "invent" in result["presentation_guidance"].lower()
 
 
 # ── search_zoning ─────────────────────────────────────────────────────────────

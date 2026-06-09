@@ -42,6 +42,17 @@ PIPELINE_VERSION = "v2.2"
 _pipeline_cache: dict[str, tuple["ZoningReport", float]] = {}
 PIPELINE_CACHE_TTL = 1800  # 30 minutes
 
+# Generic fallback query when no zoning code is known. The municipality name
+# (e.g. "San Jose") has no semantic overlap with ordinance text and returns 0
+# results, so we query for generic zoning terms instead.
+GENERIC_ZONING_QUERY = "zoning district residential density setbacks height limits parking"
+
+# Auto-ingestion guard — don't re-attempt the same municipality within this window.
+# Ingestion is an idempotent upsert; the guard only prevents hammering a dead source
+# (e.g. a city not on Municode) on every analysis call.
+_AUTOINGEST_TTL = 86400.0  # 24h
+_autoingest_attempts: dict[str, float] = {}
+
 
 # Geocodio accuracy levels that indicate a confident location match
 ACCEPTABLE_ACCURACY = {"rooftop", "range_interpolation", "nearest_rooftop_match", "point"}
@@ -109,6 +120,84 @@ def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
         result["property_record"] = None
 
     return result
+
+
+async def _run_hybrid_search(municipality: str, query: str, limit: int = 15) -> list:
+    """Run a single hybrid search with its own DB session."""
+    session = await get_session()
+    try:
+        return await hybrid_search(session, municipality, query, limit=limit)
+    finally:
+        await session.close()
+
+
+async def _gather_ordinance_sections(
+    municipality: str,
+    state: str,
+    county: str,
+    search_query: str,
+) -> tuple[list, str]:
+    """Search indexed ordinances; auto-ingest once on a miss, then re-search.
+
+    This is the self-healing coverage path that makes the MCP/ACP work for any
+    municipality whose code is reachable by a source adapter (Municode/PDF/HTML)
+    without a manual ``plotlot-ingest`` run. When ingestion is not possible
+    (no adapter, empty source) it degrades honestly — the caller still has the
+    ArcGIS zoning code and reports the gap instead of fabricating data.
+
+    Returns:
+        (search_results, coverage_status) where coverage_status is one of:
+          ``"indexed"``        results came from already-indexed data
+          ``"auto_ingested"``  ingestion ran and produced results
+          ``"ingest_empty"``   ingestion attempted but yielded no usable text
+          ``"uncovered"``      no municipality/state available to ingest
+    """
+    results = await _run_hybrid_search(municipality, search_query)
+    if results:
+        return results, "indexed"
+
+    if not municipality.strip() or not state.strip():
+        return results, "uncovered"
+
+    # Guard: don't re-ingest the same place repeatedly (esp. dead sources).
+    key = f"{municipality.lower().strip()}|{state.lower().strip()}"
+    now = time.monotonic()
+    last_attempt = _autoingest_attempts.get(key)
+    if last_attempt is not None and now - last_attempt < _AUTOINGEST_TTL:
+        logger.info("Skipping auto-ingest for %s, %s (attempted recently)", municipality, state)
+        return results, "ingest_empty"
+    _autoingest_attempts[key] = now
+
+    from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+
+    logger.info("Auto-ingesting %s, %s on zoning search miss", municipality, state)
+    final_stage, final_error = "", None
+    try:
+        async for prog in run_on_demand_ingestion(
+            IngestRequest(
+                municipality=municipality,
+                state=state,
+                county=county or None,
+                trigger="pipeline_search_miss",
+            )
+        ):
+            final_stage, final_error = prog.stage, prog.error
+    except Exception:
+        logger.warning("Auto-ingestion crashed for %s, %s", municipality, state, exc_info=True)
+        return results, "ingest_empty"
+
+    if final_stage != "complete":
+        logger.info(
+            "Auto-ingest did not complete for %s, %s (stage=%s error=%s)",
+            municipality,
+            state,
+            final_stage,
+            final_error,
+        )
+        return results, "ingest_empty"
+
+    results = await _run_hybrid_search(municipality, search_query)
+    return results, ("auto_ingested" if results else "ingest_empty")
 
 
 @trace(name="lookup_address", span_type="CHAIN")
@@ -204,25 +293,26 @@ async def lookup_address(address: str) -> ZoningReport | None:
         else:
             logger.warning("No property record found for %s in %s County", address, county)
 
-        # Step 3: Hybrid search — use actual zoning code if we have it, else generic
-        # zoning terms. Falling back to the municipality name (e.g. "San Jose") returns
-        # 0 results because the name has no semantic overlap with ordinance text.
+        # Step 3: Hybrid search with self-healing coverage. Use the actual zoning
+        # code as the query when known, else generic zoning terms (the municipality
+        # name returns 0 results). On a search miss, auto-ingest the municipality's
+        # ordinance via the ACP coordinator and re-search — so the MCP/ACP path works
+        # for any municipality reachable by a source adapter, not just pre-ingested ones.
         search_query = (
             prop_record.zoning_code
             if prop_record and prop_record.zoning_code
-            else "zoning district residential density setbacks height limits parking"
+            else GENERIC_ZONING_QUERY
         )
-        session = await get_session()
-        try:
-            search_results = await hybrid_search(session, municipality, search_query, limit=15)
-        finally:
-            await session.close()
+        search_results, coverage_status = await _gather_ordinance_sections(
+            municipality, state, county, search_query
+        )
 
         logger.info(
-            "Search: %d chunks for query '%s' in %s",
+            "Search: %d chunks for query '%s' in %s (coverage=%s)",
             len(search_results),
             search_query,
             municipality,
+            coverage_status,
         )
 
         # Log Phase 1 results as params
@@ -235,6 +325,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
                 if prop_record and prop_record.zoning_code
                 else "N/A",
                 "search_result_count": str(len(search_results)),
+                "coverage_status": coverage_status,
             }
         )
 

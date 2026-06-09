@@ -38,9 +38,21 @@ mcp = fastmcp.FastMCP(
         "Use run_full_analysis to evaluate any US property address. "
         "Use search_zoning to look up specific zoning provisions. "
         "Use get_coverage to see what municipalities are already indexed. "
-        "Use get_comparable_sales to find recent land transactions near a location."
+        "Use get_comparable_sales to find recent land transactions near a location.\n\n"
+        "GROUNDING RULES (strict — never violate):\n"
+        "1. Report ONLY values present in tool responses. Never invent zoning codes, "
+        "dimensional standards, phone numbers, office names, or URLs.\n"
+        "2. run_full_analysis returns a 'data_status' object and 'presentation_guidance' "
+        "string — follow that guidance exactly when wording your answer.\n"
+        "3. If data_status.zoning_district_found is true, state the zoning district plainly; "
+        "do NOT claim the zoning 'could not be retrieved'.\n"
+        "4. If data_status.dimensional_standards_found is false, say the standards are not yet "
+        "in the database and offer to run ingest_municipality — do NOT fill the gap from general "
+        "knowledge.\n"
+        "5. When a tool returns an 'error' field, report the error honestly; do not fabricate a "
+        "successful-looking answer."
     ),
-    version="2.0.0",
+    version="2.1.0",
 )
 
 
@@ -130,6 +142,53 @@ async def run_full_analysis(address: str) -> dict:
     da = raw.get("density_analysis") or {}
     pf = raw.get("pro_forma") or {}
 
+    # ── Data status (anti-hallucination contract) ────────────────────────────
+    # Tell the agent EXACTLY what was retrieved vs. what is missing, so it never
+    # papers over a partial result with fabricated values, phone numbers, or URLs.
+    zoning_found = bool(raw.get("zoning_district"))
+    _numeric_fields = (
+        "max_density_units_per_acre",
+        "min_lot_area_per_unit_sqft",
+        "far",
+        "max_lot_coverage_pct",
+        "max_height_ft",
+        "setback_front_ft",
+        "setback_side_ft",
+        "setback_rear_ft",
+    )
+    standards_found = any(np.get(f) is not None for f in _numeric_fields)
+    ordinance_indexed = bool(raw.get("sources"))
+    max_units = da.get("max_units")
+
+    if standards_found:
+        coverage = "full"
+    elif zoning_found:
+        coverage = "zoning_only"
+    else:
+        coverage = "none"
+
+    if coverage == "full":
+        guidance = (
+            "Full data available. Present the zoning district, dimensional standards, "
+            "and max-units analysis as computed. Cite the retrieved ordinance sections."
+        )
+    elif coverage == "zoning_only":
+        guidance = (
+            f"The zoning district ({raw.get('zoning_district')}) and property data below were "
+            "retrieved from the county's official GIS and ARE accurate — state them plainly. "
+            "Do NOT say the zoning 'could not be retrieved'. The dimensional standards "
+            "(setbacks, density, height, FAR) for this district are NOT yet in the PlotLot "
+            "database, so max units cannot be computed. Say so honestly and offer to ingest the "
+            "ordinance with the ingest_municipality tool. NEVER fabricate phone numbers, office "
+            "names, URLs, or numeric zoning values that are not present in this response."
+        )
+    else:
+        guidance = (
+            "No zoning district was resolved for this address. State that the official zoning "
+            "lookup returned no record and suggest verifying the address. Do NOT invent a zoning "
+            "code, phone number, URL, or any dimensional values."
+        )
+
     return {
         "address": address,
         "municipality": raw.get("municipality"),
@@ -144,10 +203,18 @@ async def run_full_analysis(address: str) -> dict:
         "setback_side_ft": np.get("setback_side_ft"),
         "setback_rear_ft": np.get("setback_rear_ft"),
         "min_lot_area_sqft": np.get("min_lot_area_per_unit_sqft"),
-        "max_units": da.get("max_units"),
+        "max_units": max_units,
         "governing_constraint": da.get("governing_constraint"),
         "max_land_price": pf.get("max_land_price"),
         "cost_per_door": pf.get("cost_per_door"),
+        "data_status": {
+            "coverage": coverage,
+            "zoning_district_found": zoning_found,
+            "dimensional_standards_found": standards_found,
+            "ordinance_text_indexed": ordinance_indexed,
+            "max_units_computed": bool(max_units),
+        },
+        "presentation_guidance": guidance,
         "full_report": raw,
     }
 
