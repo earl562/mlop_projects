@@ -1,1 +1,0 @@
-PlotLot harness live integration test
