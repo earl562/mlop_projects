@@ -1,6 +1,10 @@
-"""Core domain types and error taxonomy shared across all plotlot modules."""
+"""Compat shim — re-exports from workspace shared package.
 
-from plotlot.core.errors import (
+Existing code imports from plotlot.core — this redirects to shared.types and shared.errors.
+The originals remain in place for direct import if needed.
+"""
+
+from shared.errors import (  # noqa: F401
     ConfigurationError,
     DegradedError,
     ExternalAPIError,
@@ -16,7 +20,7 @@ from plotlot.core.errors import (
     RetriableError,
     TimeoutError,
 )
-from plotlot.core.types import (
+from shared.types import (  # noqa: F401
     ChunkMetadata,
     MunicodeConfig,
     PropertyRecord,
@@ -29,29 +33,10 @@ from plotlot.core.types import (
 )
 
 __all__ = [
-    # Error taxonomy
-    "ConfigurationError",
-    "DegradedError",
-    "ExternalAPIError",
-    "FatalError",
-    "GeocodingError",
-    "LowConfidenceError",
-    "NoDataError",
-    "OutOfCoverageError",
-    "PartialExtractionError",
-    "PlotLotError",
-    "PropertyLookupError",
-    "RateLimitError",
-    "RetriableError",
-    "TimeoutError",
-    # Domain types
-    "ChunkMetadata",
-    "MunicodeConfig",
-    "PropertyRecord",
-    "RawSection",
-    "SearchResult",
-    "Setbacks",
-    "TextChunk",
-    "TocNode",
-    "ZoningReport",
+    "ChunkMetadata", "ConfigurationError", "DegradedError", "ExternalAPIError",
+    "FatalError", "GeocodingError", "LowConfidenceError", "MunicodeConfig",
+    "NoDataError", "OutOfCoverageError", "PartialExtractionError",
+    "PlotLotError", "PropertyLookupError", "PropertyRecord", "RateLimitError",
+    "RawSection", "RetriableError", "SearchResult", "Setbacks",
+    "TextChunk", "TimeoutError", "TocNode", "ZoningReport",
 ]
