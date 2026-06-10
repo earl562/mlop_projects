@@ -74,6 +74,7 @@ async def test_lookup_returns_record_with_zoning_and_lot() -> None:
     assert record.folio == "16303605012"
     assert abs(record.lot_size_sqft - 0.54 * 43560) < 1.0
     assert record.county == "Clark"
+    # City of Las Vegas layer (7) returned the code → incorporated → "Las Vegas"
     assert record.municipality == "Las Vegas"
     assert record.lat == _LAT
     assert record.lng == _LNG
@@ -104,6 +105,47 @@ async def test_lookup_falls_back_to_cc_zoning_when_lv_empty() -> None:
     assert record is not None
     assert record.zoning_code == "R-U"
     assert record.zoning_description == "Rural"
+    # County layer (11) matched → unincorporated → jurisdiction is "Clark County",
+    # NOT the mailing city. This label is what routes ordinance ingest/search to
+    # the body that actually adopted the code (Clark County is on Municode).
+    assert record.municipality == "Clark County"
+    assert record.zoning_layer_url.endswith("MapServer/11")
+
+
+@pytest.mark.asyncio
+async def test_unincorporated_rs20_labels_clark_county() -> None:
+    """The real test case: GIS layer reports 'RS20' from the county layer.
+
+    The City of Las Vegas layer returns ZNCLASS=CITY (parcel is outside the
+    incorporated city), so the county layer is authoritative and the
+    jurisdiction must be labeled 'Clark County'.
+    """
+    provider = ClarkCountyNVProvider()
+
+    async def fake_get(url: str, params: dict | None = None):
+        if "LandApp" in url:
+            return _arcgis_response([_parcel_feature()])
+        if "MapServer/7" in url:
+            return _arcgis_response([_cc_zoning_feature()])  # ZNCLASS=CITY → not in city
+        if "MapServer/11" in url:
+            return _arcgis_response(
+                [{"attributes": {"ZNCLASS": "RS20", "Description": "Residential Single-Family 20"}}]
+            )
+        return _arcgis_response([])
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = AsyncMock(side_effect=fake_get)
+
+    with patch("plotlot.property.clark_county_nv.httpx.AsyncClient", return_value=mock_client):
+        record = await provider.lookup(
+            "2975 Montessouri St, Las Vegas, NV 89117", "Clark", lat=_LAT, lng=_LNG, state="NV"
+        )
+
+    assert record is not None
+    assert record.zoning_code == "RS20"
+    assert record.municipality == "Clark County"
 
 
 @pytest.mark.asyncio

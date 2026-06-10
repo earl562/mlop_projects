@@ -36,6 +36,7 @@ from plotlot.retrieval.bulk_search import (
 from plotlot.retrieval.google_workspace import create_document, create_spreadsheet
 from plotlot.retrieval.llm import call_llm
 from plotlot.retrieval.search import hybrid_search
+from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
 from plotlot.observability.prompts import get_active_prompt
 from plotlot.observability.tracing import start_span
 from plotlot.oauth.openai_auth import has_saved_tokens
@@ -1232,15 +1233,35 @@ async def _execute_lookup_property(
                 "living_units": record.living_units,
             }
             muni = record.municipality or address
+            # The GIS layer's code (Track 1) and the ordinance code book (Track 2)
+            # can label the same district differently (e.g. GIS "RS20" vs. Clark
+            # County "R-E"). Crosswalk before steering the agent's ordinance search,
+            # else it searches the GIS code and matches nothing in the indexed text.
+            crosswalk = crosswalk_zoning_code(
+                record.zoning_code,
+                state=state,
+                county=record.county,
+                municipality=record.municipality,
+            )
+            if crosswalk.matched:
+                result["ordinance_district_code"] = crosswalk.search_code
             zoning_query = (
-                f"{record.zoning_code} setbacks density height"
+                f"{crosswalk.search_code} setbacks density height"
                 if record.zoning_code
                 else f"{muni} zoning setbacks density height allowed uses"
             )
-            result["next_step"] = (
-                f"Now call search_zoning_ordinance with municipality='{muni}' "
-                f"and query='{zoning_query}' to get the zoning regulations for this property"
-            )
+            if crosswalk.matched:
+                result["next_step"] = (
+                    f"The GIS layer labels this parcel '{record.zoning_code}', but the adopted "
+                    f"ordinance uses '{crosswalk.search_code}' for that district. Now call "
+                    f"search_zoning_ordinance with municipality='{muni}' and query='{zoning_query}' "
+                    f"— search under '{crosswalk.search_code}', not '{record.zoning_code}'."
+                )
+            else:
+                result["next_step"] = (
+                    f"Now call search_zoning_ordinance with municipality='{muni}' "
+                    f"and query='{zoning_query}' to get the zoning regulations for this property"
+                )
             return json.dumps(result)
         return json.dumps(
             {
@@ -1261,9 +1282,20 @@ async def _execute_zoning_search(municipality: str, query: str, session_id: str 
     with start_span(name="chat_zoning_search", span_type="RETRIEVER") as span:
         span.set_inputs({"municipality": municipality, "query": query, "limit": 15})
 
+        # Boost chunks tagged with this parcel's exact ordinance district code.
+        # Prefer the crosswalked ordinance code (e.g. "R-E") established by
+        # lookup_property_info; fall back to the raw GIS code.
+        boost = ""
+        if session_id:
+            ctx = _sessions.get_property_context(session_id)
+            if ctx:
+                boost = str(ctx.get("ordinance_district_code") or ctx.get("zoning_code") or "")
+
         session = await get_session()
         try:
-            results = await hybrid_search(session, municipality, query, limit=15)
+            results = await hybrid_search(
+                session, municipality, query, limit=15, zone_code_boost=boost or None
+            )
         finally:
             await session.close()
 
@@ -2221,6 +2253,9 @@ async def chat(request: ChatRequest, http_request: Request):
                                             "municipality": prop.get("municipality", ""),
                                             "county": prop.get("county", ""),
                                             "zoning_code": prop.get("zoning_code", ""),
+                                            "ordinance_district_code": prop.get(
+                                                "ordinance_district_code", ""
+                                            ),
                                             "zoning_description": prop.get(
                                                 "zoning_description", ""
                                             ),

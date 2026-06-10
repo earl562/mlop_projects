@@ -58,15 +58,27 @@ class ClarkCountyNVProvider(PropertyProvider):
         # Step 1: Get parcel info via spatial query (APN + lot area)
         apn, lot_sqft = await _spatial_parcel(lat, lng)
 
-        # Step 2: Get zoning via spatial query — try Las Vegas city layer first
-        zoning_code, zoning_desc = await _spatial_zoning(_LV_ZONING_URL, lat, lng)
+        # Step 2: Resolve zoning AND jurisdiction by which layer the parcel point
+        # actually intersects. The mailing city ("Las Vegas") is NOT the zoning
+        # authority — most "Las Vegas, NV" addresses are unincorporated land zoned
+        # by Clark County. Whichever layer returns a polygon IS the authority:
+        #   • City of Las Vegas layer (7) hits → incorporated → "Las Vegas"
+        #   • Clark County layer (11) hits      → unincorporated → "Clark County"
+        # The label drives downstream ordinance ingest/search, so it must match the
+        # body that actually adopted the code. "Clark County" is on Municode (Title
+        # 30); the City of Las Vegas is not — so this routing is what makes
+        # unincorporated parcels analyzable instead of dead-ending under "Las Vegas".
+        lv_code, lv_desc = await _spatial_zoning(_LV_ZONING_URL, lat, lng)
 
-        # Las Vegas layer returns ZNCLASS=CITY for unincorporated parcels
-        if not zoning_code or zoning_code.upper() in ("", "CITY"):
+        # The LV layer returns ZNCLASS=CITY (or no feature) for parcels outside the
+        # incorporated city; a real code here means the parcel IS inside the city.
+        if lv_code and lv_code.upper() not in ("", "CITY"):
+            zoning_code, zoning_desc = lv_code, lv_desc
+            municipality, zoning_layer_url = "Las Vegas", _LV_ZONING_URL
+        else:
             cc_code, cc_desc = await _spatial_zoning(_CC_ZONING_URL, lat, lng)
-            # Only override if we got something more specific than "CITY"
-            if cc_code and cc_code.upper() not in ("CITY",):
-                zoning_code, zoning_desc = cc_code, cc_desc
+            zoning_code, zoning_desc = cc_code, cc_desc
+            municipality, zoning_layer_url = "Clark County", _CC_ZONING_URL
 
         if not apn and not zoning_code:
             logger.warning("No parcel or zoning data found at (%.4f, %.4f)", lat, lng)
@@ -74,16 +86,17 @@ class ClarkCountyNVProvider(PropertyProvider):
 
         record = PropertyRecord(county="Clark")
         record.folio = apn
-        record.municipality = "Las Vegas"
+        record.municipality = municipality
         record.lat = lat
         record.lng = lng
         record.lot_size_sqft = lot_sqft
         record.zoning_code = zoning_code
         record.zoning_description = zoning_desc
-        record.zoning_layer_url = _LV_ZONING_URL.rsplit("/query", 1)[0]
+        record.zoning_layer_url = zoning_layer_url.rsplit("/query", 1)[0]
 
         logger.info(
-            "Clark County NV: apn=%s zoning=%s lot=%.0f sqft",
+            "Clark County NV: jurisdiction=%s apn=%s zoning=%s lot=%.0f sqft",
+            municipality,
             apn or "N/A",
             zoning_code or "N/A",
             lot_sqft,

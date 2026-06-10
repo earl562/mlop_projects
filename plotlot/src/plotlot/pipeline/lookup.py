@@ -31,6 +31,7 @@ from plotlot.pipeline.calculator import calculate_max_units, calculate_max_gla, 
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
+from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
 from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -122,11 +123,18 @@ def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
     return result
 
 
-async def _run_hybrid_search(municipality: str, query: str, limit: int = 15) -> list:
+async def _run_hybrid_search(
+    municipality: str,
+    query: str,
+    limit: int = 15,
+    zone_code_boost: str | None = None,
+) -> list:
     """Run a single hybrid search with its own DB session."""
     session = await get_session()
     try:
-        return await hybrid_search(session, municipality, query, limit=limit)
+        return await hybrid_search(
+            session, municipality, query, limit=limit, zone_code_boost=zone_code_boost
+        )
     finally:
         await session.close()
 
@@ -136,6 +144,8 @@ async def _gather_ordinance_sections(
     state: str,
     county: str,
     search_query: str,
+    *,
+    zone_code_boost: str | None = None,
 ) -> tuple[list, str]:
     """Search indexed ordinances; auto-ingest once on a miss, then re-search.
 
@@ -152,7 +162,7 @@ async def _gather_ordinance_sections(
           ``"ingest_empty"``   ingestion attempted but yielded no usable text
           ``"uncovered"``      no municipality/state available to ingest
     """
-    results = await _run_hybrid_search(municipality, search_query)
+    results = await _run_hybrid_search(municipality, search_query, zone_code_boost=zone_code_boost)
     if results:
         return results, "indexed"
 
@@ -196,7 +206,7 @@ async def _gather_ordinance_sections(
         )
         return results, "ingest_empty"
 
-    results = await _run_hybrid_search(municipality, search_query)
+    results = await _run_hybrid_search(municipality, search_query, zone_code_boost=zone_code_boost)
     return results, ("auto_ingested" if results else "ingest_empty")
 
 
@@ -293,18 +303,31 @@ async def lookup_address(address: str) -> ZoningReport | None:
         else:
             logger.warning("No property record found for %s in %s County", address, county)
 
-        # Step 3: Hybrid search with self-healing coverage. Use the actual zoning
-        # code as the query when known, else generic zoning terms (the municipality
-        # name returns 0 results). On a search miss, auto-ingest the municipality's
-        # ordinance via the ACP coordinator and re-search — so the MCP/ACP path works
-        # for any municipality reachable by a source adapter, not just pre-ingested ones.
-        search_query = (
-            prop_record.zoning_code
-            if prop_record and prop_record.zoning_code
-            else GENERIC_ZONING_QUERY
+        # Step 3: Hybrid search with self-healing coverage. The GIS layer's zoning
+        # code (Track 1) and the ordinance code book (Track 2) often use different
+        # labels for the same district — e.g. GIS "RS20" vs. Clark County Title 30
+        # "R-E" — so we crosswalk the GIS code to the ordinance code BEFORE searching,
+        # else the ingested text never matches. When no crosswalk exists the code is
+        # used unchanged. The municipality name alone returns 0 results, so fall back
+        # to generic zoning terms when no code is known. On a search miss, auto-ingest
+        # the municipality's ordinance via the ACP coordinator and re-search — so the
+        # MCP/ACP path works for any source-adapter-reachable place, not just pre-ingested ones.
+        gis_zoning_code = prop_record.zoning_code if prop_record else ""
+        crosswalk = crosswalk_zoning_code(
+            gis_zoning_code, state=state, county=county, municipality=municipality
         )
+        if crosswalk.matched:
+            logger.info("Zoning crosswalk: %s", crosswalk.note)
+
+        if gis_zoning_code:
+            search_query: str = crosswalk.search_code
+            zone_boost: str | None = crosswalk.search_code
+        else:
+            search_query = GENERIC_ZONING_QUERY
+            zone_boost = None
+
         search_results, coverage_status = await _gather_ordinance_sections(
-            municipality, state, county, search_query
+            municipality, state, county, search_query, zone_code_boost=zone_boost
         )
 
         logger.info(
@@ -324,6 +347,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
                 "zoning_code": prop_record.zoning_code
                 if prop_record and prop_record.zoning_code
                 else "N/A",
+                "ordinance_zoning_code": crosswalk.search_code if gis_zoning_code else "N/A",
+                "zoning_crosswalk_matched": str(crosswalk.matched),
                 "search_result_count": str(len(search_results)),
                 "coverage_status": coverage_status,
             }
@@ -338,6 +363,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
             search_results=search_results,
             municipality=municipality,
             county=county,
+            ordinance_code=crosswalk.search_code if crosswalk.matched else "",
         )
 
         # ── Phase 3: Deterministic max-units calculation ──
@@ -411,12 +437,15 @@ async def _agentic_analysis(
     search_results: list,
     municipality: str,
     county: str,
+    ordinance_code: str = "",
 ) -> ZoningReport:
     """LLM analysis with tool access for additional searches."""
     from plotlot.retrieval.llm import call_llm
 
     # Build context message with all collected data
-    context_msg = _build_context_message(address, geo, prop_record, search_results)
+    context_msg = _build_context_message(
+        address, geo, prop_record, search_results, ordinance_code=ordinance_code
+    )
 
     # Tools available during analysis
     tools = [
@@ -688,7 +717,13 @@ async def _agentic_analysis(
     return _build_fallback_report(address, geo, prop_record, list(dict.fromkeys(all_sources)))
 
 
-def _build_context_message(address: str, geo: dict, prop_record, search_results: list) -> str:
+def _build_context_message(
+    address: str,
+    geo: dict,
+    prop_record,
+    search_results: list,
+    ordinance_code: str = "",
+) -> str:
     """Build the data context for the LLM analysis."""
     parts = [
         f"# Property Analysis: {address}\n",
@@ -706,7 +741,14 @@ def _build_context_message(address: str, geo: dict, prop_record, search_results:
         if prop_record.owner:
             parts.append(f"- Owner: {prop_record.owner}")
         if prop_record.zoning_code:
-            parts.append(f"- Zoning Code: {prop_record.zoning_code}")
+            parts.append(f"- Zoning Code (GIS map label): {prop_record.zoning_code}")
+        if ordinance_code and ordinance_code != prop_record.zoning_code:
+            parts.append(
+                f"- Ordinance District Code: {ordinance_code} — the adopted code book uses "
+                f"this label for the same district that the GIS layer labels "
+                f"'{prop_record.zoning_code}'. Search the ordinance and report standards "
+                f"under '{ordinance_code}'."
+            )
         if prop_record.zoning_description:
             parts.append(f"- Zoning Description: {prop_record.zoning_description}")
         if prop_record.land_use_description:
