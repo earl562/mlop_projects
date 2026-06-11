@@ -1,5 +1,7 @@
 """Tests for the harness runtime boundary."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from plotlot.harness import HarnessRuntime
@@ -57,7 +59,8 @@ async def test_harness_runtime_calls_handler_when_allowed():
 
 
 # ---------------------------------------------------------------------------
-# Bug 2 regression — search_municode_live short-circuit for PDF-scraped cities
+# Bug 2 — search_municode_live serves indexed content for non-Municode cities
+# (San Diego is PDF-sourced; its ordinance is in the local index, not Municode).
 # ---------------------------------------------------------------------------
 
 
@@ -73,39 +76,57 @@ def test_is_pdf_scraped_other_cities():
     assert _is_pdf_scraped("Miami") is False
 
 
-@pytest.mark.asyncio
-async def test_search_municode_live_short_circuits_for_san_diego():
-    """San Diego uses local PDF index, not Municode — must return no_results immediately."""
-    context = ToolContext(
+def _ctx() -> ToolContext:
+    return ToolContext(
         workspace_id="ws_test",
         actor_user_id="user_test",
         run_id="run_test",
         risk_budget_cents=0,
         approved_approval_ids=set(),
     )
-    result = await _handle_search_municode_live(
-        {"municipality": "San Diego", "query": "RM-3-7 density", "state": "CA"},
-        context,
-    )
+
+
+@pytest.mark.asyncio
+async def test_search_municode_live_returns_indexed_content_for_san_diego():
+    """San Diego isn't on Municode — the live tool must serve REAL indexed ordinance
+    content in one call (delegating to the indexed search), not a dead-end redirect."""
+    fake_indexed = {
+        "status": "success",
+        "results": [
+            {"section": "131.0102", "title": "RM-3-7", "snippet": "...", "evidence_id": "ev1"}
+        ],
+        "evidence": [{"id": "ev1"}],
+    }
+    with patch(
+        "plotlot.harness.default_runtime._handle_search_ordinances",
+        new=AsyncMock(return_value=fake_indexed),
+    ) as mock_indexed:
+        result = await _handle_search_municode_live(
+            {"municipality": "San Diego", "query": "RM-3-7 density", "state": "CA"},
+            _ctx(),
+        )
+
+    mock_indexed.assert_awaited_once()
+    assert result["status"] == "success"
+    assert result["results"]
+    assert result["source"] == "indexed"
+    assert "indexed" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_search_municode_live_san_diego_degrades_honestly_when_unindexed():
+    """If San Diego has no indexed text yet, return honest no_results — never fabricate."""
+    empty_indexed = {"status": "success", "results": [], "evidence": []}
+    with patch(
+        "plotlot.harness.default_runtime._handle_search_ordinances",
+        new=AsyncMock(return_value=empty_indexed),
+    ):
+        result = await _handle_search_municode_live(
+            {"municipality": "san diego", "query": "setbacks", "state": "CA"},
+            _ctx(),
+        )
+
     assert result["status"] == "no_results"
     assert result["results"] == []
-    assert result["evidence"] == []
     assert "search_zoning_ordinance" in result["message"]
-
-
-@pytest.mark.asyncio
-async def test_search_municode_live_short_circuits_case_insensitive():
-    """Short-circuit must be case-insensitive."""
-    context = ToolContext(
-        workspace_id="ws_test",
-        actor_user_id="user_test",
-        run_id="run_test",
-        risk_budget_cents=0,
-        approved_approval_ids=set(),
-    )
-    result = await _handle_search_municode_live(
-        {"municipality": "san diego", "query": "setbacks", "state": "CA"},
-        context,
-    )
-    assert result["status"] == "no_results"
-    assert "search_zoning_ordinance" in result["message"]
+    assert "fabricate" in result["message"].lower()

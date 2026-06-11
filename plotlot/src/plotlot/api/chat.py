@@ -1354,8 +1354,13 @@ async def _execute_zoning_search(municipality: str, query: str, session_id: str 
         return json.dumps({"status": "success", "results": chunks})
 
 
-async def _execute_municode_live_search(municipality: str, query: str) -> str:
-    """Search live Municode sections for a municipality using heading-based matching."""
+async def _execute_municode_live_search(municipality: str, query: str, session_id: str = "") -> str:
+    """Search live Municode sections for a municipality using heading-based matching.
+
+    When the municipality is not on Municode (e.g. San Diego, served from a local
+    PDF index), fall back to the indexed ordinance search so the agent gets real
+    ordinance text instead of a dead end.
+    """
     from plotlot.ingestion.discovery import get_municode_configs
     from plotlot.ingestion.scraper import MunicodeScraper
 
@@ -1368,12 +1373,9 @@ async def _execute_municode_live_search(municipality: str, query: str) -> str:
             ]
             config = candidates[0] if candidates else None
         if not config:
-            return json.dumps(
-                {
-                    "status": "no_results",
-                    "message": f"No live Municode authority found for {municipality}",
-                }
-            )
+            # Not on Municode — serve indexed ordinance text (and the anti-hallucination
+            # contract) rather than returning nothing.
+            return await _execute_zoning_search(municipality, query, session_id)
 
         scraper = MunicodeScraper(max_concurrent=3)
         raw_terms = [term.lower() for term in re.findall(r"[a-z0-9-]+", query) if len(term) >= 3]
@@ -1901,6 +1903,7 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
         return await _execute_municode_live_search(
             args.get("municipality", ""),
             args.get("query", ""),
+            session_id=session_id,
         )
     elif name == "discover_open_data_layers":
         return await _execute_open_data_discovery(

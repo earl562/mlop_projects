@@ -76,6 +76,16 @@ async def resolve_adapter(
     raise NoAdapterError(municipality, state)
 
 
+def pdf_registered_municipalities() -> frozenset[str]:
+    """Return the lowercased municipality names served by a PDF-only adapter.
+
+    Derived from :data:`_PDF_REGISTRY` so callers (e.g. live ordinance search)
+    can recognize non-Municode cities without hardcoding names. Registering one
+    PDF city automatically extends this set.
+    """
+    return frozenset(key.rsplit("_", 1)[0] for key in _PDF_REGISTRY)
+
+
 def register_pdf_municipality(
     municipality: str,
     state: str,
