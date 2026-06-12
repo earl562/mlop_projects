@@ -3,10 +3,13 @@
 Resolution order:
   1. Check _PDF_REGISTRY for known PDF-only municipalities (not on Municode)
   2. Try live Municode API discovery
-  3. Raise NoAdapterError if nothing found
+  3. Try codifier platform discovery (Code Publishing / municipal.codes /
+     eCode360 / American Legal) → generic WebCodifierAdapter
+  4. Raise NoAdapterError if nothing found
 
 Adding a new municipality:
-  - If it's on Municode → nothing to do (auto-discovered)
+  - If it's on Municode or a known codifier platform → nothing to do
+    (auto-discovered)
   - If it's PDF-only → add one entry to _PDF_REGISTRY and one factory function
   - If it's custom HTML → build an HTMLAdapter manually (no registry entry needed
     since HTMLAdapter accepts an arbitrary URL list at construction time)
@@ -73,6 +76,12 @@ async def resolve_adapter(
         logger.info("registry_hit adapter=municode municipality=%s state=%s", municipality, state)
         return MunicodeAdapter(config)
 
+    # 3. Codifier platform discovery (Code Publishing, municipal.codes,
+    #    eCode360, American Legal) — deterministic URL probing, no keys needed.
+    adapter = await _try_codifier(municipality, state, county)
+    if adapter is not None:
+        return adapter
+
     raise NoAdapterError(municipality, state)
 
 
@@ -124,6 +133,40 @@ async def _try_municode(
     except Exception as exc:
         logger.warning(
             "municode_discovery_failed municipality=%s state=%s error=%s",
+            municipality,
+            state,
+            exc,
+        )
+        return None
+
+
+async def _try_codifier(
+    municipality: str,
+    state: str,
+    county: str | None,
+) -> SourceAdapter | None:
+    """Attempt codifier platform discovery.  Returns None on any failure."""
+    try:
+        from plotlot.ingestion.adapters.codifier import WebCodifierAdapter, discover_codifier
+
+        hit = await discover_codifier(municipality, state)
+        if hit is None:
+            return None
+        logger.info(
+            "registry_hit adapter=codifier platform=%s municipality=%s state=%s",
+            hit.platform,
+            municipality,
+            state,
+        )
+        return WebCodifierAdapter(
+            municipality=municipality,
+            county=county or "",
+            state=state,
+            hit=hit,
+        )
+    except Exception as exc:
+        logger.warning(
+            "codifier_discovery_failed municipality=%s state=%s error=%s",
             municipality,
             state,
             exc,
