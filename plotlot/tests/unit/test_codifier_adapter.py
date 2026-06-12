@@ -376,6 +376,40 @@ async def test_adapter_node_ids_unique_across_pages() -> None:
 
 
 @pytest.mark.asyncio
+async def test_adapter_reroots_prefix_dropping_spa_links() -> None:
+    """Code Publishing's new layout links /CVMC/19 (404s server-side); the
+    real route is {root}/CVMC/19. On 404 the walk must retry re-rooted."""
+    cv_root = "https://www.codepublishing.com/CA/ChulaVista/"
+    bad_link = "https://www.codepublishing.com/CVMC/19"
+    rerooted = "https://www.codepublishing.com/CA/ChulaVista/CVMC/19"
+    responses = {
+        cv_root: _page(
+            200,
+            text="Chula Vista Municipal Code",
+            title="Chula Vista Municipal Code",
+            url=cv_root,
+            links=[("19 Planning and Zoning", bad_link)],
+        ),
+        # bad_link is absent from responses → FakeTransport returns 404
+        rerooted: _page(200, text=_LONG, title="Title 19 Planning and Zoning", url=rerooted),
+    }
+    transport = _FakeTransport(responses)
+    hit = CodifierHit(
+        platform="codepublishing", url=cv_root, final_url=cv_root, title="Chula Vista"
+    )
+    adapter = WebCodifierAdapter("Chula Vista", "San Diego", "CA", hit=hit)
+    with patch("plotlot.ingestion.adapters.codifier.CodifierTransport", return_value=transport):
+        chunks = await adapter.fetch_chunks()
+
+    assert bad_link in transport.fetched
+    assert rerooted in transport.fetched
+    assert chunks, "re-rooted page must be chunked"
+    assert chunks[0].metadata.chapter == "19 Planning and Zoning"
+    # Node ID derives from the URL that actually served content
+    assert "CVMC_19" in chunks[0].metadata.municode_node_id
+
+
+@pytest.mark.asyncio
 async def test_adapter_does_not_fetch_in_page_anchors() -> None:
     """Child links that are anchors into the same document burn quota for
     duplicate content — they must be skipped without fetching."""

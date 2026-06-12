@@ -361,23 +361,39 @@ class WebCodifierAdapter(SourceAdapter):
             # of letting them poison the index with duplicate help-page text.
             seen_text: set[str] = {_text_hash(_strip_markdown_noise(root.text))}
             used_node_ids: set[str] = set()
-            pages_fetched = 0
+            fetch_budget = [self.max_pages]
+
+            async def fetch_page(url: str) -> tuple[PageContent, str]:
+                """Fetch with one re-rooted retry on 404 (new-layout SPA links
+                drop the jurisdiction prefix: /CVMC/19 404s server-side but
+                /CA/ChulaVista/CVMC/19 serves the real page — verified live).
+                Every attempt counts against the page budget."""
+                fetch_budget[0] -= 1
+                page = await transport.fetch(url)
+                if page.target_status == 404 and fetch_budget[0] > 0:
+                    alt = _reroot_candidate(url, root.final_url or self.hit.url)
+                    if alt and alt not in visited:
+                        visited.add(alt)
+                        fetch_budget[0] -= 1
+                        alt_page = await transport.fetch(alt)
+                        if alt_page.target_status == 200 and not alt_page.blocked:
+                            return alt_page, alt
+                return page, url
 
             for chapter_label, chapter_url in zoning_links:
-                if pages_fetched >= self.max_pages:
+                if fetch_budget[0] <= 0:
                     break
                 if chapter_url in visited:
                     continue
                 visited.add(chapter_url)
-                page = await transport.fetch(chapter_url)
-                pages_fetched += 1
+                page, served_url = await fetch_page(chapter_url)
                 if page.blocked or page.target_status != 200:
                     continue
 
                 chunks.extend(
                     self._page_to_chunks(
                         page,
-                        requested_url=chapter_url,
+                        requested_url=served_url,
                         chapter=chapter_label,
                         section=chapter_label,
                         seen_text=seen_text,
@@ -388,7 +404,7 @@ class WebCodifierAdapter(SourceAdapter):
                 for sec_label, sec_url in _select_links(
                     page.links, allowed_hosts, keyword_match=False, section_match=True
                 ):
-                    if pages_fetched >= self.max_pages:
+                    if fetch_budget[0] <= 0:
                         break
                     if sec_url in visited:
                         continue
@@ -396,18 +412,18 @@ class WebCodifierAdapter(SourceAdapter):
                     # document — fetching them would burn quota for repeats.
                     if _strip_fragment(sec_url) in {
                         _strip_fragment(chapter_url),
+                        _strip_fragment(served_url),
                         _strip_fragment(page.final_url),
                     }:
                         continue
                     visited.add(sec_url)
-                    sec_page = await transport.fetch(sec_url)
-                    pages_fetched += 1
+                    sec_page, sec_served = await fetch_page(sec_url)
                     if sec_page.blocked or sec_page.target_status != 200:
                         continue
                     chunks.extend(
                         self._page_to_chunks(
                             sec_page,
-                            requested_url=sec_url,
+                            requested_url=sec_served,
                             chapter=chapter_label,
                             section=sec_label,
                             seen_text=seen_text,
@@ -507,6 +523,23 @@ def _resolve_spa_fragment(url: str) -> str:
         return url
     base = parsed.path if parsed.path.endswith("/") else parsed.path.rsplit("/", 1)[0] + "/"
     return parsed._replace(path=f"{base}html/{parsed.fragment[2:]}", fragment="").geturl()
+
+
+def _reroot_candidate(url: str, root_url: str) -> str | None:
+    """Re-root a prefix-dropping SPA link under the code's base path.
+
+    Code Publishing's new layout emits TOC hrefs like
+    ``https://www.codepublishing.com/CVMC/19`` which 404 server-side; the real
+    route keeps the jurisdiction prefix: ``…/CA/ChulaVista/CVMC/19``. Returns
+    None when the link is off-host or already under the base path.
+    """
+    p, r = urlparse(url), urlparse(root_url)
+    if p.netloc != r.netloc:
+        return None
+    base = r.path if r.path.endswith("/") else f"{r.path}/"
+    if not p.path or p.path.startswith(base):
+        return None
+    return p._replace(path=f"{base.rstrip('/')}{p.path}").geturl()
 
 
 def _strip_fragment(url: str) -> str:
