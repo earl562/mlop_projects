@@ -182,7 +182,17 @@ class CompAnalysisResponse(BaseModel):
     comparables: list[ComparableSaleResponse] = []
     median_price_per_acre: float = 0.0
     estimated_land_value: float = 0.0
+    # Price range across land comps (25th–75th percentile)
+    price_per_acre_low: float = 0.0
+    price_per_acre_high: float = 0.0
+    estimated_land_value_low: float = 0.0
+    estimated_land_value_high: float = 0.0
+    # ADV from sold-unit (exit) comps
     adv_per_unit: float | None = None
+    adv_per_unit_low: float | None = None
+    adv_per_unit_high: float | None = None
+    adv_source: str = ""
+    unit_comparables: list[ComparableSaleResponse] = []
     confidence: float = 0.0
 
 
@@ -200,12 +210,14 @@ class LandProFormaResponse(BaseModel):
     builder_margin: float = 0.0
     max_land_price: float = 0.0
     cost_per_door: float = 0.0
-    construction_cost_psf: float = 175.0
+    construction_cost_psf: float = 200.0
     avg_unit_size_sqft: float = 1000.0
     adv_per_unit: float = 0.0
     max_units: int = 0
     soft_cost_pct: float = 20.0
     builder_margin_pct: float = 25.0
+    adv_source: str = ""
+    market: str = ""
     notes: list[str] = []
 
 

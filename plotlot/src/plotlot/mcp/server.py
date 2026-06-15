@@ -380,10 +380,18 @@ async def get_comparable_sales(
         "state": state,
         "comparable_count": len(result.comparables),
         "median_price_per_acre": comp_data.get("median_price_per_acre"),
+        "price_per_acre_low": comp_data.get("price_per_acre_low"),
+        "price_per_acre_high": comp_data.get("price_per_acre_high"),
         "estimated_land_value": comp_data.get("estimated_land_value"),
+        "estimated_land_value_low": comp_data.get("estimated_land_value_low"),
+        "estimated_land_value_high": comp_data.get("estimated_land_value_high"),
         "adv_per_unit": comp_data.get("adv_per_unit"),
+        "adv_per_unit_low": comp_data.get("adv_per_unit_low"),
+        "adv_per_unit_high": comp_data.get("adv_per_unit_high"),
+        "adv_source": comp_data.get("adv_source"),
         "confidence": comp_data.get("confidence"),
         "comparables": comp_data.get("comparables", []),
+        "unit_comparables": comp_data.get("unit_comparables", []),
     }
 
 

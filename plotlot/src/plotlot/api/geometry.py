@@ -23,6 +23,7 @@ from plotlot.api.schemas import (
     PropertyTypeProFormaResponse,
     ZoningReportResponse,
 )
+from plotlot.documents.deal_paper import generate_deal_paper_pdf
 from plotlot.documents.pdf_export import generate_zoning_pdf
 from plotlot.documents.proforma import (
     ProFormaInput,
@@ -194,6 +195,29 @@ async def export_report_pdf(report: ZoningReportResponse):
         .replace(",", "")[:50]
     )
     filename = f"PlotLot_{address_slug}.pdf"
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/deal-paper/pdf")
+async def export_deal_paper_pdf(report: ZoningReportResponse):
+    """Export a one-page investment memo (Deal Paper) PDF.
+
+    Bundles property, zoning, max buildable units, the comparable-sales price
+    range, the residual pro forma, and site risk into a single lender/partner-
+    ready one-pager.
+    """
+    pdf_bytes = generate_deal_paper_pdf(report.model_dump())
+    address_slug = (
+        (report.formatted_address or report.address or "deal")
+        .replace(" ", "_")
+        .replace(",", "")[:50]
+    )
+    filename = f"PlotLot_DealPaper_{address_slug}.pdf"
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

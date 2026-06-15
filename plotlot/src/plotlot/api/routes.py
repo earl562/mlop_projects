@@ -557,11 +557,13 @@ async def analyze_stream(request: AnalyzeRequest):
                     },
                 )
                 try:
+                    from plotlot.pipeline.cost_model import get_cost_model
                     from plotlot.pipeline.proforma import calculate_land_pro_forma
 
                     report.pro_forma = calculate_land_pro_forma(
                         density=report.density_analysis,
                         comps=report.comp_analysis,
+                        cost_model=get_cost_model(state, county),
                     )
                     pf_msg = (
                         f"Max offer: ${report.pro_forma.max_land_price:,.0f}"

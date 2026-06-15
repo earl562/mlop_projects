@@ -557,7 +557,23 @@ class CompAnalysis:
     comparables: list[ComparableSale] = field(default_factory=list)
     median_price_per_acre: float = 0.0
     estimated_land_value: float = 0.0
+
+    # Price range across the land comps (25th / 75th percentile of $/acre and
+    # the resulting land-value band for the subject). Gives users a sense of
+    # the pricing spread within the search radius, not just a single point.
+    price_per_acre_low: float = 0.0
+    price_per_acre_high: float = 0.0
+    estimated_land_value_low: float = 0.0
+    estimated_land_value_high: float = 0.0
+
+    # After-development value derived from nearby improved (finished) sales.
     adv_per_unit: float | None = None
+    adv_per_unit_low: float | None = None
+    adv_per_unit_high: float | None = None
+    adv_source: str = ""  # "comps" | "" (empty when no improved sales found)
+    # Exit comps — improved/finished sales used to derive ADV per unit.
+    unit_comparables: list[ComparableSale] = field(default_factory=list)
+
     confidence: float = 0.0  # 0.0-1.0 based on comp count and recency
     notes: list[str] = field(default_factory=list)
 
@@ -581,12 +597,17 @@ class LandProForma:
     builder_margin: float = 0.0
     max_land_price: float = 0.0
     cost_per_door: float = 0.0
-    construction_cost_psf: float = 175.0
+    construction_cost_psf: float = 200.0
     avg_unit_size_sqft: float = 1000.0
     adv_per_unit: float = 0.0
     max_units: int = 0
     soft_cost_pct: float = 20.0
     builder_margin_pct: float = 25.0
+    # Provenance of the ADV used: "comps" (from sold-unit comps),
+    # "regional_default" (market fallback), "override" (caller-supplied),
+    # or "comps_land_value" (last-resort land-value fallback).
+    adv_source: str = ""
+    market: str = ""  # regional cost-model label, e.g. "San Diego"
     notes: list[str] = field(default_factory=list)
 
 
