@@ -1,0 +1,228 @@
+﻿{
+    "address":  "1233 Hueneme St, San Diego, CA 92110",
+    "formatted_address":  "1233 Hueneme St, San Diego, CA 92110",
+    "municipality":  "San Diego",
+    "county":  "San Diego",
+    "state":  "CA",
+    "lat":  32.768678,
+    "lng":  -117.185797,
+    "zoning_district":  "RM-3-7",
+    "zoning_description":  "RM-3-7 - Residential Multiple Unit Zone permitting medium density multiple dwelling units with limited commercial uses",
+    "allowed_uses":  [
+                         "Multiple dwelling units",
+                         "Limited commercial uses"
+                     ],
+    "conditional_uses":  [
+
+                         ],
+    "prohibited_uses":  [
+
+                        ],
+    "setbacks":  {
+                     "front":  "10 ft minimum (50% of building envelope) / 20 ft standard (remaining 50%)",
+                     "side":  "5 ft or 10% of premises width, whichever is greater",
+                     "rear":  "5 feet (or 5 feet when abutting alley)"
+                 },
+    "max_height":  "40 feet / 3 stories",
+    "max_density":  "1 dwelling unit per 1,000 sq ft of lot area",
+    "floor_area_ratio":  "1.5",
+    "lot_coverage":  "60%",
+    "min_lot_size":  "25 ft width, 50 ft depth",
+    "parking_requirements":  "1 space per unit",
+    "property_record":  {
+                            "folio":  "4364230200",
+                            "address":  "",
+                            "municipality":  "",
+                            "county":  "San Diego",
+                            "owner":  "",
+                            "zoning_code":  "RM-3-7",
+                            "zoning_description":  "RM-3-7",
+                            "land_use_code":  "",
+                            "land_use_description":  "",
+                            "lot_size_sqft":  6470.606240596008,
+                            "lot_dimensions":  "",
+                            "bedrooms":  0,
+                            "bathrooms":  0.0,
+                            "half_baths":  0,
+                            "floors":  0,
+                            "living_units":  0,
+                            "building_area_sqft":  0.0,
+                            "living_area_sqft":  0.0,
+                            "year_built":  0,
+                            "assessed_value":  0.0,
+                            "market_value":  0.0,
+                            "last_sale_price":  0.0,
+                            "last_sale_date":  "",
+                            "lat":  32.768678,
+                            "lng":  -117.185797,
+                            "parcel_geometry":  [
+                                                    [
+                                                        -117.185460141713,
+                                                        32.7686720439881
+                                                    ],
+                                                    [
+                                                        -117.185880231908,
+                                                        32.7685785467343
+                                                    ],
+                                                    [
+                                                        -117.185921795139,
+                                                        32.7687069631601
+                                                    ],
+                                                    [
+                                                        -117.185501807692,
+                                                        32.7688005534872
+                                                    ],
+                                                    [
+                                                        -117.185460141713,
+                                                        32.7686720439881
+                                                    ]
+                                                ],
+                            "zoning_layer_url":  ""
+                        },
+    "numeric_params":  {
+                           "max_density_units_per_acre":  8.0,
+                           "min_lot_area_per_unit_sqft":  1000.0,
+                           "far":  1.5,
+                           "max_lot_coverage_pct":  60.0,
+                           "max_height_ft":  40.0,
+                           "max_stories":  3,
+                           "setback_front_ft":  10.0,
+                           "setback_side_ft":  5.0,
+                           "setback_rear_ft":  5.0,
+                           "min_unit_size_sqft":  500.0,
+                           "min_lot_width_ft":  25.0,
+                           "parking_spaces_per_unit":  1.0,
+                           "parking_per_1000_gla_sqft":  null,
+                           "max_gla_sqft":  null,
+                           "min_tenant_size_sqft":  null,
+                           "loading_spaces":  null,
+                           "property_type":  "multifamily"
+                       },
+    "density_analysis":  {
+                             "max_units":  1,
+                             "governing_constraint":  "density",
+                             "constraints":  [
+                                                 {
+                                                     "name":  "density",
+                                                     "max_units":  1,
+                                                     "raw_value":  1.1883574362894413,
+                                                     "formula":  "8 units/acre x 0.1485 acres = 1.19",
+                                                     "is_governing":  true
+                                                 },
+                                                 {
+                                                     "name":  "min_lot_area",
+                                                     "max_units":  6,
+                                                     "raw_value":  6.470606240596008,
+                                                     "formula":  "6,471 sqft / 1,000 sqft/unit = 6.47",
+                                                     "is_governing":  false
+                                                 },
+                                                 {
+                                                     "name":  "floor_area_ratio",
+                                                     "max_units":  19,
+                                                     "raw_value":  19.411818721788027,
+                                                     "formula":  "FAR 1.5 x 6,471 sqft = 9,706 sqft / 500 sqft/unit = 19.41",
+                                                     "is_governing":  false
+                                                 }
+                                             ],
+                             "lot_size_sqft":  6470.606240596008,
+                             "buildable_area_sqft":  null,
+                             "lot_width_ft":  null,
+                             "lot_depth_ft":  null,
+                             "max_gla_sqft":  null,
+                             "confidence":  "high",
+                             "notes":  [
+
+                                       ]
+                         },
+    "comp_analysis":  null,
+    "pro_forma":  null,
+    "sensitivity":  null,
+    "entitlement":  null,
+    "summary":  "RM-3-7 zone allows medium density residential with limited commercial uses. Key standards: 10/20 ft front setbacks, 5 ft min side/rear setbacks, 40 ft max height (3 stories), 1 unit per 1,000 sq ft lot area, 60% max lot coverage, 1.5 FAR, and 1 parking space per unit. Lot must be at least 25 ft wide and 50 ft deep.",
+    "sources":  [
+                    "Art.01 Div.04 â San Diego Municipal Code Chapter 13: Zones",
+                    "Art.03 Div.03 â Ch. Art. Div.",
+                    "Art.02 Div.12 â Ch. Art. Div.",
+                    "Art.01 Div.05 â San Diego Municipal Code Chapter 13: Zones",
+                    "Art.03 Div.04 â Ch. Art. Div."
+                ],
+    "confidence":  "high",
+    "warnings":  [
+                     "Floor area ratio: Extracted 1.5, but source text states 4."
+                 ],
+    "extraction_verification":  {
+                                    "fields":  [
+                                                   {
+                                                       "field":  "max_density_units_per_acre",
+                                                       "label":  "Max density (units/acre)",
+                                                       "llm_value":  8.0,
+                                                       "source_value":  null,
+                                                       "status":  "unverified",
+                                                       "citation":  "",
+                                                       "section":  "",
+                                                       "note":  "No corroborating value found in the retrieved ordinance text."
+                                                   },
+                                                   {
+                                                       "field":  "min_lot_area_per_unit_sqft",
+                                                       "label":  "Min lot area per unit (sqft)",
+                                                       "llm_value":  1000.0,
+                                                       "source_value":  null,
+                                                       "status":  "unverified",
+                                                       "citation":  "",
+                                                       "section":  "",
+                                                       "note":  "No corroborating value found in the retrieved ordinance text."
+                                                   },
+                                                   {
+                                                       "field":  "far",
+                                                       "label":  "Floor area ratio",
+                                                       "llm_value":  1.5,
+                                                       "source_value":  4.0,
+                                                       "status":  "conflict",
+                                                       "citation":  "â¦rage for sloping lots [See Section 131.0445(a)] applies Max floor area ratio per the base zone(4) Accessory uses and structures [See Section 131.0448(a),(b)â¦",
+                                                       "section":  "Art.01 Div.04",
+                                                       "note":  "Extracted 1.5, but source text states 4."
+                                                   }
+                                               ],
+                                    "overall":  "conflict",
+                                    "offer_is_provisional":  true,
+                                    "warnings":  [
+                                                     "Floor area ratio: Extracted 1.5, but source text states 4."
+                                                 ]
+                                },
+    "source_refs":  [
+                        {
+                            "section":  "Art.01 Div.04",
+                            "section_title":  "San Diego Municipal Code Chapter 13: Zones",
+                            "chunk_text_preview":  "width, but not\nmore than 10 feet, may be counted toward the required rear yard.  In no\ncase shall a rear setback using this provision be less than 5 feet.\n(f) Setbacks in RM-3-7, RM-3-8, RM-3-9 Zones\n",
+                            "score":  0.1317780580075662
+                        },
+                        {
+                            "section":  "Art.03 Div.03",
+                            "section_title":  "Ch. Art. Div.",
+                            "chunk_text_preview":  "plies\nMax structure height (ft)\nRM-1-1, RM-1-2, and RM-1-3 36(2, 5)\nRM-2-4, RM-2-5, and RM-2-6 40(3, 5)\nRM-3-7, RM-3-8, and RM-3-9 40(5)\nLot coverage for sloping lots [See Section 131.0445(a)] applies",
+                            "score":  0.13015873015873017
+                        },
+                        {
+                            "section":  "Art.03 Div.03",
+                            "section_title":  "Ch. Art. Div.",
+                            "chunk_text_preview":  "racter.\nCh. Art. Div.\n14 3 3 18\nSan Diego Municipal Code Chapter 14: General Regulations\n(3-2026)\nThe following supplemental regulations apply to a Site Development Permit for a\nsmall lot subdivision.",
+                            "score":  0.12557544757033248
+                        },
+                        {
+                            "section":  "Art.01 Div.04",
+                            "section_title":  "San Diego Municipal Code Chapter 13: Zones",
+                            "chunk_text_preview":  "xterior\nopen space abutting the unit with a minimum dimension of 6 feet.  The open\nspace may be located in required front and rear yards, but shall be no closer\nthan 9 feet to the front property line.",
+                            "score":  0.11612903225806452
+                        },
+                        {
+                            "section":  "Art.02 Div.12",
+                            "section_title":  "Ch. Art. Div.",
+                            "chunk_text_preview":  "pal Code  Chapter 14: General Regulations\n(4-2026)\n(3) Real estate signs other than those identified in Section 142.1270(b)(1)\nand (b)(2) that offer the premises for sale, lease, or rent are permitted",
+                            "score":  0.115625
+                        }
+                    ],
+    "confidence_warning":  "",
+    "suggested_next_steps":  [
+
+                             ]
+}

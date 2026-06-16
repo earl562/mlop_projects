@@ -2,9 +2,63 @@
 
 from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.calculator import (
+    _reconcile_density,
     calculate_max_units,
     parse_lot_dimensions,
 )
+
+
+# ---------------------------------------------------------------------------
+# Density / min-lot-area reconciliation (regression: 1233 Hueneme St, RM-3-7)
+# ---------------------------------------------------------------------------
+
+
+class TestDensityReconciliation:
+    def test_san_diego_rm37_regression(self):
+        """1233 Hueneme St: contradictory density must not crush units to 1.
+
+        LLM extracted 6 u/ac AND 1,000 sqft/unit (≈43.6 u/ac) — a 7x conflict.
+        Trusting min-lot-area, a 6,470 sqft lot yields 6 units, not 1.
+        """
+        params = NumericZoningParams(
+            max_density_units_per_acre=6.0,
+            min_lot_area_per_unit_sqft=1000.0,
+            far=1.25,
+            min_unit_size_sqft=500.0,
+        )
+        result = calculate_max_units(6470.6, params)
+        assert result.max_units == 6
+        assert any("contradicts min lot area" in n for n in result.notes)
+        # density constraint should now agree with min-lot-area (~6), not 1
+        density = next(c for c in result.constraints if c.name == "density")
+        assert density.max_units == 6
+
+    def test_no_contradiction_keeps_density(self):
+        # 6 u/ac and 7,260 sqft/unit (≈6 u/ac) agree → unchanged.
+        d, note = _reconcile_density(6.0, 7260.0)
+        assert d == 6.0
+        assert note is None
+
+    def test_contradiction_prefers_min_lot_area(self):
+        d, note = _reconcile_density(6.0, 1000.0)
+        assert round(d, 1) == 43.6
+        assert note is not None
+
+    def test_only_density_present_unchanged(self):
+        assert _reconcile_density(25.0, None) == (25.0, None)
+
+    def test_only_min_lot_area_present_unchanged(self):
+        assert _reconcile_density(None, 1000.0) == (None, None)
+
+    def test_contradiction_caps_confidence(self):
+        params = NumericZoningParams(
+            max_density_units_per_acre=6.0,
+            min_lot_area_per_unit_sqft=1000.0,
+            far=1.25,
+            min_unit_size_sqft=500.0,
+        )
+        # 3 constraints would normally be "high"; contradiction caps it to medium.
+        assert calculate_max_units(6470.6, params).confidence == "medium"
 
 
 # ---------------------------------------------------------------------------
