@@ -77,6 +77,7 @@ def build_sensitivity_table(
     unit_size = base.avg_unit_size_sqft
     soft = base.soft_cost_pct
     margin = base.builder_margin_pct
+    impact_fees = base.impact_fees_per_unit
 
     table.col_values = [round(base_adv * (1 + p / 100.0)) for p in adv_variation_pct]
     table.row_values = [round(base_cost * (1 + p / 100.0), 1) for p in cost_variation_pct]
@@ -94,6 +95,7 @@ def build_sensitivity_table(
                 avg_unit_size_sqft=unit_size,
                 soft_cost_pct=soft,
                 builder_margin_pct=margin,
+                impact_fees_per_unit=impact_fees,
             )
             row.append(round(pf.max_land_price, 2))
         grid.append(row)

@@ -518,6 +518,7 @@ class ZoningReport:
     comp_analysis: "CompAnalysis | None" = None
     pro_forma: "LandProForma | None" = None
     sensitivity: "SensitivityTable | None" = None
+    entitlement: "EntitlementAssessment | None" = None
 
     # Summary
     summary: str = ""
@@ -639,6 +640,8 @@ class LandProForma:
     hard_costs: float = 0.0
     soft_costs: float = 0.0
     builder_margin: float = 0.0
+    impact_fees: float = 0.0  # total government impact/development fees
+    impact_fees_per_unit: float = 0.0
     max_land_price: float = 0.0
     cost_per_door: float = 0.0
     construction_cost_psf: float = 200.0
@@ -680,6 +683,40 @@ class SensitivityTable:
     base_col_index: int = 0
     base_value: float = 0.0  # base-case max land offer (the headline number)
     notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Entitlement path + impact fees ("what it takes to build")
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class EntitlementStep:
+    """One step on the path from raw land to a building permit."""
+
+    name: str
+    status: str  # "required" | "likely" | "conditional" | "not_needed"
+    timeline_months: float
+    note: str = ""
+
+
+@dataclass
+class EntitlementAssessment:
+    """The approval path, timeline, and government fees to build the project.
+
+    Deterministic: the path is classified from the zoning use lists, and fees
+    come from the regional cost model — no LLM involvement.
+    """
+
+    path: str = "unknown"  # "by_right" | "conditional_use" | "rezoning" | "unknown"
+    complexity: str = "unknown"  # "low" | "medium" | "high" | "unknown"
+    steps: list[EntitlementStep] = field(default_factory=list)
+    est_timeline_months: float = 0.0
+    impact_fee_per_unit: float = 0.0
+    impact_fees_total: float = 0.0
+    fee_market: str = ""  # regional cost-model label the fee came from
+    utilities_note: str = ""
+    warnings: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

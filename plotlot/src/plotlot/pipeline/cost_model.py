@@ -34,6 +34,8 @@ class RegionalCostModel:
         adv_per_unit_default: Fallback after-development value per finished unit,
             used only when comparable sold-unit data is unavailable.
         avg_unit_size_sqft: Typical finished unit size for the market.
+        impact_fee_per_unit: Typical government development/impact fees per unit
+            (school, park, traffic, water/sewer connection) — a real soft cost.
         source: Provenance tag for observability.
     """
 
@@ -43,6 +45,7 @@ class RegionalCostModel:
     builder_margin_pct: float
     adv_per_unit_default: float
     avg_unit_size_sqft: float = 1000.0
+    impact_fee_per_unit: float = 25_000.0
     source: str = "regional_default"
 
 
@@ -54,6 +57,7 @@ NATIONAL_DEFAULT = RegionalCostModel(
     builder_margin_pct=25.0,
     adv_per_unit_default=400_000.0,
     avg_unit_size_sqft=1000.0,
+    impact_fee_per_unit=25_000.0,
     source="national_default",
 )
 
@@ -67,6 +71,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=450_000.0,
         avg_unit_size_sqft=1000.0,
+        impact_fee_per_unit=25_000.0,
         source="market:south_florida",
     ),
     "bay_area": RegionalCostModel(
@@ -76,6 +81,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=900_000.0,
         avg_unit_size_sqft=1100.0,
+        impact_fee_per_unit=50_000.0,
         source="market:bay_area",
     ),
     "san_diego": RegionalCostModel(
@@ -85,6 +91,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=750_000.0,
         avg_unit_size_sqft=1050.0,
+        impact_fee_per_unit=40_000.0,
         source="market:san_diego",
     ),
     "sacramento": RegionalCostModel(
@@ -94,6 +101,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=500_000.0,
         avg_unit_size_sqft=1050.0,
+        impact_fee_per_unit=35_000.0,
         source="market:sacramento",
     ),
     "charlotte": RegionalCostModel(
@@ -103,6 +111,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=375_000.0,
         avg_unit_size_sqft=1050.0,
+        impact_fee_per_unit=12_000.0,
         source="market:charlotte",
     ),
     "las_vegas": RegionalCostModel(
@@ -112,6 +121,7 @@ _MARKETS: dict[str, RegionalCostModel] = {
         builder_margin_pct=25.0,
         adv_per_unit_default=420_000.0,
         avg_unit_size_sqft=1050.0,
+        impact_fee_per_unit=20_000.0,
         source="market:las_vegas",
     ),
 }

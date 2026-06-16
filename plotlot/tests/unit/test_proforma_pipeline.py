@@ -108,6 +108,45 @@ class TestAdvResolution:
         assert pf.max_land_price == 250_000
         assert pf.adv_source == "comps_land_value"
 
+
+class TestImpactFees:
+    def test_impact_fees_deducted_from_residual(self):
+        density = DensityAnalysis(max_units=10, governing_constraint="density", constraints=[])
+        base = calculate_land_pro_forma(
+            density=density,
+            adv_per_unit=400_000,
+            construction_cost_psf=175,
+            avg_unit_size_sqft=1000,
+            soft_cost_pct=20,
+            builder_margin_pct=25,
+        )
+        with_fees = calculate_land_pro_forma(
+            density=density,
+            adv_per_unit=400_000,
+            construction_cost_psf=175,
+            avg_unit_size_sqft=1000,
+            soft_cost_pct=20,
+            builder_margin_pct=25,
+            impact_fees_per_unit=20_000,
+        )
+        assert base.impact_fees == 0
+        assert with_fees.impact_fees == 200_000  # 10 × 20k
+        assert with_fees.max_land_price == base.max_land_price - 200_000
+        assert with_fees.cost_per_door == base.cost_per_door + 20_000  # fees per door
+
+    def test_cost_model_supplies_impact_fees(self):
+        density = DensityAnalysis(max_units=4, governing_constraint="density", constraints=[])
+        cm = get_cost_model("CA", "San Diego")  # 40k/unit
+        pf = calculate_land_pro_forma(density=density, cost_model=cm)
+        assert pf.impact_fees_per_unit == 40_000
+        assert pf.impact_fees == 160_000
+
+    def test_no_impact_fees_without_model_or_arg(self):
+        density = DensityAnalysis(max_units=5, governing_constraint="density", constraints=[])
+        pf = calculate_land_pro_forma(density=density, adv_per_unit=300_000)
+        assert pf.impact_fees == 0
+        assert pf.impact_fees_per_unit == 0
+
     def test_cost_per_door(self):
         density = DensityAnalysis(max_units=4, governing_constraint="density", constraints=[])
         pf = calculate_land_pro_forma(

@@ -290,6 +290,7 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
             ["Hard Costs", _fmt_money(pf.get("hard_costs"))],
             ["Soft Costs", _fmt_money(pf.get("soft_costs"))],
             ["Builder Margin", _fmt_money(pf.get("builder_margin"))],
+            ["Impact / Development Fees", _fmt_money(pf.get("impact_fees"))],
             ["Cost per Door", _fmt_money(pf.get("cost_per_door"))],
             ["Maximum Land Offer", _fmt_money(pf.get("max_land_price"))],
         ]
@@ -301,6 +302,39 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
             f"{float(pf.get('avg_unit_size_sqft', 0)):,.0f} sf/unit"
         )
         elements.append(Paragraph(assumptions, note_style))
+
+    # --- Entitlement & fees (what it takes to build) ---
+    ent = report.get("entitlement") or {}
+    if ent.get("path"):
+        elements.append(Paragraph("Entitlement & Fees", section_style))
+        path = str(ent.get("path") or "unknown")
+        path_label = {
+            "by_right": "By-right",
+            "conditional_use": "Conditional-use permit",
+            "rezoning": "Rezoning required",
+            "unknown": "Path unverified",
+        }.get(path, path)
+        complexity = str(ent.get("complexity") or "—").title()
+        ent_rows: list[list[str]] = [
+            ["Approval path", path_label, "Complexity", complexity],
+            [
+                "Est. timeline",
+                f"{float(ent.get('est_timeline_months', 0)):.0f} mo",
+                "Impact fees",
+                f"{_fmt_money(ent.get('impact_fees_total'))} "
+                f"({_fmt_money(ent.get('impact_fee_per_unit'))}/unit)",
+            ],
+        ]
+        elements.append(_kv_table(ent_rows))
+        steps = ent.get("steps") or []
+        if steps:
+            step_text = " · ".join(
+                f"{s.get('name')} ({s.get('status')}, {float(s.get('timeline_months', 0)):.0f}mo)"
+                for s in steps
+            )
+            elements.append(Paragraph(step_text, note_style))
+        if ent.get("utilities_note"):
+            elements.append(Paragraph(ent["utilities_note"], note_style))
 
     # --- Sensitivity (max offer vs. ADV × construction cost) ---
     sens = _resolve_sensitivity(report.get("sensitivity"), pf)

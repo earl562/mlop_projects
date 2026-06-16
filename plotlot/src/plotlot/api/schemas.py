@@ -146,6 +146,7 @@ class ZoningReportResponse(BaseModel):
     comp_analysis: "CompAnalysisResponse | None" = None
     pro_forma: "LandProFormaResponse | None" = None
     sensitivity: "SensitivityTableResponse | None" = None
+    entitlement: "EntitlementAssessmentResponse | None" = None
 
     summary: str = ""
     sources: list[str] = []
@@ -216,6 +217,8 @@ class LandProFormaResponse(BaseModel):
     hard_costs: float = 0.0
     soft_costs: float = 0.0
     builder_margin: float = 0.0
+    impact_fees: float = 0.0
+    impact_fees_per_unit: float = 0.0
     max_land_price: float = 0.0
     cost_per_door: float = 0.0
     construction_cost_psf: float = 200.0
@@ -262,6 +265,29 @@ class ExtractionVerificationResponse(BaseModel):
     fields: list[FieldVerificationResponse] = []
     overall: str = "unverified"
     offer_is_provisional: bool = False
+    warnings: list[str] = []
+
+
+class EntitlementStepResponse(BaseModel):
+    """One step on the path from raw land to a building permit."""
+
+    name: str = ""
+    status: str = "required"
+    timeline_months: float = 0.0
+    note: str = ""
+
+
+class EntitlementAssessmentResponse(BaseModel):
+    """Approval path, timeline, and government fees to build the project."""
+
+    path: str = "unknown"
+    complexity: str = "unknown"
+    steps: list[EntitlementStepResponse] = []
+    est_timeline_months: float = 0.0
+    impact_fee_per_unit: float = 0.0
+    impact_fees_total: float = 0.0
+    fee_market: str = ""
+    utilities_note: str = ""
     warnings: list[str] = []
 
 

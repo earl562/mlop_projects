@@ -572,6 +572,10 @@ async def analyze_stream(request: AnalyzeRequest):
                         comps=report.comp_analysis,
                         cost_model=cost_model,
                     )
+                    # Entitlement path, timeline + impact fees ("what it takes to build").
+                    from plotlot.pipeline.entitlement import assess_entitlement
+
+                    report.entitlement = assess_entitlement(report)
                     # Deterministic plausibility guardrail — flags implausible or
                     # uncorroborated inputs so a confident dollar figure is never
                     # printed on top of a hallucinated unit count (San Diego).

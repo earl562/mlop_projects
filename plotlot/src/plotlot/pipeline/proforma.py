@@ -60,6 +60,7 @@ def calculate_land_pro_forma(
     avg_unit_size_sqft: float | None = None,
     soft_cost_pct: float | None = None,
     builder_margin_pct: float | None = None,
+    impact_fees_per_unit: float | None = None,
 ) -> LandProForma:
     """Calculate residual land value (max offer price).
 
@@ -73,6 +74,9 @@ def calculate_land_pro_forma(
         avg_unit_size_sqft: Override average unit size in sqft.
         soft_cost_pct: Override soft costs as % of hard costs.
         builder_margin_pct: Override builder margin as % of GDV.
+        impact_fees_per_unit: Government impact/development fees per unit; a real
+            cost deducted from the residual. Defaults to the cost model's value
+            (or 0 when no model is given).
 
     Returns:
         LandProForma with calculated max land price.
@@ -98,12 +102,18 @@ def calculate_land_pro_forma(
         if builder_margin_pct is not None
         else (cost_model.builder_margin_pct if cost_model else DEFAULT_BUILDER_MARGIN_PCT)
     )
+    impact_fees_per_unit = (
+        impact_fees_per_unit
+        if impact_fees_per_unit is not None
+        else (cost_model.impact_fee_per_unit if cost_model else 0.0)
+    )
 
     pf = LandProForma(
         construction_cost_psf=construction_cost_psf,
         avg_unit_size_sqft=avg_unit_size_sqft,
         soft_cost_pct=soft_cost_pct,
         builder_margin_pct=builder_margin_pct,
+        impact_fees_per_unit=impact_fees_per_unit,
         market=cost_model.market if cost_model else "",
     )
 
@@ -149,13 +159,20 @@ def calculate_land_pro_forma(
     # Builder margin = GDV × margin_pct
     pf.builder_margin = pf.gross_development_value * (builder_margin_pct / 100)
 
-    # Max land price = GDV - hard - soft - margin
+    # Impact/development fees = units × per-unit fee
+    pf.impact_fees = units * impact_fees_per_unit
+
+    # Max land price = GDV - hard - soft - margin - impact fees
     pf.max_land_price = (
-        pf.gross_development_value - pf.hard_costs - pf.soft_costs - pf.builder_margin
+        pf.gross_development_value
+        - pf.hard_costs
+        - pf.soft_costs
+        - pf.builder_margin
+        - pf.impact_fees
     )
 
     # Cost per door
-    total_costs = pf.hard_costs + pf.soft_costs
+    total_costs = pf.hard_costs + pf.soft_costs + pf.impact_fees
     pf.cost_per_door = total_costs / units if units > 0 else 0
 
     if adv_source == "regional_default":
