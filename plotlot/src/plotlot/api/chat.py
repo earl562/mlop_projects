@@ -1656,6 +1656,66 @@ async def _execute_create_document(
         return json.dumps({"status": "error", "message": f"Failed to create document: {str(e)}"})
 
 
+# Explicit generate_document args that map directly onto DealContext fields.
+_DOC_ARG_FIELDS = (
+    "buyer_name",
+    "buyer_entity",
+    "buyer_email",
+    "buyer_phone",
+    "seller_name",
+    "seller_entity",
+    "seller_email",
+    "seller_phone",
+    "purchase_price",
+    "down_payment",
+    "earnest_money",
+    "financing_type",
+    "state_code",
+    "closing_days",
+    "due_diligence_days",
+    "inspection_days",
+    "financing_contingency",
+    "appraisal_contingency",
+    "inspection_contingency",
+)
+
+
+def _build_deal_context_data(session_id: str, args: dict) -> dict:
+    """Assemble DealContext field data from session state + explicit args.
+
+    The chat tool-loop stores property context and geocode (not a full
+    ZoningReport), so we populate what is available and take ``state_code`` from
+    the geocode — never a hardcoded state. Explicit args override session values;
+    financial terms (price, financing, parties) come from args.
+    """
+    ctx_data: dict = {}
+    prop_ctx = _sessions.get_property_context(session_id) or {}
+    geo = _sessions.get_geocode(session_id) or {}
+
+    if prop_ctx.get("address"):
+        ctx_data["property_address"] = prop_ctx["address"]
+        ctx_data["formatted_address"] = prop_ctx["address"]
+    if prop_ctx.get("municipality"):
+        ctx_data["municipality"] = prop_ctx["municipality"]
+    if prop_ctx.get("county"):
+        ctx_data["county"] = prop_ctx["county"]
+    if prop_ctx.get("zoning_code"):
+        ctx_data["zoning_district"] = prop_ctx["zoning_code"]
+    if prop_ctx.get("zoning_description"):
+        ctx_data["zoning_description"] = prop_ctx["zoning_description"]
+    if prop_ctx.get("lot_size_sqft"):
+        ctx_data["lot_size_sqft"] = prop_ctx["lot_size_sqft"]
+    if geo.get("state"):
+        ctx_data["state_code"] = geo["state"]
+
+    # Explicit args override session-derived values.
+    for key in _DOC_ARG_FIELDS:
+        if args.get(key) is not None:
+            ctx_data[key] = args[key]
+
+    return ctx_data
+
+
 async def _execute_generate_document(session_id: str, args: dict) -> str:
     """Generate a deal document via the clause builder engine."""
     from plotlot.clauses.engine import assemble_document
@@ -1671,74 +1731,8 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
     except ValueError as e:
         return json.dumps({"status": "error", "message": str(e)})
 
-    # Build context from session's active report if available
-    ctx_data: dict = {}
-    session = _sessions.get(session_id)
-    if session and hasattr(session, "report") and session.report:
-        rpt = session.report
-        ctx_data["property_address"] = getattr(rpt, "address", "")
-        ctx_data["formatted_address"] = getattr(rpt, "formatted_address", "")
-        ctx_data["municipality"] = getattr(rpt, "municipality", "")
-        ctx_data["county"] = getattr(rpt, "county", "")
-        ctx_data["state_code"] = getattr(rpt, "state", "")
-        ctx_data["zoning_district"] = getattr(rpt, "zoning_district", "")
-        ctx_data["zoning_description"] = getattr(rpt, "zoning_description", "")
-        if getattr(rpt, "property_record", None):
-            pr = rpt.property_record
-            ctx_data["apn"] = getattr(pr, "folio", "")
-            ctx_data["lot_size_sqft"] = getattr(pr, "lot_size_sqft", 0)
-            ctx_data["year_built"] = getattr(pr, "year_built", 0)
-            ctx_data["owner"] = getattr(pr, "owner", "")
-        if getattr(rpt, "density_analysis", None):
-            ctx_data["max_units"] = rpt.density_analysis.max_units
-            ctx_data["governing_constraint"] = rpt.density_analysis.governing_constraint
-            ctx_data["max_height"] = getattr(rpt, "max_height", "")
-            ctx_data["max_density"] = getattr(rpt, "max_density", "")
-        if getattr(rpt, "comp_analysis", None):
-            ctx_data["median_price_per_acre"] = rpt.comp_analysis.median_price_per_acre
-            ctx_data["estimated_land_value"] = rpt.comp_analysis.estimated_land_value
-            ctx_data["comp_count"] = rpt.comp_analysis.comp_count
-            ctx_data["comp_confidence"] = rpt.comp_analysis.confidence_score
-        if getattr(rpt, "pro_forma", None):
-            pf = rpt.pro_forma
-            ctx_data["gross_development_value"] = pf.gross_development_value
-            ctx_data["hard_costs"] = pf.hard_costs
-            ctx_data["soft_costs"] = pf.soft_costs
-            ctx_data["max_land_price"] = pf.max_land_price
-            ctx_data["builder_margin"] = pf.builder_margin
-            ctx_data["cost_per_door"] = pf.cost_per_door
-            ctx_data["adv_per_unit"] = pf.adv_per_unit
-        ctx_data["allowed_uses"] = getattr(rpt, "allowed_uses", [])
-        ctx_data["owner"] = (
-            getattr(rpt.property_record, "owner", "")
-            if getattr(rpt, "property_record", None)
-            else ""
-        )
-
-    # Override with explicit args
-    for key in [
-        "buyer_name",
-        "buyer_entity",
-        "buyer_email",
-        "buyer_phone",
-        "seller_name",
-        "seller_entity",
-        "seller_email",
-        "seller_phone",
-        "purchase_price",
-        "down_payment",
-        "earnest_money",
-        "financing_type",
-        "state_code",
-        "closing_days",
-        "due_diligence_days",
-        "inspection_days",
-        "financing_contingency",
-        "appraisal_contingency",
-        "inspection_contingency",
-    ]:
-        if args.get(key) is not None:
-            ctx_data[key] = args[key]
+    # Build context from the chat session's stored property + geocode data.
+    ctx_data = _build_deal_context_data(session_id, args)
 
     output_format = "xlsx" if doc_type == DocumentType.proforma_spreadsheet else "docx"
     config = AssemblyConfig(
@@ -1770,9 +1764,6 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
                 }
             )
 
-        # Store the generated doc bytes in session for download
-        if session:
-            session.last_document = doc
         return json.dumps(
             {
                 "status": "success",
