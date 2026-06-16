@@ -373,6 +373,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
             and report.property_record
             and report.property_record.lot_size_sqft > 0
         ):
+            from plotlot.pipeline.extraction_verify import is_field_verified
+
             lot_width, lot_depth = parse_lot_dimensions(
                 report.property_record.lot_dimensions or "",
             )
@@ -395,6 +397,12 @@ async def lookup_address(address: str) -> ZoningReport | None:
                     params=report.numeric_params,
                     lot_width_ft=lot_width,
                     lot_depth_ft=lot_depth,
+                    density_verified=is_field_verified(
+                        report.extraction_verification, "max_density_units_per_acre"
+                    ),
+                    min_lot_area_verified=is_field_verified(
+                        report.extraction_verification, "min_lot_area_per_unit_sqft"
+                    ),
                 )
                 logger.info(
                     "Max units: %d (governing: %s, confidence: %s)",

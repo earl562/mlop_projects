@@ -35,20 +35,48 @@ class TestDensityReconciliation:
 
     def test_no_contradiction_keeps_density(self):
         # 6 u/ac and 7,260 sqft/unit (≈6 u/ac) agree → unchanged.
-        d, note = _reconcile_density(6.0, 7260.0)
+        d, ml, note = _reconcile_density(6.0, 7260.0)
         assert d == 6.0
+        assert ml == 7260.0
         assert note is None
 
     def test_contradiction_prefers_min_lot_area(self):
-        d, note = _reconcile_density(6.0, 1000.0)
+        # Neither verified → trust min-lot-area (the granular form).
+        d, ml, note = _reconcile_density(6.0, 1000.0)
         assert round(d, 1) == 43.6
-        assert note is not None
+        assert ml == 1000.0
+        assert note is not None and "min lot area" in note
+
+    def test_contradiction_prefers_verified_density(self):
+        # Density is source-verified, min-lot-area is not → trust density.
+        d, ml, note = _reconcile_density(43.0, 6000.0, density_verified=True)
+        assert d == 43.0
+        assert round(ml) == 1013  # 43,560 / 43
+        assert "density (source-verified)" in note
+
+    def test_contradiction_prefers_verified_min_lot(self):
+        d, ml, note = _reconcile_density(6.0, 1000.0, min_lot_area_verified=True)
+        assert round(d, 1) == 43.6
+        assert "min lot area (source-verified)" in note
 
     def test_only_density_present_unchanged(self):
-        assert _reconcile_density(25.0, None) == (25.0, None)
+        assert _reconcile_density(25.0, None) == (25.0, None, None)
 
     def test_only_min_lot_area_present_unchanged(self):
-        assert _reconcile_density(None, 1000.0) == (None, None)
+        assert _reconcile_density(None, 1000.0) == (None, 1000.0, None)
+
+    def test_verified_density_governs_in_full_calc(self):
+        """When density is verified and contradicts min-lot-area, density wins."""
+        params = NumericZoningParams(
+            max_density_units_per_acre=43.0,
+            min_lot_area_per_unit_sqft=6000.0,  # spurious (implies ~7 u/ac)
+        )
+        # Without verification → trust min-lot-area → 6000 sqft/unit on 43,560 = 7 units
+        heuristic = calculate_max_units(43560.0, params)
+        assert heuristic.max_units == 7
+        # With density verified → 43 u/ac × 1 acre = 43 units
+        verified = calculate_max_units(43560.0, params, density_verified=True)
+        assert verified.max_units == 43
 
     def test_contradiction_caps_confidence(self):
         params = NumericZoningParams(

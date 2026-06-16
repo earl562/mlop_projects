@@ -106,6 +106,41 @@ class TestZonePrior:
         assert any("zone code" in w.lower() for w in ver.warnings)
 
 
+# San Diego encodes density as lot-area-per-DU, not units/acre.
+SD_FORWARD = "In the RM-3-7 zone, one dwelling unit is allowed per 1,000 square feet of lot area."
+SD_REVERSE = "A minimum of 1,000 square feet of lot area per dwelling unit is required."
+
+
+class TestSanDiegoLotAreaGrounding:
+    def test_one_du_per_n_sqft_grounds_min_lot(self):
+        params = NumericZoningParams(min_lot_area_per_unit_sqft=1000)
+        ver = verify_numeric_params(params, _results(SD_FORWARD), zone_code="RM-3-7")
+        ml = _field(ver, "min_lot_area_per_unit_sqft")
+        assert ml.source_value == 1000
+        assert ml.status == "verified"
+
+    def test_reverse_phrasing_grounds_min_lot(self):
+        params = NumericZoningParams(min_lot_area_per_unit_sqft=1000)
+        ver = verify_numeric_params(params, _results(SD_REVERSE), zone_code="RM-3-7")
+        assert _field(ver, "min_lot_area_per_unit_sqft").status == "verified"
+
+    def test_spurious_density_flagged_but_offer_firm(self):
+        """1233 Hueneme: LLM emits a junk 6 u/ac next to the real 1,000 sqft/unit.
+
+        Min-lot-area grounds + verifies; the contradictory density is flagged a
+        CONFLICT; but because the density limit IS corroborated via min-lot-area,
+        the offer is no longer provisional.
+        """
+        params = NumericZoningParams(
+            max_density_units_per_acre=6.0, min_lot_area_per_unit_sqft=1000
+        )
+        ver = verify_numeric_params(params, _results(SD_FORWARD), zone_code="RM-3-7")
+        assert _field(ver, "min_lot_area_per_unit_sqft").status == "verified"
+        assert _field(ver, "max_density_units_per_acre").status == "conflict"
+        assert ver.offer_is_provisional is False
+        assert ver.overall == "partial"
+
+
 class TestDeterminism:
     def test_repeatable(self):
         params = NumericZoningParams(max_density_units_per_acre=35)

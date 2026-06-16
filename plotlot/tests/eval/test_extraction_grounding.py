@@ -13,7 +13,8 @@ the density driver is flagged.
 from dataclasses import dataclass
 
 from plotlot.core.types import NumericZoningParams
-from plotlot.pipeline.extraction_verify import verify_numeric_params
+from plotlot.pipeline.calculator import calculate_max_units
+from plotlot.pipeline.extraction_verify import is_field_verified, verify_numeric_params
 
 
 @dataclass
@@ -82,6 +83,46 @@ class TestGroundingAccuracy:
             assert density.status == "verified", f"{case.name}: density should verify"
             assert density.source_value == case.density, f"{case.name}: grounded value wrong"
             assert not ver.offer_is_provisional, f"{case.name}: should not be provisional"
+
+
+class TestHueneme1233Regression:
+    """The exact production failure: San Diego RM-3-7, lot-area-per-DU table only.
+
+    The LLM emitted a spurious 6 u/ac next to the real 1,000 sqft/unit. End to
+    end the system must ground + verify min-lot-area, flag the junk density, keep
+    the offer firm, and compute 6 units (not the 1 it produced in production).
+    """
+
+    LOT_SQFT = 6470.6
+    TEXT = "In the RM-3-7 zone, one dwelling unit is allowed per 1,000 square feet of lot area."
+
+    def test_grounds_min_lot_and_flags_spurious_density(self):
+        params = NumericZoningParams(
+            max_density_units_per_acre=6.0,
+            min_lot_area_per_unit_sqft=1000.0,
+            far=1.25,
+            min_unit_size_sqft=500.0,
+        )
+        ver = verify_numeric_params(params, [_Chunk(self.TEXT)], "RM-3-7")
+        assert is_field_verified(ver, "min_lot_area_per_unit_sqft")
+        assert not is_field_verified(ver, "max_density_units_per_acre")
+        assert ver.offer_is_provisional is False  # density limit corroborated
+
+    def test_calculator_yields_6_units(self):
+        params = NumericZoningParams(
+            max_density_units_per_acre=6.0,
+            min_lot_area_per_unit_sqft=1000.0,
+            far=1.25,
+            min_unit_size_sqft=500.0,
+        )
+        ver = verify_numeric_params(params, [_Chunk(self.TEXT)], "RM-3-7")
+        result = calculate_max_units(
+            self.LOT_SQFT,
+            params,
+            density_verified=is_field_verified(ver, "max_density_units_per_acre"),
+            min_lot_area_verified=is_field_verified(ver, "min_lot_area_per_unit_sqft"),
+        )
+        assert result.max_units == 6
 
 
 class TestHallucinationCaught:

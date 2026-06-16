@@ -31,32 +31,49 @@ def parse_lot_dimensions(dims: str) -> tuple[float | None, float | None]:
 def _reconcile_density(
     max_density_units_per_acre: float | None,
     min_lot_area_per_unit_sqft: float | None,
-) -> tuple[float | None, str | None]:
+    *,
+    density_verified: bool = False,
+    min_lot_area_verified: bool = False,
+) -> tuple[float | None, float | None, str | None]:
     """Reconcile the two encodings of the same density limit.
 
     Density (units/acre) and minimum-lot-area-per-unit (sqft/DU) describe the
     *same* limit. A code states it one way; if the LLM extracted both and they
-    contradict (>25%), one is an extraction artifact. We trust min-lot-area (the
-    granular form most codes — including San Diego — publish) and return the
-    implied density plus an explanatory note. Returns the density unchanged when
-    the two agree or only one is present.
+    contradict (>25%), one is an extraction artifact — applying both as
+    independent constraints lets the wrong one silently govern.
+
+    Resolution when they contradict: prefer whichever encoding is *source-
+    verified*; if neither is verified, trust min-lot-area (the granular form
+    most codes — including San Diego — publish). Returns a consistent
+    ``(effective_density, effective_min_lot_area, note)`` so both downstream
+    constraints agree. Values pass through unchanged when they agree or only
+    one is present.
     """
     if not (max_density_units_per_acre and max_density_units_per_acre > 0):
-        return max_density_units_per_acre, None
+        return max_density_units_per_acre, min_lot_area_per_unit_sqft, None
     if not (min_lot_area_per_unit_sqft and min_lot_area_per_unit_sqft > 0):
-        return max_density_units_per_acre, None
+        return max_density_units_per_acre, min_lot_area_per_unit_sqft, None
 
     implied = SQFT_PER_ACRE / min_lot_area_per_unit_sqft
     hi = max(implied, max_density_units_per_acre)
     lo = min(implied, max_density_units_per_acre)
-    if hi > 0 and (hi - lo) / hi > 0.25:
-        note = (
-            f"Density {max_density_units_per_acre:g} u/ac contradicts min lot area "
-            f"{min_lot_area_per_unit_sqft:,.0f} sqft/unit (≈ {implied:.1f} u/ac); "
-            f"using min lot area."
-        )
-        return implied, note
-    return max_density_units_per_acre, None
+    if hi <= 0 or (hi - lo) / hi <= 0.25:
+        return max_density_units_per_acre, min_lot_area_per_unit_sqft, None
+
+    if density_verified and not min_lot_area_verified:
+        eff_density = max_density_units_per_acre
+        eff_min_lot = SQFT_PER_ACRE / max_density_units_per_acre
+        basis = "density (source-verified)"
+    else:
+        eff_density = implied
+        eff_min_lot = min_lot_area_per_unit_sqft
+        basis = "min lot area" + (" (source-verified)" if min_lot_area_verified else "")
+
+    note = (
+        f"Density {max_density_units_per_acre:g} u/ac contradicts min lot area "
+        f"{min_lot_area_per_unit_sqft:,.0f} sqft/unit (≈ {implied:.1f} u/ac); using {basis}."
+    )
+    return eff_density, eff_min_lot, note
 
 
 @trace(name="calculate_max_units", span_type="TOOL")
@@ -65,10 +82,16 @@ def calculate_max_units(
     params: NumericZoningParams,
     lot_width_ft: float | None = None,
     lot_depth_ft: float | None = None,
+    *,
+    density_verified: bool = False,
+    min_lot_area_verified: bool = False,
 ) -> DensityAnalysis:
     """Calculate maximum allowable dwelling units from zoning parameters.
 
     Evaluates every applicable constraint and returns the minimum (governing).
+    ``density_verified`` / ``min_lot_area_verified`` let the caller pass source-
+    verification status so a contradiction between the two density encodings is
+    resolved in favor of the corroborated one.
     """
     if lot_size_sqft <= 0:
         return DensityAnalysis(
@@ -83,8 +106,11 @@ def calculate_max_units(
     notes: list[str] = []
 
     # Reconcile density (u/ac) vs min-lot-area (sqft/DU) — same limit, two forms.
-    effective_density, density_note = _reconcile_density(
-        params.max_density_units_per_acre, params.min_lot_area_per_unit_sqft
+    effective_density, effective_min_lot, density_note = _reconcile_density(
+        params.max_density_units_per_acre,
+        params.min_lot_area_per_unit_sqft,
+        density_verified=density_verified,
+        min_lot_area_verified=min_lot_area_verified,
     )
     if density_note:
         notes.append(density_note)
@@ -103,16 +129,15 @@ def calculate_max_units(
         )
 
     # ── Constraint 2: Minimum lot area per unit ──
-    if params.min_lot_area_per_unit_sqft is not None and params.min_lot_area_per_unit_sqft > 0:
-        raw = lot_size_sqft / params.min_lot_area_per_unit_sqft
+    if effective_min_lot is not None and effective_min_lot > 0:
+        raw = lot_size_sqft / effective_min_lot
         constraints.append(
             ConstraintResult(
                 name="min_lot_area",
                 max_units=max(1, math.floor(raw)),
                 raw_value=raw,
                 formula=(
-                    f"{lot_size_sqft:,.0f} sqft / "
-                    f"{params.min_lot_area_per_unit_sqft:,.0f} sqft/unit = {raw:.2f}"
+                    f"{lot_size_sqft:,.0f} sqft / {effective_min_lot:,.0f} sqft/unit = {raw:.2f}"
                 ),
             )
         )

@@ -25,6 +25,8 @@ from plotlot.core.types import (
     NumericZoningParams,
 )
 
+SQFT_PER_ACRE = 43_560
+
 # Relative tolerance for treating two numbers as the same value.
 _REL_TOL = 0.02
 # Zone-code density prior is a soft check: flag only when the LLM value deviates
@@ -37,10 +39,18 @@ _DENSITY_PATTERNS = (
     r"(?:dwelling\s+units|units|du)\s*(?:per acre|/acre|du/ac)",
     r"(\d+(?:\.\d+)?)\s*(?:dwelling\s+units|units|du)\s*(?:per acre|/acre|du/ac)",
 )
+# Lot area per dwelling unit. Includes San Diego's table phrasing —
+# "1 dwelling unit per 1,000 square feet of lot area" / "1,000 sf of lot area
+# per dwelling unit" — which earlier patterns missed (left density unverified).
+_SQFT = r"(?:square\s*feet|sq\.?\s*ft|sqft|sf)"
 _MIN_LOT_PATTERNS = (
-    r"(?:minimum|min)\s+lot\s+(?:size|area)[^.]{0,80}?"
-    r"(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
-    r"lot\s+area\s+per\s+unit[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*(?:square feet|sq\.?\s*ft|sqft)",
+    r"(?:minimum|min)\s+lot\s+(?:size|area)[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*" + _SQFT,
+    r"lot\s+area\s+per\s+(?:dwelling\s+)?unit[^.]{0,80}?(\d[\d,]*(?:\.\d+)?)\s*" + _SQFT,
+    r"(?:1|one)\s+(?:dwelling\s+)?units?[^.\d;:]{0,25}?(?:per|for\s+each|/)\s+"
+    r"(\d[\d,]*(?:\.\d+)?)\s*" + _SQFT,
+    r"(\d[\d,]*(?:\.\d+)?)\s*"
+    + _SQFT
+    + r"\s*(?:of\s+lot\s+area\s*)?(?:per|/)\s*(?:dwelling\s+)?unit",
 )
 _FAR_PATTERNS = (r"(?:floor area ratio|\bFAR\b)[^.]{0,40}?(\d+(?:\.\d+)?)",)
 
@@ -144,6 +154,13 @@ def _verify_field(
     return fv
 
 
+def is_field_verified(verification: ExtractionVerification | None, field: str) -> bool:
+    """True if a named field was source-verified in the verification result."""
+    if verification is None:
+        return False
+    return any(f.field == field and f.status == "verified" for f in verification.fields)
+
+
 def verify_numeric_params(
     params: NumericZoningParams | None,
     search_results: list | None,
@@ -206,32 +223,43 @@ def verify_numeric_params(
                 density.status = "conflict"
                 density.note += f" Also conflicts with zone code {zone_code} (~{expected:g} u/ac)."
 
+    # Cross-check the two density encodings. If the source grounded a
+    # min-lot-area but the LLM's units/acre disagrees with what it implies, the
+    # units/acre value is the artifact — flag it so it can't masquerade as data.
+    if min_lot.source_value and density.llm_value and density.source_value is None:
+        implied = SQFT_PER_ACRE / min_lot.source_value
+        hi, lo = max(implied, density.llm_value), min(implied, density.llm_value)
+        if hi > 0 and (hi - lo) / hi > 0.25:
+            density.status = "conflict"
+            density.note = (
+                f"Extracted {density.llm_value:g} u/ac contradicts source min lot area "
+                f"{min_lot.source_value:,.0f} sqft/unit (≈ {implied:.1f} u/ac)."
+            )
+
     result.fields = [density, min_lot, far]
 
-    # A driver (density or min lot area) decides max units; if either is in
-    # conflict or could not be corroborated, the offer is provisional.
-    drivers = [density, min_lot]
-    extracted_drivers = [f for f in drivers if f.llm_value is not None]
+    # Density and min-lot-area are two encodings of the SAME limit; the limit is
+    # corroborated if EITHER encoding is source-verified. That governing limit —
+    # not a redundant or non-governing field — decides whether the offer is firm.
+    density_limit_extracted = density.llm_value is not None or min_lot.llm_value is not None
+    density_limit_verified = density.status == "verified" or min_lot.status == "verified"
+    result.offer_is_provisional = not (density_limit_extracted and density_limit_verified)
 
-    if any(f.status == "conflict" for f in result.fields):
-        result.overall = "conflict"
-    elif extracted_drivers and all(f.status == "verified" for f in extracted_drivers):
-        result.overall = "verified"
-    elif any(f.status == "verified" for f in result.fields):
-        result.overall = "partial"
-    else:
+    has_conflict = any(f.status == "conflict" for f in result.fields)
+    if not density_limit_extracted:
         result.overall = "unverified"
-
-    driver_ok = bool(extracted_drivers) and all(f.status == "verified" for f in extracted_drivers)
-    result.offer_is_provisional = not driver_ok
+    elif density_limit_verified:
+        result.overall = "partial" if has_conflict else "verified"
+    else:
+        result.overall = "conflict" if has_conflict else "unverified"
 
     for f in result.fields:
         if f.status == "conflict":
             result.warnings.append(f"{f.label}: {f.note}")
-    if result.offer_is_provisional and result.overall != "conflict":
+    if result.offer_is_provisional:
         result.warnings.append(
-            "Buildable-unit drivers are not fully corroborated by the ordinance text — "
-            "treat the offer price as provisional until verified."
+            "Buildable-unit density limit is not source-verified — "
+            "treat the offer price as provisional until confirmed."
         )
 
     return result

@@ -472,11 +472,19 @@ async def analyze_stream(request: AnalyzeRequest):
                 lot_width, lot_depth = parse_lot_dimensions(
                     report.property_record.lot_dimensions or "",
                 )
+                from plotlot.pipeline.extraction_verify import is_field_verified
+
                 report.density_analysis = calculate_max_units(
                     lot_size_sqft=report.property_record.lot_size_sqft,
                     params=report.numeric_params,
                     lot_width_ft=lot_width,
                     lot_depth_ft=lot_depth,
+                    density_verified=is_field_verified(
+                        report.extraction_verification, "max_density_units_per_acre"
+                    ),
+                    min_lot_area_verified=is_field_verified(
+                        report.extraction_verification, "min_lot_area_per_unit_sqft"
+                    ),
                 )
                 yield _sse_event(
                     "status",
