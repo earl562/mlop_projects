@@ -121,6 +121,7 @@ class ZoningReportResponse(BaseModel):
     formatted_address: str
     municipality: str
     county: str
+    state: str = ""
     lat: float | None = None
     lng: float | None = None
 
@@ -269,6 +270,60 @@ class ErrorResponse(BaseModel):
 
     detail: str
     error_type: str = "pipeline_error"
+
+
+# ---------------------------------------------------------------------------
+# Batch "buy box" screening
+# ---------------------------------------------------------------------------
+
+
+class BuyBoxRequest(BaseModel):
+    """A batch screening request: candidate addresses + acquisition criteria."""
+
+    addresses: list[str] = Field(..., description="Candidate addresses to screen")
+    states: list[str] = []
+    counties: list[str] = []
+    zoning_prefixes: list[str] = Field(default=[], description='e.g. ["RM", "RD"]')
+    min_lot_sqft: float | None = None
+    max_lot_sqft: float | None = None
+    min_units: int | None = None
+    min_residual: float | None = Field(default=None, description="Max land offer floor")
+    exclude_high_flood_risk: bool = False
+    require_verified: bool = Field(
+        default=False, description="Drop deals whose buildable-unit drivers are unverified"
+    )
+    max_results: int = 25
+    with_comps: bool = Field(
+        default=False, description="Run live comps per address (slower); else regional ADV"
+    )
+    concurrency: int = 4
+
+
+class ScreeningResultResponse(BaseModel):
+    """Outcome for one screened address."""
+
+    address: str
+    status: str = "rejected"
+    score: float = 0.0
+    max_units: int = 0
+    max_land_price: float = 0.0
+    zoning_district: str = ""
+    county: str = ""
+    state: str = ""
+    lot_size_sqft: float = 0.0
+    offer_is_provisional: bool = False
+    reasons: list[str] = []
+    error: str = ""
+
+
+class BatchScreeningResponse(BaseModel):
+    """Aggregate screening outcome, qualified deals ranked best-first."""
+
+    qualified: list[ScreeningResultResponse] = []
+    rejected: list[ScreeningResultResponse] = []
+    errors: list[ScreeningResultResponse] = []
+    total: int = 0
+    qualified_count: int = 0
 
 
 # ---------------------------------------------------------------------------

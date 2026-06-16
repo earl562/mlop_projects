@@ -483,6 +483,7 @@ class ZoningReport:
     formatted_address: str
     municipality: str
     county: str
+    state: str = ""  # two-letter state code (for regional cost model + comps)
     lat: float | None = None
     lng: float | None = None
 

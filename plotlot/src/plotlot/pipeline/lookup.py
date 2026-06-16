@@ -962,6 +962,7 @@ def _build_report(
         formatted_address=geo.get("formatted_address", address),
         municipality=geo.get("municipality", ""),
         county=geo.get("county", ""),
+        state=geo.get("state", ""),
         lat=geo.get("lat"),
         lng=geo.get("lng"),
         zoning_district=args.get("zoning_district", ""),

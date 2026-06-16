@@ -35,6 +35,7 @@ from plotlot.api.ordinance import router as ordinance_router
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.render import router as render_router
 from plotlot.api.routes import router
+from plotlot.api.screening import router as screening_router
 from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
 from plotlot.observability.tracing import configure_mlflow
@@ -208,6 +209,7 @@ app.include_router(portfolio_router)
 app.include_router(geometry_router)
 app.include_router(ordinance_router)
 app.include_router(render_router)
+app.include_router(screening_router)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)
 from plotlot.api.documents import router as documents_router  # noqa: E402

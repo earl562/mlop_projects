@@ -47,9 +47,7 @@ _FAR_PATTERNS = (r"(?:floor area ratio|\bFAR\b)[^.]{0,40}?(\d+(?:\.\d+)?)",)
 # Multifamily zone codes whose *single* trailing number denotes units/acre
 # (RM-25, RD-1.5, MF18). Anchored to one number so multi-segment codes like
 # San Diego's "RM-3-9" — where the digits are NOT density — never misfire.
-_DENSITY_CODE_RE = re.compile(
-    r"^\s*(RM|RD|RH|RMF|MF)\s*-?\s*(\d+(?:\.\d+)?)\s*$", re.IGNORECASE
-)
+_DENSITY_CODE_RE = re.compile(r"^\s*(RM|RD|RH|RMF|MF)\s*-?\s*(\d+(?:\.\d+)?)\s*$", re.IGNORECASE)
 
 
 def _close(a: float, b: float) -> bool:

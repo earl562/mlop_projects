@@ -585,7 +585,9 @@ def _sensitivity_grid(sens: dict) -> Table:
 
     # Highlight the base case.
     style_cmds.append(("BOX", (base_c + 1, base_r + 1), (base_c + 1, base_r + 1), 1.5, AMBER_700))
-    style_cmds.append(("FONTNAME", (base_c + 1, base_r + 1), (base_c + 1, base_r + 1), "Helvetica-Bold"))
+    style_cmds.append(
+        ("FONTNAME", (base_c + 1, base_r + 1), (base_c + 1, base_r + 1), "Helvetica-Bold")
+    )
 
     n_cols = len(col_values) + 1
     first = 1.25 * inch
