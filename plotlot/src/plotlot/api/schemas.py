@@ -147,6 +147,7 @@ class ZoningReportResponse(BaseModel):
     pro_forma: "LandProFormaResponse | None" = None
     sensitivity: "SensitivityTableResponse | None" = None
     entitlement: "EntitlementAssessmentResponse | None" = None
+    density_uplift: "DensityUpliftResponse | None" = None
 
     summary: str = ""
     sources: list[str] = []
@@ -289,6 +290,43 @@ class EntitlementAssessmentResponse(BaseModel):
     fee_market: str = ""
     utilities_note: str = ""
     warnings: list[str] = []
+
+
+class UpliftProgramResponse(BaseModel):
+    """One California statute (or verified local override) that can add units."""
+
+    name: str = ""
+    statute: str = ""
+    applies: bool = True
+    eligibility: str = "eligible"
+    source: str = "state"  # "state" | "local"
+    additional_units: int = 0
+    potential_units: int = 0
+    basis: str = ""
+    requirements: str = ""
+
+
+class LocalOverrideResponse(BaseModel):
+    """An LLM-proposed local provision and whether it was verified against text."""
+
+    field: str = ""
+    label: str = ""
+    value: float = 0.0
+    quote: str = ""
+    section: str = ""
+    status: str = "unverified"
+    note: str = ""
+
+
+class DensityUpliftResponse(BaseModel):
+    """Additive CA state-program 'potential' overlay (separate from firm base)."""
+
+    base_units: int = 0
+    state: str = ""
+    programs: list[UpliftProgramResponse] = []
+    max_potential_units: int = 0
+    local_overrides: list[LocalOverrideResponse] = []
+    notes: list[str] = []
 
 
 class ErrorResponse(BaseModel):

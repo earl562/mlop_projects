@@ -666,6 +666,51 @@ async def analyze_stream(request: AnalyzeRequest):
                     {"step": "site_risk", "message": "Skipped", "complete": True},
                 )
 
+            # CA state-program upside (ADU/SB9/Density Bonus) — deterministic,
+            # additive (base stays firm), with SB9 eligibility gated on site
+            # hazards we already computed. Runs last so site_risk is available.
+            if (
+                state.upper() == "CA"
+                and report.density_analysis
+                and report.density_analysis.max_units > 0
+            ):
+                from plotlot.pipeline.density_bonus import compute_density_uplift
+
+                sr = report.site_risk
+                report.density_uplift = compute_density_uplift(
+                    report.density_analysis.max_units,
+                    state=state,
+                    property_type=(
+                        report.numeric_params.property_type or "" if report.numeric_params else ""
+                    ),
+                    base_is_provisional=bool(
+                        report.extraction_verification
+                        and report.extraction_verification.offer_is_provisional
+                    ),
+                    in_flood_hazard=bool(sr and sr.flood_zone and sr.flood_zone.in_sfha),
+                    has_wetlands=bool(sr and sr.has_wetlands),
+                )
+
+                # Optional LLM local-override layer — proposes city-specific
+                # programs that exceed the state baseline, each only applied if a
+                # deterministic check corroborates it against the ordinance text.
+                # Best-effort: any failure leaves the deterministic uplift intact.
+                try:
+                    from plotlot.pipeline.local_overrides import get_local_overrides
+
+                    await asyncio.wait_for(
+                        get_local_overrides(
+                            report.density_uplift,
+                            municipality,
+                            report.zoning_district,
+                            search_results,
+                            section=report.source_refs[0].section if report.source_refs else "",
+                        ),
+                        timeout=20,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Local-override step skipped: %s", exc)
+
             # Final result
             report_dict = asdict(report)
             yield _sse_event("result", report_dict)

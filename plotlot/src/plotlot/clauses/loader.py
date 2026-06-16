@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 _DEFINITIONS_DIR = Path(__file__).parent / "definitions"
 
 
+def _load_reference_yaml(path: Path) -> dict:
+    """Load a reference YAML file (prefixed with '_') and return its data."""
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+        return data or {}
+    except Exception:
+        logger.exception("Failed to load reference file: %s", path)
+        return {}
+
+
 def load_clauses(directory: Path | None = None) -> list[ContractClause]:
     """Load all clause YAML files from the given directory tree.
 
@@ -96,11 +107,24 @@ class ClauseRegistry:
     def __init__(self, clauses: list[ContractClause]) -> None:
         self._clauses = clauses
         self._by_id: dict[str, ContractClause] = {c.id: c for c in clauses}
+        self._state_terminology: dict[str, str] = {}
+        self._categories: dict[str, dict] = {}
 
     @classmethod
     def from_directory(cls, directory: Path | None = None) -> ClauseRegistry:
         """Load clauses from YAML files and build a registry."""
-        return cls(load_clauses(directory))
+        registry = cls(load_clauses(directory))
+        root = directory or _DEFINITIONS_DIR
+        if root.is_dir():
+            state_path = root / "_state_variants.yaml"
+            if state_path.exists():
+                data = _load_reference_yaml(state_path)
+                registry._state_terminology = data.get("state_terminology", {})
+            cat_path = root / "_categories.yaml"
+            if cat_path.exists():
+                data = _load_reference_yaml(cat_path)
+                registry._categories = data.get("categories", {})
+        return registry
 
     @property
     def all_clauses(self) -> list[ContractClause]:
@@ -148,6 +172,16 @@ class ClauseRegistry:
             if clause.group_id:
                 groups.setdefault(clause.group_id, []).append(clause)
         return groups
+
+    @property
+    def state_terminology(self) -> dict[str, str]:
+        """Per-state terminology map loaded from _state_variants.yaml."""
+        return dict(self._state_terminology)
+
+    @property
+    def categories(self) -> dict[str, dict]:
+        """Category metadata loaded from _categories.yaml."""
+        return {k: dict(v) for k, v in self._categories.items()}
 
     def __len__(self) -> int:
         return len(self._clauses)

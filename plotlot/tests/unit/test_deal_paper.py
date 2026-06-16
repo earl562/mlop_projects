@@ -84,6 +84,31 @@ class TestGenerateDealPaper:
         pdf = generate_deal_paper_pdf(report)
         assert pdf.startswith(b"%PDF")
 
+    def test_density_upside_section_renders(self):
+        report = _full_report()
+        report["density_uplift"] = {
+            "base_units": 8,
+            "state": "CA",
+            "max_potential_units": 12,
+            "programs": [
+                {
+                    "name": "ADU (detached)",
+                    "statute": "CA Gov. Code §66310 et seq.",
+                    "potential_units": 10,
+                    "requirements": "Ministerial.",
+                },
+                {
+                    "name": "Density Bonus",
+                    "statute": "CA Gov. Code §65915",
+                    "potential_units": 12,
+                    "requirements": "15% very-low-income set-aside.",
+                },
+            ],
+            "notes": [],
+        }
+        pdf = generate_deal_paper_pdf(report)
+        assert pdf.startswith(b"%PDF")
+
     def test_explicit_sensitivity_renders(self):
         report = _full_report()
         report["sensitivity"] = {

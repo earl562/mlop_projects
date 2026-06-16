@@ -519,6 +519,7 @@ class ZoningReport:
     pro_forma: "LandProForma | None" = None
     sensitivity: "SensitivityTable | None" = None
     entitlement: "EntitlementAssessment | None" = None
+    density_uplift: "DensityUplift | None" = None
 
     # Summary
     summary: str = ""
@@ -717,6 +718,62 @@ class EntitlementAssessment:
     fee_market: str = ""  # regional cost-model label the fee came from
     utilities_note: str = ""
     warnings: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# California state-program density uplift (ADU / SB9 / Density Bonus)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UpliftProgram:
+    """One California statute that can add units above base zoning."""
+
+    name: str
+    statute: str
+    applies: bool = True
+    eligibility: str = "eligible"  # "eligible" | "restricted" | "ineligible"
+    source: str = "state"  # "state" (deterministic) | "local" (verified LLM override)
+    additional_units: int = 0  # units added over base via this program
+    potential_units: int = 0  # base + additional for this pathway
+    basis: str = ""  # plain-language explanation of the math
+    requirements: str = ""  # conditions to actually achieve it
+
+
+@dataclass
+class LocalOverride:
+    """A local-ordinance provision the LLM proposed to exceed the state baseline.
+
+    The number is *proposed* by the LLM but only trusted after a deterministic
+    check that the cited quote is verbatim in the retrieved ordinance text and
+    contains the value. Unverified overrides are surfaced but never applied.
+    """
+
+    field: str  # e.g. "local_adu_additional" | "local_density_bonus_pct"
+    label: str
+    value: float
+    quote: str = ""  # the verbatim ordinance sentence the LLM cited
+    section: str = ""
+    status: str = "unverified"  # "verified" | "unverified"
+    note: str = ""
+
+
+@dataclass
+class DensityUplift:
+    """Additive 'potential' overlay on top of the verified base unit count.
+
+    State programs are deterministic (statute constants). Optional *local*
+    overrides come from the LLM but are applied only when a deterministic check
+    corroborates them against the ordinance text. The base zoning count stays the
+    firm number; this is shown separately as upside, never folded into the offer.
+    """
+
+    base_units: int = 0
+    state: str = ""
+    programs: list[UpliftProgram] = field(default_factory=list)
+    max_potential_units: int = 0  # best single applicable pathway
+    local_overrides: list[LocalOverride] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

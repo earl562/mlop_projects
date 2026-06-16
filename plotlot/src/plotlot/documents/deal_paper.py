@@ -336,6 +336,43 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
         if ent.get("utilities_note"):
             elements.append(Paragraph(ent["utilities_note"], note_style))
 
+    # --- Development upside (CA state programs) — additive, not the firm count ---
+    uplift = report.get("density_uplift") or {}
+    programs = uplift.get("programs") or []
+    if programs:
+        base_u = uplift.get("base_units", 0)
+        max_u = uplift.get("max_potential_units", base_u)
+        elements.append(Paragraph("Development Upside — CA State Programs", section_style))
+        up_rows = [["Program", "Potential Units", "Requires"]]
+        for p in programs:
+            eligible = p.get("eligibility", "eligible") == "eligible"
+            potential = (
+                f"{base_u} → {p.get('potential_units', base_u)}"
+                if eligible
+                else "restricted — verify"
+            )
+            tag = (
+                " — local (verified)"
+                if p.get("source") == "local"
+                else f" ({p.get('statute', '')})"
+            )
+            up_rows.append(
+                [
+                    f"{p.get('name', '')}{tag}",
+                    potential,
+                    p.get("requirements", ""),
+                ]
+            )
+        elements.append(_uplift_table(up_rows))
+        elements.append(
+            Paragraph(
+                f"Base zoning is the firm count ({base_u} units); state programs could reach "
+                f"<b>up to {max_u} units</b> as upside. Additive (not stacked) — confirm "
+                "eligibility with a land-use attorney. Does not change the offer above.",
+                note_style,
+            )
+        )
+
     # --- Sensitivity (max offer vs. ADV × construction cost) ---
     sens = _resolve_sensitivity(report.get("sensitivity"), pf)
     if sens and sens.get("grid"):
@@ -504,6 +541,28 @@ def _fmt_val(v: Any) -> str:
     except (TypeError, ValueError):
         return str(v)
     return f"{f:g}"
+
+
+def _uplift_table(rows: list[list[str]]) -> Table:
+    """Render the CA state-program upside table (program | potential | requires)."""
+    body = [
+        [Paragraph(c, ParagraphStyle("u", fontSize=8, leading=10)) for c in row] for row in rows
+    ]
+    t = Table(body, colWidths=[2.3 * inch, 1.3 * inch, 3.3 * inch])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), STONE_200),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, STONE_200),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    return t
 
 
 def _verification_table(fields: list[dict]) -> Table:

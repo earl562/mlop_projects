@@ -49,7 +49,7 @@ def _build_pro_forma_rows(context: DealContext) -> tuple[list[str], list[list[st
     contingency = hard * 0.10 if hard else 0
     total_cost = land + hard + soft + contingency
     gdv = context.gross_development_value
-    profit = gdv - total_cost if gdv and total_cost else 0
+    profit = gdv - total_cost
     roi = (profit / total_cost * 100) if total_cost > 0 else 0
 
     rows: list[list[str]] = [
@@ -76,13 +76,7 @@ def _build_pro_forma_rows(context: DealContext) -> tuple[list[str], list[list[st
         ["", "", ""],
         # Revenue
         ["Revenue", "Gross Development Value", _fmt_currency(gdv)],
-        [
-            "Revenue",
-            "Builder Margin",
-            _fmt_pct(context.builder_margin * 100)
-            if context.builder_margin < 1
-            else _fmt_pct(context.builder_margin),
-        ],
+        ["Revenue", "Builder Margin", _fmt_currency(context.builder_margin)],
         ["Revenue", "Max Land Price", _fmt_currency(context.max_land_price)],
         ["Revenue", "ADV per Unit", _fmt_currency(context.adv_per_unit)],
         ["", "", ""],

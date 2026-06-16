@@ -677,6 +677,70 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                         "type": "number",
                         "description": "Purchase price in dollars (optional — uses pro forma max land price if omitted)",
                     },
+                    "buyer_entity": {
+                        "type": "string",
+                        "description": "Buyer entity type (e.g. LLC, Corporation, Individual)",
+                    },
+                    "buyer_email": {
+                        "type": "string",
+                        "description": "Buyer email address",
+                    },
+                    "buyer_phone": {
+                        "type": "string",
+                        "description": "Buyer phone number",
+                    },
+                    "seller_entity": {
+                        "type": "string",
+                        "description": "Seller entity type (e.g. LLC, Corporation, Individual)",
+                    },
+                    "seller_email": {
+                        "type": "string",
+                        "description": "Seller email address",
+                    },
+                    "seller_phone": {
+                        "type": "string",
+                        "description": "Seller phone number",
+                    },
+                    "down_payment": {
+                        "type": "number",
+                        "description": "Down payment amount in dollars",
+                    },
+                    "earnest_money": {
+                        "type": "number",
+                        "description": "Earnest money deposit amount in dollars",
+                    },
+                    "financing_type": {
+                        "type": "string",
+                        "description": "Type of financing (cash, conventional, seller_carryback, subject_to)",
+                    },
+                    "closing_days": {
+                        "type": "number",
+                        "description": "Number of days until closing",
+                    },
+                    "due_diligence_days": {
+                        "type": "number",
+                        "description": "Number of days for due diligence period",
+                    },
+                    "inspection_days": {
+                        "type": "number",
+                        "description": "Number of days for inspection period",
+                    },
+                    "financing_contingency": {
+                        "type": "boolean",
+                        "description": "Whether financing contingency applies",
+                    },
+                    "appraisal_contingency": {
+                        "type": "boolean",
+                        "description": "Whether appraisal contingency applies",
+                    },
+                    "inspection_contingency": {
+                        "type": "boolean",
+                        "description": "Whether inspection contingency applies",
+                    },
+                    "state_code": {
+                        "type": "string",
+                        "description": "Two-letter state code (e.g. CA, FL, TX)",
+                    },
                 },
                 "required": ["document_type", "deal_type"],
             },
@@ -1616,6 +1680,7 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
         ctx_data["formatted_address"] = getattr(rpt, "formatted_address", "")
         ctx_data["municipality"] = getattr(rpt, "municipality", "")
         ctx_data["county"] = getattr(rpt, "county", "")
+        ctx_data["state_code"] = getattr(rpt, "state", "")
         ctx_data["zoning_district"] = getattr(rpt, "zoning_district", "")
         ctx_data["zoning_description"] = getattr(rpt, "zoning_description", "")
         if getattr(rpt, "property_record", None):
@@ -1627,23 +1692,53 @@ async def _execute_generate_document(session_id: str, args: dict) -> str:
         if getattr(rpt, "density_analysis", None):
             ctx_data["max_units"] = rpt.density_analysis.max_units
             ctx_data["governing_constraint"] = rpt.density_analysis.governing_constraint
+            ctx_data["max_height"] = getattr(rpt, "max_height", "")
+            ctx_data["max_density"] = getattr(rpt, "max_density", "")
         if getattr(rpt, "comp_analysis", None):
             ctx_data["median_price_per_acre"] = rpt.comp_analysis.median_price_per_acre
             ctx_data["estimated_land_value"] = rpt.comp_analysis.estimated_land_value
+            ctx_data["comp_count"] = rpt.comp_analysis.comp_count
+            ctx_data["comp_confidence"] = rpt.comp_analysis.confidence_score
         if getattr(rpt, "pro_forma", None):
             pf = rpt.pro_forma
             ctx_data["gross_development_value"] = pf.gross_development_value
             ctx_data["hard_costs"] = pf.hard_costs
             ctx_data["soft_costs"] = pf.soft_costs
             ctx_data["max_land_price"] = pf.max_land_price
+            ctx_data["builder_margin"] = pf.builder_margin
+            ctx_data["cost_per_door"] = pf.cost_per_door
+            ctx_data["adv_per_unit"] = pf.adv_per_unit
+        ctx_data["allowed_uses"] = getattr(rpt, "allowed_uses", [])
+        ctx_data["owner"] = (
+            getattr(rpt.property_record, "owner", "")
+            if getattr(rpt, "property_record", None)
+            else ""
+        )
 
     # Override with explicit args
-    if args.get("buyer_name"):
-        ctx_data["buyer_name"] = args["buyer_name"]
-    if args.get("seller_name"):
-        ctx_data["seller_name"] = args["seller_name"]
-    if args.get("purchase_price"):
-        ctx_data["purchase_price"] = float(args["purchase_price"])
+    for key in [
+        "buyer_name",
+        "buyer_entity",
+        "buyer_email",
+        "buyer_phone",
+        "seller_name",
+        "seller_entity",
+        "seller_email",
+        "seller_phone",
+        "purchase_price",
+        "down_payment",
+        "earnest_money",
+        "financing_type",
+        "state_code",
+        "closing_days",
+        "due_diligence_days",
+        "inspection_days",
+        "financing_contingency",
+        "appraisal_contingency",
+        "inspection_contingency",
+    ]:
+        if args.get(key) is not None:
+            ctx_data[key] = args[key]
 
     output_format = "xlsx" if doc_type == DocumentType.proforma_spreadsheet else "docx"
     config = AssemblyConfig(
