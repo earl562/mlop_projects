@@ -559,11 +559,30 @@ async def analyze_stream(request: AnalyzeRequest):
                 try:
                     from plotlot.pipeline.cost_model import get_cost_model
                     from plotlot.pipeline.proforma import calculate_land_pro_forma
+                    from plotlot.pipeline.sensitivity import build_sensitivity_table
 
+                    cost_model = get_cost_model(state, county)
                     report.pro_forma = calculate_land_pro_forma(
                         density=report.density_analysis,
                         comps=report.comp_analysis,
-                        cost_model=get_cost_model(state, county),
+                        cost_model=cost_model,
+                    )
+                    report.sensitivity = build_sensitivity_table(
+                        density=report.density_analysis,
+                        comps=report.comp_analysis,
+                        cost_model=cost_model,
+                    )
+                    # Deterministic plausibility guardrail — flags implausible or
+                    # uncorroborated inputs so a confident dollar figure is never
+                    # printed on top of a hallucinated unit count (San Diego).
+                    from plotlot.pipeline.guardrails import check_residual_plausibility
+
+                    lot_sqft_for_check = (
+                        report.property_record.lot_size_sqft if report.property_record else 0.0
+                    )
+                    # Preserve extraction-verification warnings; append residual ones.
+                    report.warnings = list(report.warnings or []) + check_residual_plausibility(
+                        report.density_analysis, lot_sqft_for_check, report.pro_forma
                     )
                     pf_msg = (
                         f"Max offer: ${report.pro_forma.max_land_price:,.0f}"

@@ -76,6 +76,8 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
     pf = report.get("pro_forma") or {}
     risk = report.get("site_risk") or {}
     prop = report.get("property_record") or {}
+    verification = report.get("extraction_verification") or {}
+    provisional = bool(verification.get("offer_is_provisional"))
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -144,9 +146,10 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
     def _hero_cell(label: str, value: str) -> list:
         return [Paragraph(label, hero_label_style), Paragraph(f"<b>{value}</b>", hero_value_style)]
 
+    offer_label = "MAX OFFER (PROVISIONAL)" if provisional else "MAX OFFER (RESIDUAL)"
     hero_data = [
         [
-            _hero_cell("MAX OFFER (RESIDUAL)", _fmt_money(max_offer)),
+            _hero_cell(offer_label, _fmt_money(max_offer)),
             _hero_cell("MAX UNITS", str(max_units) if max_units else "—"),
             _hero_cell("EST. LAND VALUE", land_value_band),
             _hero_cell("ADV / UNIT", _fmt_money(adv_per_unit)),
@@ -168,6 +171,34 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
     )
     elements.append(hero)
     elements.append(Spacer(1, 4))
+
+    # --- Plausibility warnings (verify before relying) ---
+    warnings = report.get("warnings") or []
+    if warnings:
+        warn_style = ParagraphStyle(
+            "Warn", parent=note_style, fontSize=8.5, textColor=STONE_800, leading=12
+        )
+        warn_text = "<br/>".join(f"&bull; {w}" for w in warnings)
+        warn_para = Paragraph(
+            '<b><font color="#b91c1c">Verify before relying on these numbers</font></b>'
+            f"<br/>{warn_text}",
+            warn_style,
+        )
+        box = Table([[warn_para]], colWidths=[6.9 * inch])
+        box.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, -1), AMBER_100),
+                    ("BOX", (0, 0), (-1, -1), 1, RED_700),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        elements.append(box)
+        elements.append(Spacer(1, 6))
 
     # --- Deal at a glance ---
     elements.append(Paragraph("Deal at a Glance", section_style))
@@ -237,6 +268,20 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
         )
     )
 
+    # --- Source verification (every value-driver corroborated or flagged) ---
+    ver_fields = verification.get("fields") or []
+    if ver_fields:
+        elements.append(Paragraph("Source Verification", section_style))
+        elements.append(_verification_table(ver_fields))
+        overall = verification.get("overall", "unverified")
+        elements.append(
+            Paragraph(
+                f"Overall: <b>{overall}</b>. Values are checked against the ordinance text and "
+                "the zoning code; unverified drivers make the offer provisional.",
+                note_style,
+            )
+        )
+
     # --- Residual pro forma ---
     if pf.get("max_units"):
         elements.append(Paragraph("Residual Pro Forma", section_style))
@@ -256,6 +301,19 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
             f"{float(pf.get('avg_unit_size_sqft', 0)):,.0f} sf/unit"
         )
         elements.append(Paragraph(assumptions, note_style))
+
+    # --- Sensitivity (max offer vs. ADV × construction cost) ---
+    sens = _resolve_sensitivity(report.get("sensitivity"), pf)
+    if sens and sens.get("grid"):
+        elements.append(Paragraph("Sensitivity — Max Offer", section_style))
+        elements.append(_sensitivity_grid(sens))
+        elements.append(
+            Paragraph(
+                "Max land offer as ADV per unit (columns) and construction $/sf (rows) "
+                "swing ±20%. Green = deal pencils; red = upside-down.",
+                note_style,
+            )
+        )
 
     # --- Site risk ---
     flood = risk.get("flood_zone") or {}
@@ -392,4 +450,146 @@ def _range_table(rows: list[list[str]]) -> Table:
             ]
         )
     )
+    return t
+
+
+# Sensitivity-grid shading
+EMERALD_50 = colors.HexColor("#ecfdf5")
+RED_50 = colors.HexColor("#fef2f2")
+
+_VER_BADGE = {"verified": "VERIFIED", "conflict": "CONFLICT", "unverified": "UNVERIFIED"}
+_VER_COLOR = {"verified": EMERALD_700, "conflict": RED_700, "unverified": AMBER_700}
+
+
+def _fmt_val(v: Any) -> str:
+    """Format an extracted numeric value for the verification table."""
+    if v is None:
+        return "—"
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return f"{f:g}"
+
+
+def _verification_table(fields: list[dict]) -> Table:
+    """Render per-value verification: extracted vs. source, with a status badge."""
+    rows = [["Value", "Extracted", "Source", "Status"]]
+    status_by_row: list[str] = []
+    for fv in fields:
+        status = fv.get("status", "unverified")
+        status_by_row.append(status)
+        rows.append(
+            [
+                fv.get("label", fv.get("field", "")),
+                _fmt_val(fv.get("llm_value")),
+                _fmt_val(fv.get("source_value")),
+                _VER_BADGE.get(status, status.upper()),
+            ]
+        )
+
+    style_cmds: list = [
+        ("BACKGROUND", (0, 0), (-1, 0), STONE_200),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("GRID", (0, 0), (-1, -1), 0.5, STONE_200),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+    ]
+    for i, status in enumerate(status_by_row):
+        style_cmds.append(("TEXTCOLOR", (3, i + 1), (3, i + 1), _VER_COLOR.get(status, STONE_800)))
+        style_cmds.append(("FONTNAME", (3, i + 1), (3, i + 1), "Helvetica-Bold"))
+
+    t = Table(rows, colWidths=[2.7 * inch, 1.4 * inch, 1.4 * inch, 1.4 * inch])
+    t.setStyle(TableStyle(style_cmds))
+    return t
+
+
+def _fmt_compact(val: Any) -> str:
+    """Compact money for dense grids: $1.2M / $760K / -$45K / —."""
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return "—"
+    if f == 0:
+        return "—"
+    neg = f < 0
+    f = abs(f)
+    if f >= 1_000_000:
+        s = f"${f / 1_000_000:.1f}M"
+    elif f >= 1_000:
+        s = f"${f / 1_000:.0f}K"
+    else:
+        s = f"${f:,.0f}"
+    return f"-{s}" if neg else s
+
+
+def _resolve_sensitivity(sens: dict | None, pf: dict) -> dict | None:
+    """Use the report's sensitivity table, or compute one from pro-forma values."""
+    if sens and sens.get("grid"):
+        return sens
+    units = pf.get("max_units") or 0
+    adv = pf.get("adv_per_unit") or 0
+    if not units or adv <= 0:
+        return None
+    from dataclasses import asdict
+
+    from plotlot.pipeline.sensitivity import build_sensitivity_table
+
+    table = build_sensitivity_table(
+        max_units=int(units),
+        adv_per_unit=float(adv),
+        construction_cost_psf=float(pf.get("construction_cost_psf") or 0) or None,
+        avg_unit_size_sqft=float(pf.get("avg_unit_size_sqft") or 0) or None,
+        soft_cost_pct=float(pf.get("soft_cost_pct") or 0) or None,
+        builder_margin_pct=float(pf.get("builder_margin_pct") or 0) or None,
+    )
+    return asdict(table)
+
+
+def _sensitivity_grid(sens: dict) -> Table:
+    """Render the 2-way sensitivity grid with green/red shading + base highlight."""
+    col_values = sens.get("col_values", [])
+    row_values = sens.get("row_values", [])
+    grid = sens.get("grid", [])
+    base_r = sens.get("base_row_index", 0)
+    base_c = sens.get("base_col_index", 0)
+
+    header = ["$/sf ↓  ADV →"] + [_fmt_compact(v) for v in col_values]
+    data = [header]
+    for r, cost in enumerate(row_values):
+        row = [f"${float(cost):,.0f}"] + [_fmt_compact(grid[r][c]) for c in range(len(col_values))]
+        data.append(row)
+
+    style_cmds: list = [
+        ("BACKGROUND", (0, 0), (-1, 0), STONE_200),
+        ("BACKGROUND", (0, 0), (0, -1), STONE_200),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, STONE_200),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]
+
+    # Per-cell green/red shading by feasibility.
+    for r in range(len(row_values)):
+        for c in range(len(col_values)):
+            color = EMERALD_50 if grid[r][c] > 0 else RED_50
+            style_cmds.append(("BACKGROUND", (c + 1, r + 1), (c + 1, r + 1), color))
+
+    # Highlight the base case.
+    style_cmds.append(("BOX", (base_c + 1, base_r + 1), (base_c + 1, base_r + 1), 1.5, AMBER_700))
+    style_cmds.append(("FONTNAME", (base_c + 1, base_r + 1), (base_c + 1, base_r + 1), "Helvetica-Bold"))
+
+    n_cols = len(col_values) + 1
+    first = 1.25 * inch
+    rest = (6.8 * inch - first) / max(n_cols - 1, 1)
+    t = Table(data, colWidths=[first] + [rest] * (n_cols - 1))
+    t.setStyle(TableStyle(style_cmds))
     return t

@@ -950,6 +950,13 @@ def _build_report(
     # Build source_refs from top search results (for inline citations)
     source_refs = _build_source_refs(search_results)
 
+    # Deterministically verify the LLM's value-drivers against the source text.
+    from plotlot.pipeline.extraction_verify import verify_numeric_params
+
+    verification = verify_numeric_params(
+        numeric_params, search_results, args.get("zoning_district", "")
+    )
+
     return ZoningReport(
         address=address,
         formatted_address=geo.get("formatted_address", address),
@@ -979,6 +986,8 @@ def _build_report(
         sources=sources,
         confidence=args.get("confidence", "low"),
         source_refs=source_refs,
+        extraction_verification=verification,
+        warnings=list(verification.warnings),
     )
 
 

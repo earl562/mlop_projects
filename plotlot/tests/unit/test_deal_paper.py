@@ -75,6 +75,37 @@ class TestGenerateDealPaper:
         pdf = generate_deal_paper_pdf({})
         assert pdf.startswith(b"%PDF")
 
+    def test_warnings_callout_renders(self):
+        report = _full_report()
+        report["warnings"] = [
+            "Implied density is 311 units/acre — unusually high. Verify the zoning density.",
+            "ADV per unit is a regional market estimate — confirm exit pricing.",
+        ]
+        pdf = generate_deal_paper_pdf(report)
+        assert pdf.startswith(b"%PDF")
+
+    def test_explicit_sensitivity_renders(self):
+        report = _full_report()
+        report["sensitivity"] = {
+            "row_label": "Construction $/sf",
+            "col_label": "ADV per Unit",
+            "row_values": [280, 315, 350, 385, 420],
+            "col_values": [608_000, 684_000, 760_000, 836_000, 912_000],
+            "grid": [
+                [1_200_000, 1_500_000, 1_800_000, 2_100_000, 2_400_000],
+                [900_000, 1_200_000, 1_500_000, 1_800_000, 2_100_000],
+                [600_000, 900_000, 1_200_000, 1_500_000, 1_800_000],
+                [300_000, 600_000, 900_000, 1_200_000, 1_500_000],
+                [-100_000, 200_000, 500_000, 800_000, 1_100_000],
+            ],
+            "base_row_index": 2,
+            "base_col_index": 2,
+            "base_value": 1_200_000,
+            "notes": [],
+        }
+        pdf = generate_deal_paper_pdf(report)
+        assert pdf.startswith(b"%PDF")
+
     def test_nested_none_sections_handled(self):
         report = {
             "address": "1 Test St",

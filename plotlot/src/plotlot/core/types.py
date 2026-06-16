@@ -436,6 +436,41 @@ class SourceRef:
     score: float = 0.0
 
 
+# ---------------------------------------------------------------------------
+# Extraction verification — deterministic cross-check of LLM-extracted numbers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FieldVerification:
+    """Verification status for one LLM-extracted numeric value.
+
+    Cross-checks the LLM value against an independent regex read of the source
+    ordinance text (and, for density, the zone code's self-described value).
+    """
+
+    field: str  # e.g. "max_density_units_per_acre"
+    label: str  # human label, e.g. "Max density (units/acre)"
+    llm_value: float | None = None
+    source_value: float | None = None  # value found deterministically in the text
+    status: str = "unverified"  # "verified" | "conflict" | "unverified"
+    citation: str = ""  # the matched source sentence (evidence)
+    section: str = ""  # ordinance section the citation came from
+    note: str = ""
+
+
+@dataclass
+class ExtractionVerification:
+    """Aggregate verification of the value-drivers that set max buildable units."""
+
+    fields: list[FieldVerification] = field(default_factory=list)
+    overall: str = "unverified"  # "verified" | "partial" | "conflict" | "unverified"
+    # True when a max-units driver (density / min lot area) is unverified or in
+    # conflict — the offer must be shown as provisional, not firm.
+    offer_is_provisional: bool = False
+    warnings: list[str] = field(default_factory=list)
+
+
 @dataclass
 class ZoningReport:
     """Structured zoning analysis for a property address.
@@ -481,11 +516,19 @@ class ZoningReport:
     # Comparable sales + pro forma
     comp_analysis: "CompAnalysis | None" = None
     pro_forma: "LandProForma | None" = None
+    sensitivity: "SensitivityTable | None" = None
 
     # Summary
     summary: str = ""
     sources: list[str] = field(default_factory=list)
     confidence: str = ""  # "high", "medium", "low"
+
+    # Deterministic plausibility warnings (e.g. implausible density, ADV from a
+    # regional estimate). Surfaced so a human verifies before trusting numbers.
+    warnings: list[str] = field(default_factory=list)
+
+    # Per-value verification of LLM-extracted zoning numbers vs. the source text.
+    extraction_verification: "ExtractionVerification | None" = None
 
     # Inline citations — maps extracted values back to source ordinance chunks
     source_refs: list[SourceRef] = field(default_factory=list)
@@ -608,6 +651,33 @@ class LandProForma:
     # or "comps_land_value" (last-resort land-value fallback).
     adv_source: str = ""
     market: str = ""  # regional cost-model label, e.g. "San Diego"
+    notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Pro forma sensitivity analysis
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SensitivityTable:
+    """Two-way sensitivity of the residual max land offer.
+
+    The residual land value is a single point estimate built on uncertain
+    assumptions. This sweeps the two most impactful drivers — ADV per unit
+    (revenue) across columns and construction cost per sqft (cost) down rows —
+    and records the resulting max land offer in ``grid[row][col]``. Cells where
+    the offer is negative mark deals that no longer pencil.
+    """
+
+    row_label: str = "Construction $/sf"
+    col_label: str = "ADV per Unit"
+    row_values: list[float] = field(default_factory=list)  # construction $/sf
+    col_values: list[float] = field(default_factory=list)  # ADV per unit
+    grid: list[list[float]] = field(default_factory=list)  # max_land_price[row][col]
+    base_row_index: int = 0
+    base_col_index: int = 0
+    base_value: float = 0.0  # base-case max land offer (the headline number)
     notes: list[str] = field(default_factory=list)
 
 

@@ -144,10 +144,17 @@ class ZoningReportResponse(BaseModel):
     density_analysis: MaxAllowableUnitsResponse | None = None
     comp_analysis: "CompAnalysisResponse | None" = None
     pro_forma: "LandProFormaResponse | None" = None
+    sensitivity: "SensitivityTableResponse | None" = None
 
     summary: str = ""
     sources: list[str] = []
     confidence: str = ""
+
+    # Deterministic plausibility warnings (implausible density, estimated ADV, …)
+    warnings: list[str] = []
+
+    # Per-value verification of LLM-extracted zoning numbers vs. source text
+    extraction_verification: "ExtractionVerificationResponse | None" = None
 
     # Inline citations — source ordinance chunks backing extracted values
     source_refs: list[SourceRefResponse] = []
@@ -219,6 +226,42 @@ class LandProFormaResponse(BaseModel):
     adv_source: str = ""
     market: str = ""
     notes: list[str] = []
+
+
+class SensitivityTableResponse(BaseModel):
+    """Two-way sensitivity of the residual max land offer (ADV × cost)."""
+
+    row_label: str = "Construction $/sf"
+    col_label: str = "ADV per Unit"
+    row_values: list[float] = []
+    col_values: list[float] = []
+    grid: list[list[float]] = []
+    base_row_index: int = 0
+    base_col_index: int = 0
+    base_value: float = 0.0
+    notes: list[str] = []
+
+
+class FieldVerificationResponse(BaseModel):
+    """Verification status for one LLM-extracted numeric value."""
+
+    field: str = ""
+    label: str = ""
+    llm_value: float | None = None
+    source_value: float | None = None
+    status: str = "unverified"  # "verified" | "conflict" | "unverified"
+    citation: str = ""
+    section: str = ""
+    note: str = ""
+
+
+class ExtractionVerificationResponse(BaseModel):
+    """Aggregate verification of the value-drivers behind max buildable units."""
+
+    fields: list[FieldVerificationResponse] = []
+    overall: str = "unverified"
+    offer_is_provisional: bool = False
+    warnings: list[str] = []
 
 
 class ErrorResponse(BaseModel):
