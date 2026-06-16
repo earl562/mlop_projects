@@ -511,9 +511,7 @@ async def find_comparables(
     result.unit_comparables = unit_comps
 
     # --- Confidence + notes ---
-    fraction_recent = (
-        sum(land_recent_flags[:max_comps]) / len(land_comps) if land_comps else 0.0
-    )
+    fraction_recent = sum(land_recent_flags[:max_comps]) / len(land_comps) if land_comps else 0.0
     result.confidence = _score_confidence(len(land_comps), fraction_recent)
 
     if not land_comps and not unit_comps:

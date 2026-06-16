@@ -174,7 +174,12 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
     governing = density.get("governing_constraint", "")
     lot_sqft = prop.get("lot_size_sqft") or report.get("lot_size_sqft") or 0
     glance_rows = [
-        ["Zoning District", zoning_district or "—", "Max Units", str(max_units) if max_units else "—"],
+        [
+            "Zoning District",
+            zoning_district or "—",
+            "Max Units",
+            str(max_units) if max_units else "—",
+        ],
         [
             "Lot Size",
             f"{float(lot_sqft):,.0f} sqft" if lot_sqft else "—",
@@ -259,13 +264,17 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
         elements.append(Paragraph("Site Risk", section_style))
         bits = []
         if flood:
-            bits.append(f"FEMA flood zone <b>{flood.get('zone', 'N/A')}</b> ({flood.get('risk_level', 'unknown')} risk)")
+            bits.append(
+                f"FEMA flood zone <b>{flood.get('zone', 'N/A')}</b> ({flood.get('risk_level', 'unknown')} risk)"
+            )
         if risk.get("has_wetlands"):
             bits.append("NWI wetlands present")
         overall = risk.get("overall_risk")
         if overall and overall != "unknown":
             bits.append(f"overall risk <b>{overall}</b>")
-        elements.append(Paragraph(" · ".join(bits) if bits else "No significant flags.", body_style))
+        elements.append(
+            Paragraph(" · ".join(bits) if bits else "No significant flags.", body_style)
+        )
         for flag in risk_flags[:4]:
             elements.append(Paragraph(f"&bull; {flag}", note_style))
 
