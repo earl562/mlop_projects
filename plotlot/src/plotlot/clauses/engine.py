@@ -161,11 +161,14 @@ def render_clause(
     clause: ContractClause,
     context: DealContext,
     state_code: str = "FL",
+    extra_context: dict | None = None,
 ) -> RenderedClause:
     """Render a single clause's Jinja2 template with the DealContext.
 
     Applies state variants if the state_code has an override template.
-    Missing variables render as empty strings (ChainableUndefined).
+    ``extra_context`` exposes extra top-level template vars (e.g. the state's
+    installment-contract ``contract_term``). Missing variables render as empty
+    strings (ChainableUndefined).
     """
     # Choose template: state variant or default
     template_str = clause.content_template
@@ -174,7 +177,7 @@ def render_clause(
 
     # Render
     template = _JINJA_ENV.from_string(template_str)
-    rendered = template.render(context=context)
+    rendered = template.render(context=context, **(extra_context or {}))
 
     return RenderedClause(
         id=clause.id,
@@ -243,10 +246,15 @@ def assemble_clauses(
 
     resolved.sort(key=sort_key)
 
-    # 6. Render each clause
+    # 6. Render each clause. Inject the state's installment-contract terminology
+    #    (from _state_variants.yaml via the registry) so templates can localize.
+    extra_context = {
+        "state_code": config.state_code,
+        "contract_term": registry.state_terminology.get(config.state_code, ""),
+    }
     rendered: list[RenderedClause] = []
     for clause in resolved:
-        rendered.append(render_clause(clause, context, config.state_code))
+        rendered.append(render_clause(clause, context, config.state_code, extra_context))
 
     logger.info(
         "Assembled %d clauses for %s (%s)",
