@@ -37,6 +37,12 @@ from plotlot.property.base import PropertyProvider
 
 logger = logging.getLogger(__name__)
 
+
+def _escape_where(value: str) -> str:
+    """Escape single quotes for ArcGIS REST API WHERE clause safety."""
+    return value.replace("'", "''")
+
+
 # ---------------------------------------------------------------------------
 # County configurations
 #
@@ -289,12 +295,12 @@ class CaliforniaProvider(PropertyProvider):
         normalized = normalize_address(address)
         # Try full normalized address first, then house-number + first street token
         where_clauses = [
-            f"UPPER({addr_field}) LIKE '%{normalized}%'",
+            f"UPPER({addr_field}) LIKE '%{_escape_where(normalized)}%'",
         ]
         tokens = normalized.split()
         if len(tokens) >= 2:
             short = " ".join(tokens[:2])
-            where_clauses.append(f"UPPER({addr_field}) LIKE '%{short}%'")
+            where_clauses.append(f"UPPER({addr_field}) LIKE '%{_escape_where(short)}%'")
 
         params_base = {
             "outFields": "*",
@@ -503,10 +509,10 @@ class CaliforniaProvider(PropertyProvider):
         # --- address LIKE fallback ---
         normalized = normalize_address(address)
         tokens = normalized.split()
-        where_clauses = [f"UPPER(SITE_ADDR) LIKE '%{normalized}%'"]
+        where_clauses = [f"UPPER(SITE_ADDR) LIKE '%{_escape_where(normalized)}%'"]
         if len(tokens) >= 2:
             short = " ".join(tokens[:2])
-            where_clauses.append(f"UPPER(SITE_ADDR) LIKE '%{short}%'")
+            where_clauses.append(f"UPPER(SITE_ADDR) LIKE '%{_escape_where(short)}%'")
 
         params_base = {
             "outFields": out_fields,

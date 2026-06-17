@@ -389,7 +389,9 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
     # --- Site risk ---
     flood = risk.get("flood_zone") or {}
     risk_flags = risk.get("risk_flags") or []
-    if flood or risk_flags or risk.get("has_wetlands"):
+    coastal = report.get("coastal_overlay") or {}
+    coastal_relevant = coastal.get("status") in ("in", "unverified")
+    if flood or risk_flags or risk.get("has_wetlands") or coastal_relevant:
         elements.append(Paragraph("Site Risk", section_style))
         bits = []
         if flood:
@@ -398,6 +400,8 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
             )
         if risk.get("has_wetlands"):
             bits.append("NWI wetlands present")
+        if coastal.get("status") == "in" and coastal.get("height_limit_ft"):
+            bits.append(f"Coastal height limit <b>{coastal['height_limit_ft']:g} ft</b> (Prop D)")
         overall = risk.get("overall_risk")
         if overall and overall != "unknown":
             bits.append(f"overall risk <b>{overall}</b>")
@@ -406,6 +410,8 @@ def generate_deal_paper_pdf(report: dict) -> bytes:
         )
         for flag in risk_flags[:4]:
             elements.append(Paragraph(f"&bull; {flag}", note_style))
+        if coastal_relevant and coastal.get("note"):
+            elements.append(Paragraph(f"&bull; {coastal['note']}", note_style))
 
     # --- Recommendation ---
     elements.append(Paragraph("Assessment", section_style))

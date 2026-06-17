@@ -159,11 +159,18 @@ def compute_density_uplift(
     if base_units >= _DENSITY_BONUS_MIN_UNITS:
         frac = _density_bonus_fraction(income_level, set_aside_pct)
         if frac is None:
-            frac = _MAX_DENSITY_BONUS
-            requirements = (
-                "Up to +50% — e.g. 15% very-low-income or 24% low-income affordable "
-                "set-aside (Gov. Code §65915)."
-            )
+            if income_level is None and set_aside_pct is None:
+                frac = _MAX_DENSITY_BONUS
+                requirements = (
+                    "Up to +50% — e.g. 15% very-low-income or 24% low-income affordable "
+                    "set-aside (Gov. Code §65915)."
+                )
+            else:
+                frac = 0.0
+                requirements = (
+                    f"Set-aside {set_aside_pct:g}% is below {income_level or 'the'} income "
+                    "threshold — not eligible for Density Bonus."
+                )
         else:
             requirements = (
                 f"{set_aside_pct:g}% {(income_level or '').replace('_', '-')}-income "

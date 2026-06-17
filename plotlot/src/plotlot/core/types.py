@@ -539,6 +539,9 @@ class ZoningReport:
     # Site risk — FEMA flood zone + NWI wetland data
     site_risk: "SiteRisk | None" = None
 
+    # San Diego Coastal Height Limit Overlay (Prop D) — height → stories → units
+    coastal_overlay: "CoastalHeightOverlay | None" = None
+
 
 # ---------------------------------------------------------------------------
 # Site risk types
@@ -574,6 +577,33 @@ class SiteRisk:
     overall_risk: str = "unknown"  # "high", "moderate", "low", "unknown"
     risk_flags: list[str] = field(default_factory=list)
     data_sources: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CoastalHeightOverlay:
+    """San Diego Coastal Height Limit Overlay Zone (Proposition D, 1972).
+
+    A voter-enacted overlay capping structure height at 30 ft generally west of
+    Interstate 5 in the City of San Diego. Membership is a *deterministic
+    geographic* fact — a parcel is either inside the voter-mapped overlay polygon
+    or it isn't — resolved by point-in-polygon against the City's authoritative
+    DSD Zoning_Overlay layer. No LLM is involved, so there is no hallucination
+    surface.
+
+    ``status`` separates a *confirmed* determination from an *unverified* one so
+    the firm unit count is only reduced when membership is known. An unverified
+    result (City service unreachable) surfaces a warning instead of silently
+    cutting units, per the fail-loud doctrine.
+    """
+
+    applies: bool = False  # confirmed inside the overlay → height_limit_ft applies
+    height_limit_ft: float | None = None  # 30.0 when applies
+    # "in" | "out" | "unverified" | "not_applicable"
+    status: str = "not_applicable"
+    zone_name: str = ""  # ZONENAME from the overlay layer
+    citation: str = ""  # statutory / municipal-code reference
+    source: str = ""  # data-source label
+    note: str = ""
 
 
 # ---------------------------------------------------------------------------

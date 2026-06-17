@@ -474,6 +474,39 @@ async def analyze_stream(request: AnalyzeRequest):
                 )
                 from plotlot.pipeline.extraction_verify import is_field_verified
 
+                # Coastal height overlay (San Diego Prop D) — a 30 ft cap generally
+                # west of I-5 that limits stories and can pull units below base
+                # zoning. Deterministic point-in-polygon; only a *confirmed* hit
+                # feeds the cap into the calculator. Best-effort: a failure leaves
+                # the firm number intact and surfaces a verify-warning instead.
+                coastal_height_limit: float | None = None
+                if "coastal_overlay" not in request.skip_steps:
+                    try:
+                        from plotlot.pipeline.coastal_overlay import fetch_coastal_height_overlay
+
+                        c_lat = report.property_record.lat or lat
+                        c_lng = report.property_record.lng or lng
+                        if c_lat is not None and c_lng is not None:
+                            coastal = await asyncio.wait_for(
+                                fetch_coastal_height_overlay(
+                                    c_lat,
+                                    c_lng,
+                                    city=municipality,
+                                    county=county,
+                                    state=state,
+                                ),
+                                timeout=12,
+                            )
+                            if coastal.status != "not_applicable":
+                                report.coastal_overlay = coastal
+                            if coastal.applies and coastal.height_limit_ft:
+                                coastal_height_limit = coastal.height_limit_ft
+                                report.warnings.append(coastal.note)
+                            elif coastal.status == "unverified":
+                                report.warnings.append(coastal.note)
+                    except Exception as exc:  # noqa: BLE001 — non-blocking
+                        logger.warning("Coastal overlay step skipped: %s", exc)
+
                 report.density_analysis = calculate_max_units(
                     lot_size_sqft=report.property_record.lot_size_sqft,
                     params=report.numeric_params,
@@ -485,12 +518,19 @@ async def analyze_stream(request: AnalyzeRequest):
                     min_lot_area_verified=is_field_verified(
                         report.extraction_verification, "min_lot_area_per_unit_sqft"
                     ),
+                    height_limit_ft=coastal_height_limit,
                 )
+                calc_msg = (
+                    f"Max units: {report.density_analysis.max_units} "
+                    f"({report.density_analysis.governing_constraint})"
+                )
+                if coastal_height_limit:
+                    calc_msg += f" · Prop D {coastal_height_limit:g} ft coastal height cap applied"
                 yield _sse_event(
                     "status",
                     {
                         "step": "calculation",
-                        "message": f"Max units: {report.density_analysis.max_units} ({report.density_analysis.governing_constraint})",
+                        "message": calc_msg,
                         "complete": True,
                     },
                 )

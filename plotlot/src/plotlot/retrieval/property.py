@@ -21,6 +21,12 @@ from plotlot.observability.tracing import start_span, trace
 
 logger = logging.getLogger(__name__)
 
+
+def _escape_where(value: str) -> str:
+    """Escape single quotes for ArcGIS REST API WHERE clause safety."""
+    return value.replace("'", "''")
+
+
 BROWARD_CITY_CODES: dict[str, str] = {
     "coconut creek": "CK",
     "cooper city": "CY",
@@ -338,7 +344,7 @@ async def _lookup_miami_dade(
 
         features = await _query_arcgis(
             MDC_PROPERTY_URL,
-            where=f"TRUE_SITE_ADDR LIKE '%{street}%'",
+            where=f"TRUE_SITE_ADDR LIKE '%{_escape_where(street)}%'",
             out_fields=MDC_PROPERTY_FIELDS,
             extra_params={"outSR": "4326"},
         )
@@ -349,7 +355,7 @@ async def _lookup_miami_dade(
                 short = " ".join(tokens[:2])
                 features = await _query_arcgis(
                     MDC_PROPERTY_URL,
-                    where=f"TRUE_SITE_ADDR LIKE '%{short}%'",
+                    where=f"TRUE_SITE_ADDR LIKE '%{_escape_where(short)}%'",
                     out_fields=MDC_PROPERTY_FIELDS,
                     extra_params={"outSR": "4326"},
                 )
@@ -467,7 +473,7 @@ async def _lookup_broward(
         if not features and city_code:
             features = await _query_arcgis(
                 BROWARD_PROPERTY_URL,
-                where=f"SITUS_STREET_NUMBER='{street_num}' AND SITUS_STREET_NAME LIKE '%{street_name}%'",
+                where=f"SITUS_STREET_NUMBER='{_escape_where(street_num)}' AND SITUS_STREET_NAME LIKE '%{_escape_where(street_name)}%'",
                 out_fields=BROWARD_PROPERTY_FIELDS,
                 limit=None,
             )
@@ -537,7 +543,7 @@ async def _lookup_broward(
         if folio:
             parcel_features = await _query_arcgis(
                 BROWARD_PARCELS_URL,
-                where=f"FOLIO='{folio}'",
+                where=f"FOLIO='{_escape_where(folio)}'",
                 out_fields="*",
                 extra_params={"outSR": "4326"},
                 limit=1,
@@ -588,7 +594,7 @@ async def _lookup_palm_beach(
 
         features = await _query_arcgis(
             PBC_PROPERTY_URL,
-            where=f"SITE_ADDR_STR LIKE '%{street}%'",
+            where=f"SITE_ADDR_STR LIKE '%{_escape_where(street)}%'",
             out_fields=PBC_PROPERTY_FIELDS,
             extra_params={"outSR": "4326"},
         )

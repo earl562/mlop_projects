@@ -2,6 +2,7 @@
 
 from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.calculator import (
+    _effective_stories,
     _reconcile_density,
     calculate_max_units,
     parse_lot_dimensions,
@@ -158,11 +159,11 @@ class TestDensityConstraint:
         assert result.max_units == 1
 
     def test_minimum_one_unit(self):
-        """Very small lot still returns at least 1 unit."""
+        """Very small lot returns 0 — no artificial floor of 1."""
         params = NumericZoningParams(max_density_units_per_acre=6.0)
         result = calculate_max_units(1000, params)
 
-        assert result.max_units == 1
+        assert result.max_units == 0
 
 
 # ---------------------------------------------------------------------------
@@ -450,3 +451,118 @@ class TestRealWorldScenarios:
         # density: 25 * 0.5 = 12.5 → 12
         assert result.max_units <= 12
         assert result.confidence == "high"
+
+
+# ---------------------------------------------------------------------------
+# Height-limited stories — zoning height + external coastal cap (Prop D)
+# ---------------------------------------------------------------------------
+
+
+def _envelope(result):
+    return next(c for c in result.constraints if c.name == "buildable_envelope")
+
+
+# 100 x 200 lot, 20' front/rear, 10' side →
+#   buildable = (100 - 20) x (200 - 40) = 80 x 160 = 12,800 sqft.
+def _envelope_params(**overrides) -> NumericZoningParams:
+    base = dict(
+        setback_front_ft=20.0,
+        setback_rear_ft=20.0,
+        setback_side_ft=10.0,
+        min_unit_size_sqft=800.0,
+        max_stories=6,
+    )
+    base.update(overrides)
+    return NumericZoningParams(**base)
+
+
+class TestEffectiveStories:
+    def test_no_height_info_uses_max_stories(self):
+        stories, note = _effective_stories(NumericZoningParams(max_stories=4), None, 11.0)
+        assert stories == 4
+        assert note is None
+
+    def test_no_stories_at_all_defaults_to_one(self):
+        stories, note = _effective_stories(NumericZoningParams(), None, 11.0)
+        assert stories == 1
+        assert note is None
+
+    def test_external_coastal_cap_reduces_and_notes(self):
+        # 30 ft / 11 ft = 2 stories, below the zoning's 6.
+        stories, note = _effective_stories(NumericZoningParams(max_stories=6), 30.0, 11.0)
+        assert stories == 2
+        assert note is not None and "Coastal height limit" in note
+
+    def test_coastal_cap_not_binding_no_note(self):
+        # Zoning already allows only 2 stories — coastal 30 ft (also 2) changes nothing.
+        stories, note = _effective_stories(NumericZoningParams(max_stories=2), 30.0, 11.0)
+        assert stories == 2
+        assert note is None
+
+    def test_zoning_height_binds_without_coastal(self):
+        # max_height 22 ft / 11 = 2 stories, below max_stories 6 — silent (no coastal note).
+        stories, note = _effective_stories(
+            NumericZoningParams(max_stories=6, max_height_ft=22.0), None, 11.0
+        )
+        assert stories == 2
+        assert note is None
+
+    def test_zoning_height_more_restrictive_than_coastal(self):
+        # Zoning 11 ft (1 story) beats coastal 30 ft — coastal is not the binding source.
+        stories, note = _effective_stories(
+            NumericZoningParams(max_stories=6, max_height_ft=11.0), 30.0, 11.0
+        )
+        assert stories == 1
+        assert note is None
+
+
+class TestCoastalHeightLimit:
+    def test_prop_d_halves_envelope_units(self):
+        params = _envelope_params(max_stories=6)
+        base = calculate_max_units(20000, params, lot_width_ft=100.0, lot_depth_ft=200.0)
+        # 12,800 * 6 / 800 = 96
+        assert _envelope(base).max_units == 96
+
+        capped = calculate_max_units(
+            20000, params, lot_width_ft=100.0, lot_depth_ft=200.0, height_limit_ft=30.0
+        )
+        # 30/11 → 2 stories → 12,800 * 2 / 800 = 32
+        assert _envelope(capped).max_units == 32
+        assert any("Coastal height limit" in n for n in capped.notes)
+
+    def test_prop_d_governs_when_density_allows_more(self):
+        # Density alone would allow ~55 units; Prop D envelope caps to 32 and governs.
+        params = _envelope_params(max_density_units_per_acre=120.0, max_stories=6)
+        capped = calculate_max_units(
+            20000, params, lot_width_ft=100.0, lot_depth_ft=200.0, height_limit_ft=30.0
+        )
+        assert capped.governing_constraint == "buildable_envelope"
+        assert capped.max_units == 32
+
+    def test_story_height_param_is_configurable(self):
+        params = _envelope_params(max_stories=6)
+        # 30 / 10 = 3 stories → 12,800 * 3 / 800 = 48
+        res = calculate_max_units(
+            20000,
+            params,
+            lot_width_ft=100.0,
+            lot_depth_ft=200.0,
+            height_limit_ft=30.0,
+            story_height_ft=10.0,
+        )
+        assert _envelope(res).max_units == 48
+
+    def test_zoning_max_height_now_binds_envelope(self):
+        # Latent-gap fix: max_height_ft was previously ignored by the calculator.
+        params = _envelope_params(max_stories=6, max_height_ft=22.0)
+        res = calculate_max_units(20000, params, lot_width_ft=100.0, lot_depth_ft=200.0)
+        # 22/11 → 2 stories → 32 (not 96)
+        assert _envelope(res).max_units == 32
+        assert not any("Coastal height limit" in n for n in res.notes)
+
+    def test_no_height_limit_leaves_units_unchanged(self):
+        params = _envelope_params(max_stories=6)
+        res = calculate_max_units(
+            20000, params, lot_width_ft=100.0, lot_depth_ft=200.0, height_limit_ft=None
+        )
+        assert _envelope(res).max_units == 96

@@ -65,6 +65,9 @@ class Settings(BaseSettings):
         self.database_url = url
         return self
 
+    # Debug mode — enables /debug/* endpoints (off by default in production)
+    debug_mode: bool = False
+
     # Auth (opt-in — app works without auth configured)
     auth_enabled: bool = False
     # Clerk JWT verification (RS256 via JWKS)

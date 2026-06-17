@@ -4,6 +4,10 @@ These are the API contract — decoupled from the internal domain dataclasses.
 We bridge them using dataclasses.asdict() in the route handlers.
 """
 
+from __future__ import annotations
+
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -148,10 +152,11 @@ class ZoningReportResponse(BaseModel):
     sensitivity: "SensitivityTableResponse | None" = None
     entitlement: "EntitlementAssessmentResponse | None" = None
     density_uplift: "DensityUpliftResponse | None" = None
+    coastal_overlay: "CoastalHeightOverlayResponse | None" = None
 
     summary: str = ""
     sources: list[str] = []
-    confidence: str = ""
+    confidence: Literal["high", "medium", "low"] = "low"
 
     # Deterministic plausibility warnings (implausible density, estimated ADV, …)
     warnings: list[str] = []
@@ -327,6 +332,18 @@ class DensityUpliftResponse(BaseModel):
     max_potential_units: int = 0
     local_overrides: list[LocalOverrideResponse] = []
     notes: list[str] = []
+
+
+class CoastalHeightOverlayResponse(BaseModel):
+    """San Diego Coastal Height Limit Overlay (Prop D) determination."""
+
+    applies: bool = False
+    height_limit_ft: float | None = None
+    status: str = "not_applicable"  # "in" | "out" | "unverified" | "not_applicable"
+    zone_name: str = ""
+    citation: str = ""
+    source: str = ""
+    note: str = ""
 
 
 class ErrorResponse(BaseModel):

@@ -84,12 +84,12 @@ def calculate_land_pro_forma(
     # Resolve cost levers: explicit override → cost model → module default.
     construction_cost_psf = (
         construction_cost_psf
-        if construction_cost_psf is not None
+        if construction_cost_psf is not None and construction_cost_psf > 0
         else (cost_model.construction_cost_psf if cost_model else DEFAULT_CONSTRUCTION_COST_PSF)
     )
     avg_unit_size_sqft = (
         avg_unit_size_sqft
-        if avg_unit_size_sqft is not None
+        if avg_unit_size_sqft is not None and avg_unit_size_sqft > 0
         else (cost_model.avg_unit_size_sqft if cost_model else DEFAULT_AVG_UNIT_SIZE_SQFT)
     )
     soft_cost_pct = (

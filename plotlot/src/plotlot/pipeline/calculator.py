@@ -14,6 +14,64 @@ from plotlot.observability.tracing import trace
 
 SQFT_PER_ACRE = 43_560
 
+# Default residential floor-to-floor height (ft) used to translate a height limit
+# into a story count. Deliberately conservative — taller assumed stories yield
+# *fewer* stories and thus fewer units, the safe direction for a max-offer tool.
+# Real story heights vary, so any height-derived story count is surfaced as a note.
+RESIDENTIAL_STORY_HEIGHT_FT = 11.0
+
+
+def _effective_stories(
+    params: NumericZoningParams,
+    height_limit_ft: float | None,
+    story_height_ft: float,
+) -> tuple[int, str | None]:
+    """Resolve the binding number of stories from zoning + any external height cap.
+
+    Stories are limited by the most restrictive of: the zoning ``max_stories``,
+    the zoning ``max_height_ft``, and an *external* ``height_limit_ft`` (e.g. the
+    San Diego Proposition D 30 ft coastal cap). Height limits are translated to a
+    story count via ``story_height_ft``.
+
+    Returns ``(stories, note)``. ``note`` is set only when the *external* coastal
+    limit is what bites (reduces stories below the zoning allowance) — the
+    informative case worth surfacing; zoning's own height binding is a silent
+    correctness improvement.
+    """
+    zoning_stories = (
+        int(params.max_stories) if params.max_stories and params.max_stories > 0 else None
+    )
+
+    # Translate any height caps to stories; track which source is binding.
+    height_options: list[tuple[float, str]] = []
+    if params.max_height_ft and params.max_height_ft > 0:
+        height_options.append((params.max_height_ft, "zoning"))
+    if height_limit_ft and height_limit_ft > 0:
+        height_options.append((height_limit_ft, "coastal"))
+
+    height_stories: int | None = None
+    binding_source: str | None = None
+    if height_options:
+        binding_height, binding_source = min(height_options, key=lambda h: h[0])
+        height_stories = max(1, math.floor(binding_height / story_height_ft))
+
+    candidates = [s for s in (zoning_stories, height_stories) if s is not None]
+    stories = max(1, min(candidates)) if candidates else 1
+
+    note: str | None = None
+    if (
+        binding_source == "coastal"
+        and height_stories is not None
+        and stories == height_stories
+        and (zoning_stories is None or height_stories < zoning_stories)
+    ):
+        plural = "story" if stories == 1 else "stories"
+        note = (
+            f"Coastal height limit {height_limit_ft:g} ft caps the building to {stories} "
+            f"{plural} (~{story_height_ft:g} ft/story), reducing the buildable envelope."
+        )
+    return stories, note
+
 
 def parse_lot_dimensions(dims: str) -> tuple[float | None, float | None]:
     """Parse lot dimensions string like '75 x 100' into (width, depth).
@@ -85,6 +143,8 @@ def calculate_max_units(
     *,
     density_verified: bool = False,
     min_lot_area_verified: bool = False,
+    height_limit_ft: float | None = None,
+    story_height_ft: float = RESIDENTIAL_STORY_HEIGHT_FT,
 ) -> DensityAnalysis:
     """Calculate maximum allowable dwelling units from zoning parameters.
 
@@ -92,6 +152,12 @@ def calculate_max_units(
     ``density_verified`` / ``min_lot_area_verified`` let the caller pass source-
     verification status so a contradiction between the two density encodings is
     resolved in favor of the corroborated one.
+
+    ``height_limit_ft`` is an *external* height cap that overrides the zoning
+    height when more restrictive — e.g. the San Diego Proposition D 30 ft coastal
+    limit. It feeds the buildable-envelope constraint by reducing the number of
+    stories, and can lower the unit count below base zoning when the envelope
+    governs.
     """
     if lot_size_sqft <= 0:
         return DensityAnalysis(
@@ -122,7 +188,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="density",
-                max_units=max(1, math.floor(raw)),
+                max_units=max(0, math.floor(raw)),
                 raw_value=raw,
                 formula=(f"{effective_density:g} units/acre x {lot_acres:.4f} acres = {raw:.2f}"),
             )
@@ -134,7 +200,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="min_lot_area",
-                max_units=max(1, math.floor(raw)),
+                max_units=max(0, math.floor(raw)),
                 raw_value=raw,
                 formula=(
                     f"{lot_size_sqft:,.0f} sqft / {effective_min_lot:,.0f} sqft/unit = {raw:.2f}"
@@ -154,7 +220,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="floor_area_ratio",
-                max_units=max(1, math.floor(raw)),
+                max_units=max(0, math.floor(raw)),
                 raw_value=raw,
                 formula=(
                     f"FAR {params.far:g} x {lot_size_sqft:,.0f} sqft = "
@@ -177,13 +243,15 @@ def calculate_max_units(
         and params.min_unit_size_sqft is not None
         and params.min_unit_size_sqft > 0
     ):
-        stories = params.max_stories if params.max_stories and params.max_stories > 0 else 1
+        stories, story_note = _effective_stories(params, height_limit_ft, story_height_ft)
+        if story_note:
+            notes.append(story_note)
         total_floor_area = buildable_sqft * stories
         raw = total_floor_area / params.min_unit_size_sqft
         constraints.append(
             ConstraintResult(
                 name="buildable_envelope",
-                max_units=max(1, math.floor(raw)),
+                max_units=max(0, math.floor(raw)),
                 raw_value=raw,
                 formula=(
                     f"({buildable_sqft:,.0f} sqft buildable x {stories} stories) / "
@@ -243,11 +311,16 @@ def calculate_max_gla(
     params: NumericZoningParams,
     lot_width_ft: float | None = None,
     lot_depth_ft: float | None = None,
+    *,
+    height_limit_ft: float | None = None,
+    story_height_ft: float = RESIDENTIAL_STORY_HEIGHT_FT,
 ) -> DensityAnalysis:
     """Calculate maximum gross leasable area for commercial properties.
 
     Evaluates FAR, lot coverage, buildable envelope, and explicit GLA cap.
-    Returns the minimum (governing constraint).
+    Returns the minimum (governing constraint). ``height_limit_ft`` (e.g. the
+    San Diego Prop D 30 ft coastal cap) reduces stories for the coverage- and
+    envelope-based GLA when more restrictive than zoning.
     """
     if lot_size_sqft <= 0:
         return DensityAnalysis(
@@ -260,7 +333,9 @@ def calculate_max_gla(
 
     constraints: list[ConstraintResult] = []
     notes: list[str] = []
-    stories = params.max_stories if params.max_stories and params.max_stories > 0 else 1
+    stories, story_note = _effective_stories(params, height_limit_ft, story_height_ft)
+    if story_note:
+        notes.append(story_note)
 
     # Constraint 1: FAR
     if params.far is not None and params.far > 0:

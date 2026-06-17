@@ -13,9 +13,10 @@ import json
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
+from plotlot.api.billing import check_analysis_limit
 from plotlot.api.cache import cache_report, get_cached_report
 from plotlot.api.schemas import AnalyzeRequest
 from plotlot.core.types import InfraSignal
@@ -57,7 +58,7 @@ def _dc_should_cache(scorecard: dict) -> bool:
 
 
 @router.post("/analyze/datacenter")
-async def analyze_datacenter(request: AnalyzeRequest):
+async def analyze_datacenter(request: AnalyzeRequest, _: None = Depends(check_analysis_limit)):
     """Stream data center site analysis with real-time pipeline progress via SSE."""
 
     async def event_generator():

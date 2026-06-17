@@ -21,6 +21,7 @@ MODEL_ID = "nvidia/nv-embedqa-e5-v5"
 # Module-level counter — tracks API calls across the current process lifetime.
 # Each call to _embed_batch = 1 NVIDIA NIM API credit (32-chunk batch).
 _api_calls_this_run: int = 0
+_api_calls_lock: asyncio.Lock = asyncio.Lock()
 
 
 def get_api_calls() -> int:
@@ -65,7 +66,8 @@ async def _embed_batch(
             )
             resp.raise_for_status()
             data = resp.json()
-            _api_calls_this_run += 1
+            async with _api_calls_lock:
+                _api_calls_this_run += 1
             return [item["embedding"] for item in data["data"]]
 
         except httpx.HTTPStatusError as e:

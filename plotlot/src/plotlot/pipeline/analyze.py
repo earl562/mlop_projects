@@ -41,6 +41,10 @@ async def analyze_property_full(address: str, *, with_comps: bool = False) -> Zo
 
     density = report.density_analysis
     if density is None or density.max_units <= 0:
+        if density is not None and density.max_gla_sqft:
+            report.warnings = list(report.warnings or []) + [
+                "Commercial pro forma not yet implemented — only residential density is calculated."
+            ]
         return report
 
     cost_model = get_cost_model(report.state, report.county)

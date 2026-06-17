@@ -413,7 +413,7 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
 
     with (
         patch("openai.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
-        patch("plotlot.config.settings") as mock_settings,
+        patch("plotlot.api.main.settings") as mock_settings,
     ):
         mock_settings.nvidia_api_key = "nv-key"
         mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
