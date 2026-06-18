@@ -323,6 +323,7 @@ class PropertyRecord:
     # Lot
     lot_size_sqft: float = 0.0
     lot_dimensions: str = ""  # e.g., "75 x 100" from legal description
+    lot_size_source: str = ""  # "assessor", "geometry", or "" — provenance of the lot area
 
     # Building
     bedrooms: int = 0
@@ -482,6 +483,9 @@ class ZoningReport:
     comp_analysis: "CompAnalysis | None" = None
     pro_forma: "LandProForma | None" = None
 
+    # Deal analysis (Dani Kleyman underwriting framework)
+    deal_analysis: "DealAnalysis | None" = None
+
     # Summary
     summary: str = ""
     sources: list[str] = field(default_factory=list)
@@ -519,12 +523,42 @@ class WetlandInfo:
 
 
 @dataclass
+class GeologicHazard:
+    """CGS seismic/geologic hazard designations for a parcel.
+
+    Retrieved from the CA statewide parcel layer (FaultZone, LandslideZone,
+    LiquefactionZone fields with CGS coded-value legends).
+    """
+
+    fault_zone_status: str = ""  # e.g. "not in fault zone", "in fault zone", "not evaluated"
+    landslide_status: str = ""
+    liquefaction_status: str = ""
+    source: str = ""  # e.g. "CA_State_Parcels CGS fields"
+
+
+@dataclass
+class PermitRecord:
+    """A single building/development permit from the city's permitting system.
+
+    Retrieved from the City of San Diego DSDPermits Accela layer.
+    """
+
+    permit_holder: str = ""
+    permit_type: str = ""
+    permit_status: str = ""
+    issue_date: str = ""
+    project_title: str = ""
+    approval_url: str = ""
+
+
+@dataclass
 class SiteRisk:
-    """Physical site risk flags drawn from FEMA NFHL and USFWS NWI."""
+    """Physical site risk flags drawn from FEMA NFHL, USFWS NWI, and CGS hazard data."""
 
     flood_zone: FloodZoneInfo | None = None
     wetlands: list[WetlandInfo] = field(default_factory=list)
     has_wetlands: bool = False
+    geologic_hazard: GeologicHazard | None = None
     overall_risk: str = "unknown"  # "high", "moderate", "low", "unknown"
     risk_flags: list[str] = field(default_factory=list)
     data_sources: list[str] = field(default_factory=list)
@@ -704,4 +738,147 @@ class SiteScorecard:
     deal_breakers: list[str] = field(default_factory=list)
     strengths: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    confidence: str = "medium"
+
+
+# ============================================================================
+# Deal Analysis types — Dani Kleyman Underwriting Framework
+# ============================================================================
+
+@dataclass
+class UnitMixEntry:
+    unit_type: str = ""
+    bedrooms: int = 0
+    bathrooms: float = 0.0
+    sqft: float = 0.0
+    unit_count: int = 0
+    percentage_of_total: float = 0.0
+    monthly_rent: float = 0.0
+    annual_rent: float = 0.0
+    rent_per_sqft: float = 0.0
+
+
+@dataclass
+class RentalComp:
+    property_name: str = ""
+    address: str = ""
+    bedrooms: int = 0
+    bathrooms: float = 0.0
+    sqft: float = 0.0
+    monthly_rent: float = 0.0
+    rent_per_sqft: float = 0.0
+    unit_type: str = ""
+    source: str = ""
+    last_updated: str = ""
+
+
+@dataclass
+class RentalCompSet:
+    comps: list[RentalComp] = field(default_factory=list)
+    comp_count: int = 0
+    median_rent: float = 0.0
+    median_rent_per_sqft: float = 0.0
+    source: str = ""
+    confidence: float = 0.0
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ProformaNOI:
+    unit_mix: list[UnitMixEntry] = field(default_factory=list)
+    total_units: int = 0
+    gross_monthly_income: float = 0.0
+    gross_annual_income: float = 0.0
+    vacancy_rate_pct: float = 5.0
+    effective_gross_income: float = 0.0
+    operating_expense_ratio_pct: float = 35.0
+    operating_expenses: float = 0.0
+    net_operating_income: float = 0.0
+    monthly_noi: float = 0.0
+    expense_items: dict[str, float] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FinancingTerms:
+    loan_type: str = "construction-to-permanent"
+    lender: str = ""
+    loan_to_cost: float = 70.0
+    interest_rate: float = 6.5
+    rate_type: str = "fixed"
+    amortization_years: int = 30
+    min_dscr: float = 1.25
+    origination_fee_pct: float = 1.0
+    developer_fee_pct: float = 8.0
+    other_closing_costs_pct: float = 0.5
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CapitalStack:
+    total_project_cost: float = 0.0
+    land_cost: float = 0.0
+    hard_costs: float = 0.0
+    soft_costs: float = 0.0
+    developer_fee: float = 0.0
+    financing_costs: float = 0.0
+    interest_carry: float = 0.0
+    max_construction_loan: float = 0.0
+    max_permanent_loan: float = 0.0
+    senior_debt: float = 0.0
+    senior_debt_pct: float = 0.0
+    mezzanine_debt: float = 0.0
+    total_debt: float = 0.0
+    sponsor_equity: float = 0.0
+    investor_equity: float = 0.0
+    total_equity: float = 0.0
+    equity_required: float = 0.0
+    ltc_pct: float = 0.0
+    ltv_pct: float = 0.0
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DealMetrics:
+    levered_irr: float = 0.0
+    levered_equity_multiple: float = 0.0
+    levered_cash_on_cash: float = 0.0
+    unlevered_irr: float = 0.0
+    unlevered_equity_multiple: float = 0.0
+    cap_rate: float = 0.0
+    yield_on_cost: float = 0.0
+    debt_yield: float = 0.0
+    dscr: float = 0.0
+    gross_profit: float = 0.0
+    net_present_value: float = 0.0
+    payback_period_years: float = 0.0
+    break_even_occupancy_pct: float = 0.0
+    sensitivity_notes: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DealAnalysis:
+    address: str = ""
+    municipality: str = ""
+    county: str = ""
+    property_type: str = ""
+    max_units: int = 0
+    estimated_land_value: float = 0.0
+    estimated_land_value_per_unit: float = 0.0
+    estimated_land_value_per_acre: float = 0.0
+    comp_analysis: "CompAnalysis | None" = None
+    pro_forma: "LandProForma | None" = None
+    proforma_noi: "ProformaNOI | None" = None
+    rental_comp_set: "RentalCompSet | None" = None
+    unit_mix: list[UnitMixEntry] = field(default_factory=list)
+    financing_terms: "FinancingTerms | None" = None
+    capital_stack: "CapitalStack | None" = None
+    metrics: "DealMetrics | None" = None
+    max_offer_price: float = 0.0
+    recommended_offer: float = 0.0
+    investment_rating: str = ""
+    deal_breakers: list[str] = field(default_factory=list)
+    summary: str = ""
+    notes: list[str] = field(default_factory=list)
     confidence: str = "medium"

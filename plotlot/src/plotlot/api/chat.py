@@ -362,12 +362,32 @@ def _build_report_context(report) -> str:
     if report.property_record:
         pr = report.property_record
         parts.append(f"- Lot Size: {pr.lot_size_sqft:,.0f} sqft")
+        if pr.lot_size_source:
+            src_labels = {"assessor": "county assessor record", "geometry": "GIS parcel geometry estimate"}
+            label = src_labels.get(pr.lot_size_source, pr.lot_size_source)
+            parts.append(f"  - Lot Source: {label}")
         if pr.lot_dimensions:
             parts.append(f"- Lot Dimensions: {pr.lot_dimensions}")
         if pr.year_built:
             parts.append(f"- Year Built: {pr.year_built}")
         if pr.assessed_value:
             parts.append(f"- Assessed Value: ${pr.assessed_value:,.0f}")
+        if pr.owner:
+            parts.append(f"- Owner: {pr.owner}")
+
+    if report.site_risk:
+        sr = report.site_risk
+        parts.append(f"- Site Risk: {sr.overall_risk}")
+        if sr.flood_zone:
+            parts.append(f"  - Flood Zone: {sr.flood_zone.zone} ({sr.flood_zone.risk_level})")
+        if sr.geologic_hazard:
+            gh = sr.geologic_hazard
+            if gh.fault_zone_status:
+                parts.append(f"  - Fault Zone: {gh.fault_zone_status}")
+            if gh.landslide_status:
+                parts.append(f"  - Landslide: {gh.landslide_status}")
+            if gh.liquefaction_status:
+                parts.append(f"  - Liquefaction: {gh.liquefaction_status}")
 
     if report.numeric_params:
         np_ = report.numeric_params

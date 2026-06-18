@@ -205,12 +205,14 @@ async def test_fetch_site_risk_minimal_no_wetlands():
             "plotlot.pipeline.site_risk._fetch_fema_flood_zone", new=AsyncMock(return_value=flood)
         ),
         patch("plotlot.pipeline.site_risk._fetch_nwi_wetlands", new=AsyncMock(return_value=[])),
+        patch("plotlot.pipeline.site_risk._fetch_cgs_hazards", new=AsyncMock(return_value=None)),
     ):
         result = await fetch_site_risk(32.7, -117.1)
 
     assert result.overall_risk == "low"
     assert result.has_wetlands is False
     assert result.risk_flags == []
+    assert result.geologic_hazard is None
 
 
 @pytest.mark.asyncio
@@ -223,6 +225,7 @@ async def test_fetch_site_risk_fema_unavailable_degrades_gracefully():
         patch(
             "plotlot.pipeline.site_risk._fetch_nwi_wetlands", new=AsyncMock(return_value=wetlands)
         ),
+        patch("plotlot.pipeline.site_risk._fetch_cgs_hazards", new=AsyncMock(return_value=None)),
     ):
         result = await fetch_site_risk(32.7, -117.1)
 

@@ -1,4 +1,4 @@
-"""Site risk assessment — FEMA flood zone and NWI wetland data.
+"""Site risk assessment - FEMA flood zone, NWI wetland data, and CGS geologic hazards.
 
 Pulls from two free federal APIs using only lat/lng:
 - FEMA NFHL (National Flood Hazard Layer) — flood zone designation
@@ -14,7 +14,7 @@ import logging
 
 import httpx
 
-from plotlot.core.types import FloodZoneInfo, SiteRisk, WetlandInfo
+from plotlot.core.types import FloodZoneInfo, GeologicHazard, SiteRisk, WetlandInfo
 from plotlot.observability.tracing import start_span
 
 logger = logging.getLogger(__name__)
@@ -163,6 +163,80 @@ async def _fetch_nwi_wetlands(lat: float, lng: float, timeout: float = 10.0) -> 
 
 
 # ---------------------------------------------------------------------------
+# CGS geologic hazard fetch
+# ---------------------------------------------------------------------------
+
+# CA statewide parcel layer carries FaultZone, LandslideZone, LiquefactionZone
+# fields with CGS coded-value legends (all 58 counties).
+_CGS_PARCEL_URL = (
+    "https://services2.arcgis.com/zr3KAIbsRSUyARHG/arcgis/rest/services"
+    "/CA_State_Parcels/FeatureServer/0/query"
+)
+
+# CGS domain label maps (from CA_State_Parcels layer field domain annotations)
+_CGS_FAULT_LABELS = {1: "Not within an earthquake fault zone", 2: "Within an earthquake fault zone"}
+_CGS_LANDSLIDE_LABELS = {
+    1: "Within a landslide zone",
+    2: "Not within a landslide zone",
+    3: "Partial evaluation by CGS",
+    4: "Not evaluated by CGS for landslide hazards",
+}
+_CGS_LIQUEFACTION_LABELS = {
+    1: "Within a liquefaction zone",
+    2: "Not within a liquefaction zone",
+    3: "Partial evaluation by CGS",
+    4: "Not evaluated by CGS for liquefaction hazards",
+}
+
+
+def _cgs_code_label(code: int, labels: dict[int, str]) -> str:
+    """Look up a CGS coded-value; return the label or 'Unknown code {n}'."""
+    return labels.get(code, f"Unknown code {code}")
+
+
+async def _fetch_cgs_hazards(lat: float, lng: float, timeout: float = 10.0) -> GeologicHazard | None:
+    """Query the CA statewide parcel layer for CGS geologic/seismic hazard fields.
+
+    Returns a GeologicHazard with human-readable status strings, or None
+    if the query fails or returns no parcel.
+    """
+    params = {
+        "geometry": f"{lng},{lat}",
+        "geometryType": "esriGeometryPoint",
+        "inSR": "4326",
+        "spatialRel": "esriSpatialRelIntersects",
+        "outFields": "FaultZone,LandslideZone,LiquefactionZone",
+        "returnGeometry": "false",
+        "f": "json",
+        "resultRecordCount": "1",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(_CGS_PARCEL_URL, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("CGS hazard API unavailable: %s", exc)
+        return None
+
+    features = data.get("features") or []
+    if not features:
+        return None
+
+    attrs = features[0].get("attributes") or {}
+    fault = attrs.get("FaultZone")
+    landslide = attrs.get("LandslideZone")
+    liquefaction = attrs.get("LiquefactionZone")
+
+    return GeologicHazard(
+        fault_zone_status=_cgs_code_label(fault, _CGS_FAULT_LABELS) if fault else "",
+        landslide_status=_cgs_code_label(landslide, _CGS_LANDSLIDE_LABELS) if landslide else "",
+        liquefaction_status=_cgs_code_label(liquefaction, _CGS_LIQUEFACTION_LABELS) if liquefaction else "",
+        source="CA_State_Parcels CGS fields",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -180,8 +254,9 @@ async def fetch_site_risk(lat: float, lng: float) -> SiteRisk:
 
         flood_task = asyncio.create_task(_fetch_fema_flood_zone(lat, lng))
         wetland_task = asyncio.create_task(_fetch_nwi_wetlands(lat, lng))
+        cgs_task = asyncio.create_task(_fetch_cgs_hazards(lat, lng))
 
-        flood_zone, wetlands = await asyncio.gather(flood_task, wetland_task)
+        flood_zone, wetlands, cgs_hazard = await asyncio.gather(flood_task, wetland_task, cgs_task)
 
         # Build risk flags
         risk_flags: list[str] = []
@@ -197,6 +272,19 @@ async def fetch_site_risk(lat: float, lng: float) -> SiteRisk:
             risk_flags.append(
                 f"Wetlands present within ~100m: {types} ({total_acres:.2f} acres) — may require Section 404 permit"
             )
+        if cgs_hazard:
+            if cgs_hazard.fault_zone_status and "within" in cgs_hazard.fault_zone_status.lower():
+                risk_flags.append(f"Earthquake fault zone: {cgs_hazard.fault_zone_status}")
+            elif cgs_hazard.fault_zone_status and "not evaluated" not in cgs_hazard.fault_zone_status.lower():
+                risk_flags.append(f"Earthquake fault: {cgs_hazard.fault_zone_status}")
+            if cgs_hazard.landslide_status and "within" in cgs_hazard.landslide_status.lower():
+                risk_flags.append(f"Landslide zone: {cgs_hazard.landslide_status}")
+            elif cgs_hazard.landslide_status and "not evaluated" not in cgs_hazard.landslide_status.lower():
+                risk_flags.append(f"Landslide: {cgs_hazard.landslide_status}")
+            if cgs_hazard.liquefaction_status and "within" in cgs_hazard.liquefaction_status.lower():
+                risk_flags.append(f"Liquefaction zone: {cgs_hazard.liquefaction_status}")
+            elif cgs_hazard.liquefaction_status and "not evaluated" not in cgs_hazard.liquefaction_status.lower():
+                risk_flags.append(f"Liquefaction: {cgs_hazard.liquefaction_status}")
 
         # Overall risk
         flood_risk = flood_zone.risk_level if flood_zone else "unknown"
@@ -213,11 +301,14 @@ async def fetch_site_risk(lat: float, lng: float) -> SiteRisk:
         if flood_zone is not None:
             data_sources.append("FEMA National Flood Hazard Layer (NFHL)")
         data_sources.append("USFWS National Wetlands Inventory (NWI)")
+        if cgs_hazard is not None:
+            data_sources.append("CA_State_Parcels CGS geologic hazard fields")
 
         result = SiteRisk(
             flood_zone=flood_zone,
             wetlands=wetlands,
             has_wetlands=bool(wetlands),
+            geologic_hazard=cgs_hazard,
             overall_risk=overall_risk,
             risk_flags=risk_flags,
             data_sources=data_sources,

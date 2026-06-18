@@ -689,9 +689,15 @@ class TestResolveAdapter:
         assert result.config is config
 
     async def test_raises_no_adapter_error_when_not_found(self):
-        with patch(
-            "plotlot.ingestion.adapters.registry._try_municode",
-            new=AsyncMock(return_value=None),
+        with (
+            patch(
+                "plotlot.ingestion.adapters.registry._try_municode",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "plotlot.ingestion.adapters.registry._try_codifier",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             with pytest.raises(NoAdapterError) as exc_info:
                 await resolve_adapter("Atlantis", "ZZ")
