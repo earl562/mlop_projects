@@ -9,6 +9,7 @@ steps are always the same, so we don't waste LLM turns on orchestration.
 The LLM focuses on what it's good at: reasoning over the data.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -392,6 +393,41 @@ async def lookup_address(address: str) -> ZoningReport | None:
                     report.density_analysis.confidence,
                 )
             else:
+                # San Diego Coastal Height Limit (Prop D) — a 30 ft cap generally
+                # west of I-5 that limits stories and can pull units below base
+                # zoning. Deterministic point-in-polygon, gated to City of San
+                # Diego, CA (a no-op everywhere else). Best-effort: a failure
+                # leaves the firm number intact and surfaces a verify-warning
+                # rather than silently cutting units. Wiring it here (not just in
+                # the SSE route) means the JSON /analyze, batch screening, and the
+                # chat analyze_property tool all apply Prop D consistently.
+                coastal_height_limit: float | None = None
+                try:
+                    from plotlot.pipeline.coastal_overlay import fetch_coastal_height_overlay
+
+                    c_lat = report.property_record.lat or lat
+                    c_lng = report.property_record.lng or lng
+                    if c_lat is not None and c_lng is not None:
+                        coastal = await asyncio.wait_for(
+                            fetch_coastal_height_overlay(
+                                c_lat,
+                                c_lng,
+                                city=municipality,
+                                county=county,
+                                state=state,
+                            ),
+                            timeout=12,
+                        )
+                        if coastal.status != "not_applicable":
+                            report.coastal_overlay = coastal
+                        if coastal.applies and coastal.height_limit_ft:
+                            coastal_height_limit = coastal.height_limit_ft
+                            report.warnings.append(coastal.note)
+                        elif coastal.status == "unverified":
+                            report.warnings.append(coastal.note)
+                except Exception as exc:  # noqa: BLE001 — non-blocking
+                    logger.warning("Coastal overlay step skipped: %s", exc)
+
                 report.density_analysis = calculate_max_units(
                     lot_size_sqft=report.property_record.lot_size_sqft,
                     params=report.numeric_params,
@@ -403,6 +439,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
                     min_lot_area_verified=is_field_verified(
                         report.extraction_verification, "min_lot_area_per_unit_sqft"
                     ),
+                    height_limit_ft=coastal_height_limit,
                 )
                 logger.info(
                     "Max units: %d (governing: %s, confidence: %s)",
@@ -961,9 +998,14 @@ def _build_report(
     # Deterministically verify the LLM's value-drivers against the source text.
     from plotlot.pipeline.extraction_verify import verify_numeric_params
 
-    verification = verify_numeric_params(
-        numeric_params, search_results, args.get("zoning_district", "")
+    # Prefer the parcel's authoritative ArcGIS zone code (e.g. "RM-3-7") over the
+    # LLM-supplied district string — zone-aware grounding needs the exact code to
+    # read the right row out of a multi-zone density table (San Diego lists every
+    # RM zone in one chunk, so the wrong code grounds a neighbor's density).
+    zone_code = (getattr(prop_record, "zoning_code", "") or "").strip() or args.get(
+        "zoning_district", ""
     )
+    verification = verify_numeric_params(numeric_params, search_results, zone_code)
 
     return ZoningReport(
         address=address,

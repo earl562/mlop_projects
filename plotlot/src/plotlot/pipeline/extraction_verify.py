@@ -100,6 +100,38 @@ def _ground(text: str, patterns: tuple[str, ...]) -> tuple[float | None, str]:
     return None, ""
 
 
+# Start of a segmented zone code (RM-3-7, CC-3-6, RS-1-1, OTRM-2-4). Used to
+# split a multi-zone density table so each zone's value can be read in isolation.
+_ZONE_TOKEN_RE = re.compile(r"\b[A-Z]{1,5}-\d{1,2}(?:-\d{1,2})?\b")
+
+
+def _ground_for_zone(
+    text: str, patterns: tuple[str, ...], zone_code: str
+) -> tuple[float | None, str]:
+    """Ground a value anchored to a specific zone code within the text.
+
+    San Diego lists every RM/CC zone's density in ONE chunk — e.g. "…RM-3-7
+    permits a maximum density of 1 dwelling unit for each 1,000 square feet of
+    lot area; RM-3-8 … 800 …". A plain first-match grab (``_ground``) returns a
+    *different* zone's number (RM-1-2's 2,500), so the LLM's correct 1,000 looks
+    like a conflict and the offer is wrongly marked provisional.
+
+    This scans only the clause introduced by the target zone code, bounded by the
+    next zone code, so RM-3-7 grounds to 1,000 — not its neighbor. Returns
+    ``(None, "")`` when the zone code isn't present, so the caller falls back to
+    the global first-match behavior (single-zone chunks are unaffected).
+    """
+    if not zone_code.strip():
+        return None, ""
+    for m in re.finditer(re.escape(zone_code.strip()), text, re.IGNORECASE):
+        nxt = _ZONE_TOKEN_RE.search(text, m.end())
+        end = min(nxt.start(), m.end() + 200) if nxt else m.end() + 200
+        value, snippet = _ground(text[m.start() : end], patterns)
+        if value is not None:
+            return value, snippet
+    return None, ""
+
+
 def _zone_expected_density(zone_code: str) -> float | None:
     """Density implied by a self-describing multifamily zone code (RM-25 → 25)."""
     if not zone_code:
@@ -120,9 +152,17 @@ def _verify_field(
     text: str,
     patterns: tuple[str, ...],
     section: str,
+    zone_code: str = "",
 ) -> FieldVerification:
-    """Cross-check one LLM value against the source text."""
-    source_value, snippet = _ground(text, patterns)
+    """Cross-check one LLM value against the source text.
+
+    Grounding is zone-aware: when the chunk lists many zones, prefer the value in
+    the target zone's own clause, falling back to a global first match so single-
+    zone chunks behave exactly as before.
+    """
+    source_value, snippet = _ground_for_zone(text, patterns, zone_code)
+    if source_value is None:
+        source_value, snippet = _ground(text, patterns)
     fv = FieldVerification(
         field=field,
         label=label,
@@ -192,6 +232,7 @@ def verify_numeric_params(
         text,
         _DENSITY_PATTERNS,
         section,
+        zone_code,
     )
     min_lot = _verify_field(
         "min_lot_area_per_unit_sqft",
@@ -200,6 +241,7 @@ def verify_numeric_params(
         text,
         _MIN_LOT_PATTERNS,
         section,
+        zone_code,
     )
     far = _verify_field(
         "far",
@@ -208,6 +250,7 @@ def verify_numeric_params(
         text,
         _FAR_PATTERNS,
         section,
+        zone_code,
     )
 
     # Zone-code self-described density prior (soft, density only).

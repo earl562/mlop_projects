@@ -76,6 +76,68 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             },
         },
     ),
+    "analyze_property": ToolContract(
+        name="analyze_property",
+        description=(
+            "Full deterministic deal analysis for one address — verified buildable "
+            "units, comps, residual offer, impact fees, site/coastal risk, entitlement "
+            "path, and CA density upside. The grounded engine the agent must cite."
+        ),
+        risk_class=ToolRiskClass.READ_ONLY,
+        input_schema={
+            "type": "object",
+            "properties": {"address": {"type": "string", "minLength": 3}},
+            "required": ["address"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "by_right": {"type": "object"},
+                "valuation": {"type": "object"},
+            },
+            "required": ["status"],
+        },
+    ),
+    "screen_properties": ToolContract(
+        name="screen_properties",
+        description=(
+            "Batch buy-box screening across many addresses; returns qualified deals "
+            "ranked by the deterministic residual max land offer."
+        ),
+        risk_class=ToolRiskClass.EXPENSIVE_READ,
+        input_schema={
+            "type": "object",
+            "properties": {
+                "addresses": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+                "states": {"type": "array", "items": {"type": "string"}},
+                "counties": {"type": "array", "items": {"type": "string"}},
+                "zoning_prefixes": {"type": "array", "items": {"type": "string"}},
+                "min_lot_sqft": {"type": "number"},
+                "max_lot_sqft": {"type": "number"},
+                "min_units": {"type": "integer"},
+                "min_residual": {"type": "number"},
+                "require_verified": {"type": "boolean"},
+                "exclude_high_flood_risk": {"type": "boolean"},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+            },
+            "required": ["addresses"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "qualified": {"type": "array"},
+                "qualified_count": {"type": "integer"},
+            },
+            "required": ["status"],
+        },
+        budget_cents=50,
+    ),
     "search_ordinances": ToolContract(
         name="search_ordinances",
         description="Search locally indexed ordinance chunks and return citation-rich results.",

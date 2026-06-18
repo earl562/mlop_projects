@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.extraction_verify import (
+    _MIN_LOT_PATTERNS,
+    _ground,
+    _ground_for_zone,
     _zone_expected_density,
     verify_numeric_params,
 )
@@ -148,3 +151,59 @@ class TestDeterminism:
             verify_numeric_params(params, _results(ORDINANCE), "RM-29").overall for _ in range(20)
         ]
         assert all(r == runs[0] for r in runs)
+
+
+# The actual San Diego §131.0406 RM density block — every RM zone in ONE chunk.
+# This is the text that broke live grounding: a plain first-match grab returns
+# RM-1-1's 3,000 sqft/DU, so RM-3-7's correct 1,000 looked like a conflict and the
+# offer was wrongly marked provisional. Zone-aware grounding reads the right row.
+SD_RM_TABLE = (
+    "RM-1-1 permits a maximum density of 1 dwelling unit for each 3,000 square feet of lot area "
+    "RM-1-2 permits a maximum density of 1 dwelling unit for each 2,500 square feet of lot area "
+    "RM-1-3 permits a maximum density of 1 dwelling unit for each 2,000 square feet of lot area "
+    "RM-2-4 permits a maximum density of 1 dwelling unit for each 1,750 square feet of lot area "
+    "RM-2-5 permits a maximum density of 1 dwelling unit for each 1,500 square feet of lot area "
+    "RM-2-6 permits a maximum density of 1 dwelling unit for each 1,250 square feet of lot area "
+    "RM-3-7 permits a maximum density of 1 dwelling unit for each 1,000 square feet of lot area "
+    "RM-3-8 permits a maximum density of 1 dwelling unit for each 800 square feet of lot area "
+    "RM-3-9 permits a maximum density of 1 dwelling unit for each 600 square feet of lot area"
+)
+
+
+def test_plain_ground_grabs_first_zone_the_bug():
+    # Documents the failure mode: without zone-awareness the first density wins.
+    value, _ = _ground(SD_RM_TABLE, _MIN_LOT_PATTERNS)
+    assert value == 3000.0  # RM-1-1, the WRONG zone
+
+
+def test_ground_for_zone_reads_the_target_zone_row():
+    assert _ground_for_zone(SD_RM_TABLE, _MIN_LOT_PATTERNS, "RM-3-7")[0] == 1000.0
+    assert _ground_for_zone(SD_RM_TABLE, _MIN_LOT_PATTERNS, "RM-3-9")[0] == 600.0
+    assert _ground_for_zone(SD_RM_TABLE, _MIN_LOT_PATTERNS, "RM-1-3")[0] == 2000.0
+
+
+def test_ground_for_zone_absent_code_falls_back_to_none():
+    # Not present → None so the caller falls back to the global first-match path.
+    assert _ground_for_zone(SD_RM_TABLE, _MIN_LOT_PATTERNS, "RX-9-99")[0] is None
+    assert _ground_for_zone(SD_RM_TABLE, _MIN_LOT_PATTERNS, "")[0] is None
+
+
+def test_hueneme_rm37_verifies_firm_from_multizone_chunk():
+    # The end-to-end regression: RM-3-7 + extracted 1,000 sqft/DU must VERIFY
+    # (not conflict with RM-1-1's 3,000) and the offer must NOT be provisional.
+    params = NumericZoningParams(min_lot_area_per_unit_sqft=1000.0)
+    result = verify_numeric_params(params, _results(SD_RM_TABLE), "RM-3-7")
+    min_lot = next(f for f in result.fields if f.field == "min_lot_area_per_unit_sqft")
+    assert min_lot.status == "verified"
+    assert min_lot.source_value == 1000.0
+    assert result.offer_is_provisional is False
+
+
+def test_wrong_zone_would_still_conflict():
+    # Sanity: if the parcel were RM-3-9 (600) but the LLM extracted 1,000, that is
+    # a genuine conflict — zone-awareness must not paper over real disagreements.
+    params = NumericZoningParams(min_lot_area_per_unit_sqft=1000.0)
+    result = verify_numeric_params(params, _results(SD_RM_TABLE), "RM-3-9")
+    min_lot = next(f for f in result.fields if f.field == "min_lot_area_per_unit_sqft")
+    assert min_lot.status == "conflict"
+    assert min_lot.source_value == 600.0

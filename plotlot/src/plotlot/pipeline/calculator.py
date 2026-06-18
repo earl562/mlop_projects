@@ -275,8 +275,39 @@ def calculate_max_units(
             notes=notes,
         )
 
-    # Governing = constraint with fewest max_units
-    governing = min(constraints, key=lambda c: c.max_units)
+    # The source-verified statutory density / min-lot-area count is the FIRM
+    # by-right entitlement. Floor-area-derived counts (buildable envelope, FAR)
+    # convert a floor-area cap to units by dividing by an LLM-extracted minimum
+    # unit size — and the envelope also uses a deliberately conservative story
+    # height. Per the anti-hallucination doctrine, those coarse estimates must not
+    # silently override the verified entitlement (this is what made the San Diego
+    # Prop D 30 ft coastal cap wrongly cut 6 → 4). When they sit below the verified
+    # entitlement we keep the firm count and surface the massing concern instead.
+    density_limit_verified = density_verified or min_lot_area_verified
+    verified_floor = min(
+        (c.max_units for c in constraints if c.name in {"density", "min_lot_area"}),
+        default=None,
+    )
+    governing_pool = constraints
+    if density_limit_verified and verified_floor is not None:
+        coarse = [
+            c
+            for c in constraints
+            if c.name in {"buildable_envelope", "floor_area_ratio"} and c.max_units < verified_floor
+        ]
+        if coarse:
+            worst = min(coarse, key=lambda c: c.max_units)
+            notes.append(
+                f"Floor-area estimate ({worst.name}: {worst.max_units} units) is below the "
+                f"source-verified entitlement of {verified_floor}. The verified entitlement "
+                "governs the firm count; confirm all units fit the massing (height cap / "
+                "setbacks / unit size) at design — the estimate uses conservative assumptions."
+            )
+            demote = {c.name for c in coarse}
+            governing_pool = [c for c in constraints if c.name not in demote]
+
+    # Governing = constraint with fewest max_units (excluding demoted estimates)
+    governing = min(governing_pool, key=lambda c: c.max_units)
     governing.is_governing = True
 
     # Confidence based on how many constraints we could evaluate

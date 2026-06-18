@@ -195,6 +195,7 @@ class SessionStore:
         self._datasets: dict[str, DatasetInfo | None] = {}
         self._geocode: dict[str, dict] = {}
         self._property_context: dict[str, dict] = {}
+        self._analysis: dict[str, dict] = {}
         self._evidence_ids: dict[str, list[str]] = {}
         self._tokens: dict[str, int] = {}
         self._last_access: dict[str, float] = {}
@@ -222,6 +223,7 @@ class SessionStore:
         self._datasets.pop(session_id, None)
         self._geocode.pop(session_id, None)
         self._property_context.pop(session_id, None)
+        self._analysis.pop(session_id, None)
         self._evidence_ids.pop(session_id, None)
         self._tokens.pop(session_id, None)
         self._last_access.pop(session_id, None)
@@ -251,6 +253,13 @@ class SessionStore:
 
     def set_property_context(self, session_id: str, data: dict) -> None:
         self._property_context[session_id] = data
+
+    def get_analysis(self, session_id: str) -> dict | None:
+        """The most recent grounded analyze_property payload for this session."""
+        return self._analysis.get(session_id)
+
+    def set_analysis(self, session_id: str, data: dict) -> None:
+        self._analysis[session_id] = data
 
     def get_evidence_ids(self, session_id: str) -> list[str]:
         return self._evidence_ids.get(session_id, [])
@@ -297,6 +306,69 @@ _sessions = SessionStore()
 # ---------------------------------------------------------------------------
 
 AGENT_SYSTEM_PROMPT = get_active_prompt("chat_agent")
+
+# Hard anti-hallucination gate, appended to every chat system prompt. PlotLot's
+# whole value is being trustworthy on numbers; the deterministic pipeline (units,
+# comps, residual, fees, flood/coastal/wetlands, entitlement) is the source of
+# truth. Without this gate the agent free-forms those numbers from the model's
+# own knowledge and hallucinates — wrong zone density, fake comps, invented fees,
+# "assumed" flood zones. The rule: the model may only restate what a tool returned.
+GROUNDING_POLICY = """
+
+## GROUNDING POLICY — NON-NEGOTIABLE (read before answering)
+PlotLot is trusted because its numbers are source-verified, not guessed. You are
+a narrator of grounded results, not a calculator.
+
+For ANY question about a specific property that touches:
+- buildable units, density, or what can be built by-right
+- land value, comparable sales, "what's it worth", or "what can I pay"
+- pro forma, residual, margin, exit value, or whether a deal "pencils"
+- impact / development / school / utility fees
+- flood zone, coastal, wetlands, or site risk
+- entitlement path (by-right vs CUP vs rezone), timeline, or ADU/SB9/density bonus
+
+you MUST first call `analyze_property` for that address and then cite ONLY the
+numbers it returns. You may NOT:
+- compute any of these yourself or derive them by hand,
+- quote figures from your training knowledge or "industry benchmarks,"
+- state a zoning code's density from its name (e.g. never read "RM-3-7" as
+  "7 units/acre" — the tool returns the real density),
+- present an estimate as if it were verified.
+
+If `analyze_property` has not been run for the address in question, run it before
+answering. If it returns a field as null/absent, tell the user that value is not
+available — do NOT fill the gap with an estimate. If `offer_is_provisional` is
+true, label the unit count and offer as PROVISIONAL, not firm, and say why.
+
+ONCE you have run `analyze_property` for an address, its result stays available to
+you for the rest of the conversation (an "ACTIVE GROUNDED ANALYSIS" block). Answer
+EVERY follow-up about that property directly from those numbers. Do NOT re-run a
+hypothetical, do NOT say "I don't have your assumptions" — the residual, comps,
+fees, risk, and entitlement are already computed and in front of you.
+
+Never invent an alternative ordinance reading (e.g. a different "sq ft per unit")
+to manufacture a conflict — the verified driver the tool returns IS the answer.
+San Diego is already fully ingested; never suggest "ingesting the ordinance" or
+imply the data is missing. PROVISIONAL means automated verification was
+inconclusive, not that data is absent — present the number and flag it.
+
+Do NOT decompose or itemize an aggregate the tool returned as a single number.
+The impact/dev fee is ONE coarse regional figure — never break it into invented
+line items (park, fire, police, school, etc.); present it as the aggregate it is
+and say it's a coarse estimate, not the city's published schedule. When a value
+carries a "_basis" note saying it's a regional default/estimate (e.g. ADV with
+adv_source != "comps", or impact fees), state that provenance plainly — call it an
+estimate, not an appraised or verified figure. If comps came back empty, say land
+value/exit is estimated from a regional default; do not fabricate a comp range.
+
+When the user gives a LIST of addresses/parcels and asks which fit their box or
+pencil best, call `screen_properties` (not analyze_property one-by-one) and rank
+only from its results.
+
+If a value is genuinely outside the tools' output (e.g. a hyper-local fee
+schedule or live utility capacity), say it is not modeled and that it must be
+verified with the city — never fabricate a number to fill the gap.
+"""
 
 
 def _llm_unavailable_detail() -> str:
@@ -482,6 +554,96 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["municipality", "query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_property",
+            "description": (
+                "THE authoritative deal-analysis engine. Runs the full deterministic "
+                "PlotLot pipeline for ONE address and returns GROUNDED, source-verified "
+                "numbers: max buildable units by-right (with verification status), "
+                "estimated land value + range, residual max land price ('what you can "
+                "pay'), after-development value per unit (the exit), per-unit impact/dev "
+                "fees, entitlement path + timeline (by-right vs CUP vs rezone), FEMA "
+                "flood zone / coastal / wetlands risk, and California ADU/SB9/Density-"
+                "Bonus upside. "
+                "You MUST call this before stating ANY number about units, density, land "
+                "value, comps, pro forma, fees, risk, or entitlement. NEVER compute these "
+                "yourself or quote them from memory — only repeat what this tool returns. "
+                "Pass the full street address; it self-geocodes and looks up the parcel."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "string",
+                        "description": "Full street address (e.g. '1233 Hueneme St, San Diego, CA 92110')",
+                    },
+                },
+                "required": ["address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screen_properties",
+            "description": (
+                "Batch 'buy box' screening — analyze MANY candidate addresses at once "
+                "and return only the ones that fit the user's criteria, ranked by the "
+                "deterministic residual max land offer (best deals first). Use this when "
+                "the user has a LIST of parcels/addresses and asks which fit their box or "
+                "pencil best. Each address runs through the SAME grounded pipeline as "
+                "analyze_property (verified units + residual), so the rankings are "
+                "source-based, not estimated. Heavy operation — keep the list to ~20."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "addresses": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Candidate street addresses to screen (max ~20).",
+                    },
+                    "states": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional 2-letter state filter, e.g. ['CA'].",
+                    },
+                    "counties": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional county filter (case-insensitive).",
+                    },
+                    "zoning_prefixes": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional zoning-code prefixes, e.g. ['RM','RD'].",
+                    },
+                    "min_lot_sqft": {"type": "number", "description": "Minimum lot size (sqft)."},
+                    "max_lot_sqft": {"type": "number", "description": "Maximum lot size (sqft)."},
+                    "min_units": {"type": "integer", "description": "Minimum buildable units."},
+                    "min_residual": {
+                        "type": "number",
+                        "description": "Minimum residual max land offer — the deal must pencil to at least this.",
+                    },
+                    "require_verified": {
+                        "type": "boolean",
+                        "description": "If true, drop deals whose unit count is provisional/uncorroborated.",
+                    },
+                    "exclude_high_flood_risk": {
+                        "type": "boolean",
+                        "description": "If true, drop parcels in a high flood-risk area.",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max qualified deals to return (default 25).",
+                    },
+                },
+                "required": ["addresses"],
             },
         },
     },
@@ -940,6 +1102,8 @@ CORE_TOOLS = [
     in {
         "geocode_address",
         "lookup_property_info",
+        "analyze_property",
+        "screen_properties",
         "search_zoning_ordinance",
         "search_municode_live",
         "discover_open_data_layers",
@@ -1176,6 +1340,109 @@ def _build_intent_context(classification: IntentClassification) -> str:
     }
     parts.append(guidance.get(classification.intent, ""))
     return "\n".join(parts)
+
+
+def _build_active_analysis_context(payload: dict) -> str:
+    """Render a stored analyze_property payload into an authoritative prompt block.
+
+    The agent abandons grounded data after the turn the tool ran and reverts to
+    hypotheticals on follow-ups (it even invents alternate ordinance readings).
+    Promoting the verified numbers into the system prompt — and ordering it to
+    answer follow-ups from them — is what keeps the whole conversation grounded.
+    """
+    if not payload or payload.get("status") != "success":
+        return ""
+
+    lines: list[str] = [
+        "\n\n## ACTIVE GROUNDED ANALYSIS — AUTHORITATIVE (cite these EXACT numbers)",
+        f"Property: {payload.get('address', '')} · Zoning: {payload.get('zoning_code', '')}",
+    ]
+    lot = payload.get("lot_size_sqft")
+    if lot:
+        lines.append(f"Lot size: {lot:,.0f} sqft")
+
+    by_right = payload.get("by_right") or {}
+    if by_right:
+        verif = by_right.get("verification", "")
+        lines.append(
+            f"By-right max units: {by_right.get('max_units')} "
+            f"(governing: {by_right.get('governing_constraint')}, "
+            f"verification: {verif.upper()})"
+        )
+        drivers = by_right.get("verified_drivers") or []
+        for d in drivers:
+            if d.get("citation"):
+                lines.append(
+                    f"  • {d.get('field')}: source={d.get('source_value')} "
+                    f'[{d.get("status")}] — "{d.get("citation")[:160]}"'
+                )
+
+    val = payload.get("valuation") or {}
+    if val:
+        if val.get("max_land_price_residual") is not None:
+            lines.append(f"Max land price (residual): ${val['max_land_price_residual']:,.0f}")
+        rng = val.get("land_value_range")
+        if rng and rng[0] is not None:
+            lines.append(f"Land value range: ${rng[0]:,.0f}–${rng[1]:,.0f}")
+        if val.get("adv_per_unit") is not None:
+            adv_note = "" if val.get("adv_source") == "comps" else " [regional estimate, no comps]"
+            lines.append(
+                f"After-development value/unit (exit): ${val['adv_per_unit']:,.0f} "
+                f"(source: {val.get('adv_source', 'n/a')}){adv_note}"
+            )
+        if val.get("impact_fees_per_unit") is not None:
+            lines.append(
+                f"Impact fees/unit: ${val['impact_fees_per_unit']:,.0f} "
+                "[coarse regional aggregate — not itemized, not the city's DIF schedule]"
+            )
+        if val.get("market"):
+            lines.append(f"Cost-model market: {val['market']}")
+
+    ent = payload.get("entitlement") or {}
+    if ent:
+        lines.append(
+            f"Entitlement: {ent.get('path')} "
+            f"(~{ent.get('est_timeline_months')} mo, "
+            f"impact fee/unit ${ent.get('impact_fee_per_unit', 0):,.0f})"
+        )
+        if ent.get("utilities_note"):
+            lines.append(f"Utilities: {ent['utilities_note']}")
+
+    risk = payload.get("site_risk") or {}
+    if risk:
+        lines.append(
+            f"Site risk: flood zone {risk.get('flood_zone')} "
+            f"(SFHA={risk.get('in_special_flood_hazard_area')}), "
+            f"wetlands={risk.get('has_wetlands')}, overall={risk.get('overall_risk')}"
+        )
+    coastal = payload.get("coastal_height_overlay") or {}
+    if coastal:
+        lines.append(
+            f"Coastal (Prop D): applies={coastal.get('applies')} "
+            f"(status={coastal.get('status')}, limit={coastal.get('height_limit_ft')} ft)"
+        )
+
+    upside = payload.get("ca_upside") or {}
+    if upside:
+        lines.append(
+            f"CA upside (separate from firm base): base {upside.get('base_units')} → "
+            f"max potential {upside.get('max_potential_units')} units"
+        )
+
+    warnings = payload.get("warnings") or []
+    for w in warnings[:4]:
+        lines.append(f"Warning: {w}")
+
+    lines.append(
+        "\nUSE THESE NUMBERS for any follow-up about this property — what you can pay, "
+        "comps, exit, fees, risk, entitlement, upside. Do NOT re-derive them with "
+        "hypothetical/typical assumptions, do NOT invent alternative ordinance readings, "
+        "and do NOT suggest ingesting data or 'verifying with the city' — the analysis is "
+        "already grounded. PROVISIONAL means automated source-verification was "
+        "inconclusive (flag it as such); it does NOT mean data is missing or that you "
+        "should substitute a guess. Only call analyze_property again for a DIFFERENT address."
+    )
+    return "\n".join(lines)
 
 
 def _get_tools_for_turn(
@@ -1416,6 +1683,290 @@ async def _execute_zoning_search(municipality: str, query: str, session_id: str 
             }
         )
         return json.dumps({"status": "success", "results": chunks})
+
+
+def _round(value: float | None, ndigits: int = 0) -> float | None:
+    """Round a value for compact tool output, preserving None."""
+    if value is None:
+        return None
+    return round(value, ndigits)
+
+
+def _format_grounded_analysis(report) -> dict:
+    """Render a ZoningReport into the grounded payload the agent may cite.
+
+    Every figure here is produced by the deterministic pipeline and carries its
+    verification status. The agent is instructed (in the tool description and the
+    system prompt) to repeat ONLY these numbers — never to compute or recall its
+    own — which is what stops the chat agent from hallucinating unit counts,
+    comps, fees, and flood zones the way it did before this tool existed.
+    """
+    out: dict[str, Any] = {
+        "status": "success",
+        "address": report.formatted_address or report.address,
+        "municipality": report.municipality,
+        "county": report.county,
+        "state": report.state,
+        "zoning_code": report.zoning_district or "",
+        "zoning_description": report.zoning_description or "",
+    }
+
+    pr = report.property_record
+    out["lot_size_sqft"] = _round(pr.lot_size_sqft, 0) if pr and pr.lot_size_sqft else None
+
+    density = report.density_analysis
+    ev = report.extraction_verification
+    if density is not None:
+        provisional = bool(ev and ev.offer_is_provisional)
+        out["by_right"] = {
+            "max_units": density.max_units,
+            "governing_constraint": density.governing_constraint,
+            "confidence": density.confidence,
+            "verification": "provisional" if provisional else "verified",
+            "offer_is_provisional": provisional,
+            "verified_drivers": [
+                {
+                    "field": f.field,
+                    "status": f.status,
+                    "source_value": f.source_value,
+                    "citation": (f.citation[:240] if f.citation else ""),
+                    "section": f.section,
+                }
+                for f in (ev.fields if ev else [])
+            ],
+        }
+    else:
+        out["by_right"] = None
+        out["note"] = "No residential unit count could be computed for this parcel."
+
+    comps = report.comp_analysis
+    pf = report.pro_forma
+    valuation: dict[str, Any] = {}
+    if comps is not None:
+        valuation["estimated_land_value"] = _round(comps.estimated_land_value)
+        valuation["land_value_range"] = [
+            _round(comps.estimated_land_value_low),
+            _round(comps.estimated_land_value_high),
+        ]
+        valuation["adv_per_unit"] = _round(comps.adv_per_unit)
+        valuation["adv_per_unit_range"] = [
+            _round(comps.adv_per_unit_low),
+            _round(comps.adv_per_unit_high),
+        ]
+        valuation["adv_source"] = comps.adv_source or "regional_default"
+        valuation["comp_confidence"] = round(comps.confidence, 2)
+    if pf is not None:
+        valuation["max_land_price_residual"] = _round(pf.max_land_price)
+        valuation["gross_development_value"] = _round(pf.gross_development_value)
+        valuation["impact_fees_per_unit"] = _round(pf.impact_fees_per_unit)
+        # The impact fee is a single coarse regional aggregate, NOT an itemized
+        # schedule — label it so the agent can't invent a park/fire/police
+        # breakdown the data doesn't contain.
+        valuation["impact_fees_basis"] = (
+            "coarse regional aggregate (school/park/traffic/utility combined) — "
+            "NOT San Diego's published per-Community-Plan-Area DIF schedule; not itemized"
+        )
+        valuation["construction_cost_psf"] = _round(pf.construction_cost_psf)
+        valuation["adv_per_unit"] = _round(pf.adv_per_unit)
+        valuation["adv_source"] = pf.adv_source or valuation.get("adv_source", "")
+        if valuation["adv_source"] != "comps":
+            valuation["adv_basis"] = (
+                "regional market default — no local sold-unit comps were found; "
+                "treat exit value and residual as estimates, not appraised"
+            )
+        valuation["market"] = pf.market
+    out["valuation"] = valuation or None
+
+    ent = report.entitlement
+    if ent is not None:
+        out["entitlement"] = {
+            "path": ent.path,
+            "complexity": ent.complexity,
+            "est_timeline_months": _round(ent.est_timeline_months, 1),
+            "impact_fee_per_unit": _round(ent.impact_fee_per_unit),
+            "impact_fees_total": _round(ent.impact_fees_total),
+            "utilities_note": ent.utilities_note,
+        }
+
+    sr = report.site_risk
+    if sr is not None:
+        fz = sr.flood_zone
+        out["site_risk"] = {
+            "flood_zone": fz.zone if fz else None,
+            "in_special_flood_hazard_area": bool(fz and fz.in_sfha),
+            "flood_risk_level": fz.risk_level if fz else "undetermined",
+            "has_wetlands": sr.has_wetlands,
+            "overall_risk": sr.overall_risk,
+            "data_sources": sr.data_sources,
+        }
+
+    co = report.coastal_overlay
+    if co is not None and co.status != "not_applicable":
+        out["coastal_height_overlay"] = {
+            "applies": co.applies,
+            "height_limit_ft": co.height_limit_ft,
+            "status": co.status,
+            "citation": co.citation,
+        }
+
+    uplift = report.density_uplift
+    if uplift is not None:
+        out["ca_upside"] = {
+            "base_units": uplift.base_units,
+            "max_potential_units": uplift.max_potential_units,
+            "note": "Statutory maxima/eligibility ceilings, separate from the firm by-right count.",
+            "programs": [
+                {
+                    "name": p.name,
+                    "statute": p.statute,
+                    "eligibility": p.eligibility,
+                    "additional_units": p.additional_units,
+                    "potential_units": p.potential_units,
+                }
+                for p in uplift.programs
+            ],
+        }
+
+    if report.warnings:
+        out["warnings"] = list(report.warnings)
+
+    out["grounding_note"] = (
+        "These are the ONLY figures you may cite for this property. Do not add, "
+        "round differently, or invent any number. If a field is null or absent, "
+        "tell the user it is not available rather than estimating. If "
+        "by_right.offer_is_provisional is true, present the unit count and offer "
+        "as PROVISIONAL, not firm."
+    )
+    return out
+
+
+async def _execute_analyze_property(address: str, session_id: str = "") -> str:
+    """Run the full deterministic deal pipeline and return grounded numbers.
+
+    This is the anti-hallucination engine for chat: the agent calls it instead of
+    free-forming density, valuation, fees, or risk. It composes the same steps as
+    ``/analyze`` (verified density → comps → residual → entitlement → site risk →
+    CA uplift) via ``analyze_property_deep``.
+    """
+    if not address or not address.strip():
+        return json.dumps({"status": "error", "message": "An address is required."})
+
+    from plotlot.pipeline.analyze import analyze_property_deep
+
+    try:
+        report = await analyze_property_deep(address)
+    except Exception as e:  # noqa: BLE001 — surface a structured error, never 500 the chat
+        logger.warning("analyze_property failed for %s: %s", address[:60], e)
+        return json.dumps({"status": "error", "message": f"Analysis failed: {str(e)[:200]}"})
+
+    if report is None:
+        return json.dumps(
+            {
+                "status": "not_found",
+                "message": f"Could not geocode or analyze: {address}",
+            }
+        )
+
+    # Persist lightweight property context so follow-up tools (document
+    # generation, the active-property panel) stay consistent with this analysis.
+    if session_id and report.property_record:
+        pr = report.property_record
+        _sessions.set_property_context(
+            session_id,
+            {
+                "address": report.formatted_address or report.address,
+                "municipality": report.municipality,
+                "county": report.county,
+                "state": report.state,
+                "zoning_code": report.zoning_district or pr.zoning_code,
+                "zoning_description": report.zoning_description,
+                "lot_size_sqft": pr.lot_size_sqft,
+            },
+        )
+
+    payload = _format_grounded_analysis(report)
+    # Persist the grounded payload so EVERY follow-up turn can be answered from
+    # these exact numbers (injected into the system prompt) without the model
+    # re-deriving them from its own knowledge. This is what makes the grounding
+    # stick across a conversation instead of only on the turn the tool ran.
+    if session_id:
+        _sessions.set_analysis(session_id, payload)
+    return json.dumps(payload)
+
+
+# Cap batch size so a chat turn can't kick off an unbounded analysis fan-out.
+_MAX_SCREEN_ADDRESSES = 20
+
+
+async def _execute_screen_properties(args: dict) -> str:
+    """Batch-screen a list of addresses against a buy box and rank the winners.
+
+    Reuses the deterministic screening pipeline (``screen_addresses`` +
+    ``analyze_property_full``) so rankings come from verified units + the
+    residual offer — never the model's guess about which parcel is best.
+    """
+    from plotlot.pipeline.analyze import analyze_property_full
+    from plotlot.pipeline.screening import BuyBox, screen_addresses
+
+    raw = args.get("addresses") or []
+    addresses = [a.strip() for a in raw if isinstance(a, str) and a.strip()][:_MAX_SCREEN_ADDRESSES]
+    if not addresses:
+        return json.dumps({"status": "error", "message": "Provide a list of addresses to screen."})
+
+    buy_box = BuyBox(
+        states=args.get("states") or [],
+        counties=args.get("counties") or [],
+        zoning_prefixes=args.get("zoning_prefixes") or [],
+        min_lot_sqft=args.get("min_lot_sqft"),
+        max_lot_sqft=args.get("max_lot_sqft"),
+        min_units=args.get("min_units"),
+        min_residual=args.get("min_residual"),
+        exclude_high_flood_risk=bool(args.get("exclude_high_flood_risk", False)),
+        require_verified=bool(args.get("require_verified", False)),
+        max_results=int(args.get("max_results", 25)),
+    )
+
+    async def _analyze(addr: str):
+        return await analyze_property_full(addr, with_comps=False)
+
+    try:
+        batch = await screen_addresses(
+            addresses, buy_box, _analyze, concurrency=4, per_item_timeout=90.0
+        )
+    except Exception as e:  # noqa: BLE001 — structured error, never 500 the chat
+        logger.warning("screen_properties failed: %s", e)
+        return json.dumps({"status": "error", "message": f"Screening failed: {str(e)[:200]}"})
+
+    def _row(r) -> dict:
+        return {
+            "address": r.address,
+            "max_units": r.max_units,
+            "max_land_price": _round(r.max_land_price),
+            "zoning": r.zoning_district,
+            "county": r.county,
+            "state": r.state,
+            "offer_is_provisional": r.offer_is_provisional,
+        }
+
+    return json.dumps(
+        {
+            "status": "success",
+            "screened": batch.total,
+            "qualified_count": batch.qualified_count,
+            # Already ranked best-first (highest residual offer) by the pipeline.
+            "qualified": [_row(r) for r in batch.qualified],
+            "rejected_count": len(batch.rejected),
+            "rejected_sample": [
+                {"address": r.address, "reasons": r.reasons} for r in batch.rejected[:5]
+            ],
+            "error_count": len(batch.errors),
+            "grounding_note": (
+                "Rankings come from the deterministic residual offer on verified units. "
+                "Cite only these results. Deals marked offer_is_provisional have an "
+                "unverified unit count — flag them as provisional, not firm."
+            ),
+        }
+    )
 
 
 async def _execute_municode_live_search(municipality: str, query: str, session_id: str = "") -> str:
@@ -1979,6 +2530,10 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
             session_id=session_id,
             state=args.get("state", ""),
         )
+    elif name == "analyze_property":
+        return await _execute_analyze_property(args.get("address", ""), session_id=session_id)
+    elif name == "screen_properties":
+        return await _execute_screen_properties(args)
     elif name == "search_zoning_ordinance":
         return await _execute_zoning_search(
             args.get("municipality", ""),
@@ -2063,8 +2618,10 @@ async def chat(request: ChatRequest, http_request: Request):
                 request.message[:80],
             )
 
-            # Build system prompt with report context + intent guidance
-            system_content = AGENT_SYSTEM_PROMPT
+            # Build system prompt with report context + intent guidance.
+            # The grounding policy is appended unconditionally — it is the guard
+            # that keeps the agent citing tool output instead of hallucinating.
+            system_content = AGENT_SYSTEM_PROMPT + GROUNDING_POLICY
             if request.report_context:
                 system_content += _build_report_context(request.report_context)
             else:
@@ -2087,6 +2644,15 @@ async def chat(request: ChatRequest, http_request: Request):
                     if prop_ctx.get("lot_size_sqft"):
                         ctx_lines.append(f"- Lot Size: {prop_ctx['lot_size_sqft']:,.0f} sqft")
                     system_content += "\n".join(ctx_lines)
+
+            # Promote the most recent grounded analysis into the system prompt so
+            # EVERY follow-up turn answers from these verified numbers instead of
+            # the model re-deriving them. This is what makes grounding persist
+            # across the conversation rather than only on the turn the tool ran.
+            active_analysis = _sessions.get_analysis(session_id)
+            if active_analysis:
+                system_content += _build_active_analysis_context(active_analysis)
+
             system_content += _build_intent_context(intent)
 
             messages = [{"role": "system", "content": system_content}]
@@ -2198,6 +2764,8 @@ async def chat(request: ChatRequest, http_request: Request):
                     tool_messages = {
                         "geocode_address": "Resolving address...",
                         "lookup_property_info": "Looking up property record...",
+                        "analyze_property": "Running grounded deal analysis...",
+                        "screen_properties": "Screening parcels against your buy box...",
                         "search_zoning_ordinance": "Searching zoning ordinances...",
                         "web_search": "Searching the web...",
                         "create_spreadsheet": "Creating spreadsheet...",

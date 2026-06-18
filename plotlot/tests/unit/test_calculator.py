@@ -566,3 +566,59 @@ class TestCoastalHeightLimit:
             20000, params, lot_width_ft=100.0, lot_depth_ft=200.0, height_limit_ft=None
         )
         assert _envelope(res).max_units == 96
+
+
+class TestVerifiedEntitlementProtection:
+    """A source-verified statutory entitlement is not silently overridden by a
+    coarse floor-area estimate (buildable envelope / FAR). This is the live
+    1233 Hueneme regression: the Prop D 30 ft cap dragged the envelope to 4 and
+    it wrongly governed below the verified 6-unit density entitlement.
+    """
+
+    def _hueneme_with_coastal(self, **kw):
+        # 6,470.6 / 1,000 = 6 (the entitlement). Large min unit + 30 ft cap make
+        # the envelope bind at 4 (60x108 lot → 50x88 = 4,400 buildable, 2 stories).
+        params = NumericZoningParams(
+            min_lot_area_per_unit_sqft=1000.0,
+            min_unit_size_sqft=2000.0,
+            setback_front_ft=10.0,
+            setback_rear_ft=10.0,
+            setback_side_ft=5.0,
+            max_stories=6,
+        )
+        return calculate_max_units(
+            6470.6,
+            params,
+            lot_width_ft=60.0,
+            lot_depth_ft=108.0,
+            height_limit_ft=30.0,
+            **kw,
+        )
+
+    def test_unverified_envelope_can_still_govern(self):
+        # Without verification the conservative envelope still governs (unchanged).
+        res = self._hueneme_with_coastal()
+        assert res.governing_constraint == "buildable_envelope"
+        assert res.max_units == 4
+
+    def test_verified_entitlement_is_not_overridden_by_envelope(self):
+        res = self._hueneme_with_coastal(min_lot_area_verified=True)
+        assert res.max_units == 6
+        assert res.governing_constraint != "buildable_envelope"
+        assert any("verified entitlement governs" in n for n in res.notes)
+        # The envelope figure is still reported for transparency, just not governing.
+        assert any(c.name == "buildable_envelope" for c in res.constraints)
+
+    def test_verified_via_density_flag_also_protects(self):
+        res = self._hueneme_with_coastal(density_verified=True)
+        assert res.max_units == 6
+
+    def test_far_estimate_also_demoted_when_below_verified(self):
+        params = NumericZoningParams(
+            min_lot_area_per_unit_sqft=1000.0,  # → 6 (verified entitlement)
+            far=0.5,
+            min_unit_size_sqft=2000.0,  # FAR units: 0.5*6470.6/2000 = 1.6 → 1
+        )
+        res = calculate_max_units(6470.6, params, min_lot_area_verified=True)
+        assert res.max_units == 6
+        assert res.governing_constraint != "floor_area_ratio"
