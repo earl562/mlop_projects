@@ -36,6 +36,7 @@ from plotlot.core.types import (
     FloodZoneInfo,
     LandProForma,
     PropertyRecord,
+    SensitivityTable,
     SiteRisk,
     UpliftProgram,
     ZoningReport,
@@ -134,6 +135,20 @@ def _hueneme_report(*, provisional: bool = False) -> ZoningReport:
                 ),
             ],
         ),
+        sensitivity=SensitivityTable(
+            row_label="Construction $/sf",
+            col_label="ADV per Unit",
+            row_values=[280.0, 350.0, 420.0],  # -20%, base, +20%
+            col_values=[336_000.0, 420_000.0, 504_000.0],  # -20%, base, +20%
+            grid=[
+                [1_200_000.0, 1_400_000.0, 1_600_000.0],  # construction -20%
+                [600_000.0, 980_000.0, 1_360_000.0],  # base construction
+                [-200_000.0, 380_000.0, 960_000.0],  # construction +20%
+            ],
+            base_row_index=1,
+            base_col_index=1,
+            base_value=980_000.0,
+        ),
     )
 
 
@@ -171,7 +186,8 @@ def test_grounded_payload_surfaces_valuation_fees_risk_entitlement():
     assert val["adv_source"] == "comps"
     assert val["impact_fees_per_unit"] == 18_000
     assert "impact_fees_basis" in val  # labeled coarse aggregate, not itemizable
-    assert "not itemized" in val["impact_fees_basis"]
+    assert "coarse regional aggregate" in val["impact_fees_basis"]
+    assert "impact_fee_breakdown" not in val  # no real schedule registered
     assert val["market"] == "San Diego"
 
     assert payload["entitlement"]["path"] == "by_right"
@@ -211,12 +227,199 @@ def test_policy_forbids_itemizing_fee_aggregates():
     assert "coarse" in policy
 
 
+def test_fee_breakdown_emitted_only_when_real_schedule_registered():
+    from plotlot.pipeline import fee_schedule
+    from plotlot.pipeline.fee_schedule import FeeComponent, FeeSchedule, register_fee_schedule
+
+    report = _hueneme_report()  # state CA, county San Diego
+
+    # No schedule registered → coarse aggregate, no breakdown, "do not itemize".
+    payload = _format_grounded_analysis(report)
+    assert "impact_fee_breakdown" not in payload["valuation"]
+    assert "line items" in payload["valuation"]["impact_fees_basis"]
+
+    before = dict(fee_schedule._FEE_SCHEDULES)
+    try:
+        register_fee_schedule(
+            FeeSchedule(
+                jurisdiction="City of San Diego",
+                state="CA",
+                source="FY26 Fee Schedule",
+                effective_date="2025-07-01",
+                components=(
+                    FeeComponent("Citywide Mobility DIF", 9000.0, "R-314273"),
+                    FeeComponent("Citywide Fire-Rescue DIF", 4000.0, "R-314271"),
+                ),
+            ),
+            county="San Diego",
+        )
+        payload = _format_grounded_analysis(report)
+        val = payload["valuation"]
+        assert val["impact_fees_per_unit"] == 13000  # itemized total
+        assert len(val["impact_fee_breakdown"]) == 2
+        assert val["impact_fee_breakdown"][0]["citation"] == "R-314273"
+        assert "itemized from" in val["impact_fees_basis"]
+    finally:
+        fee_schedule._FEE_SCHEDULES.clear()
+        fee_schedule._FEE_SCHEDULES.update(before)
+
+
 def test_grounded_payload_handles_missing_density_gracefully():
     report = _hueneme_report()
     report.density_analysis = None
     payload = _format_grounded_analysis(report)
     assert payload["by_right"] is None
     assert "note" in payload
+
+
+# ---------------------------------------------------------------------------
+# Deterministic trust pass — the NIM narrator ignores correctly-injected fields
+# and misreads labeled ones, so the high-stakes facts are made deterministic.
+# ---------------------------------------------------------------------------
+
+
+def test_source_query_detection():
+    from plotlot.api.chat import _is_source_query
+
+    # Source / trust / citation phrasings fire.
+    assert _is_source_query("Can I trust that unit count — what's the source?")
+    assert _is_source_query("what's the source?")
+    assert _is_source_query("how do you know that?")
+    assert _is_source_query("cite the ordinance")
+    assert _is_source_query("what code says that?")
+    # Ordinary analysis questions do NOT hijack the source short-circuit.
+    assert not _is_source_query("what is the maximum buildable unit")
+    assert not _is_source_query("how many units can I build by-right?")
+    assert not _is_source_query("generate a pro forma")
+
+
+def test_source_answer_echoes_verified_citation_never_fabricates():
+    from plotlot.api.chat import _build_source_answer
+
+    payload = _format_grounded_analysis(_hueneme_report())
+    answer = _build_source_answer(payload)
+    assert answer is not None
+    # Reproduces the EXACT verified ordinance sentence + the real section.
+    assert "1,000 square feet of lot area" in answer
+    assert "131.0406" in answer  # the verified driver's real section
+    assert "VERIFIED" in answer
+    assert "6 units" in answer
+    # Never the fabricated section the narrator invented from the FAR field.
+    assert "131.0445" not in answer
+
+
+def test_source_answer_none_when_no_verified_driver():
+    """Provisional / unverified → fall through to the model (no fabricated echo)."""
+    from plotlot.api.chat import _build_source_answer
+
+    report = _hueneme_report(provisional=True)
+    # Only a conflicting driver — nothing verified to echo.
+    report.extraction_verification.fields = [
+        FieldVerification(
+            field="far",
+            label="Floor area ratio",
+            llm_value=1.5,
+            source_value=4.0,
+            status="conflict",
+            citation="…[See Section 131.0445(a)] applies Max floor area ratio…",
+            section="Art.01 Div.04",
+        ),
+    ]
+    payload = _format_grounded_analysis(report)
+    assert _build_source_answer(payload) is None
+
+
+def test_source_answer_does_not_borrow_a_conflicting_fields_section():
+    """The FAR conflict citation contains '131.0445' — it must never be echoed."""
+    from plotlot.api.chat import _build_source_answer
+
+    report = _hueneme_report()
+    # Verified min-lot driver PLUS a conflicting FAR driver whose citation holds the
+    # section the narrator previously mis-attributed to the unit count.
+    report.extraction_verification.fields.append(
+        FieldVerification(
+            field="far",
+            label="Floor area ratio",
+            status="conflict",
+            source_value=4.0,
+            citation="…rage for sloping lots [See Section 131.0445(a)] applies…",
+            section="Art.01 Div.04",
+        )
+    )
+    answer = _build_source_answer(_format_grounded_analysis(report))
+    assert answer is not None
+    assert "131.0445" not in answer
+    assert "1,000 square feet of lot area" in answer
+
+
+def test_exit_value_formula_is_per_unit_and_unambiguous():
+    payload = _format_grounded_analysis(_hueneme_report())
+    formula = payload["valuation"]["exit_value_formula"]
+    # units × ADV-per-unit = GDV, with an explicit "per unit" guard.
+    assert "6 units" in formula
+    assert "$420,000/unit" in formula
+    assert "$2,520,000" in formula  # 6 × 420k GDV, never 420k/6
+    assert "PER UNIT" in formula
+
+
+def test_active_context_exit_line_unambiguous():
+    payload = _format_grounded_analysis(_hueneme_report())
+    block = _build_active_analysis_context(payload)
+    assert "Exit value:" in block
+    assert "$2,520,000" in block
+    assert "do not divide" in block.lower() or "never divide" in block.lower()
+
+
+def test_sensitivity_surfaced_with_labeled_scenarios():
+    payload = _format_grounded_analysis(_hueneme_report())
+    sens = payload["sensitivity"]
+    assert sens["base_max_land_price"] == 980_000
+    joined = " | ".join(sens["scenarios"])
+    # Percentage-labeled moves off the base case.
+    assert "Construction +20%" in joined
+    assert "Exit -20%" in joined
+    # Negative cells are flagged so the narrator can say "does not pencil".
+    assert "does not pencil" in joined
+
+
+def test_active_context_includes_sensitivity_scenarios():
+    payload = _format_grounded_analysis(_hueneme_report())
+    block = _build_active_analysis_context(payload)
+    assert "Sensitivity" in block
+    assert "Construction +20%" in block
+    assert "do NOT invent" in block
+
+
+def test_active_context_lists_real_upside_programs_only():
+    payload = _format_grounded_analysis(_hueneme_report())
+    block = _build_active_analysis_context(payload)
+    # The real program + statute are present; the narrator is told not to invent.
+    assert "ADU/JADU" in block
+    assert "Gov. Code 65852.2" in block
+    assert "SB9" in block  # appears only inside the "do NOT invent ... no 'SB9'" guard
+
+
+def test_internal_reconciliation_warnings_are_filtered_out():
+    report = _hueneme_report()
+    internal = "Max density (units/acre): Extracted 6 u/ac contradicts source min lot area."
+    user_facing = "ADV per unit is a regional market estimate, not local sold-unit comps."
+    report.extraction_verification.warnings = [internal]
+    report.warnings = [internal, user_facing]
+    payload = _format_grounded_analysis(report)
+    assert payload["warnings"] == [user_facing]  # internal diagnostic dropped
+
+
+def test_policy_states_deterministic_field_rules():
+    policy = GROUNDING_POLICY
+    low = policy.lower()
+    # Citation rule (with the exact fabricated section called out).
+    assert "131.0445" in policy
+    # Exit/GDV rule.
+    assert "per unit" in low and "divide" in low
+    # Sensitivity rule.
+    assert "sensitivity" in low
+    # Program rule (the invented program names).
+    assert "sb9" in low or "educationally impactful" in low
 
 
 @pytest.mark.asyncio

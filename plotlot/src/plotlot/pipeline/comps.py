@@ -368,7 +368,15 @@ async def find_comparables(
         result.notes = ["Missing lat/lng or county — cannot search for comps"]
         return result
 
-    sales_info = await _discover_sales_dataset(subject.county, state)
+    # Prefer a curated per-county source (one registry entry per market), then
+    # fall back to generic ArcGIS Hub keyword discovery for unmapped counties.
+    from plotlot.pipeline.comps_sources import resolve_sales_dataset
+
+    sales_info = await resolve_sales_dataset(
+        state, subject.county, subject.lat, subject.lng, radius_miles
+    )
+    if not sales_info:
+        sales_info = await _discover_sales_dataset(subject.county, state)
     if not sales_info:
         result.notes = [f"No sales dataset found for {subject.county} County, {state}"]
         return result

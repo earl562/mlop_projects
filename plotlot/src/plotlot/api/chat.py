@@ -353,13 +353,14 @@ imply the data is missing. PROVISIONAL means automated verification was
 inconclusive, not that data is absent — present the number and flag it.
 
 Do NOT decompose or itemize an aggregate the tool returned as a single number.
-The impact/dev fee is ONE coarse regional figure — never break it into invented
-line items (park, fire, police, school, etc.); present it as the aggregate it is
-and say it's a coarse estimate, not the city's published schedule. When a value
-carries a "_basis" note saying it's a regional default/estimate (e.g. ADV with
-adv_source != "comps", or impact fees), state that provenance plainly — call it an
-estimate, not an appraised or verified figure. If comps came back empty, say land
-value/exit is estimated from a regional default; do not fabricate a comp range.
+Itemize the impact/dev fee ONLY if the tool gives an "impact_fee_breakdown" — then
+cite those exact verified line items. If there is no breakdown, present the fee as
+ONE coarse regional figure and never invent categories (park, fire, police,
+school). When a value carries a "_basis" note saying it's a regional
+default/estimate (e.g. ADV with adv_source != "comps", or a non-itemized fee),
+state that provenance plainly — call it an estimate, not an appraised or verified
+figure. If comps came back empty, say land value/exit is estimated from a regional
+default; do not fabricate a comp range.
 
 When the user gives a LIST of addresses/parcels and asks which fit their box or
 pencil best, call `screen_properties` (not analyze_property one-by-one) and rank
@@ -368,6 +369,27 @@ only from its results.
 If a value is genuinely outside the tools' output (e.g. a hyper-local fee
 schedule or live utility capacity), say it is not modeled and that it must be
 verified with the city — never fabricate a number to fill the gap.
+
+## DETERMINISTIC FIELDS — REPRODUCE, NEVER RE-DERIVE
+Certain figures are pre-computed and pre-labeled for you. Reproduce them exactly;
+never recompute, re-scale, or re-attribute them:
+- SOURCE / CITATION: When asked "what's the source", "can I trust this", or to cite
+  the ordinance, reproduce ONLY a VERIFIED driver's exact `citation` text and its
+  `section` from the payload. NEVER output an ordinance section number or a quoted
+  ordinance sentence that is not present verbatim in the payload — do not invent a
+  subsection (e.g. "§131.0445(a)") and do not borrow a section from a different or
+  CONFLICTING field's citation. If the verified driver has no section, say the exact
+  subsection wasn't captured in the retrieved text — never fabricate one.
+- EXIT VALUE / GDV: `adv_per_unit` is PER UNIT. Never read it as a project total or
+  divide it by the unit count. Use the pre-formatted `exit_value_formula` and
+  `gross_development_value` exactly as given (units × ADV/unit = GDV).
+- SENSITIVITY: For "what if construction/exit moves" questions, cite the
+  `sensitivity` scenarios from the payload verbatim (negative = does not pencil). Do
+  NOT invent construction-cost or exit-price ranges or compute your own residual.
+- CA UPSIDE PROGRAMS: Use ONLY the program `name`, `statute`, and unit counts in
+  `ca_upside.programs`. Never invent a program (there is no "SB9" or "Educationally
+  Impactful Development" pathway unless the payload lists it) or restate a statute's
+  mechanics from memory.
 """
 
 
@@ -1369,27 +1391,38 @@ def _build_active_analysis_context(payload: dict) -> str:
             f"(governing: {by_right.get('governing_constraint')}, "
             f"verification: {verif.upper()})"
         )
+        # Inject ONLY verified, cited drivers — never a conflicting field's
+        # citation (the FAR-conflict citation literally contains "§131.0445(a)",
+        # which the narrator borrowed and mis-attributed to the unit count).
         drivers = by_right.get("verified_drivers") or []
         for d in drivers:
-            if d.get("citation"):
+            if d.get("status") == "verified" and d.get("citation"):
+                sec = f" [{d['section']}]" if d.get("section") else ""
                 lines.append(
-                    f"  • {d.get('field')}: source={d.get('source_value')} "
-                    f'[{d.get("status")}] — "{d.get("citation")[:160]}"'
+                    f"  • VERIFIED source — {d.get('label') or d.get('field')}="
+                    f'{d.get("source_value")}{sec}: "{d.get("citation")[:200]}"'
                 )
 
     val = payload.get("valuation") or {}
     if val:
+        # Pre-formatted, unambiguous exit line so the narrator can't read the
+        # per-unit ADV as a project total and divide it (it did → "$125k/unit").
+        if val.get("exit_value_formula"):
+            lines.append(f"Exit value: {val['exit_value_formula']}")
+        elif val.get("adv_per_unit") is not None:
+            adv_note = "" if val.get("adv_source") == "comps" else " [regional estimate, no comps]"
+            lines.append(
+                f"After-development value PER UNIT (exit): ${val['adv_per_unit']:,.0f} "
+                f"(source: {val.get('adv_source', 'n/a')}){adv_note} — this is per unit, "
+                "do NOT divide by the unit count"
+            )
         if val.get("max_land_price_residual") is not None:
             lines.append(f"Max land price (residual): ${val['max_land_price_residual']:,.0f}")
         rng = val.get("land_value_range")
-        if rng and rng[0] is not None:
+        if rng and rng[1]:  # only when comps gave a real range (else it's $0–$0)
             lines.append(f"Land value range: ${rng[0]:,.0f}–${rng[1]:,.0f}")
-        if val.get("adv_per_unit") is not None:
-            adv_note = "" if val.get("adv_source") == "comps" else " [regional estimate, no comps]"
-            lines.append(
-                f"After-development value/unit (exit): ${val['adv_per_unit']:,.0f} "
-                f"(source: {val.get('adv_source', 'n/a')}){adv_note}"
-            )
+        if val.get("adv_basis"):
+            lines.append(f"  ({val['adv_basis']})")
         if val.get("impact_fees_per_unit") is not None:
             lines.append(
                 f"Impact fees/unit: ${val['impact_fees_per_unit']:,.0f} "
@@ -1397,6 +1430,17 @@ def _build_active_analysis_context(payload: dict) -> str:
             )
         if val.get("market"):
             lines.append(f"Cost-model market: {val['market']}")
+
+    sens = payload.get("sensitivity") or {}
+    if sens.get("scenarios"):
+        lines.append(
+            f"Sensitivity (max land price; base ${sens.get('base_max_land_price', 0):,.0f} "
+            f"at ${sens.get('base_construction_psf', 0):,.0f}/sf construction & "
+            f"${sens.get('base_adv_per_unit', 0):,.0f}/unit exit) — negative = does not pencil:"
+        )
+        for s in sens["scenarios"]:
+            lines.append(f"  • {s}")
+        lines.append("  (Cite these for construction/exit 'what if' — do NOT invent ranges.)")
 
     ent = payload.get("entitlement") or {}
     if ent:
@@ -1425,9 +1469,15 @@ def _build_active_analysis_context(payload: dict) -> str:
     upside = payload.get("ca_upside") or {}
     if upside:
         lines.append(
-            f"CA upside (separate from firm base): base {upside.get('base_units')} → "
-            f"max potential {upside.get('max_potential_units')} units"
+            f"CA upside (separate from the firm base {upside.get('base_units')}): "
+            f"max potential {upside.get('max_potential_units')} units, ONLY via these "
+            "programs (do NOT invent others, e.g. no 'SB9' unless listed):"
         )
+        for p in upside.get("programs", []):
+            lines.append(
+                f"  • {p.get('name')} ({p.get('statute')}): +{p.get('additional_units')} "
+                f"→ {p.get('potential_units')} units [{p.get('eligibility')}]"
+            )
 
     warnings = payload.get("warnings") or []
     for w in warnings[:4]:
@@ -1442,6 +1492,103 @@ def _build_active_analysis_context(payload: dict) -> str:
         "inconclusive (flag it as such); it does NOT mean data is missing or that you "
         "should substitute a guess. Only call analyze_property again for a DIFFERENT address."
     )
+    return "\n".join(lines)
+
+
+# Source / trust / citation questions about an already-grounded property. These
+# are answered DETERMINISTICALLY (below), not by the NIM narrator — it fabricated
+# "§131.0445(a)" with an invented quote when asked "what's the source?".
+_SOURCE_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"what'?s?\s+the\s+source|what\s+is\s+the\s+source|the\s+source\b|"
+    r"cite|citation|"
+    r"where\s+(?:does|did)\s+(?:that|this|it|the\s+\w+)\s+come\s+from|"
+    r"how\s+do\s+you\s+know|how\s+(?:can|do)\s+i\s+(?:know|trust)|"
+    r"can\s+i\s+trust|should\s+i\s+trust|"
+    r"is\s+(?:that|this|it)\s+(?:right|accurate|correct|reliable|verified|true)|"
+    r"prove\s+it|back\s+(?:that|this|it)\s+up|"
+    r"what'?s?\s+(?:the\s+)?basis|on\s+what\s+basis|"
+    r"what\s+(?:code|ordinance|section|statute|regulation)\b"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_source_query(message: str) -> bool:
+    """True when the user is asking for the source / trustworthiness of the numbers."""
+    return bool(_SOURCE_QUERY_RE.search(message or ""))
+
+
+# Display-hygiene: strip any leftover text-emitted tool-call blob (closed or
+# dangling) so raw JSON never reaches the user. Parseable blobs are recovered and
+# routed upstream in call_llm; this only cleans unparseable residue.
+_TOOL_CALL_RESIDUE_RE = re.compile(r"<tool_call>.*?(?:</tool_call>|$)", re.DOTALL)
+
+
+def _build_source_answer(payload: dict) -> str | None:
+    """Deterministic answer to 'what's the source / can I trust this?'.
+
+    Reproduces a VERIFIED driver's exact citation + section straight from the
+    grounded payload — no model narration — so the high-stakes citation cannot be
+    fabricated or mis-attributed. Returns ``None`` when there is no verified, cited
+    driver, so the caller falls back to the model (whose policy tells it to say the
+    section wasn't captured rather than invent one).
+    """
+    by_right = payload.get("by_right") or {}
+    drivers = by_right.get("verified_drivers") or []
+    verified = [d for d in drivers if d.get("status") == "verified" and d.get("citation")]
+    if not verified:
+        return None
+
+    max_units = by_right.get("max_units")
+    zoning = payload.get("zoning_code") or "this zone"
+    lot = payload.get("lot_size_sqft")
+
+    # Prefer the driver matching the governing constraint, else the first verified.
+    governing = by_right.get("governing_constraint") or ""
+    driver = next((d for d in verified if d.get("field") == governing), verified[0])
+    citation = (driver.get("citation") or "").strip().strip("•").strip()
+    section = (driver.get("section") or "").strip()
+    src_val = driver.get("source_value")
+    label = driver.get("label") or driver.get("field") or "the governing constraint"
+
+    lines = [
+        f"**Source for the {max_units}-unit by-right count — {zoning}**",
+        "",
+        "This is source-verified: the count matches the exact San Diego Municipal "
+        "Code sentence PlotLot retrieved for this parcel.",
+        "",
+        f'> "{citation}"' + (f"  — {section}" if section else ""),
+        "",
+    ]
+    if src_val and lot:
+        lines.append(f"- Governing constraint: {label} — {src_val:,.0f} sqft of lot area per unit")
+        lines.append(
+            f"- Math: {lot:,.0f} sqft lot ÷ {src_val:,.0f} sqft/unit = "
+            f"{lot / src_val:.2f} → **{max_units} units** (rounded down)"
+        )
+    lines.append("- Verification status: **VERIFIED** against the retrieved ordinance text")
+    if section:
+        lines.append(
+            f"\nThe quote above is the verbatim ordinance sentence from {section} — I'm "
+            "not adding a finer subsection number or wording beyond what the retrieved "
+            "text contains."
+        )
+    else:
+        lines.append(
+            "\nThe retrieved text didn't carry a section label, so I'm citing the "
+            "sentence itself rather than guessing a subsection number."
+        )
+
+    # Honest provenance on the financial side — the unit count is verified, but the
+    # exit/residual are regional estimates unless real comps were found.
+    val = payload.get("valuation") or {}
+    if val.get("adv_source") and val.get("adv_source") != "comps":
+        lines.append(
+            "\nNote: the unit count is verified, but the financial figures (exit value, "
+            "residual) are regional estimates — no local sold-unit comps were found — so "
+            "treat those as estimates, not appraised."
+        )
     return "\n".join(lines)
 
 
@@ -1692,6 +1839,71 @@ def _round(value: float | None, ndigits: int = 0) -> float | None:
     return round(value, ndigits)
 
 
+def _format_sensitivity(sens) -> dict:
+    """Render the deterministic residual sensitivity into citable scenarios.
+
+    ``sens.grid[row][col]`` is the max land price at construction $/sf (rows) ×
+    ADV per unit (cols); negative means the deal no longer pencils. We pre-label
+    each move as a percentage off the base case so the narrator can quote a stress
+    result verbatim instead of inventing cost ranges (it previously freelanced
+    "$150-200k/unit hard costs" and bogus negative-equity math).
+    """
+    base_row = sens.base_row_index
+    base_col = sens.base_col_index
+    base_constr = sens.row_values[base_row] if sens.row_values else 0.0
+    base_adv = sens.col_values[base_col] if sens.col_values else 0.0
+
+    def _pct(value: float, base: float) -> str:
+        if not base:
+            return ""
+        delta = round((value / base - 1) * 100)
+        return f"{delta:+d}%" if delta else "base"
+
+    def _flag(cell: float) -> str:
+        return "  (does not pencil)" if cell < 0 else ""
+
+    scenarios: list[str] = []
+    # Construction stress at base exit (vary the row).
+    for i, constr in enumerate(sens.row_values):
+        if i == base_row:
+            continue
+        cell = sens.grid[i][base_col]
+        scenarios.append(
+            f"Construction {_pct(constr, base_constr)} (${constr:,.0f}/sf): "
+            f"${cell:,.0f}{_flag(cell)}"
+        )
+    # Exit stress at base construction (vary the column).
+    for j, adv in enumerate(sens.col_values):
+        if j == base_col:
+            continue
+        cell = sens.grid[base_row][j]
+        scenarios.append(
+            f"Exit {_pct(adv, base_adv)} (${adv:,.0f}/unit): ${cell:,.0f}{_flag(cell)}"
+        )
+    # Combined adverse stress: highest construction cost + one step below base exit
+    # (a realistic "costs up AND exit soft" combo, more decision-relevant than the
+    # extreme corner). Falls back to the bottom-left corner if exit has no base-1.
+    if sens.row_values and sens.col_values:
+        combo_col = base_col - 1 if base_col >= 1 else 0
+        combo = sens.grid[-1][combo_col]
+        scenarios.append(
+            f"Construction {_pct(sens.row_values[-1], base_constr)} AND "
+            f"Exit {_pct(sens.col_values[combo_col], base_adv)}: ${combo:,.0f}{_flag(combo)}"
+        )
+
+    return {
+        "base_max_land_price": _round(sens.base_value),
+        "base_construction_psf": base_constr,
+        "base_adv_per_unit": base_adv,
+        "scenarios": scenarios,
+        "note": (
+            "Max land price under stress. Negative = the deal does not pencil at "
+            "that asking price. Cite these exact scenarios for construction/exit "
+            "'what if' questions; do not invent cost or price ranges."
+        ),
+    }
+
+
 def _format_grounded_analysis(report) -> dict:
     """Render a ZoningReport into the grounded payload the agent may cite.
 
@@ -1727,6 +1939,7 @@ def _format_grounded_analysis(report) -> dict:
             "verified_drivers": [
                 {
                     "field": f.field,
+                    "label": f.label,
                     "status": f.status,
                     "source_value": f.source_value,
                     "citation": (f.citation[:240] if f.citation else ""),
@@ -1759,15 +1972,47 @@ def _format_grounded_analysis(report) -> dict:
         valuation["max_land_price_residual"] = _round(pf.max_land_price)
         valuation["gross_development_value"] = _round(pf.gross_development_value)
         valuation["impact_fees_per_unit"] = _round(pf.impact_fees_per_unit)
-        # The impact fee is a single coarse regional aggregate, NOT an itemized
-        # schedule — label it so the agent can't invent a park/fire/police
-        # breakdown the data doesn't contain.
-        valuation["impact_fees_basis"] = (
-            "coarse regional aggregate (school/park/traffic/utility combined) — "
-            "NOT San Diego's published per-Community-Plan-Area DIF schedule; not itemized"
-        )
+        # If a real itemized fee schedule is registered for this jurisdiction, emit
+        # the verified line items (the agent MAY cite these). Otherwise the fee is a
+        # single coarse regional aggregate — label it so the agent can't invent a
+        # park/fire/police breakdown the data doesn't contain.
+        from plotlot.pipeline.fee_schedule import get_fee_schedule
+
+        fee_schedule = get_fee_schedule(report.state, report.county)
+        if fee_schedule is not None and fee_schedule.is_itemized:
+            valuation["impact_fees_per_unit"] = _round(fee_schedule.total_per_unit)
+            valuation["impact_fee_breakdown"] = [
+                {
+                    "name": c.name,
+                    "amount_per_unit": _round(c.amount_per_unit),
+                    "citation": c.citation,
+                }
+                for c in fee_schedule.components
+            ]
+            valuation["impact_fees_basis"] = (
+                f"itemized from {fee_schedule.source or fee_schedule.jurisdiction}"
+                + (
+                    f" (effective {fee_schedule.effective_date})"
+                    if fee_schedule.effective_date
+                    else ""
+                )
+            )
+        else:
+            valuation["impact_fees_basis"] = (
+                "coarse regional aggregate (school/park/traffic/utility combined) — "
+                "NOT an itemized published schedule; do not break it into line items"
+            )
         valuation["construction_cost_psf"] = _round(pf.construction_cost_psf)
         valuation["adv_per_unit"] = _round(pf.adv_per_unit)
+        # Pre-format the exit value unambiguously so the narrator can't read the
+        # PER-UNIT ADV as a project total (it did: "$750,000 total ($125k/unit)").
+        if pf.adv_per_unit and density is not None and density.max_units:
+            valuation["exit_value_formula"] = (
+                f"{density.max_units} units x ${_round(pf.adv_per_unit):,.0f}/unit "
+                f"(ADV per unit) = ${_round(pf.gross_development_value):,.0f} gross "
+                "development value (GDV). ADV is PER UNIT — never divide it by the "
+                "unit count."
+            )
         valuation["adv_source"] = pf.adv_source or valuation.get("adv_source", "")
         if valuation["adv_source"] != "comps":
             valuation["adv_basis"] = (
@@ -1776,6 +2021,13 @@ def _format_grounded_analysis(report) -> dict:
             )
         valuation["market"] = pf.market
     out["valuation"] = valuation or None
+
+    # Deterministic residual sensitivity (Task 3) — surface it so stress questions
+    # ("what if construction +20% / exit -10%?") are answered from the grid instead
+    # of the narrator freelancing invented cost ranges.
+    sens = report.sensitivity
+    if sens is not None and sens.grid:
+        out["sensitivity"] = _format_sensitivity(sens)
 
     ent = report.entitlement
     if ent is not None:
@@ -1827,8 +2079,16 @@ def _format_grounded_analysis(report) -> dict:
             ],
         }
 
-    if report.warnings:
-        out["warnings"] = list(report.warnings)
+    # Surface only USER-FACING warnings. The extraction-verification warnings
+    # (e.g. "6 u/ac contradicts source min lot area", "FAR 1.5 vs source 4") are
+    # internal density-reconciliation diagnostics — the conflict is already
+    # represented in by_right.verified_drivers' statuses, and leaking them as
+    # top-level warnings just confuses the user (Q1 polish). Keep genuinely
+    # actionable ones (e.g. ADV is a regional estimate).
+    ev_warnings = set(ev.warnings) if ev else set()
+    user_warnings = [w for w in (report.warnings or []) if w not in ev_warnings]
+    if user_warnings:
+        out["warnings"] = user_warnings
 
     out["grounding_note"] = (
         "These are the ONLY figures you may cite for this property. Do not add, "
@@ -2696,6 +2956,22 @@ async def chat(request: ChatRequest, http_request: Request):
                 {"step": "intent", "thoughts": intent_thoughts},
             )
 
+            # Deterministic source/citation echo. The citation is too high-stakes to
+            # leave to the NIM narrator (it fabricated "§131.0445(a)" with an invented
+            # quote by borrowing a CONFLICTING field's section). When the user asks for
+            # the source/trust of an already-grounded property, answer verbatim from the
+            # verified driver — bypassing the model entirely for this fact.
+            if active_analysis and _is_source_query(request.message):
+                source_answer = _build_source_answer(active_analysis)
+                if source_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_source", "args": {}})
+                    yield _sse_event("token", {"content": source_answer})
+                    memory.append({"role": "assistant", "content": source_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": source_answer})
+                    return
+
             # Token budget check — prevent runaway cost
             if _sessions.get_tokens(session_id) >= MAX_TOKENS_PER_SESSION:
                 yield _sse_event(
@@ -2725,7 +3001,11 @@ async def chat(request: ChatRequest, http_request: Request):
                 tool_calls = response.get("tool_calls", [])
 
                 if not tool_calls:
-                    # No tools — stream the text response
+                    # No tools — stream the text response. Strip any unparseable
+                    # <tool_call> residue so raw tool-call JSON never reaches the
+                    # user (parseable blobs were already recovered + routed upstream).
+                    if content and "<tool_call>" in content:
+                        content = _TOOL_CALL_RESIDUE_RE.sub("", content).strip()
                     if content:
                         yield _sse_event("token", {"content": content})
                         memory.append({"role": "assistant", "content": content})

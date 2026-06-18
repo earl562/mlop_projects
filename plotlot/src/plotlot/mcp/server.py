@@ -339,25 +339,36 @@ async def get_coverage() -> dict:
 async def get_comparable_sales(
     lat: float,
     lng: float,
+    county: str,
     state: str = "FL",
     radius_miles: float = 3.0,
 ) -> dict:
     """Find comparable land sales near a location.
 
-    Searches ArcGIS Hub for recent property transactions within a radius and
+    Resolves a sales dataset for the county (curated source → ArcGIS Hub) and
     computes price-per-acre, ADV per unit, and estimated land value.
 
     Args:
         lat:          Latitude of the subject property.
         lng:          Longitude of the subject property.
-        state:        Two-letter state code for the ArcGIS Hub search (e.g. "CA", "FL").
+        county:       County name (REQUIRED — the sales dataset is keyed by county;
+                      an empty county is why this previously always returned nothing).
+        state:        Two-letter state code (e.g. "CA", "FL").
         radius_miles: Search radius in miles (default 3.0).
 
     Returns:
         List of comparable sales with prices, dates, and per-acre/per-unit metrics.
         Returns empty comparables list when no sales data is available.
     """
-    prop = PropertyRecord(county="")
+    if not county or not county.strip():
+        return {
+            "lat": lat,
+            "lng": lng,
+            "state": state,
+            "error": "county is required to locate a comparable-sales dataset",
+            "comparables": [],
+        }
+    prop = PropertyRecord(county=county.strip())
     prop.lat = lat
     prop.lng = lng
 
@@ -377,6 +388,7 @@ async def get_comparable_sales(
     return {
         "lat": lat,
         "lng": lng,
+        "county": county.strip(),
         "state": state,
         "comparable_count": len(result.comparables),
         "median_price_per_acre": comp_data.get("median_price_per_acre"),

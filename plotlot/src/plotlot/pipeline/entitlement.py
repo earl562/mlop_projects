@@ -153,11 +153,19 @@ def assess_entitlement(report: ZoningReport) -> EntitlementAssessment:
     assessment.steps = _steps_for_path(path, report.state, max_units)
     assessment.est_timeline_months = round(sum(s.timeline_months for s in assessment.steps), 1)
 
-    # Impact fees from the regional cost model.
-    cost_model = get_cost_model(report.state, report.county)
-    assessment.fee_market = cost_model.market
-    assessment.impact_fee_per_unit = cost_model.impact_fee_per_unit
-    assessment.impact_fees_total = cost_model.impact_fee_per_unit * max_units
+    # Impact fees: prefer a real itemized jurisdiction schedule when one is
+    # registered; otherwise fall back to the coarse regional aggregate.
+    from plotlot.pipeline.fee_schedule import get_fee_schedule
+
+    schedule = get_fee_schedule(report.state, report.county)
+    if schedule is not None and schedule.is_itemized:
+        assessment.fee_market = schedule.jurisdiction
+        assessment.impact_fee_per_unit = schedule.total_per_unit
+    else:
+        cost_model = get_cost_model(report.state, report.county)
+        assessment.fee_market = cost_model.market
+        assessment.impact_fee_per_unit = cost_model.impact_fee_per_unit
+    assessment.impact_fees_total = assessment.impact_fee_per_unit * max_units
 
     # Utilities — we don't yet have a utility GIS feed, so flag honestly.
     assessment.utilities_note = (

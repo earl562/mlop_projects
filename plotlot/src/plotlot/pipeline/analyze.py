@@ -113,11 +113,22 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
             logger.warning("Deep comps lookup failed for %s: %s", address[:60], exc)
 
     # Residual pro forma + sensitivity + entitlement (deterministic, no network).
+    # Use a registered itemized fee schedule when one exists so the residual's
+    # impact fee matches the entitlement's (else the coarse regional aggregate).
+    from plotlot.pipeline.fee_schedule import get_fee_schedule
+
+    fee_schedule = get_fee_schedule(report.state, report.county)
+    fee_override = (
+        fee_schedule.total_per_unit if (fee_schedule and fee_schedule.is_itemized) else None
+    )
     try:
         from plotlot.pipeline.sensitivity import build_sensitivity_table
 
         report.pro_forma = calculate_land_pro_forma(
-            density=density, comps=report.comp_analysis, cost_model=cost_model
+            density=density,
+            comps=report.comp_analysis,
+            cost_model=cost_model,
+            impact_fees_per_unit=fee_override,
         )
         report.sensitivity = build_sensitivity_table(
             density=density, comps=report.comp_analysis, cost_model=cost_model

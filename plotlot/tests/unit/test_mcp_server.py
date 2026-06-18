@@ -545,15 +545,25 @@ async def test_get_comparable_sales_success():
     comp_result = _FakeCompAnalysis()
 
     with patch("plotlot.mcp.server.find_comparables", AsyncMock(return_value=comp_result)):
-        result = await get_comparable_sales(37.5, -122.0, state="CA")
+        result = await get_comparable_sales(37.5, -122.0, county="San Mateo", state="CA")
 
     assert result["lat"] == 37.5
     assert result["lng"] == -122.0
     assert result["state"] == "CA"
+    assert result["county"] == "San Mateo"
     assert result["median_price_per_acre"] == 120000.0
     assert result["estimated_land_value"] == 480000.0
     assert result["comparable_count"] == 0
     assert "error" not in result
+
+
+async def test_get_comparable_sales_requires_county():
+    # Empty county is why this tool always returned nothing before — now it's a
+    # clear error instead of a silent empty result.
+    result = await get_comparable_sales(37.5, -122.0, county="", state="CA")
+    assert "error" in result
+    assert "county" in result["error"]
+    assert result["comparables"] == []
 
 
 async def test_get_comparable_sales_exception_returns_error():
@@ -561,7 +571,7 @@ async def test_get_comparable_sales_exception_returns_error():
         "plotlot.mcp.server.find_comparables",
         AsyncMock(side_effect=RuntimeError("ArcGIS timeout")),
     ):
-        result = await get_comparable_sales(25.7, -80.2, state="FL")
+        result = await get_comparable_sales(25.7, -80.2, county="Miami-Dade", state="FL")
 
     assert "error" in result
     assert "ArcGIS timeout" in result["error"]
@@ -577,7 +587,7 @@ async def test_get_comparable_sales_default_state_is_fl():
         return comp_result
 
     with patch("plotlot.mcp.server.find_comparables", _mock_comps):
-        await get_comparable_sales(25.7, -80.2)
+        await get_comparable_sales(25.7, -80.2, county="Miami-Dade")
 
     assert captured["state"] == "FL"
 
@@ -586,7 +596,7 @@ async def test_get_comparable_sales_result_fields():
     comp_result = _FakeCompAnalysis()
 
     with patch("plotlot.mcp.server.find_comparables", AsyncMock(return_value=comp_result)):
-        result = await get_comparable_sales(37.5, -122.0)
+        result = await get_comparable_sales(37.5, -122.0, county="San Mateo")
 
     for fld in (
         "lat",

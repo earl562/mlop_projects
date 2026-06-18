@@ -12,6 +12,7 @@ from plotlot.retrieval.llm import (
     _convert_tool_calls_from_anthropic,
     _convert_tools_to_anthropic,
     _parse_llm_content,
+    _recover_text_tool_calls,
     analyze_zoning,
     call_llm,
     llm_response_to_report,
@@ -29,6 +30,44 @@ def _make_result(**kwargs) -> SearchResult:
     }
     defaults.update(kwargs)
     return SearchResult(**defaults)
+
+
+class TestRecoverTextToolCalls:
+    """Recover tool calls a NIM/Llama model printed as text (the Q4 leak)."""
+
+    def test_recovers_and_strips_text_tool_call(self):
+        content = (
+            'Here is the search.\n<tool_call> {"name": "search_properties", '
+            '"arguments": {"county": "San Diego", "state": "CA"}} </tool_call>'
+        )
+        tool_calls, cleaned = _recover_text_tool_calls(content)
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["function"]["name"] == "search_properties"
+        # arguments are a JSON string the chat loop can json.loads.
+        assert json.loads(tool_calls[0]["function"]["arguments"])["county"] == "San Diego"
+        # The raw blob is stripped from the displayed content.
+        assert "<tool_call>" not in cleaned
+        assert "search_properties" not in cleaned
+
+    def test_tolerates_parameters_key(self):
+        content = (
+            '<tool_call>{"name": "geocode_address", "parameters": {"address": "x"}}</tool_call>'
+        )
+        tool_calls, _ = _recover_text_tool_calls(content)
+        assert tool_calls[0]["function"]["name"] == "geocode_address"
+        assert json.loads(tool_calls[0]["function"]["arguments"]) == {"address": "x"}
+
+    def test_no_tool_call_is_passthrough(self):
+        tool_calls, cleaned = _recover_text_tool_calls("just a normal answer")
+        assert tool_calls == []
+        assert cleaned == "just a normal answer"
+
+    def test_unparseable_blob_is_left_in_place(self):
+        # Not valid JSON → don't route, don't silently swallow the content.
+        content = "<tool_call> not json </tool_call>"
+        tool_calls, cleaned = _recover_text_tool_calls(content)
+        assert tool_calls == []
+        assert cleaned == content
 
 
 class TestBuildUserPrompt:
@@ -343,6 +382,50 @@ class TestAnalyzeZoning:
         assert "reasoning_effort" not in kwargs
         assert kwargs["messages"][0]["role"] == "system"
         assert kwargs["messages"][0]["content"] == "/no_think"
+
+    @pytest.mark.asyncio
+    async def test_call_llm_recovers_text_emitted_tool_call(self):
+        """A NIM model that prints <tool_call> as text → call_llm returns it
+        structurally so the agent loop executes it (the Q4 leak fix)."""
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content='<tool_call>{"name": "search_properties", '
+                    '"arguments": {"county": "San Diego"}}</tool_call>',
+                    tool_calls=[],  # no STRUCTURED tool call — it leaked into content
+                ),
+            )
+        ]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client),
+            patch("plotlot.retrieval.llm.settings") as mock_settings,
+        ):
+            mock_settings.nvidia_api_key = "nv-key"
+            mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
+            mock_settings.nvidia_model = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+            mock_settings.nvidia_fallback_model = "minimaxai/minimax-m2.5"
+            mock_settings.openai_api_key = ""
+            mock_settings.openai_access_token = ""
+            mock_settings.use_codex_oauth = False
+            mock_settings.openai_base_url = "https://api.openai.com/v1"
+            mock_settings.openai_model = "gpt-4.1"
+            mock_settings.openai_reasoning_effort = "medium"
+
+            result = await call_llm(
+                [{"role": "user", "content": "what's land trading for nearby?"}],
+                tools=[{"type": "function", "function": {"name": "search_properties"}}],
+            )
+
+        assert len(result["tool_calls"]) == 1
+        assert result["tool_calls"][0]["function"]["name"] == "search_properties"
+        # The raw blob is not left in the displayed content.
+        assert "<tool_call>" not in result["content"]
 
     @pytest.mark.asyncio
     async def test_nvidia_preempts_stale_openai_access_token(self):
