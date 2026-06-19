@@ -183,4 +183,19 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Deep density uplift failed for %s: %s", address[:60], exc)
 
+    # Development-activity signals — does the city permit system show this parcel
+    # already in active development? Keeps the agent from pitching an entitled,
+    # developer-owned site as raw land. Non-blocking; APN-keyed (address queries
+    # on the permit layer return wrong cross-street results).
+    apn = report.property_record.folio if report.property_record else ""
+    if apn and county:
+        try:
+            from plotlot.pipeline.permits import fetch_development_signals
+
+            report.development_signals = await asyncio.wait_for(
+                fetch_development_signals(apn, county), timeout=15
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Deep development signals failed for %s: %s", address[:60], exc)
+
     return report

@@ -548,6 +548,11 @@ class ZoningReport:
     # San Diego Coastal Height Limit Overlay (Prop D) — height → stories → units
     coastal_overlay: "CoastalHeightOverlay | None" = None
 
+    # Development-activity signals (city permit system) — permit counts, active
+    # permits, holders. Flags a parcel already in active development so it is not
+    # pitched as raw land. Populated by pipeline/permits.fetch_development_signals.
+    development_signals: dict | None = None
+
 
 # ---------------------------------------------------------------------------
 # Site risk types

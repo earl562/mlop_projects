@@ -425,6 +425,12 @@ never recompute, re-scale, or re-attribute them:
   ordinance rule verified. Never call the count "verified"/"firm" on a
   geometry-estimated lot. When `lot_size_source` is "assessor", the lot is
   authoritative — say so.
+- DEVELOPMENT ACTIVITY: When `development_activity` is present (city permits on
+  record), the parcel may ALREADY be an active, owned/entitled development — not raw
+  land. Surface that fact (permit count + holders) before any "what can I pay for the
+  land" / residual answer, and frame the residual as conditional on the site actually
+  being available to acquire. Cite only the permit counts/holders the tool returns;
+  never invent permit numbers, project names, or unit counts.
 """
 
 
@@ -1570,6 +1576,16 @@ def _build_active_analysis_context(payload: dict) -> str:
             f"(status={coastal.get('status')}, limit={coastal.get('height_limit_ft')} ft)"
         )
 
+    dev = payload.get("development_activity") or {}
+    if dev:
+        holders = ", ".join(dev.get("permit_holders") or []) or "n/a"
+        lines.append(
+            f"Development activity: {dev.get('permit_count')} city permits on record "
+            f"({dev.get('active_permit_count')} active); holders: {holders}. "
+            "This parcel may ALREADY be an active development (owned/entitled), not raw "
+            "land — say so before any 'what can I pay for the land' answer."
+        )
+
     upside = payload.get("ca_upside") or {}
     if upside:
         lines.append(
@@ -2216,6 +2232,21 @@ def _format_grounded_analysis(report) -> dict:
             "height_limit_ft": co.height_limit_ft,
             "status": co.status,
             "citation": co.citation,
+        }
+
+    dev = report.development_signals
+    if dev and dev.get("permit_count"):
+        out["development_activity"] = {
+            "permit_count": dev.get("permit_count"),
+            "active_permit_count": dev.get("active_permit_count"),
+            "permit_holders": list(dev.get("unique_permit_holders") or [])[:8],
+            "data_source": dev.get("data_source"),
+            "note": (
+                "This parcel has development permits on record with the city — it may "
+                "already be an active development (owned/entitled), NOT raw land. Surface "
+                "this before any 'what can I pay for the land' framing; the residual "
+                "assumes the site is available to acquire and re-entitle."
+            ),
         }
 
     uplift = report.density_uplift
