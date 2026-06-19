@@ -189,3 +189,76 @@ class TestCompAnalysis:
         assert len(ca.comparables) == 2
         assert ca.median_price_per_acre == 889_350
         assert ca.confidence == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Discovery keywords (B) + California radius widening (C)
+# ---------------------------------------------------------------------------
+
+
+class TestSanDiegoCompTuning:
+    async def test_ca_search_radius_widens_to_5mi(self):
+        """A CA subject widens the comp search radius from the 3mi default to 5mi."""
+        from unittest.mock import AsyncMock, patch
+
+        from plotlot.core.types import PropertyRecord
+        from plotlot.pipeline.comps import find_comparables
+
+        subject = PropertyRecord(county="San Diego", lat=32.76, lng=-117.19, lot_size_sqft=7710.0)
+        with (
+            patch(
+                "plotlot.pipeline.comps_sources.resolve_sales_dataset",
+                new=AsyncMock(return_value=None),
+            ) as m_resolve,
+            patch(
+                "plotlot.pipeline.comps._discover_sales_dataset", new=AsyncMock(return_value=None)
+            ),
+        ):
+            await find_comparables(subject, state="CA")
+
+        # resolve_sales_dataset(state, county, lat, lng, radius_miles) — radius widened.
+        assert m_resolve.call_args.args[4] == 5.0
+
+    async def test_fl_radius_unchanged(self):
+        from unittest.mock import AsyncMock, patch
+
+        from plotlot.core.types import PropertyRecord
+        from plotlot.pipeline.comps import find_comparables
+
+        subject = PropertyRecord(county="Broward", lat=26.1, lng=-80.1, lot_size_sqft=7000.0)
+        with (
+            patch(
+                "plotlot.pipeline.comps_sources.resolve_sales_dataset",
+                new=AsyncMock(return_value=None),
+            ) as m_resolve,
+            patch(
+                "plotlot.pipeline.comps._discover_sales_dataset", new=AsyncMock(return_value=None)
+            ),
+        ):
+            await find_comparables(subject, state="FL")
+
+        assert m_resolve.call_args.args[4] == 3.0
+
+    async def test_discovery_includes_assessor_and_parcel_keywords(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from plotlot.pipeline.comps import _discover_sales_dataset
+
+        issued: list[str] = []
+
+        def _capture(url, params=None):
+            issued.append((params or {}).get("q", ""))
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.json = MagicMock(return_value={"data": []})
+            return resp
+
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        client.get = AsyncMock(side_effect=_capture)
+        with patch("plotlot.pipeline.comps.httpx.AsyncClient", return_value=client):
+            await _discover_sales_dataset("San Diego", "CA")
+
+        assert any("assessor" in q.lower() for q in issued)
+        assert any("parcel" in q.lower() for q in issued)

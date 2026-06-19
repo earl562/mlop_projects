@@ -232,6 +232,8 @@ async def _discover_sales_dataset(
         f"sales {county} {state}",
         f"transactions {county} {state}",
         f"property {county} {state} sales",
+        f"assessor {county} {state}",  # some counties publish sales via the assessor
+        f"parcel {county} {state}",  # parcel layers occasionally carry sale price/date
     ]
     async with httpx.AsyncClient(timeout=timeout) as client:
         for q in queries:
@@ -367,6 +369,11 @@ async def find_comparables(
     if not subject.lat or not subject.lng or not subject.county:
         result.notes = ["Missing lat/lng or county — cannot search for comps"]
         return result
+
+    # California parcels are larger and development is more spread out, and few CA
+    # counties expose open sales layers — widen the net before giving up.
+    if state.upper() in ("CA", "CALIFORNIA") and radius_miles <= 3.0:
+        radius_miles = 5.0
 
     # Prefer a curated per-county source (one registry entry per market), then
     # fall back to generic ArcGIS Hub keyword discovery for unmapped counties.
