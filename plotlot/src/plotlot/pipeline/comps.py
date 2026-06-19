@@ -343,6 +343,21 @@ def _score_confidence(land_count: int, fraction_recent_6mo: float) -> float:
     return 0.0
 
 
+async def _try_rentcast_comps(
+    subject: PropertyRecord, radius_miles: float, months: int
+) -> CompAnalysis | None:
+    """Keyed RentCast comps fallback (lazy import → no circular dependency)."""
+    from plotlot.pipeline.comps_rentcast import fetch_rentcast_comps, rentcast_configured
+
+    if not rentcast_configured():
+        return None
+    try:
+        return await fetch_rentcast_comps(subject, radius_miles, months)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("RentCast comps fallback failed: %s", exc)
+        return None
+
+
 async def find_comparables(
     subject: PropertyRecord,
     state: str = "FL",
@@ -385,6 +400,13 @@ async def find_comparables(
     if not sales_info:
         sales_info = await _discover_sales_dataset(subject.county, state)
     if not sales_info:
+        # No open arms-length-sales layer (e.g. San Diego). Try a keyed comps API
+        # (RentCast) before giving up to the regional default — gated on a key so
+        # it never breaks when unconfigured, and only here so the free tier is
+        # spent only where the free GIS path fails.
+        rc = await _try_rentcast_comps(subject, radius_miles, months)
+        if rc is not None:
+            return rc
         result.notes = [f"No sales dataset found for {subject.county} County, {state}"]
         return result
 

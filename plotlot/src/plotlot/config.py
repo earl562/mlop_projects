@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     # Jina.ai search
     jina_api_key: str = ""
 
+    # RentCast — keyed comparable-sales API (fallback comps where no open GIS
+    # sales layer exists, e.g. San Diego). Free tier ~50 req/mo.
+    rentcast_api_key: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 
@@ -141,6 +145,7 @@ class Settings(BaseSettings):
             "openai_api_key",
             "openai_access_token",
             "jina_api_key",
+            "rentcast_api_key",
             "stripe_secret_key",
             "stripe_webhook_secret",
             "clerk_jwks_url",
