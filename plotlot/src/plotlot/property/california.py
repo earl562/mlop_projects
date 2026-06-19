@@ -284,10 +284,12 @@ class CaliforniaProvider(PropertyProvider):
         # the geometry value stays but its provenance flags it as unconfirmed.
         assessor_url = config.get("assessor_lot_url")
         if assessor_url and record.folio and record.lot_size_source != "assessor":
-            assessor_lot = await self._assessor_lot_sqft(assessor_url, record.folio)
+            assessor_lot, owner_name = await self._assessor_lot_sqft(assessor_url, record.folio)
             if assessor_lot and assessor_lot > 0:
                 record.lot_size_sqft = assessor_lot
                 record.lot_size_source = "assessor"
+            if owner_name and not record.owner:
+                record.owner = owner_name
 
         # --- 2. Zoning spatial query (if the parcel layer lacks zoning) ---
         if not record.zoning_code and config.get("zoning_url") and lat and lng:
@@ -322,19 +324,20 @@ class CaliforniaProvider(PropertyProvider):
             logger.debug("CaliforniaProvider spatial parcel failed (%s): %s", url, exc)
             return None
 
-    async def _assessor_lot_sqft(self, assessor_url: str, apn: str) -> float | None:
-        """Authoritative legal lot area (sqft) for an APN from a county assessor layer.
+    async def _assessor_lot_sqft(self, assessor_url: str, apn: str) -> tuple[float | None, str]:
+        """Authoritative legal lot area (sqft) + owner name for an APN from a county assessor layer.
 
-        Returns ``None`` on any miss or failure — the caller keeps the
-        geometry-derived estimate but flags it as unconfirmed, never silently
-        substituting a guess (fail loud, per the anti-hallucination doctrine).
+        Returns ``(lot_sqft, owner_name)``. ``lot_sqft`` is ``None`` on any miss
+        or failure — the caller keeps the geometry-derived estimate but flags it
+        as unconfirmed, never silently substituting a guess (fail loud, per the
+        anti-hallucination doctrine). ``owner_name`` is empty ``""`` on miss.
         """
         apn_digits = re.sub(r"\D", "", apn or "")
         if len(apn_digits) < 8:
-            return None
+            return None, ""
         params = {
             "where": f"APN='{apn_digits}'",
-            "outFields": "ACREAGE,Shape.STArea()",
+            "outFields": "ACREAGE,Shape.STArea(),OWN_NAME1",
             "returnGeometry": "false",
             "f": "json",
         }
@@ -344,18 +347,22 @@ class CaliforniaProvider(PropertyProvider):
                 resp.raise_for_status()
                 features = resp.json().get("features", [])
             if not features:
-                return None
+                return None, ""
             attrs = features[0].get("attributes", {})
+            # Return owner name if present
+            owner = str(attrs.get("OWN_NAME1") or "").strip()
             # Prefer the recorded ACREAGE (the legal figure); fall back to the
             # assessor parcel's own geometry area (State Plane US-ft → sqft).
             acreage = safe_float(attrs.get("ACREAGE"))
             if acreage > 0:
-                return acreage * 43_560
+                return acreage * 43_560, owner
             st_area = safe_float(attrs.get("Shape.STArea()"))
-            return st_area if st_area > 0 else None
+            if st_area > 0:
+                return st_area, owner
+            return None, owner
         except Exception as exc:
             logger.debug("Assessor lot lookup failed for APN %s: %s", apn, exc)
-            return None
+            return None, ""
 
     async def _address_parcel(
         self,

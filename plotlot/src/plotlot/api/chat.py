@@ -491,12 +491,21 @@ def _build_report_context(report) -> str:
     if report.property_record:
         pr = report.property_record
         parts.append(f"- Lot Size: {pr.lot_size_sqft:,.0f} sqft")
+        if pr.lot_size_source:
+            src_labels = {
+                "assessor": "county assessor record",
+                "geometry": "GIS parcel geometry estimate",
+            }
+            label = src_labels.get(pr.lot_size_source, pr.lot_size_source)
+            parts.append(f"- Lot Source: {label}")
         if pr.lot_dimensions:
             parts.append(f"- Lot Dimensions: {pr.lot_dimensions}")
         if pr.year_built:
             parts.append(f"- Year Built: {pr.year_built}")
         if pr.assessed_value:
             parts.append(f"- Assessed Value: ${pr.assessed_value:,.0f}")
+        if pr.owner:
+            parts.append(f"- Owner: {pr.owner}")
 
     if report.numeric_params:
         np_ = report.numeric_params
@@ -520,6 +529,21 @@ def _build_report_context(report) -> str:
         parts.append(f"- Allowed Uses: {', '.join(report.allowed_uses[:10])}")
     if report.summary:
         parts.append(f"- Summary: {report.summary}")
+
+    sr = report.site_risk
+    if sr is not None:
+        fz = sr.flood_zone
+        if fz is not None:
+            parts.append(f"- Flood Zone: {fz.zone} ({fz.risk_level})")
+        geo = sr.geologic
+        if geo is not None:
+            parts.append("- Geologic Hazard (CGS):")
+            if geo.fault_zone:
+                parts.append(f"  - Fault Zone: {geo.fault_zone}")
+            if geo.landslide_zone:
+                parts.append(f"  - Landslide: {geo.landslide_zone}")
+            if geo.liquefaction_zone:
+                parts.append(f"  - Liquefaction: {geo.liquefaction_zone}")
 
     return "\n".join(parts)
 
