@@ -323,6 +323,12 @@ class PropertyRecord:
     # Lot
     lot_size_sqft: float = 0.0
     lot_dimensions: str = ""  # e.g., "75 x 100" from legal description
+    # Provenance of lot_size_sqft — gates whether a derived unit count may be
+    # presented as firm. "assessor" = authoritative legal lot area (trustworthy);
+    # "geometry" = derived from a parcel polygon (a GIS estimate that can diverge
+    # from the recorded legal lot, so a unit count built on it is NOT firm); ""
+    # = unknown. See pipeline/lookup.py and api/chat.py for how this gates trust.
+    lot_size_source: str = ""
 
     # Building
     bedrooms: int = 0
@@ -568,12 +574,50 @@ class WetlandInfo:
 
 
 @dataclass
+class GeologicHazard:
+    """CGS (California Geological Survey) seismic-hazard zones for a parcel.
+
+    From the California statewide parcel layer's Earthquake Fault / Landslide /
+    Liquefaction zone fields. Each value is the authoritative coded-value legend,
+    NOT an interpretation. ``evaluated`` is False when CGS has not mapped the
+    parcel for landslide/liquefaction (codes 3/4) — that is an honest "unknown,"
+    never to be reported as "low risk."
+    """
+
+    fault_zone: str = ""  # Alquist-Priolo Earthquake Fault Zone status
+    landslide_zone: str = ""  # CGS Seismic Hazard — landslide
+    liquefaction_zone: str = ""  # CGS Seismic Hazard — liquefaction
+    in_any_hazard_zone: bool = False  # within a mapped fault/landslide/liquefaction zone
+    evaluated: bool = True  # False when CGS has not evaluated landslide/liquefaction
+    flags: list[str] = field(default_factory=list)  # human-readable findings
+
+
+@dataclass
+class PermitRecord:
+    """A single building/development permit from the city's permitting system.
+
+    Retrieved from the City of San Diego's DSDPermits Accela layer.
+    """
+
+    permit_holder: str = ""
+    permit_type: str = ""
+    permit_status: str = ""
+    issue_date: str = ""
+    project_title: str = ""
+    approval_url: str = ""
+
+
+@dataclass
 class SiteRisk:
-    """Physical site risk flags drawn from FEMA NFHL and USFWS NWI."""
+    """Physical site risk flags drawn from FEMA NFHL, USFWS NWI, and CGS hazards."""
 
     flood_zone: FloodZoneInfo | None = None
     wetlands: list[WetlandInfo] = field(default_factory=list)
     has_wetlands: bool = False
+    geologic: "GeologicHazard | None" = None
+    # Airport Influence Areas the parcel falls in (City of San Diego DSD overlay),
+    # e.g. "San Diego International Airport — Review Area 2". Empty when none.
+    airport_influence: list[str] = field(default_factory=list)
     overall_risk: str = "unknown"  # "high", "moderate", "low", "unknown"
     risk_flags: list[str] = field(default_factory=list)
     data_sources: list[str] = field(default_factory=list)

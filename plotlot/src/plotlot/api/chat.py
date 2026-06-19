@@ -370,6 +370,23 @@ If a value is genuinely outside the tools' output (e.g. a hyper-local fee
 schedule or live utility capacity), say it is not modeled and that it must be
 verified with the city — never fabricate a number to fill the gap.
 
+## MATH RULE — NEVER CALCULATE IN YOUR HEAD
+Every arithmetic operation — units × price, cost per sqft, total project cost,
+residual, gap vs asking price, percentages, a unit count from lot area — MUST be
+done with the `calculate` tool. Do NOT compute any number yourself; LLM mental
+math is wrong often enough that it causes real financial harm. If you catch
+yourself about to write a number you did not get from a tool, call `calculate`
+first and cite its result. When a pre-formatted figure already exists in the
+payload (GDV, residual, a sensitivity cell), quote THAT — do not recompute it.
+
+## FEE RULE — NEVER FABRICATE FEE BREAKDOWNS
+Development impact fees, permit fees, and any itemized cost breakdown MUST come
+from a tool result. If the payload gives one coarse fee figure, present that ONE
+figure and its basis — do NOT invent line items like "police fee,"
+"transportation fee," "park fee," or a per-category split that is not in the tool
+output. If you don't have an itemized schedule, say exactly: "Specific fee
+breakdown not available for this project scope," and stop.
+
 ## DETERMINISTIC FIELDS — REPRODUCE, NEVER RE-DERIVE
 Certain figures are pre-computed and pre-labeled for you. Reproduce them exactly;
 never recompute, re-scale, or re-attribute them:
@@ -390,6 +407,24 @@ never recompute, re-scale, or re-attribute them:
   `ca_upside.programs`. Never invent a program (there is no "SB9" or "Educationally
   Impactful Development" pathway unless the payload lists it) or restate a statute's
   mechanics from memory.
+- SITE RISK / TOPOGRAPHY / HAZARDS: Report flood, wetlands, and geologic hazard ONLY
+  from `site_risk` (incl. `site_risk.geologic_hazard` and `risk_flags`). NEVER invent
+  an elevation, a slope grade, or a "mild/moderate slope" — topography is not modeled.
+  When `geologic_hazard.evaluated` is false, say the parcel was NOT evaluated by CGS
+  (an unknown needing a geotechnical review) — never report it as "low risk" or a
+  clearance. Report `site_risk.airport_influence` when present (Airport Influence
+  Area → disclosure / height-notification review). Overlays NOT in the payload (e.g.
+  Steep Hillsides / ESL slope review) are not checked — say they must be verified
+  with the City; do not assert their status.
+- LOT AREA & UNIT COUNT: The by-right count is lot area ÷ min-lot-area-per-unit, so
+  it is only as firm as the lot area. Use the EXACT `lot_size_sqft`; never substitute
+  a lot size from training knowledge or another listing. When `lot_size_source` is
+  "geometry" (or `by_right.lot_size_confirmed` is false), the lot is a GIS
+  parcel-polygon ESTIMATE, not the recorded legal lot — present the unit count as
+  PROVISIONAL and say it must be confirmed with the county assessor, EVEN IF the
+  ordinance rule verified. Never call the count "verified"/"firm" on a
+  geometry-estimated lot. When `lot_size_source` is "assessor", the lot is
+  authoritative — say so.
 """
 
 
@@ -606,6 +641,33 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": (
+                "Deterministic calculator — evaluate EVERY arithmetic operation here "
+                "before you state a number. Use it for units × price, cost per sqft, "
+                "total project cost, residual, gap vs asking, percentages, a unit count "
+                "from lot area — any math at all. Pass a plain arithmetic expression "
+                "(numbers and + - * / // % ** and parentheses only). NEVER compute in your "
+                "head: LLM mental math produces wrong $/unit and totals, which cause real "
+                "financial harm. Returns the exact result for you to cite verbatim."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": (
+                            "Arithmetic only, e.g. '7 * 750000' or '(4500000 - 240000) / 7'"
+                        ),
+                    },
+                },
+                "required": ["expression"],
             },
         },
     },
@@ -1125,6 +1187,7 @@ CORE_TOOLS = [
         "geocode_address",
         "lookup_property_info",
         "analyze_property",
+        "calculate",
         "screen_properties",
         "search_zoning_ordinance",
         "search_municode_live",
@@ -1381,7 +1444,16 @@ def _build_active_analysis_context(payload: dict) -> str:
     ]
     lot = payload.get("lot_size_sqft")
     if lot:
-        lines.append(f"Lot size: {lot:,.0f} sqft")
+        lot_src = payload.get("lot_size_source") or ""
+        if lot_src == "assessor":
+            lines.append(f"Lot size: {lot:,.0f} sqft (county assessor — authoritative legal lot)")
+        elif lot_src == "geometry":
+            lines.append(
+                f"Lot size: {lot:,.0f} sqft (GIS parcel-polygon ESTIMATE — not the legal lot; "
+                "confirm with assessor, count is provisional on it)"
+            )
+        else:
+            lines.append(f"Lot size: {lot:,.0f} sqft")
 
     by_right = payload.get("by_right") or {}
     if by_right:
@@ -1459,6 +1531,14 @@ def _build_active_analysis_context(payload: dict) -> str:
             f"(SFHA={risk.get('in_special_flood_hazard_area')}), "
             f"wetlands={risk.get('has_wetlands')}, overall={risk.get('overall_risk')}"
         )
+        geo = risk.get("geologic_hazard") or {}
+        if geo:
+            lines.append(
+                f"  Geologic (CGS): fault={geo.get('fault_zone')}; "
+                f"landslide={geo.get('landslide_zone')}; "
+                f"liquefaction={geo.get('liquefaction_zone')} "
+                f"(evaluated={geo.get('evaluated')})"
+            )
     coastal = payload.get("coastal_height_overlay") or {}
     if coastal:
         lines.append(
@@ -1543,6 +1623,9 @@ def _build_source_answer(payload: dict) -> str | None:
     max_units = by_right.get("max_units")
     zoning = payload.get("zoning_code") or "this zone"
     lot = payload.get("lot_size_sqft")
+    lot_source = payload.get("lot_size_source") or ""
+    lot_confirmed = lot_source == "assessor"
+    lot_unconfirmed = lot_source == "geometry"
 
     # Prefer the driver matching the governing constraint, else the first verified.
     governing = by_right.get("governing_constraint") or ""
@@ -1562,12 +1645,28 @@ def _build_source_answer(payload: dict) -> str | None:
         "",
     ]
     if src_val and lot:
+        lot_label = (
+            "county assessor — legal lot"
+            if lot_confirmed
+            else "GIS polygon ESTIMATE — confirm with assessor"
+            if lot_unconfirmed
+            else "lot area"
+        )
         lines.append(f"- Governing constraint: {label} — {src_val:,.0f} sqft of lot area per unit")
+        lines.append(f"- Lot area: {lot:,.0f} sqft ({lot_label})")
         lines.append(
             f"- Math: {lot:,.0f} sqft lot ÷ {src_val:,.0f} sqft/unit = "
             f"{lot / src_val:.2f} → **{max_units} units** (rounded down)"
         )
-    lines.append("- Verification status: **VERIFIED** against the retrieved ordinance text")
+    if lot_unconfirmed:
+        lines.append(
+            "- Status: the density **rule** is VERIFIED against the ordinance, but the "
+            "lot area is a GIS parcel-polygon estimate, not the recorded legal lot — so "
+            f"the {max_units}-unit count is **PROVISIONAL** until the lot is confirmed "
+            "with the county assessor (a different lot area changes the count)."
+        )
+    else:
+        lines.append("- Verification status: **VERIFIED** against the retrieved ordinance text")
     if section:
         lines.append(
             f"\nThe quote above is the verbatim ordinance sentence from {section} — I'm "
@@ -1925,17 +2024,38 @@ def _format_grounded_analysis(report) -> dict:
 
     pr = report.property_record
     out["lot_size_sqft"] = _round(pr.lot_size_sqft, 0) if pr and pr.lot_size_sqft else None
+    # Lot-size provenance gates trust: the unit count is lot ÷ min-lot-area, so a
+    # count is only as firm as the lot area it was built on. "assessor" = the
+    # recorded legal lot (authoritative); "geometry" = a GIS polygon estimate that
+    # can diverge from the legal lot (it once read 6,471 vs the assessor's 7,710,
+    # flipping 6↔7 units) — so a count on it is NOT firm. "" = unknown provider.
+    lot_source = (pr.lot_size_source if pr else "") or ""
+    out["lot_size_source"] = lot_source
+    lot_unconfirmed = lot_source == "geometry"
+    if lot_unconfirmed:
+        out["lot_size_basis"] = (
+            "lot area is a GIS parcel-polygon estimate, NOT the recorded legal lot — "
+            "it can diverge from the assessor's figure; confirm before treating the "
+            "unit count as firm"
+        )
+    elif lot_source == "assessor":
+        out["lot_size_basis"] = (
+            "lot area is the county assessor's recorded legal lot (authoritative)"
+        )
 
     density = report.density_analysis
     ev = report.extraction_verification
     if density is not None:
-        provisional = bool(ev and ev.offer_is_provisional)
+        # A count built on an unconfirmed (geometry) lot area cannot be firm even
+        # when the ordinance rule itself verified — the INPUT is unverified.
+        provisional = bool(ev and ev.offer_is_provisional) or lot_unconfirmed
         out["by_right"] = {
             "max_units": density.max_units,
             "governing_constraint": density.governing_constraint,
             "confidence": density.confidence,
             "verification": "provisional" if provisional else "verified",
             "offer_is_provisional": provisional,
+            "lot_size_confirmed": not lot_unconfirmed and lot_source == "assessor",
             "verified_drivers": [
                 {
                     "field": f.field,
@@ -2049,8 +2169,21 @@ def _format_grounded_analysis(report) -> dict:
             "flood_risk_level": fz.risk_level if fz else "undetermined",
             "has_wetlands": sr.has_wetlands,
             "overall_risk": sr.overall_risk,
+            "airport_influence": list(sr.airport_influence),
+            "risk_flags": list(sr.risk_flags),
             "data_sources": sr.data_sources,
         }
+        geo = sr.geologic
+        if geo is not None:
+            out["site_risk"]["geologic_hazard"] = {
+                "fault_zone": geo.fault_zone,
+                "landslide_zone": geo.landslide_zone,
+                "liquefaction_zone": geo.liquefaction_zone,
+                "in_any_hazard_zone": geo.in_any_hazard_zone,
+                "evaluated": geo.evaluated,
+                "flags": list(geo.flags),
+                "source": "California Geological Survey (CGS) Seismic Hazard Zones",
+            }
 
     co = report.coastal_overlay
     if co is not None and co.status != "not_applicable":
@@ -2087,6 +2220,12 @@ def _format_grounded_analysis(report) -> dict:
     # actionable ones (e.g. ADV is a regional estimate).
     ev_warnings = set(ev.warnings) if ev else set()
     user_warnings = [w for w in (report.warnings or []) if w not in ev_warnings]
+    if lot_unconfirmed and out.get("lot_size_sqft"):
+        user_warnings.append(
+            f"Lot area ({out['lot_size_sqft']:,.0f} sqft) is a GIS parcel-polygon "
+            "estimate, not the recorded legal lot — confirm with the county assessor; "
+            "the by-right unit count is provisional until it is."
+        )
     if user_warnings:
         out["warnings"] = user_warnings
 
@@ -2156,6 +2295,28 @@ async def _execute_analyze_property(address: str, session_id: str = "") -> str:
 
 # Cap batch size so a chat turn can't kick off an unbounded analysis fan-out.
 _MAX_SCREEN_ADDRESSES = 20
+
+
+def _execute_calculate(expression: str) -> str:
+    """Evaluate an arithmetic expression deterministically (no LLM mental math)."""
+    from plotlot.pipeline.safe_calc import CalcError, safe_calculate
+
+    try:
+        result = safe_calculate(expression)
+    except CalcError as exc:
+        return json.dumps(
+            {
+                "status": "error",
+                "expression": expression,
+                "message": (
+                    f"Could not evaluate '{expression}': {exc}. Pass arithmetic only "
+                    "(numbers and + - * / // % ** and parentheses)."
+                ),
+            }
+        )
+    # Render an int cleanly when the result is whole (units, dollars).
+    value: float | int = int(result) if result == int(result) else round(result, 4)
+    return json.dumps({"status": "success", "expression": expression, "result": value})
 
 
 async def _execute_screen_properties(args: dict) -> str:
@@ -2792,6 +2953,8 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
         )
     elif name == "analyze_property":
         return await _execute_analyze_property(args.get("address", ""), session_id=session_id)
+    elif name == "calculate":
+        return _execute_calculate(args.get("expression", ""))
     elif name == "screen_properties":
         return await _execute_screen_properties(args)
     elif name == "search_zoning_ordinance":

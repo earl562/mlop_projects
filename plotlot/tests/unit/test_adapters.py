@@ -689,9 +689,19 @@ class TestResolveAdapter:
         assert result.config is config
 
     async def test_raises_no_adapter_error_when_not_found(self):
-        with patch(
-            "plotlot.ingestion.adapters.registry._try_municode",
-            new=AsyncMock(return_value=None),
+        # Mock EVERY discovery path to miss — otherwise _try_codifier makes a live
+        # network call (discover_codifier) whose result is environment-dependent,
+        # so the test was non-hermetic and flaked on whatever the codifier service
+        # returned for a fake city.
+        with (
+            patch(
+                "plotlot.ingestion.adapters.registry._try_municode",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "plotlot.ingestion.adapters.registry._try_codifier",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             with pytest.raises(NoAdapterError) as exc_info:
                 await resolve_adapter("Atlantis", "ZZ")

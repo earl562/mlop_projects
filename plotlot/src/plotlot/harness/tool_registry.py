@@ -99,6 +99,29 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             "required": ["status"],
         },
     ),
+    "calculate": ToolContract(
+        name="calculate",
+        description=(
+            "Deterministic arithmetic evaluator. The agent calls this for ALL math so "
+            "no number is computed by LLM mental arithmetic. Pure arithmetic only — no "
+            "code-exec surface."
+        ),
+        risk_class=ToolRiskClass.READ_ONLY,
+        input_schema={
+            "type": "object",
+            "properties": {"expression": {"type": "string", "minLength": 1}},
+            "required": ["expression"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "result": {"type": "number"},
+                "expression": {"type": "string"},
+            },
+            "required": ["status"],
+        },
+    ),
     "screen_properties": ToolContract(
         name="screen_properties",
         description=(

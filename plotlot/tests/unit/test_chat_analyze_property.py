@@ -647,3 +647,138 @@ def test_grounding_policy_blocks_redrive_and_ingest_suggestions():
     assert "ingest" in policy  # never suggest ingesting (SD already ingested)
     assert "already" in policy and "ingested" in policy
     assert "alternative ordinance" in policy  # never invent a conflicting reading
+
+
+# ---------------------------------------------------------------------------
+# Lot-size provenance gates the "VERIFIED" claim (a count is only as firm as
+# the lot area it was built on).
+# ---------------------------------------------------------------------------
+
+
+def test_geometry_lot_makes_unit_count_provisional():
+    report = _hueneme_report()  # extraction verifies the ordinance rule
+    report.property_record.lot_size_source = "geometry"
+    payload = _format_grounded_analysis(report)
+
+    assert payload["lot_size_source"] == "geometry"
+    assert "estimate" in payload["lot_size_basis"].lower()
+    # Even though the ordinance rule verified, the count is provisional on the lot.
+    assert payload["by_right"]["verification"] == "provisional"
+    assert payload["by_right"]["offer_is_provisional"] is True
+    assert payload["by_right"]["lot_size_confirmed"] is False
+    assert any("assessor" in w.lower() for w in payload.get("warnings", []))
+
+
+def test_assessor_lot_keeps_count_verified():
+    report = _hueneme_report()
+    report.property_record.lot_size_source = "assessor"
+    payload = _format_grounded_analysis(report)
+
+    assert payload["lot_size_source"] == "assessor"
+    assert "authoritative" in payload["lot_size_basis"].lower()
+    assert payload["by_right"]["verification"] == "verified"
+    assert payload["by_right"]["lot_size_confirmed"] is True
+
+
+def test_unknown_lot_provenance_does_not_downgrade():
+    # Providers that don't set provenance (e.g. FL counties) must not regress to
+    # provisional — only a KNOWN geometry estimate downgrades trust.
+    report = _hueneme_report()
+    assert report.property_record.lot_size_source == ""
+    payload = _format_grounded_analysis(report)
+    assert payload["by_right"]["verification"] == "verified"
+    assert payload["by_right"]["lot_size_confirmed"] is False  # not "assessor"
+
+
+def test_source_answer_flags_provisional_on_geometry_lot():
+    from plotlot.api.chat import _build_source_answer
+
+    report = _hueneme_report()
+    report.property_record.lot_size_source = "geometry"
+    answer = _build_source_answer(_format_grounded_analysis(report))
+
+    assert answer is not None
+    assert "PROVISIONAL" in answer
+    assert "assessor" in answer.lower()
+    # The rule may be verified, but the count is NOT stamped firm-verified.
+    assert "Verification status: **VERIFIED**" not in answer
+
+
+def test_source_answer_verified_on_assessor_lot():
+    from plotlot.api.chat import _build_source_answer
+
+    report = _hueneme_report()
+    report.property_record.lot_size_source = "assessor"
+    answer = _build_source_answer(_format_grounded_analysis(report))
+
+    assert answer is not None
+    assert "VERIFIED" in answer
+    assert "PROVISIONAL" not in answer
+
+
+def test_geologic_hazard_surfaced_in_payload():
+    from plotlot.core.types import GeologicHazard
+
+    report = _hueneme_report()
+    report.site_risk.geologic = GeologicHazard(
+        fault_zone="not within an Alquist-Priolo Earthquake Fault Zone",
+        landslide_zone="NOT evaluated by CGS for seismic landslide hazards",
+        liquefaction_zone="NOT evaluated by CGS for liquefaction hazards",
+        in_any_hazard_zone=False,
+        evaluated=False,
+        flags=[
+            "Seismic landslide/liquefaction NOT evaluated by CGS here — geotechnical review needed"
+        ],
+    )
+    payload = _format_grounded_analysis(report)
+    geo = payload["site_risk"]["geologic_hazard"]
+    assert geo["evaluated"] is False
+    assert "CGS" in geo["source"]
+    assert any("geotechnical" in f.lower() for f in geo["flags"])
+
+
+# ---------------------------------------------------------------------------
+# Narrator anti-hallucination: deterministic `calculate` tool + MATH/FEE rules
+# (regression for the Kevin Woo session — fabricated fees, mental-math errors).
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_tool_registered_and_core():
+    names = {t["function"]["name"] for t in CHAT_TOOLS}
+    assert "calculate" in names
+    from plotlot.api.chat import CORE_TOOLS
+
+    assert "calculate" in {t["function"]["name"] for t in CORE_TOOLS}
+
+
+def test_calculate_executor_returns_exact_result():
+    import json
+
+    from plotlot.api.chat import _execute_calculate
+
+    out = json.loads(_execute_calculate("7 * 750000"))
+    assert out["status"] == "success"
+    assert out["result"] == 5_250_000  # rendered as int when whole
+
+    gap = json.loads(_execute_calculate("1500000 - 444900"))
+    assert gap["result"] == 1_055_100
+
+
+def test_calculate_executor_rejects_non_arithmetic():
+    import json
+
+    from plotlot.api.chat import _execute_calculate
+
+    out = json.loads(_execute_calculate("__import__('os')"))
+    assert out["status"] == "error"
+    assert "arithmetic" in out["message"].lower()
+
+
+def test_grounding_policy_has_math_and_fee_rules():
+    from plotlot.api.chat import GROUNDING_POLICY
+
+    assert "MATH RULE" in GROUNDING_POLICY
+    assert "calculate" in GROUNDING_POLICY
+    assert "FEE RULE" in GROUNDING_POLICY
+    # The exact phantom categories from the Kevin Woo hallucination are named as banned.
+    assert "police fee" in GROUNDING_POLICY.lower()

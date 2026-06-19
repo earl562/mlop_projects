@@ -179,6 +179,12 @@ async def test_fetch_site_risk_high_flood_with_wetlands():
         patch(
             "plotlot.pipeline.site_risk._fetch_nwi_wetlands", new=AsyncMock(return_value=wetlands)
         ),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_geologic_hazard", new=AsyncMock(return_value=None)
+        ),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_airport_influence", new=AsyncMock(return_value=[])
+        ),
     ):
         result = await fetch_site_risk(32.7, -117.1)
 
@@ -205,6 +211,12 @@ async def test_fetch_site_risk_minimal_no_wetlands():
             "plotlot.pipeline.site_risk._fetch_fema_flood_zone", new=AsyncMock(return_value=flood)
         ),
         patch("plotlot.pipeline.site_risk._fetch_nwi_wetlands", new=AsyncMock(return_value=[])),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_geologic_hazard", new=AsyncMock(return_value=None)
+        ),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_airport_influence", new=AsyncMock(return_value=[])
+        ),
     ):
         result = await fetch_site_risk(32.7, -117.1)
 
@@ -223,9 +235,138 @@ async def test_fetch_site_risk_fema_unavailable_degrades_gracefully():
         patch(
             "plotlot.pipeline.site_risk._fetch_nwi_wetlands", new=AsyncMock(return_value=wetlands)
         ),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_geologic_hazard", new=AsyncMock(return_value=None)
+        ),
+        patch(
+            "plotlot.pipeline.site_risk._fetch_airport_influence", new=AsyncMock(return_value=[])
+        ),
     ):
         result = await fetch_site_risk(32.7, -117.1)
 
     assert result.overall_risk == "unknown"
     assert result.flood_zone is None
     assert "USFWS National Wetlands Inventory (NWI)" in result.data_sources
+
+
+# ---------------------------------------------------------------------------
+# CGS geologic / seismic hazard tests
+# ---------------------------------------------------------------------------
+
+from plotlot.core.types import GeologicHazard  # noqa: E402
+from plotlot.pipeline.site_risk import _fetch_geologic_hazard  # noqa: E402
+
+
+def _geo_feature(fault: int, landslide: int, liquefaction: int) -> list[dict]:
+    return [
+        {
+            "attributes": {
+                "FaultZone": fault,
+                "LandslideZone": landslide,
+                "LiquefactionZone": liquefaction,
+            }
+        }
+    ]
+
+
+async def test_geologic_not_evaluated_is_honest_unknown():
+    # 1233 Hueneme St: fault=1 (not in zone), landslide=4 / liquefaction=4 (NOT evaluated).
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(return_value=_geo_feature(1, 4, 4)),
+    ):
+        geo = await _fetch_geologic_hazard(32.7677, -117.1858)
+
+    assert isinstance(geo, GeologicHazard)
+    assert "not within" in geo.fault_zone.lower()
+    assert geo.in_any_hazard_zone is False
+    assert geo.evaluated is False  # NOT a clearance — CGS hasn't mapped it
+    assert any("not evaluated" in f.lower() and "geotechnical" in f.lower() for f in geo.flags)
+
+
+async def test_geologic_within_landslide_zone_raises_flag():
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(return_value=_geo_feature(1, 1, 2)),
+    ):
+        geo = await _fetch_geologic_hazard(34.0, -118.0)
+
+    assert geo is not None
+    assert geo.in_any_hazard_zone is True
+    assert any("landslide" in f.lower() for f in geo.flags)
+
+
+async def test_geologic_within_fault_zone_raises_flag():
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(return_value=_geo_feature(2, 2, 2)),
+    ):
+        geo = await _fetch_geologic_hazard(34.0, -118.0)
+
+    assert geo is not None
+    assert geo.in_any_hazard_zone is True
+    assert geo.evaluated is True
+    assert any("fault" in f.lower() for f in geo.flags)
+
+
+async def test_geologic_outside_california_returns_none():
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(return_value=[]),
+    ):
+        assert await _fetch_geologic_hazard(25.76, -80.19) is None  # Miami → no CA parcel
+
+
+async def test_geologic_api_error_returns_none():
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(side_effect=Exception("timeout")),
+    ):
+        assert await _fetch_geologic_hazard(32.7, -117.1) is None
+
+
+async def test_fetch_site_risk_includes_geologic():
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_http(_fema_response("X", sfha="F"))),
+        patch(
+            "plotlot.property.arcgis_utils.spatial_query",
+            new=AsyncMock(return_value=_geo_feature(1, 4, 4)),
+        ),
+    ):
+        risk = await fetch_site_risk(32.7677, -117.1858)
+
+    assert risk.geologic is not None
+    assert risk.geologic.evaluated is False
+    assert any("CGS" in s for s in risk.data_sources)
+    assert any("not evaluated" in f.lower() for f in risk.risk_flags)
+
+
+# ---------------------------------------------------------------------------
+# City of San Diego Airport Influence Area tests
+# ---------------------------------------------------------------------------
+
+from plotlot.pipeline.site_risk import _fetch_airport_influence  # noqa: E402
+
+
+async def test_airport_influence_returns_zone_labels():
+    feats = [
+        {"attributes": {"Airport": "San Diego International Airport", "Label": "Review Area 2"}},
+        {"attributes": {"Airport": "San Diego International Airport", "Label": "Review Area 2"}},
+    ]
+    with patch("plotlot.property.arcgis_utils.spatial_query", new=AsyncMock(return_value=feats)):
+        out = await _fetch_airport_influence(32.7677, -117.1858)
+    # De-duplicated, human-readable.
+    assert out == ["San Diego International Airport — Review Area 2"]
+
+
+async def test_airport_influence_empty_when_not_in_area():
+    with patch("plotlot.property.arcgis_utils.spatial_query", new=AsyncMock(return_value=[])):
+        assert await _fetch_airport_influence(40.0, -100.0) == []
+
+
+async def test_airport_influence_api_error_returns_empty():
+    with patch(
+        "plotlot.property.arcgis_utils.spatial_query",
+        new=AsyncMock(side_effect=Exception("boom")),
+    ):
+        assert await _fetch_airport_influence(32.7, -117.1) == []
