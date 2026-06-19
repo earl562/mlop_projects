@@ -691,9 +691,27 @@ async def lookup_property(
     Returns:
         PropertyRecord with all available data, or None if not found.
     """
-    from plotlot.property.registry import get_provider
+    from plotlot.property.base import PropertyProvider
+    from plotlot.property.registry import get_provider, registered_counties
 
-    provider = get_provider(county)
+    county_key = county.lower().strip()
+    state_key = state.strip().upper()
+
+    # CA counties without a dedicated _COUNTY_CONFIG still have full parcel coverage
+    # through the CaliforniaProvider's statewide layer (CA_State_Parcels covers all
+    # 58 counties). Route any unregistered CA county there explicitly. Otherwise
+    # get_provider() sends it straight to the generic UniversalProvider (ArcGIS Hub
+    # discovery), which misses Bay Area parcels — this is what made Marin
+    # (Sausalito / Tiburon) report "not found" even though the parcel exists in the
+    # statewide layer. CaliforniaProvider still falls back to UniversalProvider last.
+    provider: PropertyProvider | None
+    if county_key not in registered_counties() and state_key in ("CA", "CALIFORNIA"):
+        from plotlot.property.california import CaliforniaProvider
+
+        provider = CaliforniaProvider()
+    else:
+        provider = get_provider(county)
+
     if provider is not None:
         try:
             record = await provider.lookup(address, county, lat=lat, lng=lng, state=state)
@@ -710,7 +728,6 @@ async def lookup_property(
             return None
 
     # Fallback to legacy handler map (should not happen once registry is populated)
-    county_key = county.lower().strip()
     handler = _COUNTY_HANDLERS.get(county_key)
 
     if not handler:
