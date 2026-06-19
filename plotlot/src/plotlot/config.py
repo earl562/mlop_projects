@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     hf_token: str = ""
     nvidia_api_key: str = ""
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    hud_api_key: str = ""
     nvidia_model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     nvidia_fallback_model: str = "minimaxai/minimax-m2.5"
     anthropic_api_key: str = ""
@@ -131,6 +132,7 @@ class Settings(BaseSettings):
             "hf_token",
             "nvidia_api_key",
             "nvidia_base_url",
+            "hud_api_key",
             "nvidia_model",
             "nvidia_fallback_model",
             "anthropic_api_key",

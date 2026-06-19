@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-06-18T17:17:42.117Z",
+  "findings": [
+    {
+      "type": "pass",
+      "category": "Landing Page",
+      "description": "Landing page loads and renders in light mode"
+    },
+    {
+      "type": "pass",
+      "category": "Page Title",
+      "description": "Page title contains \"PlotLot\""
+    },
+    {
+      "type": "pass",
+      "category": "H1 Heading",
+      "description": "Main heading is visible on landing page"
+    },
+    {
+      "type": "warn",
+      "category": "Dark Mode",
+      "description": "No dark mode toggle found on landing page"
+    },
+    {
+      "type": "pass",
+      "category": "Sidebar",
+      "description": "Sidebar rendered with width 286px (adequate)"
+    },
+    {
+      "type": "pass",
+      "category": "Sidebar Overflow",
+      "description": "No horizontal overflow in sidebar"
+    },
+    {
+      "type": "pass",
+      "category": "Sidebar Icons",
+      "description": "Found 9 icon elements in sidebar"
+    },
+    {
+      "type": "pass",
+      "category": "Zoning Card",
+      "description": "Found Zoning Card in analysis results"
+    },
+    {
+      "type": "warn",
+      "category": "Setbacks Diagram",
+      "description": "Setbacks Diagram not detected in current page (may need a completed analysis)"
+    },
+    {
+      "type": "pass",
+      "category": "Calculator Breakdown",
+      "description": "Found Calculator Breakdown in analysis results"
+    },
+    {
+      "type": "pass",
+      "category": "Comps List",
+      "description": "Found Comps List in analysis results"
+    },
+    {
+      "type": "warn",
+      "category": "Proforma Summary",
+      "description": "Proforma Summary not detected in current page (may need a completed analysis)"
+    },
+    {
+      "type": "pass",
+      "category": "Dark Mode",
+      "description": "Dark mode toggled and screenshot captured"
+    },
+    {
+      "type": "pass",
+      "category": "Mobile Overflow",
+      "description": "No significant horizontal overflow at 375px"
+    },
+    {
+      "type": "pass",
+      "category": "Images",
+      "description": "No broken images detected"
+    },
+    {
+      "type": "warn",
+      "category": "Overlapping Elements",
+      "description": "3 potential overlapping elements found"
+    },
+    {
+      "type": "pass",
+      "category": "Cutoff Text",
+      "description": "No cutoff text detected"
+    }
+  ],
+  "summary": {
+    "pass": 13,
+    "warn": 4,
+    "fail": 0
+  }
+}

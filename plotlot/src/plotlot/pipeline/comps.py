@@ -162,6 +162,15 @@ def _is_arms_length(price: float) -> bool:
     return price > 1_000  # Exclude $0, $10, $100 transfers
 
 
+def _resolve_search_city(subject) -> str:
+    municipality = (subject.municipality or "").strip().lower()
+    county = (subject.county or "").replace("_", " ").replace("-", " ")
+    exclude = {"fl", "tx", "ga", "sc", "nc", "", "unincorporated county", "unincorporated", "miami"}
+    if municipality not in exclude and len(municipality) > 3:
+        return municipality.title()
+    return county.title() if county else ""
+
+
 def _find_field(fields: list[str], candidates: set[str]) -> str | None:
     """Find the first matching field name (case-insensitive)."""
     upper_map = {f.upper(): f for f in fields}

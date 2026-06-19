@@ -188,6 +188,35 @@ export interface SiteRiskData {
   data_sources: string[];
 }
 
+export interface DealMetricsData {
+  levered_irr: number;
+  levered_equity_multiple: number;
+  levered_cash_on_cash: number;
+  unlevered_irr: number;
+  unlevered_equity_multiple: number;
+  cap_rate: number;
+  yield_on_cost: number;
+  debt_yield: number;
+  dscr: number;
+  gross_profit: number;
+}
+
+export interface DealAnalysisData {
+  address: string;
+  municipality: string;
+  county: string;
+  property_type: string;
+  max_units: number;
+  max_offer_price: number;
+  recommended_offer: number;
+  investment_rating: string;
+  deal_breakers: string[];
+  metrics: DealMetricsData | null;
+  summary: string;
+  notes: string[];
+  confidence: string;
+}
+
 export interface ZoningReportData {
   address: string;
   formatted_address: string;
@@ -213,6 +242,7 @@ export interface ZoningReportData {
   comp_analysis: CompAnalysisData | null;
   pro_forma: LandProFormaData | null;
   site_risk: SiteRiskData | null;
+  deal_analysis: DealAnalysisData | null;
   summary: string;
   sources: string[];
   confidence: string;

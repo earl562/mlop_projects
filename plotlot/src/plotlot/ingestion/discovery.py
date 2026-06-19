@@ -655,6 +655,19 @@ NORCAL_METROS: dict[str, list[str]] = {
     "san_francisco": [
         "San Francisco",  # last: scarce land, institutional-scale deals, lowest PlotLot relevance
     ],
+    "marin": [
+        "San Rafael",  # county seat, largest municipality
+        "Novato",  # largest land area, active residential pipeline
+        "Sausalito",  # waterfront, view-premium market
+        "Mill Valley",
+        "Larkspur",
+        "Tiburon",
+        "Belvedere",  # Belvedere and Tiburon are separate incorporated cities
+        "Corte Madera",
+        "Fairfax",
+        "Ross",
+        "San Anselmo",
+    ],
 }
 
 # CA SoCal — San Diego County.

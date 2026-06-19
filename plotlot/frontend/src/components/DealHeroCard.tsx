@@ -112,24 +112,38 @@ function MetricGrid({ metrics }: { metrics: Array<{ label: string; value: string
 // ---------------------------------------------------------------------------
 
 function LandDealHero({ report }: { report: ZoningReportData }) {
-  const da = report.density_analysis;
-  const pf = report.pro_forma;
+  const da = report.deal_analysis;
+  const daMetrics = da?.metrics;
+  const maxOffer = da?.max_offer_price ?? 0;
+  const rating = da?.investment_rating ?? "";
+  const coc = daMetrics?.levered_cash_on_cash ?? 0;
+  const dscr = daMetrics?.dscr ?? 0;
+  const capRate = daMetrics?.cap_rate ?? 0;
   const maxUnits = da?.max_units ?? 0;
-  const maxOffer = pf?.max_land_price ?? 0;
-  const rlvPerDoor = maxUnits > 0 && maxOffer > 0 ? maxOffer / maxUnits : 0;
-  const gdv = pf?.gross_development_value ?? 0;
-  const totalCost = (pf?.hard_costs ?? 0) + (pf?.soft_costs ?? 0) + maxOffer;
-  const devMargin = gdv > 0 ? ((gdv - totalCost) / gdv) * 100 : null;
-  const governing = da?.governing_constraint?.replace(/_/g, " ") || "N/A";
+
+  if (da) {
+    return (
+      <MetricGrid
+        metrics={[
+          { label: "Rating", value: rating || "Pending", highlight: true },
+          { label: "Max Offer", value: fmt(maxOffer), highlight: true },
+          { label: "Cash-on-Cash", value: `${coc.toFixed(1)}%`, subtext: coc >= 10 ? "Strong" : coc >= 7 ? "Fair" : "Low" },
+          { label: "DSCR", value: dscr > 0 ? dscr.toFixed(2) : "N/A", subtext: dscr >= 1.25 ? "Pass" : "Below Target" },
+          { label: "Cap Rate", value: capRate > 0 ? `${capRate.toFixed(1)}%` : "N/A" },
+        ]}
+      />
+    );
+  }
+
+  const pf = report.pro_forma;
+  const density = report.density_analysis;
+  const units = density?.max_units ?? 0;
+  const governing = density?.governing_constraint?.replace(/_/g, " ") || "N/A";
 
   return (
     <MetricGrid
       metrics={[
-        { label: "Max Units", value: maxUnits > 0 ? maxUnits.toString() : "N/A", highlight: true },
-        { label: "Max Offer (RLV)", value: fmt(maxOffer), highlight: true },
-        { label: "RLV / Door", value: fmt(rlvPerDoor) },
-        { label: "Dev Margin", value: fmtPct(devMargin) },
-        { label: "Governing", value: governing },
+        { label: "Max Units", value: units > 0 ? units.toString() : "N/A", highlight: true },
       ]}
     />
   );

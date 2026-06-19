@@ -67,6 +67,10 @@ register_provider("san mateo", _california)
 # San Diego County — uses CA statewide parcel layer (no county-specific config needed)
 register_provider("san diego", _california)
 
+# Marin County — uses CA statewide parcel layer (no county-specific config needed)
+# Covers Sausalito, Tiburon, Belvedere Tiburon, San Rafael, Novato, Mill Valley, etc.
+register_provider("marin", _california)
+
 
 # Convenience top-level lookup ---------------------------------------------------
 

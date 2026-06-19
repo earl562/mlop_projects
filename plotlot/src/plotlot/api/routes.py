@@ -586,6 +586,23 @@ async def analyze_stream(request: AnalyzeRequest):
                     {"step": "proforma", "message": "Skipped", "complete": True},
                 )
 
+            # Step 7.5: Deal analysis — Dani Kleyman underwriting (Steps 2-10)
+            if report.density_analysis and report.property_record:
+                from plotlot.pipeline.deal_analysis import run_deal_analysis
+                try:
+                    report.deal_analysis = await run_deal_analysis(
+                        zoning_report=report,
+                        county=geo.get("county", ""),
+                        state=geo.get("state", "FL"),
+                        land_purchase_price=(
+                            report.pro_forma.max_land_price
+                            if report.pro_forma and report.pro_forma.max_land_price > 0
+                            else 0
+                        ),
+                    )
+                except Exception as e:
+                    logger.warning("Deal analysis failed (non-blocking): %s", e)
+
             # Step 8: Site risk — FEMA flood zone + NWI wetlands (non-blocking)
             if "site_risk" not in request.skip_steps and lat and lng:
                 yield _sse_event(
