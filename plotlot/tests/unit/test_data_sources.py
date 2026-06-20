@@ -68,10 +68,48 @@ def test_fee_schedule_total_and_itemized():
 
 
 def test_fee_schedule_registry_resolves_with_county_normalization():
-    assert get_fee_schedule("CA", "San Diego") is None  # not registered yet
-    register_fee_schedule(_sd_schedule(), county="San Diego County")
-    assert get_fee_schedule("CA", "San Diego") is not None
-    assert get_fee_schedule("ca", "san diego county").total_per_unit == 15000.0
+    assert get_fee_schedule("CA", "Nowhere") is None  # unregistered county
+    register_fee_schedule(_sd_schedule(), county="Testville County")
+    assert get_fee_schedule("CA", "Testville") is not None
+    assert get_fee_schedule("ca", "testville county").total_per_unit == 15000.0
+
+
+def test_san_diego_fee_schedule_is_verified_partial():
+    """SD ships a real, sourced, PARTIAL schedule (city DIFs only)."""
+    sched = get_fee_schedule("CA", "San Diego")
+    assert sched is not None
+    assert sched.is_itemized is True
+    assert sched.covers_all_fees is False  # city DIFs only — RTCIP/school/utility separate
+    assert sched.total_per_unit == 23402.0  # 15438 + 943 + 2394 + 4627 (FY26 MF ~1,000 sqft)
+    assert len(sched.components) == 4
+    assert "feeschedule.pdf" in sched.source
+    assert sched.effective_date == "2025-07-01"
+
+
+def test_partial_schedule_keeps_conservative_entitlement_fee():
+    """A partial schedule itemizes for display but must NOT drive the entitlement
+    fee total below the conservative coarse aggregate."""
+    report = ZoningReport(
+        address="x",
+        formatted_address="x",
+        municipality="San Diego",
+        county="San Diego",
+        state="CA",
+        density_analysis=DensityAnalysis(
+            max_units=6, governing_constraint="min_lot_area", constraints=[]
+        ),
+    )
+    partial = FeeSchedule(
+        jurisdiction="City of San Diego",
+        state="CA",
+        source="FY26 city DIFs",
+        covers_all_fees=False,
+        components=(FeeComponent("Citywide Park DIF", 15000.0, "Parks"),),
+    )
+    register_fee_schedule(partial, county="San Diego")
+    assessed = assess_entitlement(report)
+    # Partial → keeps the SD cost-model aggregate ($40k), not the $15k partial total.
+    assert assessed.impact_fee_per_unit == 40000.0
 
 
 def test_entitlement_uses_registered_schedule_total():

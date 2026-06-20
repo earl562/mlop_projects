@@ -2140,7 +2140,7 @@ def _format_grounded_analysis(report) -> dict:
 
         fee_schedule = get_fee_schedule(report.state, report.county)
         if fee_schedule is not None and fee_schedule.is_itemized:
-            valuation["impact_fees_per_unit"] = _round(fee_schedule.total_per_unit)
+            dif_total = _round(fee_schedule.total_per_unit)
             valuation["impact_fee_breakdown"] = [
                 {
                     "name": c.name,
@@ -2149,14 +2149,26 @@ def _format_grounded_analysis(report) -> dict:
                 }
                 for c in fee_schedule.components
             ]
-            valuation["impact_fees_basis"] = (
-                f"itemized from {fee_schedule.source or fee_schedule.jurisdiction}"
-                + (
-                    f" (effective {fee_schedule.effective_date})"
-                    if fee_schedule.effective_date
-                    else ""
-                )
+            eff = (
+                f" (effective {fee_schedule.effective_date})" if fee_schedule.effective_date else ""
             )
+            if fee_schedule.covers_all_fees:
+                # Comprehensive schedule IS the fee basis (also drives the residual).
+                valuation["impact_fees_per_unit"] = dif_total
+                valuation["impact_fees_basis"] = f"itemized from {fee_schedule.source}{eff}"
+            else:
+                # Partial schedule (SD city DIFs only): itemize the verified DIFs, but
+                # leave impact_fees_per_unit as the residual's conservative all-in so the
+                # offer is never optimistically understated.
+                valuation["itemized_city_dif_per_unit"] = dif_total
+                valuation["impact_fees_basis"] = (
+                    f"{fee_schedule.source}{eff}. Verified City DIFs total "
+                    f"${dif_total:,.0f}/unit (the itemized line items below). The residual "
+                    f"budgets a conservative ${valuation['impact_fees_per_unit']:,.0f}/unit "
+                    "all-in because RTCIP (SANDAG), school (SDUSD), and water/sewer capacity "
+                    "fees are separate and not itemized here. Cite the verified DIF line "
+                    "items; present the rest as additional separate fees — never invent amounts."
+                )
         else:
             valuation["impact_fees_basis"] = (
                 "coarse regional aggregate (school/park/traffic/utility combined) — "

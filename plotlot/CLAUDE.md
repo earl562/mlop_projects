@@ -104,9 +104,12 @@ Plus an **agentic chat** (`api/chat.py`) that narrates GROUNDED numbers only.
 **Open:**
 - **Comps exit value**: RentCast wired but **unverified** (no key yet). Until then,
   exit stays the labeled **$750k regional default**.
-- **Impact fees**: still the coarse **$40k/unit aggregate** — SD's itemized DIF
-  schedule (Build Better SD, FY26 fee PDF `sandiego.gov/sites/default/files/
-  feeschedule.pdf`) not parsed. (Hermes P2.)
+- **Impact fees**: SD's verified FY26 Citywide DIFs (Park/Fire/Library/Mobility =
+  $23,402/unit for a ~1,000 sqft MF unit) are now **itemized** in the chat
+  (`pipeline/fee_schedule.py`). It's a PARTIAL schedule (`covers_all_fees=False`):
+  RTCIP/school/utility capacity fees are separate, so the **residual keeps the
+  conservative $40k all-in** (never optimistically understated). Remaining: parse
+  those separate fees for a full all-in.
 - **ESL Steep Hillsides** slope review: not checked (needs DEM/slope analysis).
 - **Weak-NIM narrator**: `calculate` + deterministic surfacing mitigate, but live
   re-runs of the deal-question sequence are the real regression test.
@@ -143,7 +146,7 @@ uv run pytest tests/unit/ -q
 | SD Airport Influence | `webmaps.sandiego.gov/.../DSD/Airports/MapServer/1` | none | ✅ wired |
 | SD permits (Accela) | `webmaps.sandiego.gov/.../DoIT_Public/DSDPermits/MapServer/0` | none | ✅ wired |
 | SD comps (sold price) | RentCast `/avm/value` | `RENTCAST_API_KEY` | ⚠️ wired, needs key+verify |
-| SD impact fees (DIF) | `sandiego.gov/.../feeschedule.pdf` | public PDF | ❌ not parsed |
+| SD impact fees (DIF) | `sandiego.gov/.../feeschedule.pdf` | public PDF | ✅ city DIFs parsed (partial) |
 
 ---
 

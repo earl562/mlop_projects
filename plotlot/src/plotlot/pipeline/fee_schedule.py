@@ -50,6 +50,12 @@ class FeeSchedule:
     components: tuple[FeeComponent, ...] = ()
     source: str = ""  # official source label / URL
     effective_date: str = ""  # ISO date of the schedule edition
+    # True when these components cover ALL per-unit development fees, so the total
+    # is safe to drive the residual. False for a PARTIAL schedule (e.g. San Diego's
+    # city DIFs only — RTCIP, school, and water/sewer capacity fees are separate):
+    # the verified line items are still itemized for display, but the residual keeps
+    # the conservative coarse all-in so it is never optimistically understated.
+    covers_all_fees: bool = True
 
     @property
     def total_per_unit(self) -> float:
@@ -87,9 +93,31 @@ def _norm_county(county: str) -> str:
 #       ),
 #   ),
 #
-# Left empty until verified amounts are entered → callers fall back to the coarse
-# regional aggregate (clearly labeled as an estimate), never an invented itemization.
-_FEE_SCHEDULES: dict[tuple[str, str], FeeSchedule] = {}
+# Amounts are the City of San Diego FY2026 Build Better SD Citywide DIFs for a
+# MULTI-FAMILY unit in the 951–1,000 sqft band (the representative new-MF size;
+# rates scale with unit size across the published table). Verified from the
+# official FY26 fee schedule PDF — NOT estimated. This is a PARTIAL schedule
+# (covers_all_fees=False): it is the city DIF portion only; RTCIP (SANDAG), school
+# (SDUSD), and water/sewer capacity charges are separate and not itemized here.
+_FEE_SCHEDULES: dict[tuple[str, str], FeeSchedule] = {
+    ("CA", "san diego"): FeeSchedule(
+        jurisdiction="City of San Diego",
+        state="CA",
+        source=(
+            "City of San Diego FY2026 Fee Schedule — Build Better SD Citywide DIFs, "
+            "Multi-Family, representative ~1,000 sqft unit (rates scale with unit size). "
+            "https://www.sandiego.gov/sites/default/files/feeschedule.pdf"
+        ),
+        effective_date="2025-07-01",
+        covers_all_fees=False,  # city DIFs only — RTCIP/school/utility are separate
+        components=(
+            FeeComponent("Citywide Park DIF", 15438.0, "Build Better SD / Parks for All of Us"),
+            FeeComponent("Citywide Fire-Rescue DIF", 943.0, "Resolution R-314271"),
+            FeeComponent("Citywide Library DIF", 2394.0, "Resolution R-314272"),
+            FeeComponent("Citywide Mobility DIF", 4627.0, "Resolution R-314273"),
+        ),
+    ),
+}
 
 
 def register_fee_schedule(schedule: FeeSchedule, county: str) -> None:

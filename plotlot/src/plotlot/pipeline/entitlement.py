@@ -158,7 +158,10 @@ def assess_entitlement(report: ZoningReport) -> EntitlementAssessment:
     from plotlot.pipeline.fee_schedule import get_fee_schedule
 
     schedule = get_fee_schedule(report.state, report.county)
-    if schedule is not None and schedule.is_itemized:
+    # A schedule sets the fee total only when it covers ALL per-unit fees. A partial
+    # schedule (SD city DIFs only) keeps the conservative coarse aggregate so the
+    # entitlement fee total is never understated (RTCIP/school/utility are separate).
+    if schedule is not None and schedule.is_itemized and schedule.covers_all_fees:
         assessment.fee_market = schedule.jurisdiction
         assessment.impact_fee_per_unit = schedule.total_per_unit
     else:

@@ -118,8 +118,14 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
     from plotlot.pipeline.fee_schedule import get_fee_schedule
 
     fee_schedule = get_fee_schedule(report.state, report.county)
+    # Only let a schedule drive the residual when it covers ALL per-unit fees. A
+    # partial schedule (e.g. SD city DIFs only) is itemized for display but must not
+    # lower the residual below the conservative coarse all-in (RTCIP/school/utility
+    # are separate) — else the max land price is optimistically overstated.
     fee_override = (
-        fee_schedule.total_per_unit if (fee_schedule and fee_schedule.is_itemized) else None
+        fee_schedule.total_per_unit
+        if (fee_schedule and fee_schedule.is_itemized and fee_schedule.covers_all_fees)
+        else None
     )
     try:
         from plotlot.pipeline.sensitivity import build_sensitivity_table

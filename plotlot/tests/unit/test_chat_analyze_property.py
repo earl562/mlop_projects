@@ -45,6 +45,20 @@ from plotlot.harness.tool_registry import tool_exists
 from plotlot.pipeline.screening import BatchScreeningResult, ScreeningResult
 
 
+@pytest.fixture(autouse=True)
+def _isolate_fee_registry():
+    """Run formatter tests against an empty fee registry so the module-level San
+    Diego schedule doesn't leak in. Tests that need a schedule register it
+    explicitly; this keeps the coarse-aggregate path deterministic."""
+    from plotlot.pipeline import fee_schedule as _fs
+
+    saved = dict(_fs._FEE_SCHEDULES)
+    _fs._FEE_SCHEDULES.clear()
+    yield
+    _fs._FEE_SCHEDULES.clear()
+    _fs._FEE_SCHEDULES.update(saved)
+
+
 def _hueneme_report(*, provisional: bool = False) -> ZoningReport:
     """A representative grounded report for the 1233 Hueneme St regression case."""
     return ZoningReport(
@@ -262,6 +276,38 @@ def test_fee_breakdown_emitted_only_when_real_schedule_registered():
     finally:
         fee_schedule._FEE_SCHEDULES.clear()
         fee_schedule._FEE_SCHEDULES.update(before)
+
+
+def test_partial_fee_schedule_itemizes_but_keeps_conservative_residual():
+    """A partial schedule (covers_all_fees=False, e.g. SD city DIFs only) itemizes
+    the verified line items for display but must NOT lower the residual fee — the
+    all-in stays conservative because RTCIP/school/utility are not itemized."""
+    from plotlot.pipeline.fee_schedule import FeeComponent, FeeSchedule, register_fee_schedule
+
+    report = _hueneme_report()  # pro_forma.impact_fees_per_unit = 18_000 (conservative)
+    register_fee_schedule(
+        FeeSchedule(
+            jurisdiction="City of San Diego",
+            state="CA",
+            source="FY26 Citywide DIFs",
+            effective_date="2025-07-01",
+            covers_all_fees=False,
+            components=(
+                FeeComponent("Citywide Park DIF", 15438.0, "Parks for All of Us"),
+                FeeComponent("Citywide Mobility DIF", 4627.0, "R-314273"),
+            ),
+        ),
+        county="San Diego",
+    )
+    val = _format_grounded_analysis(report)["valuation"]
+
+    # Verified DIFs are itemized for display...
+    assert len(val["impact_fee_breakdown"]) == 2
+    assert val["itemized_city_dif_per_unit"] == 20065  # 15438 + 4627
+    # ...but the residual fee stays the conservative all-in (not the partial DIF total).
+    assert val["impact_fees_per_unit"] == 18_000
+    assert "conservative" in val["impact_fees_basis"].lower()
+    assert "separate" in val["impact_fees_basis"].lower()
 
 
 def test_grounded_payload_handles_missing_density_gracefully():
