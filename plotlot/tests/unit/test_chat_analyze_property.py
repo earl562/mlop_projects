@@ -828,3 +828,86 @@ def test_grounding_policy_has_math_and_fee_rules():
     assert "FEE RULE" in GROUNDING_POLICY
     # The exact phantom categories from the Kevin Woo hallucination are named as banned.
     assert "police fee" in GROUNDING_POLICY.lower()
+
+
+# ---------------------------------------------------------------------------
+# Forced grounding: deal/source questions auto-run analyze_property so the
+# grounded payload (citation, sensitivity, CA programs) is in context before the
+# weak narrator answers — instead of it free-forming from lookup + its knowledge.
+# ---------------------------------------------------------------------------
+
+
+class TestForcedGrounding:
+    def test_needs_grounded_analysis_detects_deal_and_source_questions(self):
+        from plotlot.api.chat import _needs_grounded_analysis
+
+        for m in [
+            "How many units can I build by-right at 1233 Hueneme St?",
+            "What are San Diego's impact/development fees per unit?",
+            "Flood zone / coastal / wetlands / geologic / airport risk?",
+            "Can I trust that unit count — what's the source?",
+            "By-right, CUP, or rezone — and what's the unit upside?",
+            "What's the most I can pay for the land?",
+            "what is the maximum buildable unit",
+        ]:
+            assert _needs_grounded_analysis(m), m
+
+    def test_needs_grounded_analysis_skips_non_deal_questions(self):
+        from plotlot.api.chat import _needs_grounded_analysis
+
+        # Owner/geocode/topography/greeting must NOT pay the analyze_property latency.
+        for m in [
+            "What's the owner for 1233 Hueneme St?",
+            "hello",
+            "What is the topography of this property?",
+            "thanks!",
+        ]:
+            assert not _needs_grounded_analysis(m), m
+
+    def test_resolve_deal_address_prefers_message_then_analysis_then_context(self):
+        from unittest.mock import patch
+
+        from plotlot.api.chat import _resolve_deal_address
+
+        # 1. explicit address in the message wins
+        assert (
+            _resolve_deal_address("units at 1233 Hueneme St, San Diego, CA 92110?", "s", None)
+            == "1233 Hueneme St, San Diego, CA 92110"
+        )
+        # 2. fall back to the active grounded analysis
+        assert (
+            _resolve_deal_address("how many units?", "s", {"address": "55 Foo Ave"}) == "55 Foo Ave"
+        )
+        # 3. fall back to the session property context
+        with patch.object(
+            chat_mod._sessions, "get_property_context", return_value={"address": "9 Bar Rd"}
+        ):
+            assert _resolve_deal_address("how many units?", "s", None) == "9 Bar Rd"
+        # 4. nothing resolvable
+        with patch.object(chat_mod._sessions, "get_property_context", return_value=None):
+            assert _resolve_deal_address("how many units?", "s", None) == ""
+
+    def test_analysis_covers_address_normalizes(self):
+        from plotlot.api.chat import _analysis_covers_address
+
+        full = {"address": "1233 Hueneme St, San Diego, CA 92110"}
+        assert _analysis_covers_address(full, "1233 Hueneme St")  # prefix match
+        assert _analysis_covers_address({"address": "1233 Hueneme St"}, full["address"])
+        assert not _analysis_covers_address(full, "999 Other Rd")
+        assert not _analysis_covers_address(None, "1233 Hueneme St")
+
+    async def test_execute_analyze_property_reuses_cache_for_same_parcel(self):
+        """A cached analysis for the same parcel short-circuits the ~minute pipeline."""
+        from unittest.mock import AsyncMock, patch
+
+        sid = "test-forced-grounding-cache"
+        cached = {
+            "status": "success",
+            "address": "1233 Hueneme St, San Diego, CA 92110",
+            "by_right": {"max_units": 7},
+        }
+        chat_mod._sessions.set_analysis(sid, cached)
+        with patch("plotlot.pipeline.analyze.analyze_property_deep", new=AsyncMock()) as m_deep:
+            out = json.loads(await chat_mod._execute_analyze_property("1233 Hueneme St", sid))
+        m_deep.assert_not_called()  # cache hit → no re-run
+        assert out["by_right"]["max_units"] == 7

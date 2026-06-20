@@ -1639,6 +1639,66 @@ def _is_source_query(message: str) -> bool:
     return bool(_SOURCE_QUERY_RE.search(message or ""))
 
 
+# A property deal/source question whose answer must come from the grounded engine
+# (units, value, fees, risk, entitlement, upside). The weak NIM model otherwise
+# answers these from lookup + its own knowledge, bypassing the grounding — so we
+# force analyze_property when one of these is asked (see the chat handler).
+_DEAL_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"units?|dwelling|densit(?:y|ies)|by[-\s]?right|buildable|build\s+(?:on|here|out)|"
+    r"far\b|floor\s+area|setbacks?|max\s+height|stories|lot\s+coverage|"
+    r"worth|valu(?:e|ation)|pay\s+for|residual|pencils?|margins?|pro\s*forma|"
+    r"exit|adv\b|comps?\b|comparable|land\s+(?:price|value)|asking\s+price|"
+    r"impact\s+fee|dev(?:elopment)?\s+fee|\bdif\b|fees?\s+per\s+unit|"
+    r"flood|coastal|wetland|geologic|seismic|liquefaction|landslide|fault\s+zone|"
+    r"airport|site\s+risk|hazard|"
+    r"entitle|\bcup\b|conditional\s+use|rezon|\badu\b|sb\s?9|density\s+bonus|upside"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Extract a US street address from free text (street # + name + suffix, optional
+# city/state/zip) so a deal question can self-resolve its parcel.
+_ADDRESS_RE = re.compile(
+    r"\d{1,6}\s+[A-Za-z0-9.'\-]+(?:\s+[A-Za-z0-9.'\-]+)*?\s+"
+    r"(?:st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|"
+    r"pl|place|cir|circle|ter|terrace|hwy|highway|pkwy|parkway|sq|square|trl|trail)"
+    r"\.?(?:,?\s+[A-Za-z .'\-]+?,?\s+[A-Za-z]{2}\s+\d{5}(?:-\d{4})?)?",
+    re.IGNORECASE,
+)
+
+
+def _needs_grounded_analysis(message: str) -> bool:
+    """True when a message is a property deal/source question that must be grounded."""
+    return bool(_is_source_query(message) or _DEAL_QUERY_RE.search(message or ""))
+
+
+def _norm_addr(address: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (address or "").lower())
+
+
+def _analysis_covers_address(analysis: dict | None, address: str) -> bool:
+    """True when an existing grounded analysis already covers ``address``."""
+    if not (analysis and analysis.get("address") and address):
+        return False
+    a, b = _norm_addr(analysis["address"]), _norm_addr(address)
+    return bool(a and b and (a.startswith(b) or b.startswith(a)))
+
+
+def _resolve_deal_address(message: str, session_id: str, analysis: dict | None) -> str:
+    """Resolve the parcel a deal question refers to: explicit address in the
+    message, else the active grounded analysis, else the session property context."""
+    m = _ADDRESS_RE.search(message or "")
+    if m:
+        return m.group(0).strip().rstrip(".,")
+    if analysis and analysis.get("address"):
+        return str(analysis["address"])
+    ctx = _sessions.get_property_context(session_id)
+    if ctx and ctx.get("address"):
+        return str(ctx["address"])
+    return ""
+
+
 # Display-hygiene: strip any leftover text-emitted tool-call blob (closed or
 # dangling) so raw JSON never reaches the user. Parseable blobs are recovered and
 # routed upstream in call_llm; this only cleans unparseable residue.
@@ -2316,6 +2376,14 @@ async def _execute_analyze_property(address: str, session_id: str = "") -> str:
     """
     if not address or not address.strip():
         return json.dumps({"status": "error", "message": "An address is required."})
+
+    # Reuse a cached analysis for the same parcel — avoids re-running the ~minute
+    # pipeline when grounding was already forced this turn (or computed on a prior
+    # turn for this address), including a redundant model-issued call after forcing.
+    if session_id:
+        cached = _sessions.get_analysis(session_id)
+        if _analysis_covers_address(cached, address):
+            return json.dumps(cached)
 
     from plotlot.pipeline.analyze import analyze_property_deep
 
@@ -3134,6 +3202,32 @@ async def chat(request: ChatRequest, http_request: Request):
                     if prop_ctx.get("lot_size_sqft"):
                         ctx_lines.append(f"- Lot Size: {prop_ctx['lot_size_sqft']:,.0f} sqft")
                     system_content += "\n".join(ctx_lines)
+
+            # Force grounding for property deal/source questions. The weak NIM model
+            # often answers units/fees/comps/risk/entitlement from lookup + its own
+            # knowledge, bypassing the grounded engine — which leaves the citation
+            # echo, sensitivity, and CA-program facts with no data to cite (it then
+            # fabricated a §131.0443 quote, freelanced density bonuses, and did its
+            # own mental math). Run analyze_property deterministically (it persists
+            # the payload) so the verified numbers are in context BEFORE the model
+            # speaks. Cached per address: only the first deal question for a parcel
+            # pays the latency; a non-resolvable address just falls through.
+            if _needs_grounded_analysis(request.message):
+                _existing = _sessions.get_analysis(session_id)
+                _deal_addr = _resolve_deal_address(request.message, session_id, _existing)
+                if _deal_addr and not _analysis_covers_address(_existing, _deal_addr):
+                    yield _sse_event(
+                        "tool_use",
+                        {
+                            "tool": "analyze_property",
+                            "args": {"address": _deal_addr},
+                            "message": "Running grounded deal analysis...",
+                        },
+                    )
+                    try:
+                        await _execute_analyze_property(_deal_addr, session_id)
+                    except Exception as exc:  # noqa: BLE001 — non-fatal; model can still answer
+                        logger.warning("Forced analyze_property failed: %s", exc)
 
             # Promote the most recent grounded analysis into the system prompt so
             # EVERY follow-up turn answers from these verified numbers instead of
