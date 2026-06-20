@@ -136,6 +136,21 @@ class TestIntentClassification:
         complex_msg = self._classify("What is the zoning setback density for this lot?")
         assert complex_msg.confidence >= simple.confidence
 
+    def test_bare_address_routes_to_zoning_lookup(self):
+        """Regression: a bare address has no zoning/deal keywords and used to fall
+        through to general_question, so the agent freelanced instead of running the
+        property pipeline (the NorCal "contact the planning department" failures)."""
+        for addr in [
+            "2307 Spanish Trail Road, Belvedere Tiburon, CA",
+            "416 Richardson Street, Sausalito",
+            "1233 Hueneme St, San Diego, CA 92110",
+        ]:
+            assert self._classify(addr).intent == "zoning_lookup", addr
+
+    def test_non_address_number_is_not_an_address(self):
+        """A leading number without a street suffix must NOT be treated as an address."""
+        assert self._classify("5 unit apartment building").intent == "general_question"
+
 
 # ---------------------------------------------------------------------------
 # Intent Context Builder Tests

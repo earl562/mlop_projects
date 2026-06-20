@@ -1373,6 +1373,31 @@ _DEAL_TYPE_PATTERNS: dict[str, set[str]] = {
 }
 
 
+# Street-type suffixes used to recognize a bare address as a property query.
+_STREET_SUFFIX_RE = re.compile(
+    r"\b("
+    r"st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|"
+    r"pl|place|ter|terrace|cir|circle|hwy|highway|pkwy|parkway|trail|trl|loop|"
+    r"run|path|row|sq|square|aly|alley|walk|cres|crescent|cv|cove|pt|point"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_address(message: str) -> bool:
+    """True when the message is (or leads with) a US street address.
+
+    A bare address — "2307 Spanish Trail Road, Belvedere Tiburon, CA" — carries
+    none of the zoning/deal keywords, so without this check it falls through to
+    ``general_question`` and the agent answers from general knowledge (or tells
+    the user to call the planning department) instead of running the
+    geocode → property → zoning pipeline. Require a leading house number AND a
+    street suffix so counts like "5 unit building" don't match.
+    """
+    m = message.strip()
+    return bool(re.match(r"^\d{1,6}\s+\w", m)) and bool(_STREET_SUFFIX_RE.search(m))
+
+
 def _classify_intent(message: str) -> IntentClassification:
     """Classify user message intent and deal type from keywords."""
     msg_lower = message.lower()
@@ -1402,6 +1427,11 @@ def _classify_intent(message: str) -> IntentClassification:
     elif zoning_score >= 1:
         intent = "zoning_lookup"
         confidence = min(0.9, 0.5 + zoning_score * 0.15)
+    elif _looks_like_address(message):
+        # A bare address is an implicit "analyze this property" request — route it
+        # to the property pipeline instead of letting it fall to general_question.
+        intent = "zoning_lookup"
+        confidence = 0.75
     else:
         intent = "general_question"
         confidence = 0.5
@@ -1428,8 +1458,13 @@ def _build_intent_context(classification: IntentClassification) -> str:
 
     guidance = {
         "zoning_lookup": (
-            "The user is asking about zoning rules. Prioritize geocode → property lookup → "
-            "zoning search. Focus on dimensional standards, setbacks, and permitted uses."
+            "The user gave a property/address to analyze. You MUST run the tools: call "
+            "geocode, then lookup_property_info, then search_zoning_ordinance, and answer "
+            "from their results. Do NOT answer from general knowledge, do NOT give 'typical' "
+            "estimates, and do NOT tell the user to contact the planning department or check "
+            "a county GIS — PlotLot has the ingested ordinance and parcel data; retrieve it. "
+            "Report the lot size, zoning code, dimensional standards, setbacks, and permitted "
+            "uses that the tools return."
         ),
         "deal_analysis": (
             "The user wants deal-level analysis. After zoning lookup, focus on comparable "
