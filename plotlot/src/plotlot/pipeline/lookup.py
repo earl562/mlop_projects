@@ -17,7 +17,13 @@ import re
 import time
 from dataclasses import fields as dataclass_fields
 
-from plotlot.core.types import NumericZoningParams, Setbacks, SourceRef, ZoningReport
+from plotlot.core.types import (
+    NumericZoningParams,
+    SearchResult,
+    Setbacks,
+    SourceRef,
+    ZoningReport,
+)
 from plotlot.observability.tracing import (
     log_dict,
     log_metrics,
@@ -48,6 +54,27 @@ PIPELINE_CACHE_TTL = 1800  # 30 minutes
 # (e.g. "San Jose") has no semantic overlap with ordinance text and returns 0
 # results, so we query for generic zoning terms instead.
 GENERIC_ZONING_QUERY = "zoning district residential density setbacks height limits parking"
+
+
+def _format_sources(results: list[SearchResult]) -> list[str]:
+    """Render retrieved chunks as citation strings for the report.
+
+    Many municipalities (Tiburon, Oakland, Marin County, …) were ingested with
+    only ``section_title`` populated and an empty ``section``. Filtering on
+    ``section`` alone dropped EVERY citation for those places, so a grounded
+    result (real chunks retrieved, zoning extracted) displayed with zero
+    sources — looking unsourced. Include a chunk when EITHER field is present.
+    """
+    sources: list[str] = []
+    for r in results:
+        section = (r.section or "").strip()
+        title = (r.section_title or "").strip()
+        if section and title:
+            sources.append(f"{section} — {title}")
+        elif section or title:
+            sources.append(section or title)
+    return sources
+
 
 # Auto-ingestion guard — don't re-attempt the same municipality within this window.
 # Ingestion is an idempotent upsert; the guard only prevents hammering a dead source
@@ -635,7 +662,7 @@ async def _agentic_analysis(
         {"role": "user", "content": context_msg},
     ]
 
-    all_sources = [f"{r.section} — {r.section_title}" for r in search_results if r.section]
+    all_sources = _format_sources(search_results)
 
     for turn in range(MAX_ANALYSIS_TURNS):
         logger.info("Analysis turn %d/%d", turn + 1, MAX_ANALYSIS_TURNS)
@@ -719,9 +746,7 @@ async def _agentic_analysis(
                     finally:
                         await session.close()
 
-                    all_sources.extend(
-                        [f"{r.section} — {r.section_title}" for r in extra_results if r.section]
-                    )
+                    all_sources.extend(_format_sources(extra_results))
 
                     if extra_results:
                         chunks = [
