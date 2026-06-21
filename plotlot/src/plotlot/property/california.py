@@ -239,6 +239,7 @@ class CaliforniaProvider(PropertyProvider):
             )
             record = await self._statewide_parcel(address, county, lat=lat, lng=lng)
             if record is not None:
+                await self._enrich_marin_zoning(record, county, lat, lng)
                 return record
             return await self._universal_fallback(address, county, lat=lat, lng=lng, state=state)
 
@@ -304,6 +305,34 @@ class CaliforniaProvider(PropertyProvider):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _enrich_marin_zoning(
+        record: PropertyRecord,
+        county: str,
+        lat: float | None,
+        lng: float | None,
+    ) -> None:
+        """Fill the parcel's zone from Marin's per-city zoning layers.
+
+        The statewide parcel layer carries no zoning, so a Marin parcel returns
+        empty ``zoning_code`` and the pipeline has to guess the zone. Marin
+        County publishes a point-in-polygon zoning layer per city; resolve the
+        real zone (e.g. Tiburon -> RO-2) so retrieval can target it.
+        """
+        if record.zoning_code or county.lower().strip() != "marin" or lat is None or lng is None:
+            return
+        try:
+            from plotlot.property.marin_zoning import resolve_marin_zone
+
+            code, desc = await resolve_marin_zone(record.municipality or "", lat, lng)
+        except Exception as exc:
+            logger.debug("Marin zoning enrichment failed: %s", exc)
+            return
+        if code:
+            record.zoning_code = code
+            if desc:
+                record.zoning_description = desc
 
     async def _spatial_parcel(
         self,
