@@ -122,6 +122,30 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             "required": ["status"],
         },
     ),
+    "analyze_upzoning": ToolContract(
+        name="analyze_upzoning",
+        description=(
+            "Deterministic entitlement value-creation calculator. Compares a by-right "
+            "baseline yield to an upzoned/subdivided target and computes the instant "
+            "equity created before building. Per-lot value is a caller input, never "
+            "fabricated."
+        ),
+        risk_class=ToolRiskClass.READ_ONLY,
+        input_schema={
+            "type": "object",
+            "properties": {"lot_sqft": {"type": "number"}},
+            "required": ["lot_sqft"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "equity_created": {"type": "number"},
+                "upzoned": {"type": "object"},
+            },
+            "required": ["status"],
+        },
+    ),
     "screen_properties": ToolContract(
         name="screen_properties",
         description=(

@@ -855,6 +855,53 @@ class DensityUplift:
     notes: list[str] = field(default_factory=list)
 
 
+@dataclass
+class UpzoningScenario:
+    """One development scenario for a parcel — a yield and the gross value it earns.
+
+    Used to compare what a parcel is worth under different entitlement states: its
+    as-is by-right yield vs. an upzoned / subdivided target. ``yield_count`` is
+    lots (fee-simple subdivision) or dwelling units, per ``yield_basis``. Every
+    figure is deterministic; ``value_per_yield`` is an INPUT (comps or override),
+    never fabricated — there is no free sold-lot price source.
+    """
+
+    name: str  # e.g. "By-right subdivision", "Upzoned (special use permit)"
+    yield_count: int  # number of lots/units this scenario produces
+    yield_basis: str  # "buildable lots" | "dwelling units"
+    value_per_yield: float  # finished value per lot/unit
+    gross_value: float  # yield_count × value_per_yield
+    instant_equity: float  # gross_value − all-in basis
+    is_baseline: bool = False
+    formula: str = ""  # how the yield was derived
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class UpzoningAnalysis:
+    """Entitlement value-creation — the equity created by upzoning before building.
+
+    Models the land developer's core play: buy at a basis, change the legal yield
+    (subdivide / rezone / SUP), and capture the value uplift *before* construction.
+    All figures are deterministic. ``value_source`` flags whether the per-lot value
+    came from comps, a caller override, or is missing — when missing, the equity is
+    left uncomputed by design rather than guessed (anti-hallucination doctrine).
+    """
+
+    purchase_price: float
+    entitlement_soft_costs: float
+    all_in_basis: float  # purchase_price + entitlement_soft_costs
+    value_source: str  # "comps" | "override" | "missing"
+    baseline: UpzoningScenario | None = None
+    upzoned: UpzoningScenario | None = None
+    value_uplift: float = 0.0  # upzoned.gross_value − baseline.gross_value
+    equity_created: float = 0.0  # the upzoned scenario's instant equity (headline)
+    cost_per_yield: float = 0.0  # all_in_basis ÷ upzoned.yield_count
+    exit_options: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Phase 6 — Data Center Site Selection
 # ---------------------------------------------------------------------------

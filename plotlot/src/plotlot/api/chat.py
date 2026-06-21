@@ -704,6 +704,71 @@ CHAT_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "analyze_upzoning",
+            "description": (
+                "Deterministic entitlement value-creation calculator — the developer's "
+                "'buy the gap' play. Use it when the user asks about the UPSIDE of "
+                "subdividing or rezoning: instant equity, value uplift, 'what if I split "
+                "this into N lots', 'what's it worth if I get it upzoned', cost per lot, "
+                "or exit/monetization options (flip, assign, sell-some-keep-rest-free, "
+                "develop). It compares the by-right baseline yield to an upzoned target and "
+                "computes the equity created BEFORE building. The per-lot finished value "
+                "must come from the user or comps — never invent it. Returns exact figures "
+                "to cite verbatim (no LLM math)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lot_sqft": {
+                        "type": "number",
+                        "description": "Parcel lot area in square feet (from the grounded analysis).",
+                    },
+                    "value_per_lot": {
+                        "type": "number",
+                        "description": (
+                            "Finished sale value per lot/unit, from the user or local comps. "
+                            "Omit if unknown — the tool will not guess it."
+                        ),
+                    },
+                    "purchase_price": {
+                        "type": "number",
+                        "description": "Contract/purchase price for the parcel (incl. closing).",
+                    },
+                    "entitlement_soft_costs": {
+                        "type": "number",
+                        "description": (
+                            "Entitlement soft costs (survey, environmental, architect, zoning "
+                            "consultant, application fees). Optional."
+                        ),
+                    },
+                    "baseline_yield": {
+                        "type": "integer",
+                        "description": "By-right lots/units (e.g. the grounded by-right unit count).",
+                    },
+                    "upzoned_yield": {
+                        "type": "integer",
+                        "description": "Target lots/units after subdivision/upzoning the user is testing.",
+                    },
+                    "baseline_min_lot_area_sqft": {
+                        "type": "number",
+                        "description": "Alternative to baseline_yield: current min lot area to subdivide against.",
+                    },
+                    "upzoned_min_lot_area_sqft": {
+                        "type": "number",
+                        "description": "Alternative to upzoned_yield: target min lot area after upzoning.",
+                    },
+                    "yield_basis": {
+                        "type": "string",
+                        "description": "Label for the yield: 'buildable lots' (default) or 'dwelling units'.",
+                    },
+                },
+                "required": ["lot_sqft"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "screen_properties",
             "description": (
                 "Batch 'buy box' screening — analyze MANY candidate addresses at once "
@@ -1218,6 +1283,7 @@ CORE_TOOLS = [
         "lookup_property_info",
         "analyze_property",
         "calculate",
+        "analyze_upzoning",
         "screen_properties",
         "search_zoning_ordinance",
         "search_municode_live",
@@ -2581,6 +2647,81 @@ def _execute_calculate(expression: str) -> str:
     return json.dumps({"status": "success", "expression": expression, "result": value})
 
 
+def _execute_analyze_upzoning(args: dict) -> str:
+    """Deterministic entitlement value-creation (subdivision/upzoning) analysis.
+
+    Compares the by-right baseline yield to an upzoned target and computes the
+    instant equity created — the developer's 'buy the gap' play. All math is
+    deterministic; the per-lot value is a caller input, never fabricated.
+    """
+    from plotlot.pipeline.upzoning import analyze_upzoning
+
+    def _num(key: str) -> float | None:
+        v = args.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        return None
+
+    def _int(key: str) -> int | None:
+        v = args.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            return int(v)
+        return None
+
+    lot_sqft = _num("lot_sqft")
+    if not lot_sqft or lot_sqft <= 0:
+        return json.dumps(
+            {"status": "error", "message": "A positive lot_sqft is required for upzoning analysis."}
+        )
+
+    a = analyze_upzoning(
+        lot_sqft=lot_sqft,
+        value_per_lot=_num("value_per_lot"),
+        purchase_price=_num("purchase_price") or 0.0,
+        entitlement_soft_costs=_num("entitlement_soft_costs") or 0.0,
+        baseline_yield=_int("baseline_yield"),
+        upzoned_yield=_int("upzoned_yield"),
+        baseline_min_lot_area_sqft=_num("baseline_min_lot_area_sqft"),
+        upzoned_min_lot_area_sqft=_num("upzoned_min_lot_area_sqft"),
+        yield_basis=str(args.get("yield_basis") or "buildable lots"),
+        value_source="comps" if args.get("value_source") == "comps" else "override",
+    )
+
+    def _scenario(s) -> dict | None:
+        if s is None:
+            return None
+        return {
+            "name": s.name,
+            "yield_count": s.yield_count,
+            "yield_basis": s.yield_basis,
+            "value_per_yield": round(s.value_per_yield),
+            "gross_value": round(s.gross_value),
+            "instant_equity": round(s.instant_equity),
+            "formula": s.formula,
+        }
+
+    return json.dumps(
+        {
+            "status": "success",
+            "all_in_basis": round(a.all_in_basis),
+            "value_source": a.value_source,
+            "baseline": _scenario(a.baseline),
+            "upzoned": _scenario(a.upzoned),
+            "value_uplift": round(a.value_uplift),
+            "equity_created": round(a.equity_created),
+            "cost_per_yield": round(a.cost_per_yield),
+            "exit_options": a.exit_options,
+            "notes": a.notes,
+            "warnings": a.warnings,
+            "grounding_note": (
+                "Cite these EXACT figures. Equity = (upzoned lots × per-lot value) − all-in "
+                "basis. If value_source is 'missing', tell the user a per-lot value is needed "
+                "and do NOT estimate the equity yourself."
+            ),
+        }
+    )
+
+
 async def _execute_screen_properties(args: dict) -> str:
     """Batch-screen a list of addresses against a buy box and rank the winners.
 
@@ -3217,6 +3358,8 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
         return await _execute_analyze_property(args.get("address", ""), session_id=session_id)
     elif name == "calculate":
         return _execute_calculate(args.get("expression", ""))
+    elif name == "analyze_upzoning":
+        return _execute_analyze_upzoning(args)
     elif name == "screen_properties":
         return await _execute_screen_properties(args)
     elif name == "search_zoning_ordinance":
