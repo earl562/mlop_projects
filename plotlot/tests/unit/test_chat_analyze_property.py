@@ -72,7 +72,11 @@ def _hueneme_report(*, provisional: bool = False) -> ZoningReport:
         zoning_district="RM-3-7",
         zoning_description="Residential Multiple-Unit",
         property_record=PropertyRecord(
-            zoning_code="RM-3-7", lot_size_sqft=6470.61, lat=32.75, lng=-117.21
+            zoning_code="RM-3-7",
+            lot_size_sqft=6470.61,
+            lat=32.75,
+            lng=-117.21,
+            owner="1233 HUENEME LLC",
         ),
         density_analysis=DensityAnalysis(
             max_units=6,
@@ -396,6 +400,91 @@ def test_source_answer_does_not_borrow_a_conflicting_fields_section():
     assert answer is not None
     assert "131.0445" not in answer
     assert "1,000 square feet of lot area" in answer
+
+
+# ---------------------------------------------------------------------------
+# Owner of record — deterministic carry + echo (regression: the narrator
+# intermittently claimed the owner was "not in the dataset" on follow-up turns
+# because the persistent grounding block had dropped the assessor owner field).
+# ---------------------------------------------------------------------------
+
+
+def test_grounded_payload_carries_owner():
+    """The grounded payload must carry the assessor owner so it survives across turns."""
+    payload = _format_grounded_analysis(_hueneme_report())
+    assert payload["owner"] == "1233 HUENEME LLC"
+
+
+def test_active_context_states_owner_and_forbids_denial():
+    """The persistent context block must inject the owner and tell the model to state it."""
+    payload = _format_grounded_analysis(_hueneme_report())
+    block = _build_active_analysis_context(payload)
+    assert "1233 HUENEME LLC" in block
+    assert "Owner of record" in block
+
+
+def test_owner_query_detection():
+    from plotlot.api.chat import _is_owner_query
+
+    assert _is_owner_query("Who owns this, and is it already being developed?")
+    assert _is_owner_query("who's the owner?")
+    assert _is_owner_query("what is the owner of record?")
+    assert _is_owner_query("is this parcel under contract?")
+    # Unrelated questions do NOT hijack the owner short-circuit.
+    assert not _is_owner_query("how many units can I build by-right?")
+    assert not _is_owner_query("what are the impact fees per unit?")
+
+
+def test_owner_answer_echoes_assessor_owner():
+    from plotlot.api.chat import _build_owner_answer
+
+    payload = _format_grounded_analysis(_hueneme_report())
+    answer = _build_owner_answer(payload, None)
+    assert answer is not None
+    assert "1233 HUENEME LLC" in answer
+    assert "county assessor" in answer
+
+
+def test_owner_answer_falls_back_to_property_context():
+    """When no analysis is cached, the owner echo reads the session property context."""
+    from plotlot.api.chat import _build_owner_answer
+
+    answer = _build_owner_answer(None, {"address": "1233 Hueneme St", "owner": "1233 HUENEME LLC"})
+    assert answer is not None
+    assert "1233 HUENEME LLC" in answer
+
+
+def test_owner_answer_none_when_owner_unknown():
+    """No owner on record → None, so the caller falls back to the model (never invents)."""
+    from plotlot.api.chat import _build_owner_answer
+
+    report = _hueneme_report()
+    report.property_record.owner = ""
+    payload = _format_grounded_analysis(report)
+    assert "owner" not in payload
+    assert _build_owner_answer(payload, None) is None
+    assert _build_owner_answer(payload, {"owner": ""}) is None
+
+
+def test_owner_answer_keeps_permit_holders_distinct_from_owner():
+    """Development-permit holders are contractors, NOT the owner — keep them separate."""
+    from plotlot.api.chat import _build_owner_answer
+
+    report = _hueneme_report()
+    report.development_signals = {
+        "permit_count": 20,
+        "active_permit_count": 20,
+        "unique_permit_holders": ["Belmont West", "HCI Systems"],
+        "data_source": "SD Accela DSDPermits",
+    }
+    payload = _format_grounded_analysis(report)
+    answer = _build_owner_answer(payload, None)
+    assert answer is not None
+    assert "1233 HUENEME LLC" in answer
+    assert "20 city permits" in answer
+    assert "Belmont West" in answer
+    # The owner name must be presented as the owner; permit holders flagged as not.
+    assert "not necessarily the owner" in answer
 
 
 def test_exit_value_formula_is_per_unit_and_unambiguous():

@@ -1520,6 +1520,14 @@ def _build_active_analysis_context(payload: dict) -> str:
         else:
             lines.append(f"Lot size: {lot:,.0f} sqft")
 
+    owner = payload.get("owner")
+    if owner:
+        lines.append(
+            f"Owner of record (county assessor): {owner} — this is the verified owner. "
+            "If asked who owns the parcel, state THIS name; do NOT say the owner is "
+            "unavailable or absent from the dataset."
+        )
+
     by_right = payload.get("by_right") or {}
     if by_right:
         verif = by_right.get("verification", "")
@@ -1823,6 +1831,80 @@ def _build_source_answer(payload: dict) -> str | None:
             "residual) are regional estimates — no local sold-unit comps were found — so "
             "treat those as estimates, not appraised."
         )
+    return "\n".join(lines)
+
+
+# "Who owns this?" / "is it being developed?" — the owner of record is a county
+# assessor lookup field (OWN_NAME1), not an inference, yet the weak NIM narrator
+# intermittently claimed it was "not in the dataset" on follow-up turns (the
+# persistent grounding block had dropped it). Detect these and answer them
+# DETERMINISTICALLY from the grounded payload, the same way the citation echo
+# removed the narrator's discretion over the high-stakes source quote.
+_OWNER_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"who\s+owns?|who'?s\s+the\s+owner|who\s+is\s+the\s+owner|whose\s+(?:property|parcel|lot|land)|"
+    r"current\s+owner|owner\s+of\s+record|owner'?s?\s+name|ownership|owned\s+by|"
+    r"who\s+holds?\s+(?:the\s+)?title|already\s+(?:being\s+)?develop|under\s+contract"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_owner_query(message: str) -> bool:
+    """True when the user is asking who owns the parcel / whether it's being developed."""
+    return bool(_OWNER_QUERY_RE.search(message or ""))
+
+
+def _build_owner_answer(payload: dict | None, prop_ctx: dict | None) -> str | None:
+    """Deterministic answer to 'who owns this / is it already being developed?'.
+
+    The owner of record comes straight from the county assessor (OWN_NAME1) and is
+    reliable run-to-run — but the narrator kept denying it existed on follow-ups
+    after the grounding block stopped carrying it. Reproduce the owner (and any
+    development-permit signals) verbatim from the grounded payload / session
+    property context, bypassing the model. Returns ``None`` when no owner is known,
+    so the caller falls back to the model (whose policy is to say a field is
+    unavailable rather than invent one — never a silent wrong answer).
+    """
+    owner = ""
+    if payload and payload.get("status") == "success":
+        owner = str(payload.get("owner") or "").strip()
+    if not owner and prop_ctx:
+        owner = str(prop_ctx.get("owner") or "").strip()
+    if not owner:
+        return None
+
+    addr = ""
+    if payload and payload.get("address"):
+        addr = str(payload["address"])
+    elif prop_ctx and prop_ctx.get("address"):
+        addr = str(prop_ctx["address"])
+
+    lines = [
+        "**Owner of record**",
+        "",
+        f"{owner} — per the county assessor record" + (f" for {addr}" if addr else "") + ".",
+    ]
+
+    # Development-permit signals (when grounded). Permit holders are
+    # contractors/applicants, NOT necessarily the owner — keep them distinct so the
+    # owner name isn't conflated with a sprinkler or construction company.
+    dev = (payload or {}).get("development_activity") or {}
+    if dev.get("permit_count"):
+        active = dev.get("active_permit_count")
+        active_note = f" ({active} active)" if active else ""
+        lines += [
+            "",
+            "**Development activity**",
+            "",
+            f"{dev['permit_count']} city permits are on record{active_note} — this parcel "
+            "may already be an active development, not raw land.",
+        ]
+        holders = ", ".join(dev.get("permit_holders") or [])
+        if holders:
+            lines.append(
+                f"Permit holders (contractors/applicants, not necessarily the owner): {holders}."
+            )
     return "\n".join(lines)
 
 
@@ -2178,6 +2260,15 @@ def _format_grounded_analysis(report) -> dict:
             "lot area is the county assessor's recorded legal lot (authoritative)"
         )
 
+    # Owner of record (county assessor OWN_NAME1) — a deterministic lookup field,
+    # never an LLM guess. Carried in the grounded payload so it PERSISTS across
+    # turns: the per-turn grounding block used to drop it, which let the narrator
+    # claim "owner is not in the dataset" on follow-ups even though the assessor
+    # record reliably returns it. Keep it here so the count's data carrier also
+    # carries the owner.
+    if pr and pr.owner:
+        out["owner"] = pr.owner
+
     density = report.density_analysis
     ev = report.extraction_verification
     if density is not None:
@@ -2450,6 +2541,7 @@ async def _execute_analyze_property(address: str, session_id: str = "") -> str:
                 "zoning_code": report.zoning_district or pr.zoning_code,
                 "zoning_description": report.zoning_description,
                 "lot_size_sqft": pr.lot_size_sqft,
+                "owner": pr.owner,
             },
         )
 
@@ -3236,6 +3328,11 @@ async def chat(request: ChatRequest, http_request: Request):
                         ctx_lines.append(f"- Zoning Description: {prop_ctx['zoning_description']}")
                     if prop_ctx.get("lot_size_sqft"):
                         ctx_lines.append(f"- Lot Size: {prop_ctx['lot_size_sqft']:,.0f} sqft")
+                    if prop_ctx.get("owner"):
+                        ctx_lines.append(
+                            f"- Owner of record (county assessor): {prop_ctx['owner']} "
+                            "(state this if asked who owns it; do not say it is unavailable)"
+                        )
                     system_content += "\n".join(ctx_lines)
 
             # Force grounding for property deal/source questions. The weak NIM model
@@ -3329,6 +3426,26 @@ async def chat(request: ChatRequest, http_request: Request):
                     if len(memory) > MAX_MEMORY_MESSAGES:
                         del memory[:-MAX_MEMORY_MESSAGES]
                     yield _sse_event("done", {"full_content": source_answer})
+                    return
+
+            # Deterministic owner echo. The owner of record is a county-assessor
+            # lookup field (reliable run-to-run), but the narrator kept claiming it
+            # was "not in the dataset" on follow-up turns once the grounding block
+            # dropped it. When asked who owns the parcel, answer verbatim from the
+            # grounded payload / property context — bypassing the model. Falls
+            # through to the model only when no owner is on record (then policy is to
+            # say it's unavailable, never to invent one).
+            if _is_owner_query(request.message):
+                owner_answer = _build_owner_answer(
+                    active_analysis, _sessions.get_property_context(session_id)
+                )
+                if owner_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_owner", "args": {}})
+                    yield _sse_event("token", {"content": owner_answer})
+                    memory.append({"role": "assistant", "content": owner_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": owner_answer})
                     return
 
             # Token budget check — prevent runaway cost
@@ -3556,6 +3673,7 @@ async def chat(request: ChatRequest, http_request: Request):
                                                 "zoning_description", ""
                                             ),
                                             "lot_size_sqft": prop.get("lot_size_sqft"),
+                                            "owner": prop.get("owner", ""),
                                         },
                                     )
                             # Accumulate evidence IDs from every tool that returns them,
