@@ -228,6 +228,15 @@ class DealContext(BaseModel):
     appraisal_contingency: bool = True
     inspection_contingency: bool = True
 
+    # --- Entitlement / upzoning contingency (the land-deal value-creation play:
+    # control the parcel cheaply, then create value by rezoning/subdividing BEFORE
+    # closing). Off by default — only included when the buyer is pursuing an upzone. ---
+    entitlement_contingency: bool = False  # gate the rezoning/upzoning contingency clause
+    upzoning_vehicle: str = ""  # e.g. "special use permit", "rezoning", "PUD", "variance"
+    entitlement_close_days: int = 0  # total days to close while pursuing approval (e.g. 365)
+    entitlement_extension_days: int = 0  # extension option if approval is delayed (e.g. 180)
+    target_units: int = 0  # the upzoned unit/lot yield the buyer is pursuing (for reference)
+
     # --- JV-specific ---
     jv_profit_split_pct: float = 50.0
     jv_expense_split_pct: float = 50.0

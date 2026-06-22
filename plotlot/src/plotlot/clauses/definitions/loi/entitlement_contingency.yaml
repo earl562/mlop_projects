@@ -1,0 +1,13 @@
+id: loi.entitlement_contingency
+category: contingencies
+title: "Entitlement / Rezoning Contingency"
+document_types: [loi]
+deal_types: [land_deal]
+order_weight: 410
+is_required: false
+condition_expr: "context.entitlement_contingency == True"
+source: "Entitlement value-creation play (control + upzone before close)"
+content_template: |
+  Entitlement Contingency: This transaction is contingent upon Purchaser obtaining {{ context.upzoning_vehicle or 'rezoning / upzoning approval' }} for the Property{% if context.target_units > 0 %} authorizing up to {{ context.target_units }} units/lots{% endif %} prior to Closing. Purchaser shall pursue the approval at its sole cost during a Pursuit Period of {{ context.entitlement_close_days or 365 }} days from the PSA effective date, with an option to extend Closing by {{ context.entitlement_extension_days or 180 }} days if the approval is delayed through no fault of Purchaser.
+
+  Seller agrees to reasonably cooperate, as record owner, with Purchaser's applications, plats, and site plans at no out-of-pocket cost to Seller. If the approval is not obtained on terms acceptable to Purchaser, Purchaser may terminate and recover its Deposit in full.
