@@ -1635,10 +1635,28 @@ def _build_active_analysis_context(payload: dict) -> str:
         if val.get("adv_basis"):
             lines.append(f"  ({val['adv_basis']})")
         if val.get("impact_fees_per_unit") is not None:
-            lines.append(
-                f"Impact fees/unit: ${val['impact_fees_per_unit']:,.0f} "
-                "[coarse regional aggregate — not itemized, not the city's DIF schedule]"
-            )
+            # When a real itemized DIF schedule is registered, the payload carries
+            # the verified line items + a basis note — surface them faithfully so a
+            # FOLLOW-UP fees question is answered with the itemized DIFs, not the
+            # coarse label. (The label was hardcoded here, which made the chat report
+            # "coarse, not itemized" even though the payload had the $23,402 DIFs —
+            # the same lossy-re-render class of bug as the dropped owner field.)
+            breakdown = val.get("impact_fee_breakdown") or []
+            if breakdown:
+                items = "; ".join(
+                    f"{c.get('name')} ${c.get('amount_per_unit', 0):,.0f}" for c in breakdown
+                )
+                dif_total = val.get("itemized_city_dif_per_unit") or val["impact_fees_per_unit"]
+                lines.append(
+                    f"Impact fees/unit: itemized city DIFs total ${dif_total:,.0f} — {items}."
+                )
+                if val.get("impact_fees_basis"):
+                    lines.append(f"  ({val['impact_fees_basis']})")
+            else:
+                lines.append(
+                    f"Impact fees/unit: ${val['impact_fees_per_unit']:,.0f} "
+                    "[coarse regional aggregate — not itemized, not the city's DIF schedule]"
+                )
         if val.get("market"):
             lines.append(f"Cost-model market: {val['market']}")
 

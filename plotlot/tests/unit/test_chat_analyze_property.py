@@ -314,6 +314,42 @@ def test_partial_fee_schedule_itemizes_but_keeps_conservative_residual():
     assert "separate" in val["impact_fees_basis"].lower()
 
 
+def test_active_context_surfaces_itemized_difs_not_coarse_label():
+    """Regression: the persistent context block hardcoded a 'coarse, not itemized'
+    fee label even when the payload carried verified itemized DIFs — so a follow-up
+    fees question mislabeled SD's DIFs as coarse. It must render the line items.
+    Same lossy-re-render class as the dropped owner field."""
+    from plotlot.pipeline.fee_schedule import FeeComponent, FeeSchedule, register_fee_schedule
+
+    report = _hueneme_report()
+    register_fee_schedule(
+        FeeSchedule(
+            jurisdiction="City of San Diego",
+            state="CA",
+            source="FY26 Citywide DIFs",
+            effective_date="2025-07-01",
+            covers_all_fees=False,
+            components=(
+                FeeComponent("Citywide Park DIF", 15438.0, "Parks for All of Us"),
+                FeeComponent("Citywide Mobility DIF", 4627.0, "R-314273"),
+            ),
+        ),
+        county="San Diego",
+    )
+    block = _build_active_analysis_context(_format_grounded_analysis(report))
+    assert "itemized city DIFs" in block
+    assert "Citywide Park DIF" in block
+    assert "20,065" in block  # the itemized DIF total ($15,438 + $4,627) is surfaced
+    # And it must NOT mislabel an itemized schedule as coarse/not-itemized.
+    assert "coarse regional aggregate — not itemized" not in block
+
+
+def test_active_context_keeps_coarse_label_without_a_schedule():
+    """Without an itemized schedule registered, the coarse-aggregate label is correct."""
+    block = _build_active_analysis_context(_format_grounded_analysis(_hueneme_report()))
+    assert "coarse regional aggregate — not itemized" in block
+
+
 def test_grounded_payload_handles_missing_density_gracefully():
     report = _hueneme_report()
     report.density_analysis = None
