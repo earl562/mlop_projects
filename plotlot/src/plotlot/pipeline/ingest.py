@@ -83,8 +83,15 @@ async def retry_async(fn, *args, retries: int = 3, delay: float = 5.0, label: st
 # ---------------------------------------------------------------------------
 
 
-async def _resolve_config(key: str):
-    """Resolve a municipality config — try discovery first, fall back to static."""
+async def _resolve_config(key: str, state: str | None = None):
+    """Resolve a municipality config — warm cache, static fallback, then live discovery.
+
+    The warm cache (``get_municode_configs``) is a curated subset; cities ingested
+    via a county batch (e.g. Marin → Tiburon) may not be keyed there. When a state
+    is supplied we fall back to a *targeted* single-name Municode lookup so
+    ``plotlot-ingest tiburon --state CA`` re-ingests without a full re-discovery
+    (which hammers the Library API into 429s).
+    """
     try:
         from plotlot.ingestion.discovery import get_municode_configs
 
@@ -93,13 +100,30 @@ async def _resolve_config(key: str):
         if config:
             return config
     except Exception as e:
-        logger.warning("Discovery unavailable, using fallback: %s", e)
+        logger.warning("Discovery cache unavailable, using fallback: %s", e)
 
     config = MUNICODE_CONFIGS.get(key)
-    if not config:
-        available = list(MUNICODE_CONFIGS.keys())
-        raise ValueError(f"Unknown municipality key: {key!r}. Available fallback keys: {available}")
-    return config
+    if config:
+        return config
+
+    if state:
+        from plotlot.ingestion.discovery import discover_municode_authority_for_name
+
+        name = key.replace("_", " ").title()
+        logger.info("Key %r not cached — discovering %r in %s live", key, name, state)
+        config = await discover_municode_authority_for_name(name, state)
+        if config:
+            return config
+        raise ValueError(
+            f"Could not discover {name!r} on Municode for state {state!r}. "
+            "It may use a non-Municode codifier (ingest via the county/ACP path)."
+        )
+
+    available = list(MUNICODE_CONFIGS.keys())
+    raise ValueError(
+        f"Unknown municipality key: {key!r}. Pass --state XX to discover it live "
+        f"(e.g. 'plotlot-ingest {key} --state CA'). Available fallback keys: {available}"
+    )
 
 
 async def _resolve_all_configs() -> dict:
@@ -171,16 +195,21 @@ async def _scrape(config) -> list:
     return await scraper.scrape_zoning_chapter(config)
 
 
-async def ingest_municipality(key: str) -> int:
+async def ingest_municipality(key: str, state: str | None = None) -> int:
     """Run the full ingestion pipeline for a single municipality.
 
     Network-bound steps (scrape, embed) use retry with exponential backoff.
     Each stage logs metrics to MLflow for observability (non-fatal on failure).
 
+    Args:
+        key: Municipality key (warm-cache or static-fallback key).
+        state: Optional state code; enables live single-name discovery when the
+            key isn't cached (e.g. re-ingesting a county-batch city like Tiburon).
+
     Returns:
         Number of chunks stored.
     """
-    config = await _resolve_config(key)
+    config = await _resolve_config(key, state=state)
 
     logger.info("=== Ingesting %s ===", config.municipality)
 

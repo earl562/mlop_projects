@@ -65,6 +65,62 @@ class TestResolveConfig:
             with pytest.raises(ValueError, match="Unknown municipality key"):
                 await _resolve_config("nonexistent_city")
 
+    @pytest.mark.asyncio
+    async def test_resolve_live_discovery_with_state(self):
+        """A warm-cache miss + state falls back to targeted single-name discovery
+        (re-ingesting a county-batch city like Tiburon, not in the curated cache)."""
+        discovered = MunicodeConfig(
+            municipality="Tiburon",
+            county="marin",
+            client_id=9796,
+            product_id=16657,
+            job_id=475397,
+            zoning_node_id="CH16ZO",
+        )
+
+        async def empty_cache():
+            return {}
+
+        with (
+            patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache),
+            patch(
+                "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+                new=AsyncMock(return_value=discovered),
+            ) as mock_disc,
+        ):
+            config = await _resolve_config("tiburon", state="CA")
+
+        assert config.municipality == "Tiburon"
+        # Key was de-slugged to a proper jurisdiction name for the lookup.
+        mock_disc.assert_awaited_once_with("Tiburon", "CA")
+
+    @pytest.mark.asyncio
+    async def test_resolve_non_municode_with_state_raises(self):
+        """When live discovery finds nothing (non-Municode codifier, e.g. Sausalito),
+        the error must say so rather than silently doing nothing."""
+
+        async def empty_cache():
+            return {}
+
+        with (
+            patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache),
+            patch(
+                "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            with pytest.raises(ValueError, match="non-Municode codifier"):
+                await _resolve_config("sausalito", state="CA")
+
+    @pytest.mark.asyncio
+    async def test_resolve_unknown_without_state_hints_state_flag(self):
+        async def empty_cache():
+            return {}
+
+        with patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache):
+            with pytest.raises(ValueError, match="--state"):
+                await _resolve_config("tiburon")
+
 
 class TestResolveAllConfigs:
     @pytest.mark.asyncio
