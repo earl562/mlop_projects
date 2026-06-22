@@ -1788,9 +1788,16 @@ _DEAL_QUERY_RE = re.compile(
 # city/state/zip) so a deal question can self-resolve its parcel.
 _ADDRESS_RE = re.compile(
     r"\d{1,6}\s+[A-Za-z0-9.'\-]+(?:\s+[A-Za-z0-9.'\-]+)*?\s+"
+    # \b after the suffix so "st" doesn't match inside "Street" and truncate there.
     r"(?:st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|"
-    r"pl|place|cir|circle|ter|terrace|hwy|highway|pkwy|parkway|sq|square|trl|trail)"
-    r"\.?(?:,?\s+[A-Za-z .'\-]+?,?\s+[A-Za-z]{2}\s+\d{5}(?:-\d{4})?)?",
+    r"pl|place|cir|circle|ter|terrace|hwy|highway|pkwy|parkway|sq|square|trl|trail)\b"
+    # City/state/ZIP tail, tolerant of the comma users often type before the ZIP
+    # ("San Diego, CA, 92110"). Without that tolerance the group failed and the
+    # address truncated to just the street ("1233 Hueneme St"), which geocodes at
+    # low confidence and breaks forced grounding (the 6-units/no-owner regression).
+    # ZIP stays required here: it anchors the lazy city matcher so it expands to the
+    # full city instead of stopping after two letters ("San Di").
+    r"\.?(?:,?\s+[A-Za-z .'\-]+?,?\s+[A-Za-z]{2},?\s+\d{5}(?:-\d{4})?)?",
     re.IGNORECASE,
 )
 

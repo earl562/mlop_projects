@@ -350,6 +350,61 @@ def test_active_context_keeps_coarse_label_without_a_schedule():
     assert "coarse regional aggregate — not itemized" in block
 
 
+def test_active_context_reflects_all_trust_critical_fields():
+    """PARITY GUARD against the lossy-re-render class of bug.
+
+    The chat model gets the grounded analysis through TWO surfaces: the full payload
+    (_format_grounded_analysis, seen on the turn the tool runs) and a hand-maintained
+    re-render (_build_active_analysis_context, injected on EVERY follow-up turn). When
+    a field lives in the payload but is dropped/mislabeled in the re-render, the first
+    answer is right and follow-ups regress — this is exactly how the OWNER was dropped
+    (60d593d) and the itemized FEES were mislabeled (5b72097).
+
+    This test fails CI if any trust-critical value stops surviving into the re-render,
+    so the regression is caught here instead of in a live session. Add a row whenever
+    a new trust-critical field is added to the payload."""
+    from plotlot.pipeline.fee_schedule import FeeComponent, FeeSchedule, register_fee_schedule
+
+    report = _hueneme_report()  # owner, lot, units, ADV, residual, CA upside
+    report.development_signals = {
+        "permit_count": 20,
+        "active_permit_count": 20,
+        "unique_permit_holders": ["Belmont West", "HCI Systems"],
+        "data_source": "SD Accela DSDPermits",
+    }
+    register_fee_schedule(
+        FeeSchedule(
+            jurisdiction="City of San Diego",
+            state="CA",
+            source="FY26 Citywide DIFs",
+            covers_all_fees=False,
+            components=(
+                FeeComponent("Citywide Park DIF", 15438.0, "Parks for All of Us"),
+                FeeComponent("Citywide Mobility DIF", 4627.0, "R-314273"),
+            ),
+        ),
+        county="San Diego",
+    )
+
+    block = _build_active_analysis_context(_format_grounded_analysis(report))
+
+    # (field, expected substring in the re-rendered block)
+    required = {
+        "owner": "1233 HUENEME LLC",
+        "lot size": "6,471",
+        "by-right units": "By-right max units: 6",
+        "exit / ADV per unit": "420,000",
+        "residual max land price": "980,000",
+        "itemized DIF total": "20,065",
+        "DIF line item": "Citywide Park DIF",
+        "development permit count": "20 city permits",
+        "permit holder": "Belmont West",
+        "CA upside program": "ADU/JADU",
+    }
+    missing = {name: sub for name, sub in required.items() if sub not in block}
+    assert not missing, f"persistent context dropped trust-critical field(s): {missing}\n\n{block}"
+
+
 def test_grounded_payload_handles_missing_density_gracefully():
     report = _hueneme_report()
     report.density_analysis = None
@@ -1011,6 +1066,25 @@ class TestForcedGrounding:
         # 4. nothing resolvable
         with patch.object(chat_mod._sessions, "get_property_context", return_value=None):
             assert _resolve_deal_address("how many units?", "s", None) == ""
+
+    def test_resolve_deal_address_tolerates_common_punctuation(self):
+        """Regression: a comma before the ZIP ('San Diego, CA, 92110') or a spelled-out
+        'Street' truncated the extracted address to just the street, which geocoded at
+        low confidence and broke forced grounding (the 6-units/no-owner regression)."""
+        from plotlot.api.chat import _resolve_deal_address
+
+        # Comma before the ZIP must NOT truncate the city/state/ZIP.
+        assert (
+            _resolve_deal_address(
+                "build by-right at 1233 Hueneme St, San Diego, CA, 92110", "s", None
+            )
+            == "1233 Hueneme St, San Diego, CA, 92110"
+        )
+        # A spelled-out suffix must not match "st" inside "Street" and stop there.
+        assert (
+            _resolve_deal_address("456 Main Street, Austin, TX, 78701 worth?", "s", None)
+            == "456 Main Street, Austin, TX, 78701"
+        )
 
     def test_analysis_covers_address_normalizes(self):
         from plotlot.api.chat import _analysis_covers_address
