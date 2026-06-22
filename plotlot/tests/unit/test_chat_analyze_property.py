@@ -526,6 +526,42 @@ def test_owner_query_detection():
     assert not _is_owner_query("what are the impact fees per unit?")
 
 
+def test_pure_owner_query_gate_excludes_compound_questions():
+    """The owner echo must only short-circuit a STANDALONE ownership question —
+    a compound question that also asks a deal/source thing has to reach the model
+    so the deal part isn't dropped (regression: 'who owns it AND the residual?'
+    returned only the owner)."""
+    from plotlot.api.chat import _is_pure_owner_query
+
+    # Standalone ownership questions → echo is safe.
+    assert _is_pure_owner_query("who owns this?")
+    assert _is_pure_owner_query("who is the owner of record?")
+    assert _is_pure_owner_query("is this parcel under contract?")
+    # Compound / deal-bearing questions → must NOT short-circuit (go to the model).
+    assert not _is_pure_owner_query("who owns it and what's the residual?")
+    assert not _is_pure_owner_query("who owns this and how many units can I build?")
+    assert not _is_pure_owner_query("what are the ownership requirements for an ADU?")
+    # Owner + source question → source echo handles it, not the owner echo.
+    assert not _is_pure_owner_query("who owns it and can I trust the unit count?")
+
+
+def test_echo_address_guard_blocks_wrong_parcel():
+    """The deterministic echoes must not answer a DIFFERENT parcel than the cached
+    one — 'who owns 456 Oak Ave?' while 1233 Hueneme is cached must fall through to
+    the model, not echo the stale owner."""
+    from plotlot.api.chat import _echo_address_matches
+
+    cached = {"address": "1233 Hueneme St, San Diego, CA 92110"}
+    # No explicit address → referential, use the active property.
+    assert _echo_address_matches("who owns it?", cached)
+    # Same parcel named → echo is correct.
+    assert _echo_address_matches("who owns 1233 Hueneme St?", cached)
+    # Different parcel named → must NOT echo the cached owner.
+    assert not _echo_address_matches("who owns 456 Oak Ave, Austin, TX 78701?", cached)
+    # No grounded context at all + explicit address → can't echo, go to model.
+    assert not _echo_address_matches("who owns 456 Oak Ave, Austin, TX 78701?", None)
+
+
 def test_owner_answer_echoes_assessor_owner():
     from plotlot.api.chat import _build_owner_answer
 

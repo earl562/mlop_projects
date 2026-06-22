@@ -1946,6 +1946,31 @@ def _is_owner_query(message: str) -> bool:
     return bool(_OWNER_QUERY_RE.search(message or ""))
 
 
+def _is_pure_owner_query(message: str) -> bool:
+    """True only for a STANDALONE ownership question — safe to answer with the owner
+    echo alone. A compound question that also asks a deal/source thing ("who owns it
+    AND what's the residual?", "ownership rules for an ADU?") must NOT short-circuit,
+    or the deal part is silently dropped; it goes to the model instead, which has the
+    owner in its grounded context (the parity guard guarantees it) and is told to
+    state it. This keeps the echo's anti-denial benefit without truncating answers."""
+    return _is_owner_query(message) and not _needs_grounded_analysis(message)
+
+
+def _echo_address_matches(message: str, *contexts: dict | None) -> bool:
+    """Guard the deterministic echoes from answering the WRONG parcel.
+
+    The owner/source echoes reproduce the CACHED analysis. If the user names a
+    different explicit address than the one we have grounded data for, echoing the
+    cache would return the wrong property's owner/citation — so return False and let
+    the model resolve the new address. With no explicit address in the message the
+    question is referential ("who owns it?") → True, use the active property."""
+    m = _ADDRESS_RE.search(message or "")
+    if not m:
+        return True
+    cand = m.group(0).strip().rstrip(".,")
+    return any(_analysis_covers_address(ctx, cand) for ctx in contexts if ctx)
+
+
 def _build_owner_answer(payload: dict | None, prop_ctx: dict | None) -> str | None:
     """Deterministic answer to 'who owns this / is it already being developed?'.
 
@@ -3585,7 +3610,11 @@ async def chat(request: ChatRequest, http_request: Request):
             # quote by borrowing a CONFLICTING field's section). When the user asks for
             # the source/trust of an already-grounded property, answer verbatim from the
             # verified driver — bypassing the model entirely for this fact.
-            if active_analysis and _is_source_query(request.message):
+            if (
+                active_analysis
+                and _is_source_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
                 source_answer = _build_source_answer(active_analysis)
                 if source_answer:
                     yield _sse_event("tool_use", {"tool": "verified_source", "args": {}})
@@ -3603,10 +3632,11 @@ async def chat(request: ChatRequest, http_request: Request):
             # grounded payload / property context — bypassing the model. Falls
             # through to the model only when no owner is on record (then policy is to
             # say it's unavailable, never to invent one).
-            if _is_owner_query(request.message):
-                owner_answer = _build_owner_answer(
-                    active_analysis, _sessions.get_property_context(session_id)
-                )
+            _owner_prop_ctx = _sessions.get_property_context(session_id)
+            if _is_pure_owner_query(request.message) and _echo_address_matches(
+                request.message, active_analysis, _owner_prop_ctx
+            ):
+                owner_answer = _build_owner_answer(active_analysis, _owner_prop_ctx)
                 if owner_answer:
                     yield _sse_event("tool_use", {"tool": "verified_owner", "args": {}})
                     yield _sse_event("token", {"content": owner_answer})
