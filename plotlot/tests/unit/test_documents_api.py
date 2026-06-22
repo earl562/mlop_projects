@@ -548,3 +548,96 @@ class TestInputValidation:
             },
         )
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Entitlement / rezoning contingency wiring (the value-creation play)
+# ---------------------------------------------------------------------------
+
+
+class TestEntitlementContingency:
+    async def test_psa_includes_entitlement_clause_when_opted_in(self, client: AsyncClient):
+        resp = await client.post(
+            "/api/v1/documents/preview",
+            json={
+                "document_type": "psa",
+                "deal_type": "land_deal",
+                "context": {
+                    "property_address": "1233 Hueneme St, San Diego, CA 92110",
+                    "buyer_name": "EP Ventures LLC",
+                    "seller_name": "1233 HUENEME LLC",
+                    "entitlement_contingency": True,
+                    "upzoning_vehicle": "special use permit",
+                    "entitlement_close_days": 365,
+                    "entitlement_extension_days": 180,
+                    "target_units": 12,
+                },
+            },
+        )
+        assert resp.status_code == 200
+        clauses = resp.json()["clauses"]
+        ent = next((c for c in clauses if c["id"] == "psa.entitlement_contingency"), None)
+        assert ent is not None, "entitlement clause missing when opted in"
+        assert "special use permit" in ent["content"]
+        assert "365 days" in ent["content"]
+        assert "record owner" in ent["content"]
+        assert "12 units/lots" in ent["content"]
+
+    async def test_psa_excludes_entitlement_clause_by_default(self, client: AsyncClient):
+        resp = await client.post(
+            "/api/v1/documents/preview",
+            json={
+                "document_type": "psa",
+                "deal_type": "land_deal",
+                "context": {
+                    "property_address": "1233 Hueneme St, San Diego, CA 92110",
+                    "buyer_name": "EP Ventures LLC",
+                    "seller_name": "1233 HUENEME LLC",
+                },
+            },
+        )
+        assert resp.status_code == 200
+        ids = {c["id"] for c in resp.json()["clauses"]}
+        assert "psa.entitlement_contingency" not in ids
+
+    async def test_loi_includes_entitlement_clause_when_opted_in(self, client: AsyncClient):
+        resp = await client.post(
+            "/api/v1/documents/preview",
+            json={
+                "document_type": "loi",
+                "deal_type": "land_deal",
+                "context": {
+                    "property_address": "1233 Hueneme St, San Diego, CA 92110",
+                    "entitlement_contingency": True,
+                    "upzoning_vehicle": "rezoning",
+                },
+            },
+        )
+        assert resp.status_code == 200
+        ids = {c["id"] for c in resp.json()["clauses"]}
+        assert "loi.entitlement_contingency" in ids
+
+    async def test_string_true_is_coerced(self, client: AsyncClient):
+        """A JSON string 'true' (lenient clients) still opts in."""
+        resp = await client.post(
+            "/api/v1/documents/preview",
+            json={
+                "document_type": "psa",
+                "deal_type": "land_deal",
+                "context": {
+                    "property_address": "1233 Hueneme St, San Diego, CA 92110",
+                    "buyer_name": "EP Ventures LLC",
+                    "seller_name": "1233 HUENEME LLC",
+                    "entitlement_contingency": "true",
+                },
+            },
+        )
+        assert resp.status_code == 200
+        ids = {c["id"] for c in resp.json()["clauses"]}
+        assert "psa.entitlement_contingency" in ids
+
+    async def test_templates_advertise_entitlement_fields(self, client: AsyncClient):
+        resp = await client.get("/api/v1/documents/templates")
+        by_type = {t["document_type"]: t for t in resp.json()}
+        assert "entitlement_contingency" in by_type["psa"]["optional_fields"]
+        assert "upzoning_vehicle" in by_type["loi"]["optional_fields"]
