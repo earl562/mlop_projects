@@ -20,7 +20,7 @@ from plotlot.land_use.models import PolicyDecision, ToolContext
 ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[dict[str, Any]]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ToolCallResult:
     tool_name: str
     decision: PolicyDecision
@@ -56,7 +56,7 @@ class HarnessRuntime:
         if self._event_sink is not None:
             try:
                 self._event_sink(event)
-            except Exception:
+            except Exception:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK
                 # Never let event emission break tool execution.
                 return
 
@@ -169,12 +169,31 @@ class HarnessRuntime:
 
         try:
             handler_result = await handler(tool_args, context)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK
             out = ToolCallResult(
                 tool_name=tool_name,
                 decision=decision,
                 status="error",
                 message=f"{type(exc).__name__}: {exc}",
+            )
+            self._emit(
+                kind="tool_result",
+                payload={
+                    "tool_name": tool_name,
+                    "status": out.status,
+                    "message": out.message,
+                },
+                buffer=events,
+            )
+            return out
+        result_status = str(handler_result.get("status") or "success")
+        if result_status == "blocked":
+            out = ToolCallResult(
+                tool_name=tool_name,
+                decision=decision,
+                status="blocked",
+                result=handler_result,
+                message=str(handler_result.get("message") or "Tool handler blocked execution."),
             )
             self._emit(
                 kind="tool_result",

@@ -251,8 +251,6 @@ def _joined(values: Iterable[str]) -> str:
 def _max_units(report: ZoningReport) -> int | None:
     if report.density_analysis is None:
         return None
-    if report.density_analysis.max_units <= 0:
-        return None
     return report.density_analysis.max_units
 
 

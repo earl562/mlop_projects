@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from plotlot.harness.events import HarnessEvent
 from plotlot.harness.runtime import HarnessRuntime, ToolCallResult
 from plotlot.harness.tool_registry import list_tool_contracts
 from plotlot.land_use.models import ToolContext
@@ -36,10 +37,12 @@ class MCPAdapter:
         arguments: dict[str, Any],
         context: ToolContext,
         approval_id: str | None = None,
+        events: list[HarnessEvent] | None = None,
     ) -> ToolCallResult:
         return await self._runtime.call_tool(
             tool_name=name,
             tool_args=arguments,
             context=context,
             approval_id=approval_id,
+            events=events,
         )

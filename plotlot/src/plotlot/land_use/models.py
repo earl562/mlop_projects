@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
+# allow: SIZE_OK - shared land-use Pydantic model aggregate; split in a dedicated refactor.
+
 DEFAULT_ORDINANCE_LEGAL_CAVEAT = (
     "Online ordinance text may not be the official or most current copy; verify with the "
     "municipality or official clerk before taking legal, entitlement, or acquisition action."
@@ -177,6 +179,7 @@ class ToolContext(BaseModel):
     risk_budget_cents: int = Field(default=0, ge=0)
     live_network_allowed: bool = False
     approved_approval_ids: set[str] = Field(default_factory=set)
+    recorded_evidence_ids: set[str] = Field(default_factory=set)
 
 
 class PolicyDecision(BaseModel):

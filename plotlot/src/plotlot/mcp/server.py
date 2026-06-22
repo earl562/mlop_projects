@@ -1,34 +1,45 @@
-"""PlotLot MCP Server — 5 tools for zoning analysis and data ingestion.
-
-Run via:
-    uv run plotlot-mcp          # stdio transport (Claude Code / Claude Desktop)
-
-Tools
------
-ingest_municipality     Ingest zoning ordinances for any US municipality.
-run_full_analysis       Full pipeline: geocode → property → zoning → density → pro forma.
-search_zoning           Hybrid search over indexed zoning ordinance text.
-get_coverage            Show which municipalities have indexed data and how many chunks.
-get_comparable_sales    Find comparable land sales near a lat/lng coordinate.
-"""
-
 from __future__ import annotations
 
 import logging
 from dataclasses import asdict
-from sqlalchemy import func, select
+from typing import TypeAlias
+from uuid import uuid4
 
 import fastmcp
 
-from plotlot.core.types import PropertyRecord
-from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+from plotlot.harness.agent_run_tool import handle_start_agent_run
+from plotlot.harness.agent_run_trace_tool import handle_get_agent_run_trace
+from plotlot.harness.agent_run_eval_tool import (
+    handle_evaluate_agent_run,
+    handle_get_agent_run_improvement_summary,
+    handle_get_latest_agent_run_eval,
+)
+from plotlot.ingestion.acp_coordinator import run_on_demand_ingestion
+from plotlot.land_use.models import ToolContext
+from plotlot.pipeline.lookup_snapshot_eval import LOOKUP_CORRECTNESS_SUITE
+from plotlot.harness.lookup_eval_tools import (
+    DEFAULT_EVAL_HISTORY_LIMIT,
+    handle_assess_lookup_release_gate,
+    handle_list_lookup_eval_runs,
+    handle_run_lookup_golden_eval_batch,
+)
+from plotlot.mcp.analysis import RunFullAnalysisDeps, run_full_analysis_tool
+from plotlot.mcp.comps import (
+    ComparableSalesDeps,
+    ComparableSalesInput,
+    run_get_comparable_sales,
+)
+from plotlot.mcp.coverage import CoverageDeps, run_get_coverage
+from plotlot.mcp.ingestion import McpIngestInput, run_ingest_municipality
+from plotlot.mcp.search import SearchZoningDeps, SearchZoningInput, run_search_zoning
 from plotlot.pipeline.comps import find_comparables
 from plotlot.pipeline.lookup import lookup_address
 from plotlot.retrieval.search import hybrid_search
 from plotlot.storage.db import get_session
-from plotlot.storage.models import OrdinanceChunk
 
 logger = logging.getLogger(__name__)
+
+FastMcpToolResult: TypeAlias = dict
 
 mcp = fastmcp.FastMCP(
     name="plotlot",
@@ -38,16 +49,22 @@ mcp = fastmcp.FastMCP(
         "Use run_full_analysis to evaluate any US property address. "
         "Use search_zoning to look up specific zoning provisions. "
         "Use get_coverage to see what municipalities are already indexed. "
-        "Use get_comparable_sales to find recent land transactions near a location.\n\n"
-        "GROUNDING RULES (strict — never violate):\n"
+        "Use get_comparable_sales to find recent land transactions near a location. "
+        "Use evaluate_agent_run and get_agent_run_improvement_summary to score "
+        "agent-run replay quality. "
+        "Use run_lookup_golden_eval_batch to run canonical lookup-correctness "
+        "golden cases against recorded lookup snapshots. "
+        "Use list_lookup_eval_runs and assess_lookup_release_gate to inspect "
+        "lookup-correctness evals before release.\n\n"
+        "GROUNDING RULES (strict - never violate):\n"
         "1. Report ONLY values present in tool responses. Never invent zoning codes, "
         "dimensional standards, phone numbers, office names, or URLs.\n"
         "2. run_full_analysis returns a 'data_status' object and 'presentation_guidance' "
-        "string — follow that guidance exactly when wording your answer.\n"
+        "string - follow that guidance exactly when wording your answer.\n"
         "3. If data_status.zoning_district_found is true, state the zoning district plainly; "
         "do NOT claim the zoning 'could not be retrieved'.\n"
         "4. If data_status.dimensional_standards_found is false, say the standards are not yet "
-        "in the database and offer to run ingest_municipality — do NOT fill the gap from general "
+        "in the database and offer to run ingest_municipality - do NOT fill the gap from general "
         "knowledge.\n"
         "5. When a tool returns an 'error' field, report the error honestly; do not fabricate a "
         "successful-looking answer."
@@ -56,170 +73,28 @@ mcp = fastmcp.FastMCP(
 )
 
 
-# ── Tool 1: ingest_municipality ───────────────────────────────────────────────
-
-
 @mcp.tool
 async def ingest_municipality(
     municipality: str,
     state: str,
     county: str | None = None,
-) -> dict:
-    """Ingest zoning ordinances for a municipality into the PlotLot database.
+) -> FastMcpToolResult:
+    """Ingest zoning ordinances for a municipality into the PlotLot database."""
 
-    Resolves the best data source (Municode API, PDF files, or HTML pages),
-    downloads and chunks the zoning text, embeds it, and stores it so future
-    search_zoning and run_full_analysis calls can use it.
-
-    Args:
-        municipality: City or unincorporated area name (e.g. "Fremont", "San Jose").
-        state:        Two-letter state code (e.g. "CA", "FL").
-        county:       Optional county name hint to speed up Municode discovery.
-
-    Returns:
-        Summary with success flag, chunks_stored, and per-stage progress log.
-    """
-    request = IngestRequest(
-        municipality=municipality,
-        state=state,
-        county=county,
-        trigger="mcp",
+    return await run_ingest_municipality(
+        McpIngestInput(municipality=municipality, state=state, county=county),
+        runner=run_on_demand_ingestion,
     )
-
-    events: list[dict] = []
-    async for prog in run_on_demand_ingestion(request):
-        events.append(prog.model_dump())
-        logger.info("ingest_progress stage=%s message=%s", prog.stage, prog.message)
-
-    final = events[-1] if events else {}
-    success = final.get("stage") == "complete"
-    chunks_stored = final.get("chunks_done", 0) if success else 0
-
-    return {
-        "municipality": municipality,
-        "state": state.upper(),
-        "county": county,
-        "success": success,
-        "chunks_stored": chunks_stored,
-        "error": final.get("error") if not success else None,
-        "progress": events,
-    }
-
-
-# ── Tool 2: run_full_analysis ─────────────────────────────────────────────────
 
 
 @mcp.tool
-async def run_full_analysis(address: str) -> dict:
-    """Run the full PlotLot analysis pipeline for a US property address.
+async def run_full_analysis(address: str) -> FastMcpToolResult:
+    """Run the full PlotLot analysis pipeline for a US property address."""
 
-    Steps: geocode → ArcGIS property lookup → zoning ordinance search →
-    LLM extraction of dimensional standards → density calculator →
-    comparable sales → land pro forma.
-
-    Args:
-        address: Full US property address (e.g. "1233 Hueneme St, San Diego CA 92110").
-
-    Returns:
-        Zoning report with district, numeric parameters, max units, comparable
-        sales, and pro forma land value.  Returns {"error": ...} on failure.
-    """
-    try:
-        report = await lookup_address(address)
-    except Exception as exc:
-        logger.error("run_full_analysis failed address=%s error=%s", address, exc)
-        return {"error": str(exc), "address": address}
-
-    if report is None:
-        return {
-            "error": f"Could not geocode or analyse address: {address}",
-            "address": address,
-        }
-
-    raw = asdict(report)
-
-    np = raw.get("numeric_params") or {}
-    da = raw.get("density_analysis") or {}
-    pf = raw.get("pro_forma") or {}
-
-    # ── Data status (anti-hallucination contract) ────────────────────────────
-    # Tell the agent EXACTLY what was retrieved vs. what is missing, so it never
-    # papers over a partial result with fabricated values, phone numbers, or URLs.
-    zoning_found = bool(raw.get("zoning_district"))
-    _numeric_fields = (
-        "max_density_units_per_acre",
-        "min_lot_area_per_unit_sqft",
-        "far",
-        "max_lot_coverage_pct",
-        "max_height_ft",
-        "setback_front_ft",
-        "setback_side_ft",
-        "setback_rear_ft",
+    return await run_full_analysis_tool(
+        address,
+        deps=RunFullAnalysisDeps(lookup_address=lookup_address, asdict_fn=asdict),
     )
-    standards_found = any(np.get(f) is not None for f in _numeric_fields)
-    ordinance_indexed = bool(raw.get("sources"))
-    max_units = da.get("max_units")
-
-    if standards_found:
-        coverage = "full"
-    elif zoning_found:
-        coverage = "zoning_only"
-    else:
-        coverage = "none"
-
-    if coverage == "full":
-        guidance = (
-            "Full data available. Present the zoning district, dimensional standards, "
-            "and max-units analysis as computed. Cite the retrieved ordinance sections."
-        )
-    elif coverage == "zoning_only":
-        guidance = (
-            f"The zoning district ({raw.get('zoning_district')}) and property data below were "
-            "retrieved from the county's official GIS and ARE accurate — state them plainly. "
-            "Do NOT say the zoning 'could not be retrieved'. The dimensional standards "
-            "(setbacks, density, height, FAR) for this district are NOT yet in the PlotLot "
-            "database, so max units cannot be computed. Say so honestly and offer to ingest the "
-            "ordinance with the ingest_municipality tool. NEVER fabricate phone numbers, office "
-            "names, URLs, or numeric zoning values that are not present in this response."
-        )
-    else:
-        guidance = (
-            "No zoning district was resolved for this address. State that the official zoning "
-            "lookup returned no record and suggest verifying the address. Do NOT invent a zoning "
-            "code, phone number, URL, or any dimensional values."
-        )
-
-    return {
-        "address": address,
-        "municipality": raw.get("municipality"),
-        "county": raw.get("county"),
-        "zoning_district": raw.get("zoning_district"),
-        "zoning_description": raw.get("zoning_description"),
-        "confidence": raw.get("confidence"),
-        "max_density_units_per_acre": np.get("max_density_units_per_acre"),
-        "max_height_ft": np.get("max_height_ft"),
-        "max_far": np.get("far"),
-        "setback_front_ft": np.get("setback_front_ft"),
-        "setback_side_ft": np.get("setback_side_ft"),
-        "setback_rear_ft": np.get("setback_rear_ft"),
-        "min_lot_area_sqft": np.get("min_lot_area_per_unit_sqft"),
-        "max_units": max_units,
-        "governing_constraint": da.get("governing_constraint"),
-        "max_land_price": pf.get("max_land_price"),
-        "cost_per_door": pf.get("cost_per_door"),
-        "data_status": {
-            "coverage": coverage,
-            "zoning_district_found": zoning_found,
-            "dimensional_standards_found": standards_found,
-            "ordinance_text_indexed": ordinance_indexed,
-            "max_units_computed": bool(max_units),
-        },
-        "presentation_guidance": guidance,
-        "full_report": raw,
-    }
-
-
-# ── Tool 3: search_zoning ─────────────────────────────────────────────────────
 
 
 @mcp.tool
@@ -227,112 +102,20 @@ async def search_zoning(
     municipality: str,
     query: str,
     limit: int = 10,
-) -> dict:
-    """Search the indexed zoning ordinance text for a municipality.
+) -> FastMcpToolResult:
+    """Search indexed zoning ordinance text for a municipality."""
 
-    Uses hybrid search (vector similarity + BM25 full-text with RRF fusion) to
-    find the most relevant zoning sections for a given query.
-
-    Args:
-        municipality: Name of the municipality to search (e.g. "San Diego").
-        query:        Search query — can be a zone code, question, or keyword
-                      (e.g. "RM-3 density", "maximum building height", "setback requirements").
-        limit:        Number of results to return (1–25, default 10).
-
-    Returns:
-        List of matching ordinance chunks with section titles, zone codes, and scores.
-        Returns empty results list when the municipality has no indexed data.
-    """
-    limit = max(1, min(25, limit))
-
-    session = await get_session()
-    try:
-        results = await hybrid_search(session, municipality, query, limit=limit)
-    except Exception as exc:
-        logger.error("search_zoning failed municipality=%s error=%s", municipality, exc)
-        return {
-            "municipality": municipality,
-            "query": query,
-            "error": str(exc),
-            "results": [],
-        }
-    finally:
-        await session.close()
-
-    return {
-        "municipality": municipality,
-        "query": query,
-        "result_count": len(results),
-        "results": [
-            {
-                "section": r.section,
-                "section_title": r.section_title,
-                "chapter": r.chapter,
-                "zone_codes": r.zone_codes,
-                "score": round(r.score, 4),
-                "chunk_text": r.chunk_text,
-                "source_url": r.source_url,
-            }
-            for r in results
-        ],
-    }
-
-
-# ── Tool 4: get_coverage ──────────────────────────────────────────────────────
+    return await run_search_zoning(
+        SearchZoningInput(municipality=municipality, query=query, limit=limit),
+        deps=SearchZoningDeps(get_session=get_session, hybrid_search=hybrid_search),
+    )
 
 
 @mcp.tool
-async def get_coverage() -> dict:
-    """Return zoning ordinance coverage statistics for all indexed municipalities.
+async def get_coverage() -> FastMcpToolResult:
+    """Return zoning ordinance coverage statistics for indexed municipalities."""
 
-    Shows which municipalities have indexed data, how many chunks they have,
-    and the state/county breakdown. Use this to decide whether to call
-    ingest_municipality before run_full_analysis.
-
-    Returns:
-        Coverage summary with total municipalities, total chunks, and per-municipality
-        breakdown sorted by chunk count descending.
-    """
-    session = await get_session()
-    try:
-        result = await session.execute(
-            select(
-                OrdinanceChunk.municipality,
-                OrdinanceChunk.county,
-                OrdinanceChunk.state,
-                func.count().label("chunks"),
-            )
-            .group_by(
-                OrdinanceChunk.municipality,
-                OrdinanceChunk.county,
-                OrdinanceChunk.state,
-            )
-            .order_by(func.count().desc())
-        )
-        rows = result.fetchall()
-    except Exception as exc:
-        logger.error("get_coverage failed error=%s", exc)
-        return {"error": str(exc), "municipalities": [], "total_chunks": 0}
-    finally:
-        await session.close()
-
-    total_chunks = sum(r.chunks for r in rows)
-    return {
-        "total_municipalities": len(rows),
-        "total_chunks": total_chunks,
-        "municipalities": [
-            {
-                "municipality": r.municipality,
-                "county": r.county,
-                "state": r.state,
-                "chunks": r.chunks,
-            }
-            for r in rows
-        ],
-    }
-
-
-# ── Tool 5: get_comparable_sales ──────────────────────────────────────────────
+    return await run_get_coverage(CoverageDeps(get_session=get_session))
 
 
 @mcp.tool
@@ -341,63 +124,139 @@ async def get_comparable_sales(
     lng: float,
     state: str = "FL",
     radius_miles: float = 3.0,
-) -> dict:
-    """Find comparable land sales near a location.
+) -> FastMcpToolResult:
+    """Find comparable land sales near a coordinate."""
 
-    Searches ArcGIS Hub for recent property transactions within a radius and
-    computes price-per-acre, ADV per unit, and estimated land value.
-
-    Args:
-        lat:          Latitude of the subject property.
-        lng:          Longitude of the subject property.
-        state:        Two-letter state code for the ArcGIS Hub search (e.g. "CA", "FL").
-        radius_miles: Search radius in miles (default 3.0).
-
-    Returns:
-        List of comparable sales with prices, dates, and per-acre/per-unit metrics.
-        Returns empty comparables list when no sales data is available.
-    """
-    prop = PropertyRecord(county="")
-    prop.lat = lat
-    prop.lng = lng
-
-    try:
-        result = await find_comparables(prop, state=state)
-    except Exception as exc:
-        logger.error("get_comparable_sales failed lat=%s lng=%s error=%s", lat, lng, exc)
-        return {
-            "lat": lat,
-            "lng": lng,
-            "state": state,
-            "error": str(exc),
-            "comparables": [],
-        }
-
-    comp_data = asdict(result)
-    return {
-        "lat": lat,
-        "lng": lng,
-        "state": state,
-        "comparable_count": len(result.comparables),
-        "median_price_per_acre": comp_data.get("median_price_per_acre"),
-        "price_per_acre_low": comp_data.get("price_per_acre_low"),
-        "price_per_acre_high": comp_data.get("price_per_acre_high"),
-        "estimated_land_value": comp_data.get("estimated_land_value"),
-        "estimated_land_value_low": comp_data.get("estimated_land_value_low"),
-        "estimated_land_value_high": comp_data.get("estimated_land_value_high"),
-        "adv_per_unit": comp_data.get("adv_per_unit"),
-        "adv_per_unit_low": comp_data.get("adv_per_unit_low"),
-        "adv_per_unit_high": comp_data.get("adv_per_unit_high"),
-        "adv_source": comp_data.get("adv_source"),
-        "confidence": comp_data.get("confidence"),
-        "comparables": comp_data.get("comparables", []),
-        "unit_comparables": comp_data.get("unit_comparables", []),
-    }
+    return await run_get_comparable_sales(
+        ComparableSalesInput(
+            lat=lat,
+            lng=lng,
+            state=state,
+            radius_miles=radius_miles,
+        ),
+        deps=ComparableSalesDeps(find_comparables=find_comparables),
+    )
 
 
-# ── Server entry point ────────────────────────────────────────────────────────
+@mcp.tool
+async def list_lookup_eval_runs(
+    suite: str = LOOKUP_CORRECTNESS_SUITE,
+    limit: int = DEFAULT_EVAL_HISTORY_LIMIT,
+) -> FastMcpToolResult:
+    """List recorded lookup-correctness eval runs and improvement-log entries."""
+
+    return await handle_list_lookup_eval_runs(
+        {"suite": suite, "limit": limit},
+        _fastmcp_tool_context("list_lookup_eval_runs"),
+    )
+
+
+@mcp.tool
+async def assess_lookup_release_gate(
+    suite: str = LOOKUP_CORRECTNESS_SUITE,
+) -> FastMcpToolResult:
+    """Assess whether latest lookup-correctness eval history blocks release."""
+
+    return await handle_assess_lookup_release_gate(
+        {"suite": suite},
+        _fastmcp_tool_context("assess_lookup_release_gate"),
+    )
+
+
+@mcp.tool
+async def run_lookup_golden_eval_batch(
+    snapshot_id: str,
+    address: str | None = None,
+    case_id: str | None = None,
+    suite: str = LOOKUP_CORRECTNESS_SUITE,
+    use_latest_baseline: bool = True,
+) -> FastMcpToolResult:
+    """Run a recorded lookup snapshot against a canonical golden fixture."""
+
+    return await handle_run_lookup_golden_eval_batch(
+        {
+            "suite": suite,
+            "snapshots": [
+                {
+                    "snapshot_id": snapshot_id,
+                    "address": address,
+                    "case_id": case_id,
+                }
+            ],
+            "use_latest_baseline": use_latest_baseline,
+        },
+        _fastmcp_tool_context("run_lookup_golden_eval_batch"),
+    )
+
+
+@mcp.tool
+async def start_agent_run(
+    lookup_snapshot_id: str,
+    objective: str,
+    run_id: str | None = None,
+) -> FastMcpToolResult:
+    """Start a replayable agent run from a recorded lookup snapshot."""
+
+    resolved_run_id = run_id.strip() if run_id else f"fastmcp_agent_run_{uuid4()}"
+    return await handle_start_agent_run(
+        {"lookup_snapshot_id": lookup_snapshot_id, "objective": objective},
+        _fastmcp_tool_context("start_agent_run", resolved_run_id),
+    )
+
+
+@mcp.tool
+async def get_agent_run_trace(run_id: str) -> FastMcpToolResult:
+    """Return the replay trace package for a recorded agent run."""
+
+    return await handle_get_agent_run_trace(
+        {"run_id": run_id},
+        _fastmcp_tool_context("get_agent_run_trace"),
+    )
+
+
+@mcp.tool
+async def evaluate_agent_run(run_id: str) -> FastMcpToolResult:
+    """Score a recorded agent run against deterministic replay and evidence gates."""
+
+    return await handle_evaluate_agent_run(
+        {"run_id": run_id},
+        _fastmcp_tool_context("evaluate_agent_run"),
+    )
+
+
+@mcp.tool
+async def get_latest_agent_run_eval(run_id: str) -> FastMcpToolResult:
+    """Return the latest persisted deterministic eval for a recorded agent run."""
+
+    return await handle_get_latest_agent_run_eval(
+        {"run_id": run_id},
+        _fastmcp_tool_context("get_latest_agent_run_eval"),
+    )
+
+
+@mcp.tool
+async def get_agent_run_improvement_summary(run_id: str) -> FastMcpToolResult:
+    """Return baseline delta and release-blocking status for an agent-run eval."""
+
+    return await handle_get_agent_run_improvement_summary(
+        {"run_id": run_id},
+        _fastmcp_tool_context("get_agent_run_improvement_summary"),
+    )
+
+
+def _fastmcp_tool_context(
+    tool_name: str,
+    run_id: str = "fastmcp_lookup_eval",
+) -> ToolContext:
+    return ToolContext(
+        workspace_id="fastmcp",
+        actor_user_id="fastmcp",
+        run_id=run_id,
+        tool_run_id=f"fastmcp_{tool_name}",
+        project_id="fastmcp_project",
+        risk_budget_cents=0,
+    )
 
 
 def run() -> None:
-    """Start the MCP server (stdio transport for Claude Code / Claude Desktop)."""
     mcp.run()

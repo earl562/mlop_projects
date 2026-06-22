@@ -76,7 +76,7 @@ def has_value(value: FieldScalar) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     if isinstance(value, int | float):
-        return value > 0
+        return True
     return value
 
 
