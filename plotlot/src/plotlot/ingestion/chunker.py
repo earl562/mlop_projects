@@ -45,16 +45,82 @@ def _parse_chapter_section(heading: str, parent_heading: str | None) -> tuple[st
     return chapter, section, title
 
 
+def _flatten_columns(columns) -> list[str]:
+    """Flatten a (possibly MultiIndex) set of DataFrame columns to readable labels.
+
+    Multi-row ordinance headers parse as tuples, e.g.
+    ('Minimum Setbacks', 'Front') → "Minimum Setbacks Front". Repeated levels
+    ("Zone", "Zone") collapse to "Zone"; pandas "Unnamed: N" placeholders drop out.
+    """
+    labels: list[str] = []
+    for col in columns:
+        parts = col if isinstance(col, tuple) else (col,)
+        clean: list[str] = []
+        for p in parts:
+            s = str(p).strip()
+            if not s or s.startswith("Unnamed"):
+                continue
+            if not clean or clean[-1] != s:  # drop duplicated header levels
+                clean.append(s)
+        labels.append(" ".join(clean))
+    return labels
+
+
+def _table_to_text(table_html: str) -> str | None:
+    """Serialize an HTML table as labeled rows: ``RowLabel — Col: val; Col: val``.
+
+    The old flattener joined cells with ``" | "`` and dropped the column headers,
+    so a zone's standards row (``RO-2 | 20,000 s.f. | ... | 30 ft. | 15 ft.``)
+    lost which value was the front setback vs. the side setback — the LLM then
+    reported them as "not found". ``pandas.read_html`` resolves colspan/rowspan
+    and multi-row headers into a clean grid; we re-emit each row with its column
+    labels so every value stays attached to its meaning. Returns ``None`` (caller
+    falls back to the pipe-join) when the table can't be parsed.
+    """
+    from io import StringIO
+
+    import pandas as pd
+
+    try:
+        frames = pd.read_html(StringIO(table_html))
+    except Exception:
+        return None
+
+    lines: list[str] = []
+    for frame in frames:
+        frame = frame.fillna("")
+        cols = _flatten_columns(frame.columns)
+        for row in frame.itertuples(index=False, name=None):
+            cells = [str(v).strip() for v in row]
+            if not any(cells):
+                continue
+            label = cells[0]
+            pairs = [
+                f"{cols[i]}: {cells[i]}" if i < len(cols) and cols[i] else cells[i]
+                for i in range(1, len(cells))
+                if cells[i]
+            ]
+            if pairs:
+                lines.append(f"{label} — " + "; ".join(pairs) if label else "; ".join(pairs))
+            elif label:
+                lines.append(label)
+    return "\n".join(lines) if lines else None
+
+
 def _html_to_text(html: str) -> str:
-    """Convert HTML to clean text, preserving table structure."""
+    """Convert HTML to clean text, preserving table structure as labeled rows."""
     soup = BeautifulSoup(html, "html.parser")
 
     for table in soup.find_all("table"):
-        rows = []
-        for tr in table.find_all("tr"):
-            cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
-            rows.append(" | ".join(cells))
-        table.replace_with("\n".join(rows) + "\n")
+        labeled = _table_to_text(str(table))
+        if labeled is None:
+            # Fallback: pipe-join (header association is lost, but better than dropping).
+            rows = []
+            for tr in table.find_all("tr"):
+                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+                rows.append(" | ".join(cells))
+            labeled = "\n".join(rows)
+        table.replace_with("\n" + labeled + "\n")
 
     text = soup.get_text(separator="\n")
     text = re.sub(r"\n{3,}", "\n\n", text)

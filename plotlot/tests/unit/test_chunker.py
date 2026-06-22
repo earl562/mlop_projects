@@ -54,6 +54,41 @@ class TestHtmlToText:
         assert "RS-8" in text
         assert "25ft" in text
 
+    def test_table_rows_are_header_labeled(self):
+        """Each value must carry its column label, not just a bare pipe-joined cell."""
+        html = (
+            "<table>"
+            "<tr><th>Zone</th><th>Min Lot Area</th><th>Front Setback</th></tr>"
+            "<tr><td>R-1</td><td>10,000 s.f.</td><td>15 ft.</td></tr>"
+            "</table>"
+        )
+        text = _html_to_text(html)
+        assert "R-1 —" in text
+        assert "Min Lot Area: 10,000 s.f." in text
+        assert "Front Setback: 15 ft." in text
+
+    def test_multirow_header_with_colspan_keeps_setback_columns(self):
+        """The real failure: a multi-row header (colspan setbacks) must keep
+        Front/Sides distinct so RO-2's 30 ft front setback is extractable."""
+        html = (
+            "<table>"
+            "<tr><th rowspan='2'>Zone</th><th rowspan='2'>Minimum Lot Area</th>"
+            "<th colspan='2'>Minimum Setback Requirements</th></tr>"
+            "<tr><th>Front</th><th>Sides</th></tr>"
+            "<tr><td>RO-2</td><td>20,000 s.f.</td><td>30 ft.</td><td>15 ft.</td></tr>"
+            "</table>"
+        )
+        text = _html_to_text(html)
+        assert "RO-2 —" in text
+        assert "Minimum Lot Area: 20,000 s.f." in text
+        assert "Front: 30 ft." in text
+        assert "Sides: 15 ft." in text
+
+    def test_malformed_table_falls_back(self):
+        """A table pandas can't parse still yields its cell text (no crash)."""
+        text = _html_to_text("<table><tr><td>R-1</td><td>data</td></tr></table>")
+        assert "R-1" in text and "data" in text
+
     def test_empty_html(self):
         assert _html_to_text("") == ""
 
