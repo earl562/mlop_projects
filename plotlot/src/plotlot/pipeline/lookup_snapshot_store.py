@@ -134,6 +134,7 @@ def build_lookup_snapshot_evidence_records(
                 parser_version=parser_version,
                 schema_version=schema_version,
                 confidence=confidence,
+                source_type=source_type,
             )
         )
         field_warnings = tuple(

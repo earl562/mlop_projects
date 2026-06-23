@@ -179,6 +179,7 @@ def _source_record(
             parser_version=parser_version,
             schema_version=INGESTION_ADAPTER_SCHEMA_VERSION,
             confidence=1.0,
+            source_type=descriptor.source_type,
         )
     )
     raw_artifact_ref = descriptor.source_url or f"{descriptor.source_type}:unrecorded_source"

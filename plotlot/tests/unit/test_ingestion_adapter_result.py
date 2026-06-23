@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from plotlot.core.types import ChunkMetadata, MunicodeConfig, TextChunk
 from plotlot.ingestion.adapters.base import SourceAdapter
 from plotlot.ingestion.adapters.html import HTMLAdapter
@@ -88,6 +90,101 @@ def test_source_quality_blocks_unknown_authority_even_with_complete_metadata() -
     # Then: unknown authority blocks display-ready quality.
     assert quality_flags == ("unaccepted_source_authority",)
     assert metadata_quality.score == 0.0
+
+
+def test_source_quality_distinguishes_user_upload_as_evidence_candidate() -> None:
+    # Given: a user-uploaded document has complete metadata but is not verified as official.
+    metadata_quality = score_source_metadata(
+        SourceMetadataQualityInput(
+            source_url="https://storage.example.test/user/zoning-letter.pdf",
+            source_authority="user_upload",
+            retrieved_at="2026-06-01T00:00:00+00:00",
+            effective_date="2026-01-01",
+            parser_version="upload_pdf.v1",
+            schema_version="ingestion_adapter_result.v1",
+            confidence=0.92,
+            source_type="user_uploaded_document",
+        )
+    )
+
+    # When: the source is scored for display readiness.
+    quality_flags = metadata_quality.flags
+
+    # Then: it is traceable evidence candidate material, not an authoritative fact.
+    assert quality_flags == ("user_uploaded_document_source",)
+    assert metadata_quality.score == 0.4
+
+
+@pytest.mark.parametrize(
+    ("source_type", "source_authority", "expected_flag"),
+    (
+        ("third_party_aggregator", "third_party_aggregator", "third_party_aggregator_source"),
+        ("scraped_web_text", "scraped_web_text", "scraped_web_text_source"),
+    ),
+)
+def test_source_quality_distinguishes_external_evidence_candidates(
+    source_type: str,
+    source_authority: str,
+    expected_flag: str,
+) -> None:
+    # Given: an external non-authoritative source has complete metadata.
+    metadata_quality = score_source_metadata(
+        SourceMetadataQualityInput(
+            source_url="https://example.test/source",
+            source_authority=source_authority,
+            retrieved_at="2026-06-01T00:00:00+00:00",
+            effective_date="2026-01-01",
+            parser_version="external.v1",
+            schema_version="ingestion_adapter_result.v1",
+            confidence=0.9,
+            source_type=source_type,
+        )
+    )
+
+    # When: the source is scored for display readiness.
+    quality_flags = metadata_quality.flags
+
+    # Then: it remains a named evidence candidate and cannot become authoritative.
+    assert quality_flags == (expected_flag,)
+    assert metadata_quality.score == 0.4
+
+
+def test_source_quality_distinguishes_assumptions_from_evidence_candidates() -> None:
+    # Given: underwriting assumptions and model summaries are complete but non-authoritative.
+    assumption_quality = score_source_metadata(
+        SourceMetadataQualityInput(
+            source_url="plotlot://assumptions/rent",
+            source_authority="underwriting_assumption",
+            retrieved_at="2026-06-01T00:00:00+00:00",
+            effective_date="2026-06-01",
+            parser_version="assumption.v1",
+            schema_version="ingestion_adapter_result.v1",
+            confidence=0.8,
+            source_type="underwriting_assumption",
+        )
+    )
+    summary_quality = score_source_metadata(
+        SourceMetadataQualityInput(
+            source_url="plotlot://model-summary/run-123",
+            source_authority="model_generated_summary",
+            retrieved_at="2026-06-01T00:00:00+00:00",
+            effective_date="2026-06-01",
+            parser_version="summary.v1",
+            schema_version="ingestion_adapter_result.v1",
+            confidence=0.8,
+            source_type="model_generated_summary",
+        )
+    )
+
+    # When: the sources are scored for display readiness.
+    assumption_flags = assumption_quality.flags
+    summary_flags = summary_quality.flags
+
+    # Then: assumptions and model summaries keep distinct warning categories.
+    assert assumption_flags == ("underwriting_assumption_source",)
+    assert assumption_quality.score == 0.35
+    assert summary_flags == ("model_generated_summary_source",)
+    assert summary_quality.score == 0.2
 
 
 def test_source_quality_caps_stale_effective_date_before_display() -> None:
