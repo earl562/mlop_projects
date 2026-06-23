@@ -20,6 +20,7 @@ from plotlot.dev.agent_loop_models import (
     RunStatus,
     redact_text,
 )
+from plotlot.dev.agent_loop_policy import agent_worker_policies
 
 
 def execute_loop(config: LoopConfig) -> LoopReport:
@@ -40,6 +41,7 @@ def execute_loop(config: LoopConfig) -> LoopReport:
         generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         status=_overall_status(tuple(results)),
         phases=config.phases,
+        worker_policies=agent_worker_policies(config.phases),
         results=tuple(results),
     )
 

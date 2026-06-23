@@ -48,6 +48,29 @@ def test_plan_only_marks_commands_without_executing(tmp_path: Path) -> None:
     assert {result.status for result in report.results} == {agent_loop.RunStatus.PLANNED}
 
 
+def test_loop_report_records_worker_model_policy(tmp_path: Path) -> None:
+    # Given: a full loop report.
+    config = agent_loop.LoopConfig(
+        repo_root=tmp_path,
+        app_root=tmp_path / "plotlot",
+        report_dir=tmp_path / "reports",
+        phases=agent_loop.profile_phases("full"),
+        stop_on_failure=True,
+        plan_only=True,
+    )
+
+    # When: the loop executes in plan-only mode.
+    report_json = agent_loop.execute_loop(config).to_json()
+
+    # Then: the report encodes cheap default workers and a strong review-only model gate.
+    policies = {policy["phase"]: policy for policy in report_json["worker_policies"]}
+    assert policies["backend"]["primary_model"] == "deepseek-v4-flash"
+    assert policies["browser"]["primary_model"] == "deepseek-v4-flash"
+    assert policies["review"]["primary_model"] == "gpt-5.5"
+    assert policies["review"]["gpt_55_allowed"] is True
+    assert policies["backend"]["gpt_55_allowed"] is False
+
+
 def test_evidence_redaction_masks_secret_like_values() -> None:
     # Given: command output that accidentally includes credential-shaped values.
     raw = "DEEPSEEK_API_KEY=sk-live-secret Authorization: Bearer token-value ok"
