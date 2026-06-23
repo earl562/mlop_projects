@@ -20,6 +20,7 @@ from plotlot.ingestion.adapters.codifier import (
     CodifierHit,
     PageContent,
     WebCodifierAdapter,
+    _normalize_zone_tables,
     _parse_jina_page,
     _resolve_spa_fragment,
     codifier_url_patterns,
@@ -499,3 +500,54 @@ async def test_resolve_adapter_codifier_crash_degrades_to_no_adapter() -> None:
         pytest.raises(NoAdapterError),
     ):
         await resolve_adapter("Poway", "CA")
+
+
+# ---------------------------------------------------------------------------
+# Markdown zone-table normalizer (Part 1 of the Sausalito codifier rebuild)
+# ---------------------------------------------------------------------------
+
+_SAUSALITO_10_22_2 = """\
+Two-Family Residential (R-2). The district is divided into two subdistricts.
+
+| Table 10.22-2 Site Development Standards – Residential Zoning Districts 1 |
+| --- |
+| Development Requirement | R-1 | R-2 | R-3 | PR | H | A | See SMC |
+| R-1-6 | R-1-8 | R-1-20 | R-2-2.5 | R-2-5 |
+| Minimum parcel size 2 | 6,000 sf | 8,000 sf | 20,000 sf | 5,000 sf | 10,000 sf | 5,000 sf | 20,000 sf | 10,000 sf | 1,500 sf | SMC stuff |
+| Minimum lot width 2 | 50 feet | 50 feet | 50 feet | 50 feet | 50 feet | 50 feet | 50 feet | 50 feet | 30 feet |  |
+| Maximum density | 1 du/parcel | 1 du/parcel | 1 du/parcel | 1 du/2,500 sf | 1 du/5,000 sf | 1 du/1,500 sf | 1 du/1980 sf | 1 du/10,000 sf | 1 du/1,500 sf | SMC stuff |
+
+Following prose."""
+
+
+class TestNormalizeZoneTables:
+    """Reconstruct the lost colspan in codifier markdown standards tables so each
+    district's standards are unambiguous (the amlegal→codepublishing rebuild)."""
+
+    def test_r2_2_5_standards_reconstructed(self):
+        out = _normalize_zone_tables(_SAUSALITO_10_22_2)
+        # R-2-2.5 is the 4th sub-district column → its values, not R-1-6's.
+        assert "R-2-2.5 — Minimum parcel size: 5,000 sf" in out
+        assert "Minimum lot width: 50 feet" in out
+        assert "Maximum density: 1 du/2,500 sf" in out
+
+    def test_all_subdistricts_expanded_from_parents(self):
+        out = _normalize_zone_tables(_SAUSALITO_10_22_2)
+        for z in ["R-1-6", "R-1-8", "R-1-20", "R-2-2.5", "R-2-5", "R-3", "PR", "H", "A"]:
+            assert f"{z} — " in out, z
+
+    def test_prose_preserved(self):
+        out = _normalize_zone_tables(_SAUSALITO_10_22_2)
+        assert "Two-Family Residential (R-2)." in out
+        assert "Following prose." in out
+
+    def test_footnote_markers_stripped_from_labels(self):
+        out = _normalize_zone_tables(_SAUSALITO_10_22_2)
+        assert "Minimum parcel size:" in out  # "Minimum parcel size 2" → label cleaned
+
+    def test_non_zone_table_left_untouched(self):
+        plain = "| Name | Phone |\n| --- |\n| Planning | 555-1234 |"
+        assert _normalize_zone_tables(plain) == plain
+
+    def test_plain_text_unchanged(self):
+        assert _normalize_zone_tables("Just prose, no tables.") == "Just prose, no tables."

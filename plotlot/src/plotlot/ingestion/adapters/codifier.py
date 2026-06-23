@@ -450,7 +450,7 @@ class WebCodifierAdapter(SourceAdapter):
         seen_text: set[str],
         used_node_ids: set[str],
     ) -> list[TextChunk]:
-        text = _strip_markdown_noise(page.text)
+        text = _normalize_zone_tables(_strip_markdown_noise(page.text))
         if len(text) < _MIN_PAGE_TEXT:
             return []
         text_hash = _text_hash(text)
@@ -556,6 +556,101 @@ def _strip_markdown_noise(text: str) -> str:
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
     text = _MD_LINK_RE.sub(r"\1", text)
     return text.strip()
+
+
+# Zone-code cell: "R-1", "R-1-6", "R-2-2.5", "PR", "H", "A" (1-2 letter standalone
+# districts or letter+number with optional sub-segments). Excludes plain words.
+_ZONE_CELL_RE = re.compile(r"^[A-Z]{1,3}(?:-[0-9][A-Z0-9.]*)+$|^[A-Z]{1,2}$")
+_FOOTNOTE_TAIL_RE = re.compile(r"\s+\d+(?:\s*,\s*\d+)*$")  # "Minimum lot width 2, 3" → drop
+
+
+def _md_cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _is_zone_cell(c: str) -> bool:
+    return bool(_ZONE_CELL_RE.match(c)) and c not in ("SMC", "SF", "DU")
+
+
+def _normalize_zone_tables(text: str) -> str:
+    """Rewrite codifier markdown standards tables into per-zone labeled rows.
+
+    Codifier sources (Code Publishing/amlegal via Jina) emit standards tables as
+    markdown that lost the HTML colspan, so the column header is split across two
+    rows — parent districts (``R-1 | R-2 | R-3 | PR``) then sub-districts
+    (``R-1-6 | R-1-8 | R-2-2.5 …``) — and the data rows carry one value per
+    sub-district. A raw dump leaves "R-2-2.5"'s front setback ambiguous. We
+    reconstruct the sub-district column order (a parent expands to the
+    sub-districts that carry its prefix) and re-emit each district's standards:
+
+        R-2-2.5 — Minimum parcel size: 5,000 sf; Minimum lot width: 50 feet; …
+
+    Only zone-keyed numeric standards tables are rewritten; everything else
+    (prose, non-zone tables) is left untouched.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        if lines[i].lstrip().startswith("|"):
+            j = i
+            while j < n and lines[j].lstrip().startswith("|"):
+                j += 1
+            rewritten = _rewrite_zone_table(lines[i:j])
+            out.append(rewritten if rewritten is not None else "\n".join(lines[i:j]))
+            i = j
+        else:
+            out.append(lines[i])
+            i += 1
+    return "\n".join(out)
+
+
+def _rewrite_zone_table(block: list[str]) -> str | None:
+    """Return per-zone labeled text for a zone-keyed standards table, else None."""
+    rows = [_md_cells(ln) for ln in block]
+    # Drop separator rows ("| --- |") and single-cell title rows; keep title text.
+    title = ""
+    body: list[list[str]] = []
+    for r in rows:
+        if len(r) == 1:
+            if r[0] and set(r[0]) > set("-"):
+                title = r[0]
+            continue
+        if all(set(c) <= set("- ") for c in r):
+            continue
+        body.append(r)
+
+    zone_rows = [r for r in body if sum(_is_zone_cell(c) for c in r) >= 2]
+    data_rows = [
+        r for r in body if r not in zone_rows and sum(1 for c in r[1:] if re.search(r"\d", c)) >= 2
+    ]
+    if not zone_rows or not data_rows:
+        return None
+
+    zone_lists = [[c for c in r if _is_zone_cell(c)] for r in zone_rows]
+    parents = zone_lists[0]
+    children = zone_lists[1] if len(zone_lists) > 1 else []
+    order: list[str] = []
+    for p in parents:
+        kids = [c for c in children if c.startswith(p + "-")]
+        order.extend(kids if kids else [p])
+    if not order:
+        return None
+
+    lines_out: list[str] = []
+    if title:
+        lines_out.append(title)
+    for zi, zone in enumerate(order):
+        pairs = []
+        for dr in data_rows:
+            req = _FOOTNOTE_TAIL_RE.sub("", dr[0]).strip()
+            vals = dr[1:]
+            if req and zi < len(vals) and vals[zi]:
+                pairs.append(f"{req}: {vals[zi]}")
+        if pairs:
+            lines_out.append(f"{zone} — " + "; ".join(pairs))
+    return "\n".join(lines_out) if len(lines_out) > (1 if title else 0) else None
 
 
 def _page_node_id(url: str) -> str:
