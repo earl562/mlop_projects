@@ -127,26 +127,29 @@ async def _llm_opposition_assessment(
 # ---------------------------------------------------------------------------
 
 
-async def _web_search_controversies(municipality: str) -> list[str]:
-    """Search for recent planning board controversies in the municipality.
+async def _suggest_possible_controversies(municipality: str) -> list[str]:
+    """Ask the LLM for POSSIBLE recent planning controversies in a municipality.
 
-    Returns a list of relevant snippets or an empty list.
+    IMPORTANT: ``call_llm`` has no web access, so these are unverified leads
+    from the model's training knowledge, not live search results. Returns a
+    list of suggested leads or an empty list.
     """
     try:
         from plotlot.retrieval.llm import call_llm
 
         prompt = (
-            f"Search the web for recent (last 2 years) planning board or zoning "
-            f"controversies, neighbor opposition, or public hearing disputes in "
-            f"{municipality}. Focus on residential development projects. "
-            "Return a JSON array of strings, each a 1-sentence summary of a finding. "
-            "If nothing relevant is found, return []. Return ONLY valid JSON."
+            f"Based only on your existing knowledge (you do NOT have web access), "
+            f"list any notable planning-board or zoning controversies, neighbor "
+            f"opposition, or public-hearing disputes you are aware of in {municipality}, "
+            f"focused on residential development. These are UNVERIFIED leads — do not "
+            f"fabricate specifics you are unsure of. Return a JSON array of strings, each "
+            f"a 1-sentence lead. If you know of none, return []. Return ONLY valid JSON."
         )
         response = await call_llm(
             messages=[
                 {
                     "role": "system",
-                    "content": "Return only valid JSON. No markdown, no explanation.",
+                    "content": "Return only valid JSON. Never invent unverifiable specifics.",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -225,15 +228,16 @@ async def assess_opposition_risk(
 
     all_flags = list(det_flags)
 
-    # Web search for recent controversies
+    # Unverified LLM-suggested controversy leads — surfaced but NOT scored.
     try:
-        controversies = await _web_search_controversies(municipality)
+        controversies = await _suggest_possible_controversies(municipality)
     except Exception as exc:
-        logger.debug("Web search for controversies failed: %s", exc)
+        logger.debug("Controversy suggestion failed: %s", exc)
         controversies = []
     if controversies:
         all_flags.append(
-            f"Recent planning controversies found in {municipality}: {'; '.join(controversies[:3])}"
+            f"Possible controversies in {municipality} to verify "
+            f"(LLM-suggested, unverified): {'; '.join(controversies[:3])}"
         )
 
     # LLM qualitative assessment (runs with reasonable timeout)
@@ -246,12 +250,13 @@ async def assess_opposition_risk(
         except Exception as exc:
             logger.debug("LLM opposition assessment failed: %s", exc)
 
-    risk_level = _heuristic_risk_level(max_units or 0, all_flags, sf_zone)
+    # Risk level is driven by DETERMINISTIC factors only (density, zone type) —
+    # unverified controversy leads are surfaced but never raise the score.
+    risk_level = _heuristic_risk_level(max_units or 0, det_flags, sf_zone)
 
-    data_sources = []
+    data_sources = ["Heuristic rules (density delta, zone type)"]
     if controversies:
-        data_sources.append("Web search for recent planning controversies")
-    data_sources.append("Heuristic rules (density delta, zone type)")
+        data_sources.append("LLM-suggested controversy leads (unverified)")
     if assessment_text:
         data_sources.append("LLM-based qualitative analysis (low confidence)")
 

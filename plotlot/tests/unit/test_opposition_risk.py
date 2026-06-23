@@ -73,7 +73,7 @@ def test_heuristic_risk_high_sf_zone_with_flags():
 async def test_assess_opposition_risk_basic():
     with (
         patch(
-            "plotlot.pipeline.opposition_risk._web_search_controversies",
+            "plotlot.pipeline.opposition_risk._suggest_possible_controversies",
             new=AsyncMock(return_value=[]),
         ),
         patch(
@@ -101,7 +101,7 @@ async def test_assess_opposition_risk_basic():
 async def test_assess_opposition_risk_high_density_sf_zone():
     with (
         patch(
-            "plotlot.pipeline.opposition_risk._web_search_controversies",
+            "plotlot.pipeline.opposition_risk._suggest_possible_controversies",
             new=AsyncMock(return_value=["Neighbors opposed similar project in 2025"]),
         ),
         patch(
@@ -127,7 +127,7 @@ async def test_assess_opposition_risk_high_density_sf_zone():
 async def test_assess_opposition_risk_api_failure_degrades_gracefully():
     with (
         patch(
-            "plotlot.pipeline.opposition_risk._web_search_controversies",
+            "plotlot.pipeline.opposition_risk._suggest_possible_controversies",
             new=AsyncMock(side_effect=Exception("network error")),
         ),
         patch(
@@ -154,7 +154,7 @@ async def test_assess_opposition_risk_api_failure_degrades_gracefully():
 async def test_assess_opposition_risk_no_max_units():
     with (
         patch(
-            "plotlot.pipeline.opposition_risk._web_search_controversies",
+            "plotlot.pipeline.opposition_risk._suggest_possible_controversies",
             new=AsyncMock(return_value=[]),
         ),
         patch(

@@ -917,10 +917,12 @@ class UpzoningAnalysis:
 class CEQADocument:
     """A CEQA (California Environmental Quality Act) document for a project.
 
-    Retrieved live from the CEQAnet API when the parcel is in California.
-    ``doc_type`` determines the likely review timeline: CE (Categorical
+    NOTE: these are currently UNVERIFIED leads suggested by the LLM from its
+    training knowledge (there is no public CEQAnet API and ``call_llm`` has no
+    web access). Treat every field as a hint to confirm against CEQAnet, not as
+    fact. ``doc_type`` indicates the likely review timeline: CE (Categorical
     Exemption) = 0–3mo, ND/MND = 6–12mo, EIR = 12–24mo+. ``on_parcel`` is
-    True when the document's address/project matches the subject parcel.
+    reserved for future spatial matching and is not yet populated.
     """
 
     doc_type: str  # "EIR" | "MND" | "ND" | "CE" | "Other"

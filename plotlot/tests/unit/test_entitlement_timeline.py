@@ -8,6 +8,7 @@ import pytest
 
 from plotlot.core.types import CEQADocument, EntitlementTimelineRisk
 from plotlot.pipeline.entitlement_timeline import (
+    _check_active_permits,
     _estimate_timeline_range,
     _parse_ceqa_llm_response,
     _risk_level,
@@ -60,8 +61,10 @@ def test_timeline_by_right_with_ceqa_eir():
         )
     ]
     est_min, est_max, drivers = _estimate_timeline_range("by_right", docs, "low")
-    assert est_max >= 12.0  # EIR extends the timeline
-    assert any("EIR" in d for d in drivers)
+    # Unverified CEQA leads are advisory only — they must NOT inflate the
+    # deterministic by-right range, but they should surface as a flagged driver.
+    assert est_max == 6.0
+    assert any("EIR" in d and "unverified" in d.lower() for d in drivers)
 
 
 def test_timeline_conditional_use():
@@ -118,7 +121,7 @@ def test_risk_level_unknown():
 async def test_assess_timeline_risk_by_right_ca():
     with (
         patch(
-            "plotlot.pipeline.entitlement_timeline._search_ceqanet",
+            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
             new=AsyncMock(return_value=[]),
         ),
         patch(
@@ -146,7 +149,7 @@ async def test_assess_timeline_risk_by_right_ca():
 async def test_assess_timeline_risk_with_active_permits():
     with (
         patch(
-            "plotlot.pipeline.entitlement_timeline._search_ceqanet",
+            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
             new=AsyncMock(return_value=[]),
         ),
         patch(
@@ -172,7 +175,7 @@ async def test_assess_timeline_risk_with_active_permits():
 async def test_assess_timeline_risk_non_ca_skips_ceqa():
     with (
         patch(
-            "plotlot.pipeline.entitlement_timeline._search_ceqanet",
+            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
             new=AsyncMock(return_value=[CEQADocument(doc_type="EIR", status="in_progress")]),
         ),
         patch(
@@ -196,7 +199,7 @@ async def test_assess_timeline_risk_non_ca_skips_ceqa():
 async def test_assess_timeline_risk_api_failure_degrades_gracefully():
     with (
         patch(
-            "plotlot.pipeline.entitlement_timeline._search_ceqanet",
+            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
             new=AsyncMock(side_effect=Exception("API unavailable")),
         ),
         patch(
@@ -216,3 +219,30 @@ async def test_assess_timeline_risk_api_failure_degrades_gracefully():
     assert isinstance(result, EntitlementTimelineRisk)
     assert result.est_months_min == 6.0
     assert result.confidence == "low"
+
+
+# ---------------------------------------------------------------------------
+# Permit check — must read the real fetch_development_signals dict shape
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_check_active_permits_reads_correct_key():
+    """Regression: _check_active_permits must read ``active_permit_count`` —
+    the actual key fetch_development_signals returns — not ``active_permits``."""
+    with patch(
+        "plotlot.pipeline.permits.fetch_development_signals",
+        new=AsyncMock(return_value={"active_permit_count": 2, "permit_count": 5}),
+    ):
+        assert await _check_active_permits("1234567890", "San Diego") is True
+
+    with patch(
+        "plotlot.pipeline.permits.fetch_development_signals",
+        new=AsyncMock(return_value={"active_permit_count": 0, "permit_count": 3}),
+    ):
+        assert await _check_active_permits("1234567890", "San Diego") is False
+
+
+@pytest.mark.asyncio
+async def test_check_active_permits_no_apn_short_circuits():
+    assert await _check_active_permits("", "San Diego") is False
