@@ -1,7 +1,7 @@
 """Phase 6 schema changes.
 
-Revision ID: 007
-Revises: 006
+Revision ID: 007b
+Revises: 007
 Create Date: 2026-05-08
 
 1. report_cache: drop old unique index on address_normalized,
@@ -19,8 +19,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "007"
-down_revision: Union[str, None] = "d3e4f5a6b7c8"
+revision: str = "007b"
+down_revision: Union[str, None] = "007"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
