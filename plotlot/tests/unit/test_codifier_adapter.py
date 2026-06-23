@@ -551,3 +551,67 @@ class TestNormalizeZoneTables:
 
     def test_plain_text_unchanged(self):
         assert _normalize_zone_tables("Just prose, no tables.") == "Just prose, no tables."
+
+
+# ---------------------------------------------------------------------------
+# Code Publishing numeric-SPA → static chapter navigation (Part 1.5)
+# ---------------------------------------------------------------------------
+
+from plotlot.ingestion.adapters.codifier import _codepublishing_static_base  # noqa: E402
+
+
+def test_codepublishing_static_base_parses_root():
+    assert _codepublishing_static_base("https://www.codepublishing.com/CA/Sausalito/") == (
+        "https://www.codepublishing.com/CA/Sausalito/",
+        "Sausalito",
+    )
+    assert _codepublishing_static_base("https://www.codepublishing.com/CA/Sausalito/47134195") == (
+        "https://www.codepublishing.com/CA/Sausalito/",
+        "Sausalito",
+    )
+
+
+def test_codepublishing_static_base_rejects_other_hosts():
+    assert _codepublishing_static_base("https://ecode360.com/SA4880") is None
+
+
+@pytest.mark.asyncio
+async def test_expand_codepublishing_derives_static_chapter_urls():
+    """A numeric Title SPA link expands to static chapter content URLs derived
+    from the chapter numbers in the static Title index (10.22 → Sausalito1022.html)."""
+    root = "https://www.codepublishing.com/CA/Sausalito/"
+    index_url = f"{root}html/Sausalito10/Sausalito10.html"
+    index_page = _page(
+        200,
+        url=index_url,
+        links=[
+            ("Chapter 10.22 RESIDENTIAL ZONING DISTRICTS", "https://x/47134342"),
+            ("Chapter 10.24 COMMERCIAL ZONING DISTRICTS", "https://x/47134365"),
+            ("Title 9 Subdivisions", "https://x/9"),  # wrong title → ignored
+        ],
+    )
+    transport = _FakeTransport({index_url: index_page})
+    hit = CodifierHit(platform="codepublishing", url=root, final_url=root, title="Sausalito")
+    adapter = WebCodifierAdapter("Sausalito", "marin", "CA", hit)
+
+    out = await adapter._expand_codepublishing(
+        transport,  # type: ignore[arg-type]
+        root,
+        [("Title 10 Zoning", f"{root}47134195")],
+    )
+    urls = [u for _, u in out]
+    assert f"{root}html/Sausalito10/Sausalito1022.html" in urls
+    assert f"{root}html/Sausalito10/Sausalito1024.html" in urls
+    assert len(out) == 2  # only Title-10 chapters, not the Title 9 link
+
+
+@pytest.mark.asyncio
+async def test_expand_codepublishing_passes_through_static_links():
+    """A Title link already pointing at a static .html page is left untouched."""
+    root = "https://www.codepublishing.com/CA/Poway/"
+    static = f"{root}html/Poway17/Poway17.html"
+    transport = _FakeTransport({})
+    hit = CodifierHit(platform="codepublishing", url=root, final_url=root, title="Poway")
+    adapter = WebCodifierAdapter("Poway", "sd", "CA", hit)
+    out = await adapter._expand_codepublishing(transport, root, [("Title 17 Zoning", static)])  # type: ignore[arg-type]
+    assert out == [("Title 17 Zoning", static)]

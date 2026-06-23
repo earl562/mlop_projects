@@ -77,6 +77,26 @@ _SECTION_LABEL_RE = re.compile(
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _SKIP_HREF_RE = re.compile(r"\.(css|js|png|jpe?g|gif|svg|ico|zip)(\?|$)", re.IGNORECASE)
 
+# Code Publishing migrated to a numeric SPA whose Title/Chapter links render as
+# empty shells through Jina; the real content stays at the legacy static path
+# html/{City}{TitleNum}/{City}{TitleChapter}.html  (10.22 → Sausalito1022.html).
+_CP_TITLE_RE = re.compile(r"\bTitle\s+(\d+)", re.IGNORECASE)
+_CP_CHAPTER_RE = re.compile(r"\bChapter\s+(\d+\.\d+)\b", re.IGNORECASE)
+
+
+def _codepublishing_static_base(root_url: str) -> tuple[str, str] | None:
+    """Return ``(base_url, city_slug)`` for a codepublishing root, else ``None``.
+
+    ``https://www.codepublishing.com/CA/Sausalito/…`` → ``(".../CA/Sausalito/", "Sausalito")``
+    """
+    parsed = urlparse(root_url)
+    if "codepublishing.com" not in parsed.netloc:
+        return None
+    parts = [seg for seg in parsed.path.split("/") if seg]
+    if len(parts) < 2:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}/{parts[0]}/{parts[1]}/", parts[1]
+
 
 # ── Models ───────────────────────────────────────────────────────────────────
 
@@ -321,6 +341,52 @@ class WebCodifierAdapter(SourceAdapter):
         self.hit = hit
         self.max_pages = max_pages
 
+    async def _expand_codepublishing(
+        self,
+        transport: CodifierTransport,
+        root_url: str,
+        title_links: list[tuple[str, str]],
+    ) -> list[tuple[str, str]]:
+        """Expand codepublishing Title links → legacy static chapter content URLs.
+
+        The numeric SPA Title link (``/CA/Sausalito/47134195``) renders empty;
+        the real content lives at ``html/{City}{T}/{City}{TC}.html``. Fetch each
+        Title's static index, read its chapter list, and derive the chapter URL
+        from the chapter number (10.22 → ``Sausalito1022.html``). Title links that
+        are already static ``.html`` pages pass through unchanged.
+        """
+        base_info = _codepublishing_static_base(root_url)
+        if base_info is None:
+            return title_links
+        base, city = base_info
+
+        expanded: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for label, url in title_links:
+            if url.endswith(".html"):
+                expanded.append((label, url))
+                continue
+            tmatch = _CP_TITLE_RE.search(label)
+            if tmatch is None:
+                expanded.append((label, url))
+                continue
+            tnum = tmatch.group(1)
+            index = await transport.fetch(f"{base}html/{city}{tnum}/{city}{tnum}.html")
+            if index.blocked or index.target_status != 200:
+                expanded.append((label, url))  # fall back to the original link
+                continue
+            for clabel, _ in index.links:
+                cmatch = _CP_CHAPTER_RE.search(clabel)
+                if cmatch is None or not cmatch.group(1).startswith(tnum + "."):
+                    continue
+                chapter = cmatch.group(1)
+                content_url = f"{base}html/{city}{tnum}/{city}{chapter.replace('.', '')}.html"
+                if content_url in seen:
+                    continue
+                seen.add(content_url)
+                expanded.append((clabel.strip(), content_url))
+        return expanded
+
     async def fetch_chunks(self) -> list[TextChunk]:
         chunks: list[TextChunk] = []
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -348,6 +414,17 @@ class WebCodifierAdapter(SourceAdapter):
                 zoning_links = _select_links(
                     root.links, allowed_hosts, keyword_match=False, section_match=True
                 )
+
+            if self.hit.platform == "codepublishing":
+                # Code Publishing migrated to a numeric SPA whose Title links are
+                # empty shells; expand each to its legacy static chapter pages.
+                # Zoning-named titles first so the page budget covers them before
+                # subdivisions/planning if the code is large.
+                zoning_links.sort(key=lambda lu: 0 if "zoning" in lu[0].lower() else 1)
+                zoning_links = await self._expand_codepublishing(
+                    transport, root.final_url or self.hit.url, zoning_links
+                )
+
             logger.info(
                 "codifier_walk_start municipality=%s platform=%s zoning_links=%d",
                 self.municipality,
