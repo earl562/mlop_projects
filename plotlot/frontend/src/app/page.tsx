@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { ArrowRight, CheckCircle2, ChevronDown, Square, X } from "lucide-react";
 
 const asset = (name: string) => `/plotlot-assets/${name}.png`;
 
@@ -156,7 +157,7 @@ function Logo() {
 }
 
 function Arrow() {
-  return <span aria-hidden="true">-&gt;</span>;
+  return <ArrowRight className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />;
 }
 
 function Button({
@@ -196,11 +197,25 @@ function MediaImage({
   className?: string;
   priority?: boolean;
 }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        className={`${className ?? ""} bg-gradient-to-br from-amber-100 to-[var(--bg-surface-raised)] dark:from-amber-950/30 dark:to-[var(--bg-surface-raised)]`}
+        style={{ aspectRatio: "1 / 1" }}
+      />
+    );
+  }
+
   return (
     <Image
       alt={alt}
       className={className}
       height={900}
+      onError={() => setFailed(true)}
       priority={priority}
       sizes="(max-width: 768px) 100vw, 50vw"
       src={asset(name)}
@@ -219,7 +234,7 @@ function Header() {
           {navItems.map((item) => (
             <a href={item.href} key={item.label}>
               {item.label}
-              {["Product", "Solutions", "Resources"].includes(item.label) && <span aria-hidden="true">v</span>}
+              {["Product", "Solutions", "Resources"].includes(item.label) && <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />}
             </a>
           ))}
         </nav>
@@ -282,7 +297,7 @@ export default function Home() {
             <article className="floating-card site-summary-card">
               <div className="mini-card-head">
                 <strong>Site Summary</strong>
-                <span>x</span>
+                <X className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
               </div>
               {[
                 ["Address", "123 Glenwood Ave"],
@@ -303,13 +318,15 @@ export default function Home() {
               <MediaImage name="hero-massing-clean" alt="White massing study model" />
               <div>
                 <strong>Massing Study</strong>
-                <span className="cube-icon" aria-hidden="true">[]</span>
+                <span className="cube-icon" aria-hidden="true">
+                  <Square className="h-4 w-4" strokeWidth={2.4} />
+                </span>
               </div>
             </article>
             <article className="floating-card zoning-layer-card">
               <div className="mini-card-head">
                 <strong>Zoning Layers</strong>
-                <span>x</span>
+                <X className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
               </div>
               {["Zoning Districts", "Height Limits", "Overlays", "Setbacks", "Floodplain"].map((item, index) => (
                 <div className="layer-row" key={item}>
@@ -350,8 +367,20 @@ export default function Home() {
         </div>
         <div className="coded-container metrics-strip">
           <article><span>10x</span><strong>faster site review</strong><p>Automated discovery and surface what matters instantly.</p></article>
-          <article><span>[ ]</span><strong>Parcel + zoning + overlays</strong><p>All key layers in one place. Always up to date.</p></article>
-          <article><span>OK</span><strong>Minutes, not days.</strong><p>From search to site summary in just a few clicks.</p></article>
+          <article>
+            <span className="metric-badge" aria-hidden="true">
+              <CheckCircle2 className="h-5 w-5" strokeWidth={2.4} />
+            </span>
+            <strong>Parcel + zoning + overlays</strong>
+            <p>All key layers in one place. Always up to date.</p>
+          </article>
+          <article>
+            <span className="metric-badge" aria-hidden="true">
+              <CheckCircle2 className="h-5 w-5" strokeWidth={2.4} />
+            </span>
+            <strong>Minutes, not days.</strong>
+            <p>From search to site summary in just a few clicks.</p>
+          </article>
         </div>
       </section>
 
@@ -391,7 +420,10 @@ export default function Home() {
               <MediaImage name="product-aerial-clean" alt="Aerial parcel product view" />
             </div>
             <article className="floating-card product-summary-card">
-              <div className="mini-card-head"><strong>Site Summary</strong><span>x</span></div>
+              <div className="mini-card-head">
+                <strong>Site Summary</strong>
+                <X className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
+              </div>
               {[
                 ["Address", "123 Glenwood Ave"],
                 ["Lot Area", "10,019 sf"],
@@ -405,12 +437,26 @@ export default function Home() {
             </article>
             <article className="visual-card product-massing-card">
               <MediaImage name="product-massing-clean" alt="Massing study interface" />
-              <div><strong>Massing Study</strong><span className="cube-icon">[]</span></div>
+              <div>
+                <strong>Massing Study</strong>
+                <span className="cube-icon" aria-hidden="true">
+                  <Square className="h-4 w-4" strokeWidth={2.4} />
+                </span>
+              </div>
             </article>
             <article className="floating-card compliance-card">
-              <div className="mini-card-head"><strong>Compliance</strong><span>x</span></div>
+              <div className="mini-card-head">
+                <strong>Compliance</strong>
+                <X className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />
+              </div>
               {["Height Limit", "Setbacks", "FAR"].map((item) => (
-                <div className="compliance-row" key={item}><span>OK {item}</span><strong>Compliant</strong></div>
+                <div className="compliance-row" key={item}>
+                  <span className="inline-flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                    {item}
+                  </span>
+                  <strong>Compliant</strong>
+                </div>
               ))}
               <div className="compliance-row warn"><span>! Open Space</span><strong>Review</strong></div>
               <Link href="/sign-up?intent=compliance">View Full Compliance <Arrow /></Link>
@@ -503,7 +549,12 @@ export default function Home() {
                 <div className="price-line"><strong>{plan.price}</strong>{plan.price !== "$0" && <span>/ month</span>}</div>
                 <small>{plan.note}</small>
                 <ul>
-                  {plan.features.map((feature) => <li key={feature}>OK {feature}</li>)}
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="inline-flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
                 </ul>
                 <Button href={plan.href} variant={plan.featured ? "secondary" : "quiet"}>{plan.cta}</Button>
               </article>
