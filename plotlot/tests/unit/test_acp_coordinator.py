@@ -258,9 +258,9 @@ async def test_store_exception_yields_error():
             "plotlot.ingestion.acp_coordinator.embed_texts",
             AsyncMock(return_value=good_embs),
         ),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):
@@ -297,9 +297,9 @@ async def test_happy_path_all_stages_present():
             "plotlot.ingestion.acp_coordinator.embed_texts",
             AsyncMock(return_value=good_embs),
         ),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):
@@ -344,9 +344,9 @@ async def test_happy_path_complete_event_has_chunk_count():
             "plotlot.ingestion.acp_coordinator.embed_texts",
             AsyncMock(return_value=good_embs),
         ),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):
@@ -381,9 +381,9 @@ async def test_happy_path_municipality_name_normalised_in_logs(caplog):
             "plotlot.ingestion.acp_coordinator.embed_texts",
             AsyncMock(return_value=good_embs),
         ),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):
@@ -436,9 +436,9 @@ async def test_events_ordered_resolving_fetching_embedding_storing_complete():
             "plotlot.ingestion.acp_coordinator.embed_texts",
             AsyncMock(return_value=good_embs),
         ),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):
@@ -476,9 +476,9 @@ async def test_last_event_always_has_complete_true_on_success():
             AsyncMock(return_value=mock_adapter),
         ),
         patch("plotlot.ingestion.acp_coordinator.embed_texts", AsyncMock(return_value=good_embs)),
-        patch("plotlot.ingestion.acp_coordinator.init_db", AsyncMock()),
+        patch("plotlot.ingestion.acp_store.init_db", AsyncMock()),
         patch(
-            "plotlot.ingestion.acp_coordinator.get_session",
+            "plotlot.ingestion.acp_store.get_session",
             AsyncMock(return_value=mock_session),
         ),
     ):

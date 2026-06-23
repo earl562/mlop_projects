@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from plotlot.core.types import TextChunk
+
+if TYPE_CHECKING:
+    from plotlot.ingestion.adapters.result import IngestionAdapterResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,12 @@ class SourceAdapter(ABC):
     async def fetch_chunks(self) -> list[TextChunk]:
         """Scrape and chunk the ordinance. Returns chunks ready for embedding."""
         ...
+
+    async def fetch_ingestion_result(self) -> IngestionAdapterResult:
+        from plotlot.ingestion.adapters.quality import build_ingestion_adapter_result
+
+        chunks = tuple(await self.fetch_chunks())
+        return build_ingestion_adapter_result(self, chunks)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.municipality!r}, {self.state!r})"

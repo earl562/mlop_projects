@@ -19,48 +19,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import AsyncGenerator
 
-from pydantic import BaseModel
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from plotlot.core.errors import NoAdapterError
+from plotlot.ingestion.acp_adapter_result import (
+    AdapterResultContext,
+    fetch_adapter_ingestion_result,
+)
+from plotlot.ingestion.acp_evidence import ingestion_evidence_context_from_request
 from plotlot.ingestion.adapters import resolve_adapter
-from plotlot.ingestion.embedder import MODEL_ID as EMBEDDING_MODEL_ID
 from plotlot.ingestion.embedder import embed_texts
+from plotlot.ingestion.acp_models import IngestProgress, IngestRequest
+from plotlot.ingestion.acp_store import IngestionStoreRequest, store_ingestion_result
 from plotlot.pipeline.ingest import validate_chunks
-from plotlot.storage.db import get_session, init_db
-from plotlot.storage.models import OrdinanceChunk
 
 logger = logging.getLogger(__name__)
 
 # Batch size for embed+store operations (matches pipeline/ingest.py)
 _EMBED_BATCH = 50
-_STORE_BATCH = 100
-
-
-# ── ACP message models ────────────────────────────────────────────────────────
-
-
-class IngestRequest(BaseModel):
-    """Message sent TO the coordinator — describes what to ingest and why."""
-
-    municipality: str
-    state: str
-    county: str | None = None
-    trigger: str = "search_miss"  # why ingestion was triggered
-
-
-class IngestProgress(BaseModel):
-    """Message FROM the coordinator — one SSE progress frame."""
-
-    stage: str  # "resolving", "fetching", "embedding", "storing", "complete", "error"
-    message: str
-    chunks_done: int = 0
-    chunks_total: int = 0
-    complete: bool = False
-    error: str | None = None
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -136,7 +112,15 @@ async def run_on_demand_ingestion(
     )
 
     try:
-        chunks = await adapter.fetch_chunks()
+        ingestion_result = await fetch_adapter_ingestion_result(
+            adapter,
+            AdapterResultContext(
+                municipality=municipality,
+                county=county or "",
+                state=state,
+            ),
+        )
+        chunks = list(ingestion_result.chunks)
     except Exception as exc:
         logger.error("acp_fetch_failed municipality=%s error=%s", municipality, exc)
         yield IngestProgress(
@@ -224,69 +208,27 @@ async def run_on_demand_ingestion(
     )
 
     try:
-        await init_db()
-        session = await get_session()
         stored = 0
-        now = datetime.now(timezone.utc)
-
-        try:
-            for batch_start in range(0, len(chunks), _STORE_BATCH):
-                batch_chunks = chunks[batch_start : batch_start + _STORE_BATCH]
-                batch_embs = all_embeddings[batch_start : batch_start + _STORE_BATCH]
-
-                row_dicts = [
-                    {
-                        "municipality": c.metadata.municipality,
-                        "county": c.metadata.county,
-                        "chapter": c.metadata.chapter,
-                        "section": c.metadata.section,
-                        "section_title": c.metadata.section_title,
-                        "zone_codes": c.metadata.zone_codes,
-                        "chunk_text": c.text,
-                        "chunk_index": c.metadata.chunk_index,
-                        "embedding": emb,
-                        "municode_node_id": c.metadata.municode_node_id,
-                        "source_url": None,
-                        "scraped_at": now,
-                        "embedding_model": EMBEDDING_MODEL_ID,
-                        "state": state,
-                    }
-                    for c, emb in zip(batch_chunks, batch_embs)
-                ]
-
-                stmt = pg_insert(OrdinanceChunk).values(row_dicts)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["municipality", "municode_node_id", "chunk_index"],
-                    set_={
-                        "chunk_text": stmt.excluded.chunk_text,
-                        "embedding": stmt.excluded.embedding,
-                        "section": stmt.excluded.section,
-                        "section_title": stmt.excluded.section_title,
-                        "zone_codes": stmt.excluded.zone_codes,
-                        "chapter": stmt.excluded.chapter,
-                        "county": stmt.excluded.county,
-                        "scraped_at": stmt.excluded.scraped_at,
-                        "embedding_model": stmt.excluded.embedding_model,
-                        "state": stmt.excluded.state,
-                    },
-                )
-                await session.execute(stmt)
-                await session.commit()
-                stored += len(row_dicts)
-
-                yield IngestProgress(
-                    stage="storing",
-                    message=f"Saved {stored}/{len(chunks)} chunks",
-                    chunks_done=stored,
-                    chunks_total=len(chunks),
-                )
-                await asyncio.sleep(0)
-
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+        evidence_ids: tuple[str, ...] = ()
+        quality_flags = ingestion_result.quality_flags
+        source_record_count = len(ingestion_result.source_records)
+        async for progress in store_ingestion_result(
+            IngestionStoreRequest(
+                chunks=chunks,
+                embeddings=all_embeddings,
+                ingestion_result=ingestion_result,
+                state=state,
+                evidence_context=ingestion_evidence_context_from_request(request),
+            )
+        ):
+            stored = progress.chunks_done
+            if progress.evidence_ids:
+                evidence_ids = progress.evidence_ids
+            if progress.quality_flags:
+                quality_flags = progress.quality_flags
+            if progress.source_record_count:
+                source_record_count = progress.source_record_count
+            yield progress
 
     except Exception as exc:
         logger.error("acp_store_failed municipality=%s error=%s", municipality, exc)
@@ -312,4 +254,7 @@ async def run_on_demand_ingestion(
         chunks_done=stored,
         chunks_total=stored,
         complete=True,
+        evidence_ids=evidence_ids,
+        quality_flags=quality_flags,
+        source_record_count=source_record_count,
     )

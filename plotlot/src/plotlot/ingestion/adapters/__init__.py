@@ -15,6 +15,11 @@ from plotlot.ingestion.adapters.html import HTMLAdapter
 from plotlot.ingestion.adapters.municode import MunicodeAdapter
 from plotlot.ingestion.adapters.pdf import PDFAdapter, PDFSource
 from plotlot.ingestion.adapters.registry import register_pdf_municipality, resolve_adapter
+from plotlot.ingestion.adapters.result import (
+    INGESTION_ADAPTER_SCHEMA_VERSION,
+    IngestionAdapterResult,
+    IngestionSourceRecord,
+)
 
 __all__ = [
     "SourceAdapter",
@@ -22,6 +27,9 @@ __all__ = [
     "PDFAdapter",
     "PDFSource",
     "HTMLAdapter",
+    "INGESTION_ADAPTER_SCHEMA_VERSION",
+    "IngestionAdapterResult",
+    "IngestionSourceRecord",
     "resolve_adapter",
     "register_pdf_municipality",
 ]
