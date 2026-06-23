@@ -240,6 +240,7 @@ class CaliforniaProvider(PropertyProvider):
             record = await self._statewide_parcel(address, county, lat=lat, lng=lng)
             if record is not None:
                 await self._enrich_marin_zoning(record, county, lat, lng)
+                await self._enrich_marin_lot(record, county)
                 return record
             return await self._universal_fallback(address, county, lat=lat, lng=lng, state=state)
 
@@ -333,6 +334,34 @@ class CaliforniaProvider(PropertyProvider):
             record.zoning_code = code
             if desc:
                 record.zoning_description = desc
+
+    @staticmethod
+    async def _enrich_marin_lot(record: PropertyRecord, county: str) -> None:
+        """Override the coarse statewide lot area with Marin's parcel fabric.
+
+        The statewide layer under-estimates Marin lots (416 Richardson St:
+        765 sqft statewide vs 1,162 sqft in the county fabric), which would build
+        the by-right count on a wrong input. Marin County's own parcel layer is
+        the authoritative cadastral boundary; stamp ``lot_size_source="assessor"``
+        so the count is treated as firm, not a provisional GIS estimate (the SD
+        path likewise labels the assessor parcel's own geometry area "assessor").
+        """
+        if (
+            county.lower().strip() != "marin"
+            or not record.folio
+            or record.lot_size_source == "assessor"
+        ):
+            return
+        try:
+            from plotlot.property.marin_lot import resolve_marin_lot_sqft
+
+            lot = await resolve_marin_lot_sqft(record.folio)
+        except Exception as exc:
+            logger.debug("Marin lot enrichment failed: %s", exc)
+            return
+        if lot and lot > 0:
+            record.lot_size_sqft = lot
+            record.lot_size_source = "assessor"
 
     async def _spatial_parcel(
         self,
