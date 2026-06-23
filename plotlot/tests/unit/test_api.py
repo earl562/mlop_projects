@@ -346,6 +346,7 @@ async def test_chat_reports_actionable_error_when_llm_unavailable(client):
         patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=None),
         patch("plotlot.api.chat.settings") as mock_settings,
     ):
+        mock_settings.deepseek_api_key = ""
         mock_settings.nvidia_api_key = ""
         mock_settings.groq_api_key = ""
         mock_settings.openai_api_key = ""
@@ -371,8 +372,8 @@ async def test_chat_reports_actionable_error_when_llm_unavailable(client):
 
 
 @pytest.mark.asyncio
-async def test_chat_reports_nvidia_specific_error_when_stale_openai_token_exists(client):
-    """Chat should still explain the NVIDIA empty-response path when NVIDIA is mainline."""
+async def test_chat_reports_deepseek_specific_error_when_nvidia_is_not_mainline(client):
+    """Chat should explain the DeepSeek empty-response path when DeepSeek is mainline."""
     from plotlot.api.chat import _sessions
 
     _sessions._conversations.clear()
@@ -382,8 +383,9 @@ async def test_chat_reports_nvidia_specific_error_when_stale_openai_token_exists
         patch("plotlot.api.chat.call_llm", new_callable=AsyncMock, return_value=None),
         patch("plotlot.api.chat.settings") as mock_settings,
     ):
-        mock_settings.nvidia_api_key = "nv-key"
+        mock_settings.deepseek_api_key = "ds-key"
         mock_settings.groq_api_key = ""
+        mock_settings.nvidia_api_key = ""
         mock_settings.openai_api_key = ""
         mock_settings.openai_access_token = "stale-openai-token"
         mock_settings.openrouter_api_key = ""
@@ -399,12 +401,12 @@ async def test_chat_reports_nvidia_specific_error_when_stale_openai_token_exists
         )
 
     assert resp.status_code == 200
-    assert "configured NVIDIA NIM model returned no usable response" in resp.text
+    assert "configured DeepSeek model returned no usable response" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
-    """The debug endpoint should probe NVIDIA when both NVIDIA and stale OpenAI creds exist."""
+async def test_debug_llm_prefers_deepseek_when_present(client):
+    """Debug should probe DeepSeek first when DeepSeek creds are present."""
     mock_response = MagicMock()
     mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
 
@@ -415,6 +417,9 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
         patch("openai.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
         patch("plotlot.config.settings") as mock_settings,
     ):
+        mock_settings.deepseek_api_key = "ds-key"
+        mock_settings.deepseek_base_url = "https://api.deepseek.com"
+        mock_settings.deepseek_model = "deepseek-v4-flash"
         mock_settings.nvidia_api_key = "nv-key"
         mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
         mock_settings.nvidia_model = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
@@ -432,15 +437,16 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["providers"]["nvidia"]["status"] == "ok"
-    assert data["providers"]["nvidia"]["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert data["providers"]["deepseek"]["status"] == "ok"
+    assert data["providers"]["deepseek"]["model"] == "deepseek-v4-flash"
     assert "openai" not in data["providers"]
     _, client_kwargs = async_openai_ctor.call_args
-    assert client_kwargs["api_key"] == "nv-key"
-    assert client_kwargs["base_url"] == "https://integrate.api.nvidia.com/v1"
+    assert client_kwargs["api_key"] == "ds-key"
+    assert client_kwargs["base_url"] == "https://api.deepseek.com"
     _, create_kwargs = mock_client.chat.completions.create.await_args
-    assert create_kwargs["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    assert create_kwargs["messages"][0]["content"] == "/no_think"
+    assert create_kwargs["model"] == "deepseek-v4-flash"
+    assert create_kwargs["messages"] == [{"role": "user", "content": "Say 'ok' in one word."}]
+    assert create_kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
     assert "reasoning_effort" not in create_kwargs
 
 

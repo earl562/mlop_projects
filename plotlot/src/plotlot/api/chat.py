@@ -300,10 +300,12 @@ AGENT_SYSTEM_PROMPT = get_active_prompt("chat_agent")
 
 
 def _llm_unavailable_detail() -> str:
+    using_deepseek = bool(settings.deepseek_api_key)
     using_nvidia = bool(settings.nvidia_api_key)
     if not (
         settings.openai_access_token
         or settings.openai_api_key
+        or settings.deepseek_api_key
         or settings.nvidia_api_key
         or settings.groq_api_key
         or (
@@ -313,7 +315,13 @@ def _llm_unavailable_detail() -> str:
     ):
         return (
             "Chat is temporarily unavailable because no LLM credentials are configured. "
-            "Set NVIDIA_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+            "Set DEEPSEEK_API_KEY, NVIDIA_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, "
+            "or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+        )
+    if using_deepseek:
+        return (
+            "Chat is temporarily unavailable because the configured DeepSeek model "
+            "returned no usable response. Verify the model slug or credentials."
         )
     if using_nvidia:
         return (
