@@ -27,6 +27,9 @@ test.describe("Canonical db-backed lookup lane", () => {
     await waitForReport(page);
 
     await expect(page.getByTestId("report-root")).toBeVisible();
+    await expect(page.getByTestId("pipeline-stepper")).toHaveCount(0);
+    await expect(page.getByTestId("report-root")).toContainText("7940 Plantation Blvd");
+    await expect(page.getByText("No lookup snapshot")).toHaveCount(0);
     await expect(page.getByTestId("report-zoning-tab")).toBeVisible();
     await expect(page.getByTestId("report-section-zoning")).toBeVisible();
     await expect(page.getByTestId("report-property-tab")).toBeVisible();

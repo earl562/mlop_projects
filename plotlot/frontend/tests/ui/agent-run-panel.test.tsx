@@ -27,9 +27,10 @@ describe("AgentRunPanel", () => {
 
   it("starts an agent run, evaluates it, and renders the release gate summary", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/v1/agent-runs")) {
+        expect(init?.headers).toMatchObject({ "Content-Type": "application/json" });
         return jsonResponse({
           run_id: "run_frontend_agent",
           lookup_snapshot_id: "lookup_frontend",
@@ -41,6 +42,11 @@ describe("AgentRunPanel", () => {
         });
       }
       if (url.endsWith("/api/v1/agent-runs/run_frontend_agent/evals?workspace_id=frontend_workspace")) {
+        expect(init).toMatchObject({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
         return jsonResponse(evalPayload());
       }
       if (
@@ -136,9 +142,10 @@ describe("AgentRunPanel", () => {
         unsupported_claim_rate: 0.25,
       },
     };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/v1/agent-runs")) {
+        expect(init?.headers).toMatchObject({ "Content-Type": "application/json" });
         return jsonResponse({
           run_id: "run_frontend_agent",
           lookup_snapshot_id: "lookup_frontend",
@@ -150,6 +157,11 @@ describe("AgentRunPanel", () => {
         });
       }
       if (url.endsWith("/api/v1/agent-runs/run_frontend_agent/evals?workspace_id=frontend_workspace")) {
+        expect(init).toMatchObject({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
         return jsonResponse(blockedEval);
       }
       if (

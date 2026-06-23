@@ -1,3 +1,5 @@
+import type { LookupSnapshotData } from "./agentRuns";
+
 /**
  * API client for PlotLot backend.
  *
@@ -247,6 +249,7 @@ export interface ZoningReportData {
   sources: string[];
   confidence: string;
   source_refs?: SourceRefData[];
+  lookup_snapshot?: LookupSnapshotData | null;
   confidence_warning?: string;
   suggested_next_steps?: string[];
 }
@@ -1009,7 +1012,8 @@ export async function getEmailConnectorStatus(sessionId: string): Promise<EmailS
 export async function testEmailConnector(sessionId: string): Promise<EmailSendResult> {
   const response = await fetch(`${API_BASE}/api/v1/connectors/email/test`, {
     method: "POST",
-    headers: { "X-Session-ID": sessionId },
+    headers: connectorHeaders(sessionId),
+    body: "{}",
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: "Test failed" }));

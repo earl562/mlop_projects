@@ -6,6 +6,7 @@ import type {
   LookupSnapshotCalculationData,
   LookupSnapshotSourceMetadataData,
 } from "@/lib/agentRuns";
+import SafeExternalLink from "./SafeExternalLink";
 
 export default function AgentRunSnapshotEvidenceDetails({
   calculations,
@@ -63,15 +64,13 @@ function SourceMetadataList({
       <div className="mt-2 grid gap-2">
         {sources.map((source) => (
           <div className="rounded-lg bg-[var(--bg-surface)] px-3 py-2" key={source.evidence_id}>
-            <a
+            <SafeExternalLink
               className="inline-flex max-w-full items-center gap-1 text-xs font-semibold text-[var(--text-primary)] underline-offset-2 hover:text-[var(--brand)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
               href={source.source_url}
-              rel="noreferrer"
-              target="_blank"
             >
               <span className="truncate">{source.source_title || source.evidence_id}</span>
               <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-            </a>
+            </SafeExternalLink>
             <div className="mt-1 flex flex-wrap gap-2 font-mono text-[10px] text-[var(--text-muted)]">
               <span>{source.evidence_id}</span>
               {source.effective_date && <span>effective {source.effective_date}</span>}

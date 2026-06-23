@@ -98,7 +98,11 @@ export async function evaluateAgentRun(
 ): Promise<AgentRunEvalRecord> {
   const response = await fetch(
     `${API_BASE}/api/v1/agent-runs/${encodeURIComponent(runId)}/evals?workspace_id=${encodeURIComponent(workspaceId)}`,
-    { method: "POST" },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    },
   );
   const payload = await responseJson(response, "Agent run eval failed");
   return parseEvalRecord(payload);

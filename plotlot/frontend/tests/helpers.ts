@@ -86,7 +86,7 @@ export async function requireHealthyBackend(
 }
 
 export async function gotoHome(page: Page) {
-  await page.goto("/workspace", { waitUntil: "domcontentloaded" });
+  await page.goto("/workspace?mode=lookup", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("send-button")).toBeVisible();
   await expect(page.getByTestId("lookup-input")).toBeVisible();
   await page.waitForTimeout(300);
@@ -99,15 +99,15 @@ export async function gotoLanding(page: Page) {
 
 export async function switchToAgent(page: Page) {
   await page.getByRole("button", { name: "Agent" }).click();
-  await expect(page.getByTestId("agent-input")).toBeVisible();
+  await expect(page.getByTestId("agent-input")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByTestId("send-button")).toBeVisible();
   await expect(page).toHaveURL(/\/workspace(?:\?mode=(?:agent|lookup))?$/);
 }
 
 export async function switchToLookup(page: Page) {
   await page.getByRole("button", { name: "Lookup" }).click();
+  await expect(page.getByTestId("lookup-input")).toBeVisible({ timeout: 5_000 });
   await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
-  await expect(page.getByTestId("lookup-input")).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
 }
 
@@ -118,17 +118,43 @@ export async function runLookupFlow(
   const input = page.getByTestId("lookup-input");
   const sendButton = page.getByTestId("send-button");
 
-  // In some environments the page can hydrate after the first fill, wiping the input value.
-  // Retry until the controlled value "sticks" before attempting to submit.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await input.fill(address);
-    if ((await input.inputValue().catch(() => "")) === address) break;
+    await input.click();
+    await input.fill("");
+    await input.pressSequentially(address, { delay: 1 });
+
+    const currentValue = await input.inputValue().catch(() => "");
+    const readyToSubmit = await sendButton.isEnabled().catch(() => false);
+    if (currentValue === address && readyToSubmit) break;
+
     await page.waitForTimeout(150);
   }
 
   await expect(input).toHaveValue(address, { timeout: 10_000 });
   await expect(sendButton).toBeEnabled({ timeout: 10_000 });
   await sendButton.click();
+}
+
+export async function typeLookupInput(
+  page: Page,
+  address: string,
+) {
+  const input = page.getByTestId("lookup-input");
+  await input.click();
+  await input.fill("");
+  await input.pressSequentially(address, { delay: 1 });
+  await expect(input).toHaveValue(address, { timeout: 10_000 });
+}
+
+export async function typeAgentInput(
+  page: Page,
+  question: string,
+) {
+  const input = page.getByTestId("agent-input");
+  await input.click();
+  await input.fill("");
+  await input.pressSequentially(question, { delay: 1 });
+  await expect(input).toHaveValue(question, { timeout: 10_000 });
 }
 
 export async function waitForReport(page: Page) {

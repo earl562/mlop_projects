@@ -14,6 +14,7 @@ import type { AppMode } from "@/components/ModeToggle";
 import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import InputBar from "@/components/InputBar";
+import LookupReleaseGatePanel from "@/components/LookupReleaseGatePanel";
 import ThinkingIndicator from "@/components/ThinkingIndicator";
 import { useToast } from "@/components/Toast";
 import {
@@ -147,12 +148,22 @@ export default function Home() {
   const messagesRef = useRef<DisplayMessage[]>([]);
   const currentReportRef = useRef<ZoningReportData | null>(null);
   const modeRef = useRef<AppMode>("lookup");
+  const syncingModeFromUiRef = useRef(false);
   const hasProcessedRef = useRef(false);
+
+  const setModeWithSync = useCallback((nextMode: AppMode) => {
+    if (nextMode === modeRef.current) return;
+    syncingModeFromUiRef.current = true;
+    modeRef.current = nextMode;
+    setMode(nextMode);
+    setContextualSuggestions([]);
+    setInputError(null);
+  }, []);
 
   useEffect(() => {
     if (!autoScrollEnabled || messages.length === 0) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [autoScrollEnabled, messages.length]);
+  }, [autoScrollEnabled, messages]);
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -211,6 +222,13 @@ export default function Home() {
   useEffect(() => { localSessionIdRef.current = localSessionId; }, [localSessionId]);
 
   useEffect(() => {
+    if (syncingModeFromUiRef.current) {
+      if (routeMode === modeRef.current) {
+        syncingModeFromUiRef.current = false;
+      }
+      return;
+    }
+
     if (routeMode === modeRef.current) return;
     setMode(routeMode);
     setContextualSuggestions([]);
@@ -221,6 +239,7 @@ export default function Home() {
     if (pathname !== "/workspace") return;
     const params = new URLSearchParams(searchParams.toString());
     if (params.get("mode") === mode) return;
+    syncingModeFromUiRef.current = true;
     params.set("mode", mode);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [mode, pathname, router, searchParams]);
@@ -230,15 +249,13 @@ export default function Home() {
       const nextMode = (event as CustomEvent<{ mode?: AppMode }>).detail?.mode;
       if (!nextMode) return;
       if (nextMode !== modeRef.current) {
-        setMode(nextMode);
-        setContextualSuggestions([]);
-        setInputError(null);
+        setModeWithSync(nextMode);
       }
       setTimeout(() => inputRef.current?.focus(), 50);
     };
     window.addEventListener("plotlot:mode-change", handler);
     return () => window.removeEventListener("plotlot:mode-change", handler);
-  }, []);
+  }, [setModeWithSync]);
 
   // Persist backend sessionId
   useEffect(() => {
@@ -402,7 +419,7 @@ export default function Home() {
           (report) => {
             finalReport = report;
             setCurrentReport(report);
-            updateMessage(progressId, { report, pipelineSteps: undefined });
+            updateMessage(progressId, { report, pipelineSteps: [] });
           },
           (error: AnalysisError) => {
             // Error recovery UX — provide actionable buttons based on error type
@@ -469,26 +486,30 @@ export default function Home() {
 
   // Send a chat message
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim() || isProcessing) return;
+    async (text?: string) => {
+      const typedText = (text ?? inputRef.current?.value ?? input).trim();
+      if (!typedText || isProcessing) return;
+      const activeMode = modeRef.current;
 
-      const address = DIRECT_TOOL_PROMPT_PATTERN.test(text) ? null : extractAddress(text);
+      const address = DIRECT_TOOL_PROMPT_PATTERN.test(typedText)
+        ? null
+        : extractAddress(typedText);
 
       // Lookup mode: validate address BEFORE adding to chat
-      if (mode === "lookup" && !address) {
+      if (activeMode === "lookup" && !address) {
         setInputError("Please enter a street address to run a lookup analysis");
         return;
       }
 
       setIsProcessing(true);
       setInput("");
+      if (inputRef.current) inputRef.current.value = "";
       setInputError(null);
       setAutoScrollEnabled(true);
 
-      addMessage({ role: "user", content: text.trim() });
+      addMessage({ role: "user", content: typedText });
 
-      // Lookup mode: address → analysis pipeline
-      if (mode === "lookup" && address) {
+      if (activeMode === "lookup" && address) {
         setCurrentReport(null);
         await runAnalysis(address);
         setIsProcessing(false);
@@ -521,12 +542,12 @@ export default function Home() {
           .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
           .slice(-9)
           .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user" as const, content: text.trim() },
+        { role: "user" as const, content: typedText },
       ];
 
       try {
         await streamChat(
-          text.trim(),
+          typedText,
           history,
           currentReport,
           (token) => {
@@ -613,7 +634,7 @@ export default function Home() {
 
       setIsProcessing(false);
     },
-    [isProcessing, currentReport, sessionId, mode, addMessage, updateMessage, runAnalysis],
+    [input, isProcessing, currentReport, sessionId, addMessage, updateMessage, runAnalysis],
   );
 
   const beginEditUserMessage = useCallback((messageId: string, content: string) => {
@@ -681,7 +702,7 @@ export default function Home() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    sendMessage(input);
+    sendMessage();
   };
 
   const hasReport = messages.some((m) => m.report);
@@ -749,7 +770,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Input bar — z-30 so autocomplete dropdown (z-50 inside) paints above chips below */}
             <motion.form
               onSubmit={handleSubmit}
               {...fadeUp}
@@ -757,8 +777,7 @@ export default function Home() {
               className="relative z-30 mb-8 w-full max-w-4xl self-center"
             >
               <div
-                className="glass-panel flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-4 py-3 transition-all focus-within:border-amber-400/60 focus-within:ring-2 focus-within:ring-amber-400/15 sm:px-5 sm:py-4"
-                style={{ boxShadow: "var(--shadow-elevated)" }}
+                className="glass-panel flex items-center gap-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] px-3 py-3 shadow-[var(--shadow-elevated)] transition-all focus-within:border-[var(--brand)]/60 focus-within:ring-2 focus-within:ring-[var(--brand)]/15 sm:gap-2 sm:px-5 sm:py-4"
               >
                 {mode === "lookup" ? (
                   <AddressAutocomplete
@@ -766,7 +785,7 @@ export default function Home() {
                     value={input}
                     onChange={(v) => { setInput(v); if (inputError) setInputError(null); }}
                     onSelect={(address) => sendMessage(address)}
-                    placeholder="Enter a property address..."
+                    placeholder="Property address..."
                     disabled={isProcessing}
                   />
                 ) : (
@@ -788,14 +807,14 @@ export default function Home() {
                     }}
                     placeholder="Ask about zoning, density, or property data..."
                     disabled={isProcessing}
-                    className="min-w-0 flex-1 resize-none bg-transparent text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none sm:text-[17px]"
+                    className="min-w-0 flex-1 resize-none bg-transparent text-[13px] leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none sm:text-[17px]"
                     data-testid="agent-input"
                   />
                 )}
-                <ModeToggle mode={mode} onChange={setMode} />
+                <ModeToggle mode={mode} onChange={setModeWithSync} />
                 <button
                   type="submit"
-                  disabled={!input.trim() || isProcessing}
+                  disabled={!(inputRef.current?.value ?? input).trim() || isProcessing}
                   aria-label="Send message"
                   data-testid="send-button"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] transition-all hover:opacity-80 disabled:opacity-20 sm:h-9 sm:w-9"
@@ -813,9 +832,17 @@ export default function Home() {
                 </button>
               </div>
               {inputError && (
-                <p className="mt-2 px-1 text-sm text-red-500">{inputError}</p>
+                <p className="mt-2 px-1 text-sm text-[var(--danger)]">{inputError}</p>
               )}
             </motion.form>
+
+            <motion.div
+              {...fadeUp}
+              transition={{ ...springGentle, delay: 0.35 }}
+              className="w-full max-w-4xl self-center"
+            >
+              <LookupReleaseGatePanel />
+            </motion.div>
 
             {/* Footer */}
             <motion.p
@@ -855,7 +882,7 @@ export default function Home() {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto pb-52"
+        className="flex-1 overflow-y-auto pb-6"
         data-testid="conversation-scroll"
       >
         <div className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
@@ -863,20 +890,19 @@ export default function Home() {
             <div className="space-y-4 sm:space-y-6" role="log" aria-live="polite" aria-label="Analysis conversation">
               {messages.map((msg, msgIndex) => (
                 <div key={msg.id} className="animate-fade-up">
-              {/* Pipeline progress — inline stepper */}
-              {msg.pipelineSteps && msg.pipelineSteps.length > 0 && !msg.report && (
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
-                    P
-                  </div>
-                  <AnalysisStream
-                    steps={msg.pipelineSteps}
-                    error={null}
-                    onWrongProperty={handleNewAnalysis}
-                    thinkingEvents={msg.thinkingEvents}
-                  />
-                </div>
-              )}
+                  {msg.pipelineSteps && msg.pipelineSteps.length > 0 && (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-strong)] text-xs font-black text-white">
+                        P
+                      </div>
+                      <AnalysisStream
+                        steps={msg.pipelineSteps}
+                        error={null}
+                        onWrongProperty={handleNewAnalysis}
+                        thinkingEvents={msg.thinkingEvents}
+                      />
+                    </div>
+                  )}
 
               {/* Embedded report */}
               {msg.report && (
@@ -885,17 +911,17 @@ export default function Home() {
                     <TabbedReport report={msg.report} dealType="land_deal" />
                   </ErrorBoundary>
                   {msg.report.confidence_warning && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                    <div className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-subtle)] px-4 py-3">
                       <div className="flex items-start gap-3">
-                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warning)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                           <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                         </svg>
                         <div>
-                          <p className="text-sm font-medium text-amber-800 dark:text-amber-400">{msg.report.confidence_warning}</p>
+                          <p className="text-sm font-medium text-[var(--warning)]">{msg.report.confidence_warning}</p>
                           {msg.report.suggested_next_steps && msg.report.suggested_next_steps.length > 0 && (
                             <ul className="mt-1.5 space-y-1">
                               {msg.report.suggested_next_steps.map((step) => (
-                                <li key={step} className="text-xs text-amber-700 dark:text-amber-500">&#8226; {step}</li>
+                                <li key={step} className="text-xs text-[var(--warning)]">&#8226; {step}</li>
                               ))}
                             </ul>
                           )}
@@ -907,7 +933,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => setDocCanvasOpen(true)}
-                      className="min-h-[44px] rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
+                      className="min-h-[44px] rounded-lg border border-[var(--warning)]/40 bg-[var(--warning-subtle)] px-4 py-2 text-sm font-semibold text-[var(--warning)] transition-colors hover:bg-[var(--warning-subtle)] sm:min-h-0 sm:py-1.5"
                     >
                       Generate Documents
                     </button>
@@ -921,9 +947,9 @@ export default function Home() {
                       disabled={msg.saveStatus === "saving" || msg.saveStatus === "saved"}
                       className={`min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold transition-colors sm:min-h-0 sm:py-1.5 ${
                         msg.saveStatus === "saved"
-                          ? "bg-lime-100 text-lime-700"
+                          ? "bg-[var(--success-subtle)] text-[var(--success)]"
                           : msg.saveStatus === "error"
-                            ? "bg-red-100 text-red-600"
+                            ? "bg-[var(--danger-subtle)] text-[var(--danger)]"
                             : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-raised)]"
                       }`}
                     >
@@ -951,7 +977,7 @@ export default function Home() {
                 return (
                   <div className="mb-3 flex justify-start" data-testid="inline-tool-activity">
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-strong)] text-xs font-black text-white">
                         P
                       </div>
                       <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--bg-surface)] px-3 py-2 shadow-[var(--shadow-card)]">
@@ -965,14 +991,14 @@ export default function Home() {
                             data-testid={`inline-tool-${t.tool}`}
                             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                               t.status === "running"
-                                ? "border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                                ? "border border-[var(--warning)]/40 bg-[var(--warning-subtle)] text-[var(--warning)]"
                                 : t.status === "complete"
                                   ? "border border-[var(--border)] bg-[var(--bg-surface-raised)] text-[var(--text-muted)]"
-                                  : "border border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                                  : "border border-[var(--danger)]/40 bg-[var(--danger-subtle)] text-[var(--danger)]"
                             }`}
                           >
                             {t.status === "running" ? (
-                              <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse-dot" />
+                              <div className="h-1.5 w-1.5 rounded-full bg-[var(--warning)] animate-pulse-dot" />
                             ) : t.status === "complete" ? (
                               <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -1062,9 +1088,9 @@ export default function Home() {
                       )}
                     </div>
                   ) : (
-                    /* Assistant message — left-aligned with avatar */
+                    /* Assistant message - left-aligned with avatar */
                     <div className="group flex items-start gap-2 max-w-[95%] sm:gap-3 sm:max-w-[85%]">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-800 text-xs font-black text-white">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-strong)] text-xs font-black text-white">
                         P
                       </div>
                       <div
@@ -1088,7 +1114,7 @@ export default function Home() {
                             h1: ({ children }) => <h1 className="mb-2 text-lg font-bold text-[var(--text-primary)]">{children}</h1>,
                             h2: ({ children }) => <h2 className="mb-2 text-base font-bold text-[var(--text-primary)]">{children}</h2>,
                             h3: ({ children }) => <h3 className="mb-1 text-sm font-bold text-[var(--text-primary)]">{children}</h3>,
-                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-amber-700 underline hover:text-amber-600">{children}</a>,
+                            a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] underline hover:text-[var(--brand-hover)]">{children}</a>,
                             pre: ({ children }) => {
                               const child = Array.isArray(children) ? children[0] : children;
                               const codeChildren =
@@ -1132,11 +1158,11 @@ export default function Home() {
                         </ReactMarkdown>
                         {/* Streaming cursor — pulsing dot */}
                         {msg.isStreaming && msg.content && (
-                          <span className="ml-1 inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
+                          <span className="ml-1 inline-block h-2 w-2 rounded-full bg-[var(--warning)] animate-pulse-dot" />
                         )}
                         {msg.isStreaming && !msg.content && (
                           <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
-                            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-dot" />
+                            <span className="h-2 w-2 rounded-full bg-[var(--warning)] animate-pulse-dot" />
                             <span className="text-xs">Thinking...</span>
                           </span>
                         )}
@@ -1183,7 +1209,7 @@ export default function Home() {
                                 }}
                                 disabled={isProcessing}
                                 data-testid="report-retry-button"
-                                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-40"
+                                className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--warning)] transition-colors hover:bg-[var(--warning-subtle)] disabled:opacity-40"
                               >
                                 Retry
                               </button>
@@ -1217,20 +1243,20 @@ export default function Home() {
       </div>
 
       {/* Bottom area — gradient fade + suggestions + floating input */}
-      <div className="absolute bottom-0 left-0 right-0">
+      <div className="relative shrink-0">
         {!autoScrollEnabled && (
-          <div className="pointer-events-none absolute -top-12 left-0 right-0 flex justify-center">
+          <div className="pointer-events-none absolute -top-14 right-4 flex justify-end sm:right-8">
             <button
               type="button"
               onClick={scrollToBottom}
-              className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-elevated)] hover:bg-[var(--bg-surface-raised)]"
+              className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-[var(--shadow-elevated)] transition-colors hover:bg-[var(--bg-surface-raised)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
               data-testid="scroll-to-bottom"
               aria-label="Scroll to latest"
+              title="Jump to latest"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M10 14a.75.75 0 01-.53-.22l-4-4a.75.75 0 111.06-1.06L10 12.19l3.47-3.47a.75.75 0 111.06 1.06l-4 4A.75.75 0 0110 14z" clipRule="evenodd" />
               </svg>
-              Jump to latest
             </button>
           </div>
         )}
@@ -1245,8 +1271,11 @@ export default function Home() {
                 <button
                   type="button"
                   key={s}
-                  onClick={() => { setMode("agent"); sendMessage(s); }}
-                  className="min-h-[44px] rounded-full border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm text-amber-700 transition-all hover:bg-amber-100 hover:-translate-y-0.5 active:scale-[0.98] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
+                  onClick={() => {
+                    setModeWithSync("agent");
+                    void sendMessage(s);
+                  }}
+                  className="min-h-[44px] rounded-full border border-[var(--warning)]/40 bg-[var(--warning-subtle)] px-4 py-2 text-sm text-[var(--warning)] transition-all hover:bg-[var(--warning-subtle)] hover:-translate-y-0.5 active:scale-[0.98] sm:min-h-0 sm:py-1.5"
                 >
                   {s}
                 </button>
@@ -1281,9 +1310,9 @@ export default function Home() {
               onSubmit={handleSubmit}
               onAddressSelect={(address) => sendMessage(address)}
               mode={mode}
-              onModeChange={setMode}
+              onModeChange={setModeWithSync}
               placeholder={mode === "lookup"
-                ? "Enter a property address..."
+                ? "Property address..."
                 : hasReport
                   ? "Ask about this property's zoning..."
                   : "Ask about zoning, density, or property data..."
@@ -1292,7 +1321,7 @@ export default function Home() {
               isProcessing={isProcessing}
             />
             {inputError && (
-              <p className="mt-2 px-4 text-sm text-red-500">{inputError}</p>
+              <p className="mt-2 px-4 text-sm text-[var(--danger)]">{inputError}</p>
             )}
           </div>
 

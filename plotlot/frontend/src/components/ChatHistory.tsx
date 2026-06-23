@@ -145,8 +145,8 @@ export default function ChatHistory({
                     onClick={() => onSelect(session.id)}
                     className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
                       isActive
-                        ? "bg-amber-50 dark:bg-amber-900/20"
-                        : "hover:bg-stone-100 dark:hover:bg-stone-800"
+                        ? "bg-[var(--warning-subtle)]"
+                        : "hover:bg-[var(--bg-inset)]"
                     }`}
                   >
                     <span

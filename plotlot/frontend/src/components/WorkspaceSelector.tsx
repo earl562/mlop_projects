@@ -100,11 +100,7 @@ export default function WorkspaceSelector({
       {/* Dropdown */}
       {open && (
         <div
-          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border shadow-[var(--shadow-elevated)]"
-          style={{
-            background: "var(--bg-surface)",
-            borderColor: "var(--border-soft)",
-          }}
+          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--bg-surface)] shadow-[var(--shadow-elevated)]"
         >
           {/* Workspace list */}
           {workspaces.map((ws) => (
@@ -148,7 +144,7 @@ export default function WorkspaceSelector({
           ))}
 
           {/* Divider */}
-          <div className="my-1 border-t" style={{ borderColor: "var(--border-soft)" }} />
+          <div className="my-1 border-t border-[var(--border-soft)]" />
 
           {/* New workspace */}
           {creatingNew ? (

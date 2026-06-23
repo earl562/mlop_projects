@@ -55,6 +55,7 @@ test.describe("Agent run panel no-db flow", () => {
     });
 
     await page.route("**/api/v1/agent-runs", async (route) => {
+      expect(route.request().headers()["content-type"]).toContain("application/json");
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -71,6 +72,8 @@ test.describe("Agent run panel no-db flow", () => {
     });
 
     await page.route("**/api/v1/agent-runs/run_e2e_agent/evals?workspace_id=frontend_workspace", async (route) => {
+      expect(route.request().headers()["content-type"]).toContain("application/json");
+      expect(route.request().postDataJSON()).toEqual({});
       await route.fulfill({
         status: 200,
         contentType: "application/json",

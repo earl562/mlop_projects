@@ -7,6 +7,7 @@ import AgentRunTraceReportSections from "./AgentRunTraceReportSections";
 import AgentRunSourceRetrievals from "./AgentRunSourceRetrievals";
 import AgentRunTraceAssumptions from "./AgentRunTraceAssumptions";
 import AgentRunTraceOpportunities from "./AgentRunTraceOpportunities";
+import SafeExternalLink from "./SafeExternalLink";
 
 export default function AgentRunTraceSummary({
   trace,
@@ -102,15 +103,13 @@ function EvidencePacketRow({ packet }: { readonly packet: AgentRunTraceEvidenceP
     <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-surface)] px-3 py-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <a
+          <SafeExternalLink
             href={packet.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex max-w-full items-center gap-1 text-xs font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline"
           >
             <span className="truncate">{packet.source_title}</span>
             <ExternalLink className="h-3 w-3 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-          </a>
+          </SafeExternalLink>
           <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-[var(--text-secondary)]">
             <span className="font-mono">{packet.evidence_id}</span>
             <span>{packet.source_authority}</span>
