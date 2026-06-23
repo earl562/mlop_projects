@@ -1734,6 +1734,24 @@ def _build_active_analysis_context(payload: dict) -> str:
                 f"→ {p.get('potential_units')} units [{p.get('eligibility')}]"
             )
 
+    etr = payload.get("entitlement_timeline_risk") or {}
+    if etr:
+        lines.append(
+            f"Timeline risk: ~{etr.get('est_months_min')}–{etr.get('est_months_max')}mo "
+            f"({etr.get('risk_level')}), confidence={etr.get('confidence')}"
+        )
+        for d in etr.get("key_drivers") or []:
+            lines.append(f"  Timeline driver: {d}")
+        if etr.get("active_permits_exist"):
+            lines.append("  Active permits on parcel — some approvals may already be in process.")
+
+    opr = payload.get("opposition_risk") or {}
+    if opr:
+        lines.append(
+            f"Opposition risk: {opr.get('risk_level')} "
+            f"(confidence={opr.get('confidence')} — qualitative, not a prediction)"
+        )
+
     warnings = payload.get("warnings") or []
     for w in warnings[:4]:
         lines.append(f"Warning: {w}")
@@ -2583,6 +2601,26 @@ def _format_grounded_analysis(report) -> dict:
                 "this before any 'what can I pay for the land' framing; the residual "
                 "assumes the site is available to acquire and re-entitle."
             ),
+        }
+
+    etr = report.entitlement_timeline_risk
+    if etr is not None:
+        out["entitlement_timeline_risk"] = {
+            "est_months_min": round(etr.est_months_min, 1),
+            "est_months_max": round(etr.est_months_max, 1),
+            "risk_level": etr.risk_level,
+            "confidence": etr.confidence,
+            "key_drivers": list(etr.key_drivers),
+            "active_permits_exist": etr.active_permits_exist,
+        }
+
+    opr = report.opposition_risk
+    if opr is not None:
+        out["opposition_risk"] = {
+            "risk_level": opr.risk_level,
+            "flags": list(opr.flags),
+            "assessment": opr.assessment[:500] if opr.assessment else "",
+            "confidence": opr.confidence,
         }
 
     uplift = report.density_uplift

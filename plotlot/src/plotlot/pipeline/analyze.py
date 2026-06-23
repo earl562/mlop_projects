@@ -204,4 +204,48 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Deep development signals failed for %s: %s", address[:60], exc)
 
+    # Entitlement timeline risk — real-time CEQAnet search + permit check (CA).
+    if report.entitlement:
+        try:
+            from plotlot.pipeline.entitlement_timeline import assess_timeline_risk
+
+            report.entitlement_timeline_risk = await asyncio.wait_for(
+                assess_timeline_risk(
+                    address=report.formatted_address or report.address,
+                    municipality=report.municipality,
+                    county=report.county,
+                    state=report.state,
+                    entitlement_path=report.entitlement.path,
+                    entitlement_complexity=report.entitlement.complexity,
+                    apn=apn,
+                    lat=report.lat,
+                    lng=report.lng,
+                ),
+                timeout=20,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Deep timeline risk failed for %s: %s", address[:60], exc)
+
+    # Neighbor / political opposition risk — qualitative LLM-based assessment.
+    try:
+        from plotlot.pipeline.opposition_risk import assess_opposition_risk
+
+        density = report.density_analysis
+        max_units = density.max_units if density else None
+        report.opposition_risk = await asyncio.wait_for(
+            assess_opposition_risk(
+                address=report.formatted_address or report.address,
+                municipality=report.municipality,
+                county=report.county,
+                state=report.state,
+                max_units=max_units,
+                zoning_district=report.zoning_district,
+                lat=report.lat,
+                lng=report.lng,
+            ),
+            timeout=25,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Deep opposition risk failed for %s: %s", address[:60], exc)
+
     return report

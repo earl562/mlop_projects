@@ -553,6 +553,12 @@ class ZoningReport:
     # pitched as raw land. Populated by pipeline/permits.fetch_development_signals.
     development_signals: dict | None = None
 
+    # Entitlement timeline risk — real-time enhancement (CEQAnet, permits, etc.)
+    entitlement_timeline_risk: "EntitlementTimelineRisk | None" = None
+
+    # Neighbor/political opposition risk — qualitative heuristic assessment
+    opposition_risk: "OppositionRiskAssessment | None" = None
+
 
 # ---------------------------------------------------------------------------
 # Site risk types
@@ -900,6 +906,82 @@ class UpzoningAnalysis:
     exit_options: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Entitlement timeline risk — real-time enhancement of the base assessment
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CEQADocument:
+    """A CEQA (California Environmental Quality Act) document for a project.
+
+    Retrieved live from the CEQAnet API when the parcel is in California.
+    ``doc_type`` determines the likely review timeline: CE (Categorical
+    Exemption) = 0–3mo, ND/MND = 6–12mo, EIR = 12–24mo+. ``on_parcel`` is
+    True when the document's address/project matches the subject parcel.
+    """
+
+    doc_type: str  # "EIR" | "MND" | "ND" | "CE" | "Other"
+    status: str  # e.g. "in_progress", "completed", "withdrawn"
+    filed_date: str = ""
+    description: str = ""
+    lead_agency: str = ""
+    on_parcel: bool = False
+    source_url: str = ""
+
+
+@dataclass
+class EntitlementTimelineRisk:
+    """Expanded timeline risk assessment factoring in real-time checks.
+
+    Augments the base ``EntitlementAssessment.est_timeline_months`` with a
+    risk range, confidence level, and key drivers identified from live data.
+    """
+
+    est_months_min: float = 0.0  # optimistic best-case
+    est_months_max: float = 0.0  # pessimistic worst-case (incl. hearings, appeals)
+    risk_level: str = "unknown"  # "low" | "moderate" | "high" | "unknown"
+    confidence: str = "low"  # "high" | "medium" | "low"
+    key_drivers: list[str] = field(default_factory=list)
+    ceqa_documents: list[CEQADocument] = field(default_factory=list)
+    active_permits_exist: bool = False
+    data_sources: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Neighbor / political opposition risk assessment (qualitative)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AdjacentUse:
+    """Land use and zoning of an adjacent parcel."""
+
+    zoning: str = ""
+    land_use: str = ""
+    distance_ft: float = 0.0
+
+
+@dataclass
+class OppositionRiskAssessment:
+    """Qualitative assessment of neighbor/political opposition risk.
+
+    Based on parcel context: density delta, adjacent uses, zoning history,
+    and (when available) web search for recent planning controversies in the
+    municipality. This is a HEURISTIC assessment, not a data-driven model —
+    always labeled as qualitative.
+    """
+
+    risk_level: str = "unknown"  # "low" | "moderate" | "high" | "unknown"
+    flags: list[str] = field(default_factory=list)
+    adjacent_uses: list[AdjacentUse] = field(default_factory=list)
+    density_delta_description: str = ""
+    assessment: str = ""  # plain-language qualitative write-up
+    data_sources: list[str] = field(default_factory=list)
+    confidence: str = "low"  # always "low" — this is inherently qualitative
 
 
 # ---------------------------------------------------------------------------
