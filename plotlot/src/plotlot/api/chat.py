@@ -458,8 +458,15 @@ def _llm_unavailable_detail() -> str:
     return "Chat is temporarily unavailable because the LLM returned an empty response."
 
 
-def _build_report_context(report) -> str:
-    """Summarize the ZoningReport for the agent's context."""
+def _build_report_context(report, *, suppress_grounded_fields: bool = False) -> str:
+    """Summarize the ZoningReport for the agent's context.
+
+    ``suppress_grounded_fields`` omits the trust-critical figures (lot size + source,
+    by-right units/density, owner) that a freshly-computed ACTIVE GROUNDED ANALYSIS
+    supersedes. Set it when the chat already has a fresh grounded analysis so a
+    stale, browser-cached report_context can't reintroduce old numbers (the "crawls
+    back to 6 units" bug) — its still-useful extras (setbacks, FAR, uses, year built,
+    assessed value) are kept."""
     if not report:
         return ""
 
@@ -476,7 +483,7 @@ def _build_report_context(report) -> str:
         )
     if report.max_height:
         parts.append(f"- Max Height: {report.max_height}")
-    if report.max_density:
+    if report.max_density and not suppress_grounded_fields:
         parts.append(f"- Max Density: {report.max_density}")
     if report.floor_area_ratio:
         parts.append(f"- FAR: {report.floor_area_ratio}")
@@ -485,7 +492,7 @@ def _build_report_context(report) -> str:
     if report.parking_requirements:
         parts.append(f"- Parking: {report.parking_requirements}")
 
-    if report.density_analysis:
+    if report.density_analysis and not suppress_grounded_fields:
         da = report.density_analysis
         parts.append(
             f"- Max Units: {da.max_units} (governing: {da.governing_constraint}, confidence: {da.confidence})"
@@ -496,21 +503,22 @@ def _build_report_context(report) -> str:
 
     if report.property_record:
         pr = report.property_record
-        parts.append(f"- Lot Size: {pr.lot_size_sqft:,.0f} sqft")
-        if pr.lot_size_source:
-            src_labels = {
-                "assessor": "county assessor record",
-                "geometry": "GIS parcel geometry estimate",
-            }
-            label = src_labels.get(pr.lot_size_source, pr.lot_size_source)
-            parts.append(f"- Lot Source: {label}")
+        if not suppress_grounded_fields:
+            parts.append(f"- Lot Size: {pr.lot_size_sqft:,.0f} sqft")
+            if pr.lot_size_source:
+                src_labels = {
+                    "assessor": "county assessor record",
+                    "geometry": "GIS parcel geometry estimate",
+                }
+                label = src_labels.get(pr.lot_size_source, pr.lot_size_source)
+                parts.append(f"- Lot Source: {label}")
         if pr.lot_dimensions:
             parts.append(f"- Lot Dimensions: {pr.lot_dimensions}")
         if pr.year_built:
             parts.append(f"- Year Built: {pr.year_built}")
         if pr.assessed_value:
             parts.append(f"- Assessed Value: ${pr.assessed_value:,.0f}")
-        if pr.owner:
+        if pr.owner and not suppress_grounded_fields:
             parts.append(f"- Owner: {pr.owner}")
 
     if report.numeric_params:
@@ -1819,9 +1827,17 @@ def _analysis_covers_address(analysis: dict | None, address: str) -> bool:
     return bool(a and b and (a.startswith(b) or b.startswith(a)))
 
 
-def _resolve_deal_address(message: str, session_id: str, analysis: dict | None) -> str:
+def _resolve_deal_address(
+    message: str,
+    session_id: str,
+    analysis: dict | None,
+    report_context: object | None = None,
+) -> str:
     """Resolve the parcel a deal question refers to: explicit address in the
-    message, else the active grounded analysis, else the session property context."""
+    message, else the active grounded analysis, else the session property context,
+    else the frontend-supplied report_context (the property on screen). Including
+    report_context means a deal question about the displayed property forces a FRESH
+    grounded analysis instead of leaning on a possibly-stale client snapshot."""
     m = _ADDRESS_RE.search(message or "")
     if m:
         return m.group(0).strip().rstrip(".,")
@@ -1830,6 +1846,12 @@ def _resolve_deal_address(message: str, session_id: str, analysis: dict | None) 
     ctx = _sessions.get_property_context(session_id)
     if ctx and ctx.get("address"):
         return str(ctx["address"])
+    if report_context is not None:
+        addr = getattr(report_context, "formatted_address", "") or getattr(
+            report_context, "address", ""
+        )
+        if addr:
+            return str(addr)
     return ""
 
 
@@ -3496,14 +3518,57 @@ async def chat(request: ChatRequest, http_request: Request):
                 request.message[:80],
             )
 
-            # Build system prompt with report context + intent guidance.
-            # The grounding policy is appended unconditionally — it is the guard
-            # that keeps the agent citing tool output instead of hallucinating.
+            # Build system prompt. The grounding policy is appended unconditionally —
+            # it is the guard that keeps the agent citing tool output, not hallucinating.
             system_content = AGENT_SYSTEM_PROMPT + GROUNDING_POLICY
-            if request.report_context:
+
+            # Force grounding FIRST (before choosing the context source). The weak NIM
+            # model otherwise answers units/fees/comps/risk/entitlement from lookup +
+            # its own knowledge, bypassing the grounded engine. Run analyze_property
+            # deterministically (it persists the payload) so the verified numbers are
+            # in context BEFORE the model speaks. Resolving the address also from
+            # request.report_context means a deal question about the on-screen property
+            # refreshes it. Cached per address: only the first deal question for a
+            # parcel pays the latency; a non-resolvable address just falls through.
+            if _needs_grounded_analysis(request.message):
+                _existing = _sessions.get_analysis(session_id)
+                _deal_addr = _resolve_deal_address(
+                    request.message, session_id, _existing, request.report_context
+                )
+                if _deal_addr and not _analysis_covers_address(_existing, _deal_addr):
+                    yield _sse_event(
+                        "tool_use",
+                        {
+                            "tool": "analyze_property",
+                            "args": {"address": _deal_addr},
+                            "message": "Running grounded deal analysis...",
+                        },
+                    )
+                    try:
+                        await _execute_analyze_property(_deal_addr, session_id)
+                    except Exception as exc:  # noqa: BLE001 — non-fatal; model can still answer
+                        logger.warning("Forced analyze_property failed: %s", exc)
+
+            # Choose the AUTHORITATIVE grounding source for the prompt. A freshly
+            # computed grounded analysis SUPERSEDES the frontend-supplied
+            # report_context — the browser can replay report_context stale from before
+            # a backend fix, which is what made chat "crawl back" to 6 units / 6,471
+            # sqft even after the assessor lot fix landed. When both exist, inject the
+            # grounded analysis plus only report_context's NON-grounded extras
+            # (setbacks, FAR, uses) so the stale lot/units/owner can't override the
+            # verified ones. Fall back to report_context, then the lightweight session
+            # context, only when no grounded analysis is available.
+            active_analysis = _sessions.get_analysis(session_id)
+            if active_analysis:
+                if request.report_context:
+                    system_content += _build_report_context(
+                        request.report_context, suppress_grounded_fields=True
+                    )
+                system_content += _build_active_analysis_context(active_analysis)
+            elif request.report_context:
                 system_content += _build_report_context(request.report_context)
             else:
-                # Inject lightweight property context from session even when no full
+                # Lightweight property context from session even when no full
                 # ZoningReport exists (e.g. chat-only flow after lookup_property_info).
                 prop_ctx = _sessions.get_property_context(session_id)
                 if prop_ctx and prop_ctx.get("address"):
@@ -3527,40 +3592,6 @@ async def chat(request: ChatRequest, http_request: Request):
                             "(state this if asked who owns it; do not say it is unavailable)"
                         )
                     system_content += "\n".join(ctx_lines)
-
-            # Force grounding for property deal/source questions. The weak NIM model
-            # often answers units/fees/comps/risk/entitlement from lookup + its own
-            # knowledge, bypassing the grounded engine — which leaves the citation
-            # echo, sensitivity, and CA-program facts with no data to cite (it then
-            # fabricated a §131.0443 quote, freelanced density bonuses, and did its
-            # own mental math). Run analyze_property deterministically (it persists
-            # the payload) so the verified numbers are in context BEFORE the model
-            # speaks. Cached per address: only the first deal question for a parcel
-            # pays the latency; a non-resolvable address just falls through.
-            if _needs_grounded_analysis(request.message):
-                _existing = _sessions.get_analysis(session_id)
-                _deal_addr = _resolve_deal_address(request.message, session_id, _existing)
-                if _deal_addr and not _analysis_covers_address(_existing, _deal_addr):
-                    yield _sse_event(
-                        "tool_use",
-                        {
-                            "tool": "analyze_property",
-                            "args": {"address": _deal_addr},
-                            "message": "Running grounded deal analysis...",
-                        },
-                    )
-                    try:
-                        await _execute_analyze_property(_deal_addr, session_id)
-                    except Exception as exc:  # noqa: BLE001 — non-fatal; model can still answer
-                        logger.warning("Forced analyze_property failed: %s", exc)
-
-            # Promote the most recent grounded analysis into the system prompt so
-            # EVERY follow-up turn answers from these verified numbers instead of
-            # the model re-deriving them. This is what makes grounding persist
-            # across the conversation rather than only on the turn the tool ran.
-            active_analysis = _sessions.get_analysis(session_id)
-            if active_analysis:
-                system_content += _build_active_analysis_context(active_analysis)
 
             system_content += _build_intent_context(intent)
 

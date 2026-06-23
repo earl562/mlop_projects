@@ -405,6 +405,33 @@ def test_active_context_reflects_all_trust_critical_fields():
     assert not missing, f"persistent context dropped trust-critical field(s): {missing}\n\n{block}"
 
 
+def test_report_context_suppresses_grounded_fields_but_keeps_extras():
+    """A fresh grounded analysis is authoritative — when it exists, the frontend
+    report_context must NOT re-inject stale lot size / units / owner (the 'crawls
+    back to 6 units' bug, where a browser-cached report overrode the verified 7,710).
+    Its non-grounded extras (setbacks, allowed uses) are still kept."""
+    from plotlot.api.chat import _build_report_context
+    from plotlot.core.types import Setbacks
+
+    report = _hueneme_report()  # lot 6,471, max_units 6, owner "1233 HUENEME LLC"
+    report.setbacks = Setbacks(front="10 ft", side="5 ft", rear="15 ft")
+    report.allowed_uses = ["Multifamily dwellings", "Townhouses"]
+
+    full = _build_report_context(report)
+    assert "Lot Size: 6,471" in full
+    assert "Max Units: 6" in full
+    assert "1233 HUENEME LLC" in full
+
+    suppressed = _build_report_context(report, suppress_grounded_fields=True)
+    # The stale trust-critical figures are gone (the grounded analysis supplies them).
+    assert "Lot Size:" not in suppressed
+    assert "Max Units:" not in suppressed
+    assert "1233 HUENEME LLC" not in suppressed
+    # ...but the still-useful extras survive.
+    assert "Setbacks:" in suppressed
+    assert "Multifamily dwellings" in suppressed
+
+
 def test_grounded_payload_handles_missing_density_gracefully():
     report = _hueneme_report()
     report.density_analysis = None
@@ -1102,6 +1129,21 @@ class TestForcedGrounding:
         # 4. nothing resolvable
         with patch.object(chat_mod._sessions, "get_property_context", return_value=None):
             assert _resolve_deal_address("how many units?", "s", None) == ""
+
+    def test_resolve_deal_address_falls_back_to_report_context(self):
+        """A deal question about the on-screen property (no explicit address, no cached
+        analysis) resolves the report_context address → forces a FRESH grounded
+        analysis instead of leaning on the possibly-stale client snapshot."""
+        from unittest.mock import patch
+
+        from plotlot.api.chat import _resolve_deal_address
+
+        report = _hueneme_report()  # has formatted_address
+        with patch.object(chat_mod._sessions, "get_property_context", return_value=None):
+            assert (
+                _resolve_deal_address("how many units?", "s", None, report)
+                == "1233 Hueneme St, San Diego, CA 92110"
+            )
 
     def test_resolve_deal_address_tolerates_common_punctuation(self):
         """Regression: a comma before the ZIP ('San Diego, CA, 92110') or a spelled-out
