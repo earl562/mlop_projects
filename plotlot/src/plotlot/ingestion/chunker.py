@@ -66,6 +66,26 @@ def _flatten_columns(columns) -> list[str]:
     return labels
 
 
+def _detect_header_row(records: list[list[str]]) -> int | None:
+    """Find the column-header row inside a headerless table's data.
+
+    Municode standards tables put the column names ("Minimum Lot Area", "Front",
+    "Sides", "Rear", "Maximum Density") in leading <td> rows. The best header row
+    is the one with the most *distinct* word labels — e.g. the "Front | Sides |
+    Rear" row beats the colspan parent ("Minimum Setback Requirements" repeated)
+    and the data rows (which hold values/zone codes, not words). Searches only the
+    first few rows so a data row full of text descriptions isn't mistaken for it.
+    """
+    best_idx: int | None = None
+    best_score = 1  # require at least 2 distinct word labels to count as a header
+    for i, row in enumerate(records[:4]):
+        labels = {c for c in row[1:] if re.search(r"[A-Za-z]{3,}", c)}
+        if len(labels) > best_score:
+            best_score = len(labels)
+            best_idx = i
+    return best_idx
+
+
 def _table_to_text(table_html: str) -> str | None:
     """Serialize an HTML table as labeled rows: ``RowLabel — Col: val; Col: val``.
 
@@ -90,8 +110,22 @@ def _table_to_text(table_html: str) -> str | None:
     for frame in frames:
         frame = frame.fillna("")
         cols = _flatten_columns(frame.columns)
-        for row in frame.itertuples(index=False, name=None):
-            cells = [str(v).strip() for v in row]
+        records = [
+            [str(v).strip() for v in row] for row in frame.itertuples(index=False, name=None)
+        ]
+
+        # Municode standards tables use <td> for everything (no <th>), so pandas
+        # can't detect the header and yields integer column labels (0, 1, 2…).
+        # Recover the real column names ("Front", "Sides", "Minimum Lot Area") from
+        # the header row embedded in the data — otherwise values get labeled "4:"
+        # instead of "Front:" and the front-vs-side setback is still ambiguous.
+        if cols and all(c.isdigit() for c in cols if c):
+            hdr = _detect_header_row(records)
+            if hdr is not None:
+                cols = records[hdr]
+                records = records[hdr + 1 :]
+
+        for cells in records:
             if not any(cells):
                 continue
             label = cells[0]

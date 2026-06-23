@@ -84,6 +84,24 @@ class TestHtmlToText:
         assert "Front: 30 ft." in text
         assert "Sides: 15 ft." in text
 
+    def test_td_only_header_recovered(self):
+        """Municode tables use <td> for headers too (no <th>) — pandas can't detect
+        the header, so the column names must be recovered from the embedded header
+        row. Otherwise RO-2's values get labeled '4:' instead of 'Front:'."""
+        html = (
+            "<table>"
+            "<tr><td>Zone</td><td>Minimum Lot Area</td><td>Front</td><td>Sides</td></tr>"
+            "<tr><td>RO-2</td><td>20,000 s.f.</td><td>30 ft.</td><td>15 ft.</td></tr>"
+            "<tr><td>R-2</td><td>7,500 s.f.</td><td>15 ft.</td><td>8 ft.</td></tr>"
+            "</table>"
+        )
+        text = _html_to_text(html)
+        assert "RO-2 — Minimum Lot Area: 20,000 s.f." in text
+        assert "Front: 30 ft." in text
+        assert "Sides: 15 ft." in text
+        # The header row itself must not be emitted as a data row.
+        assert "Zone — Minimum Lot Area: Front" not in text
+
     def test_malformed_table_falls_back(self):
         """A table pandas can't parse still yields its cell text (no crash)."""
         text = _html_to_text("<table><tr><td>R-1</td><td>data</td></tr></table>")
