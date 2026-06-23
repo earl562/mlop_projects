@@ -835,20 +835,21 @@ export default function Home() {
   // ─── Conversation State ───────────────────────────────────────────────
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
-      {/* New Analysis button — fixed top-right */}
-      <div className="fixed right-4 top-5 z-40 sm:right-6">
-        <button
-          type="button"
-          onClick={handleNewAnalysis}
-          data-testid="new-analysis-button"
-          className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
-          style={{ boxShadow: "var(--shadow-nav)" }}
-        >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-          </svg>
-          New analysis
-        </button>
+      <div className="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
+        <div className="mx-auto flex w-full max-w-5xl justify-end">
+          <button
+            type="button"
+            onClick={handleNewAnalysis}
+            data-testid="new-analysis-button"
+            className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)] active:scale-[0.98]"
+            style={{ boxShadow: "var(--shadow-nav)" }}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+            </svg>
+            New analysis
+          </button>
+        </div>
       </div>
       {/* Messages */}
       <div
