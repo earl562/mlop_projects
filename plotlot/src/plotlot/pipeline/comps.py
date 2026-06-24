@@ -44,43 +44,9 @@ _SALES_FIELD_KEYWORDS = {
 }
 _SALES_NAME_KEYWORDS = {"sale", "transaction", "transfer", "recorded", "deed"}
 
-# Static catalog of known county sales datasets (not on Hub).
-# Keys: state → county → {url, price_fields, date_fields, lot_fields}
-_STATIC_SALES_DATASETS: dict[str, dict[str, dict[str, Any]]] = {
-    "FL": {
-        "Miami-Dade": {
-            "url": (
-                "https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/ArcGIS/rest/services"
-                "/PaGISView_gdb/FeatureServer/0/query"
-            ),
-            "price_fields": ["PRICE_1", "PRICE"],
-            "date_fields": ["DOS_1", "SALE_DATE"],
-            "lot_fields": ["LOT_SIZE"],
-        },
-        "Broward": {
-            "url": (
-                "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
-                "/BCPA_EXTERNAL_JAN26/MapServer/36/query"
-            ),
-            "price_fields": ["PRICE", "SALE_PRICE", "SALE_AMT"],
-            "date_fields": ["SALE_DATE", "DOS_1"],
-            "lot_fields": ["LOT_SIZE", "ACRES"],
-        },
-        "Palm Beach": {
-            "url": (
-                "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services"
-                "/Parcels_and_Property_Details_WebMercator/FeatureServer/0/query"
-            ),
-            "price_fields": ["PRICE", "SALE_PRICE"],
-            "date_fields": ["SALE_DATE"],
-            "lot_fields": ["ACRES", "LOT_SIZE"],
-        },
-    },
-}
-
 # Candidate field names for each datum (case-insensitive).
-_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "PRICE", "PRICE_1", "CONSIDERATION", "TRANS_AMOUNT"}
-_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE", "DOS_1"}
+_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
+_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE"}
 _ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
 _LOT_FIELDS = {"LOT_SIZE", "LOT_AREA", "LAND_SQFT", "ACRES", "ACREAGE", "SQ_FOOTAGE"}
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}
@@ -271,16 +237,6 @@ async def _discover_sales_dataset(
 
     Returns (layer_url, field_names) or None.
     """
-    # Check static catalog first (counties not published on Hub).
-    static_entry = _STATIC_SALES_DATASETS.get(state, {}).get(county)
-    if static_entry:
-        fields = (
-            static_entry.get("price_fields", [])
-            + static_entry.get("date_fields", [])
-            + static_entry.get("lot_fields", [])
-        )
-        return static_entry["url"], fields
-
     queries = [
         f"sales {county} {state}",
         f"transactions {county} {state}",
