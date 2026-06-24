@@ -9,6 +9,7 @@ steps are always the same, so we don't waste LLM turns on orchestration.
 The LLM focuses on what it's good at: reasoning over the data.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -443,6 +444,29 @@ async def lookup_address(address: str) -> ZoningReport | None:
                     "max_units": float(report.density_analysis.max_units),
                 }
             )
+
+        # ── Phase 4: Comparable sales (non-blocking, best-effort) ──
+        if (
+            report.property_record
+            and getattr(report.property_record, "lat", None)
+        ):
+            try:
+                from plotlot.pipeline.comps import find_comparables
+
+                comp_state = geo.get("state", "FL") if isinstance(geo, dict) else "FL"
+                comp_result = await asyncio.wait_for(
+                    find_comparables(report.property_record, state=comp_state),
+                    timeout=30,
+                )
+                report.comp_analysis = comp_result
+                logger.info(
+                    "Phase 4 comps: %d comparables found",
+                    len(comp_result.comparables) if comp_result else 0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Phase 4 comps: timed out after 30s (non-blocking)")
+            except Exception as e:
+                logger.warning("Phase 4 comps: failed (non-blocking): %s", e)
 
         if isinstance(report, ZoningReport):
             report.lookup_snapshot = build_lookup_snapshot(report)

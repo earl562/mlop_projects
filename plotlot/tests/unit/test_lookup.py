@@ -5,7 +5,14 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from plotlot.core.types import NumericZoningParams, PropertyRecord, SearchResult, ZoningReport
+from plotlot.core.types import (
+    ComparableSale,
+    CompAnalysis,
+    NumericZoningParams,
+    PropertyRecord,
+    SearchResult,
+    ZoningReport,
+)
 from plotlot.pipeline.lookup import (
     _build_context_message,
     _build_report,
@@ -376,6 +383,105 @@ class TestLookupAddress:
 
         assert captured_queries, "hybrid_search should have been called"
         assert captured_queries[0] == "RS-4"
+
+    @pytest.mark.asyncio
+    async def test_lookup_address_includes_comps(self):
+        """Phase 4: find_comparables() called, result attached to report."""
+        from plotlot.pipeline.lookup import _pipeline_cache
+
+        _pipeline_cache.clear()
+        mock_session = AsyncMock()
+
+        comp = CompAnalysis(
+            comparables=[ComparableSale() for _ in range(5)],
+            median_price_per_acre=500000.0,
+            estimated_land_value=200000.0,
+            confidence=0.9,
+        )
+
+        async def mock_find_comparables(subject, **kwargs):
+            return comp
+
+        async def mock_call_llm(messages, tools=None, temperature=0.1):
+            return {
+                "content": json.dumps(
+                    {
+                        "zoning_district": "RS-4",
+                        "summary": "test",
+                        "confidence": "high",
+                    }
+                ),
+                "tool_calls": [],
+            }
+
+        with (
+            patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()),
+            patch(
+                "plotlot.pipeline.lookup.lookup_property",
+                return_value=_make_prop(lat=25.977, lng=-80.232),
+            ),
+            patch(
+                "plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]
+            ),
+            patch("plotlot.pipeline.lookup.get_session", return_value=mock_session),
+            patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm),
+            patch(
+                "plotlot.pipeline.comps.find_comparables",
+                side_effect=mock_find_comparables,
+            ),
+        ):
+            result = await lookup_address("7940 Plantation Blvd, Miramar, FL")
+
+        assert result is not None
+        assert result.comp_analysis is not None
+        assert len(result.comp_analysis.comparables) == 5
+        assert result.comp_analysis.confidence == 0.9
+
+    @pytest.mark.asyncio
+    async def test_lookup_address_comps_failure_nonblocking(self):
+        """Phase 4: comps failure does not crash the pipeline."""
+        from plotlot.pipeline.lookup import _pipeline_cache
+
+        _pipeline_cache.clear()
+        mock_session = AsyncMock()
+
+        async def mock_find_comparables_error(subject, **kwargs):
+            raise RuntimeError("simulated")
+
+        async def mock_call_llm(messages, tools=None, temperature=0.1):
+            return {
+                "content": json.dumps(
+                    {
+                        "zoning_district": "RS-4",
+                        "summary": "test",
+                        "confidence": "high",
+                    }
+                ),
+                "tool_calls": [],
+            }
+
+        with (
+            patch("plotlot.pipeline.lookup.geocode_address", return_value=_make_geo()),
+            patch(
+                "plotlot.pipeline.lookup.lookup_property",
+                return_value=_make_prop(lat=25.977, lng=-80.232),
+            ),
+            patch(
+                "plotlot.pipeline.lookup.hybrid_search", return_value=[_make_result()]
+            ),
+            patch("plotlot.pipeline.lookup.get_session", return_value=mock_session),
+            patch("plotlot.retrieval.llm.call_llm", side_effect=mock_call_llm),
+            patch(
+                "plotlot.pipeline.comps.find_comparables",
+                side_effect=mock_find_comparables_error,
+            ),
+        ):
+            result = await lookup_address("7940 Plantation Blvd, Miramar, FL")
+
+        assert result is not None
+        assert result.confidence == "high"
+        assert result.property_record is not None
+        assert result.comp_analysis is None
 
 
 # ── Task 1.3: output pinning tests ──
