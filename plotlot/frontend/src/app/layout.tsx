@@ -38,16 +38,12 @@ export default function RootLayout({
           {`(function(){try{var mode=localStorage.getItem('theme');if(mode==='dark'||(!mode&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`}
         </Script>
       </head>
-        <body
-          className="min-h-screen bg-[var(--bg-primary)] font-sans antialiased"
-        >
-          <ThemeProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </ThemeProvider>
-        </body>
-      </html>
+      <body className="min-h-dvh bg-[var(--bg-primary)] font-sans antialiased">
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
+      </body>
+    </html>
   );
 
   if (!clerkPublishableKey) {

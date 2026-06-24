@@ -98,11 +98,14 @@ test.describe("live served PlotLot agent", () => {
       { timeout: 30_000 },
     );
 
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Agent" }).click();
+    await page.goto("/workspace?mode=agent", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("agent-input")).toBeVisible();
 
-    await page.getByTestId("agent-input").fill(LIVE_PROMPT);
+    const agentInput = page.getByTestId("agent-input");
+    await agentInput.click();
+    await agentInput.fill("");
+    await agentInput.type(LIVE_PROMPT, { delay: 5 });
+    await expect(page.getByTestId("send-button")).toBeEnabled({ timeout: 10_000 });
     await page.getByTestId("send-button").click();
 
     const log = page.getByRole("log", { name: "Analysis conversation" });

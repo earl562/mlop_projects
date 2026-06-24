@@ -36,6 +36,7 @@ from plotlot.retrieval.bulk_search import (
 from plotlot.retrieval.google_workspace import create_document, create_spreadsheet
 from plotlot.retrieval.llm import call_llm
 from plotlot.retrieval.search import hybrid_search
+from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
 from plotlot.observability.prompts import get_active_prompt
 from plotlot.observability.tracing import start_span
 from plotlot.oauth.openai_auth import has_saved_tokens
@@ -299,10 +300,12 @@ AGENT_SYSTEM_PROMPT = get_active_prompt("chat_agent")
 
 
 def _llm_unavailable_detail() -> str:
+    using_deepseek = bool(settings.deepseek_api_key)
     using_nvidia = bool(settings.nvidia_api_key)
     if not (
         settings.openai_access_token
         or settings.openai_api_key
+        or settings.deepseek_api_key
         or settings.nvidia_api_key
         or settings.groq_api_key
         or (
@@ -312,7 +315,13 @@ def _llm_unavailable_detail() -> str:
     ):
         return (
             "Chat is temporarily unavailable because no LLM credentials are configured. "
-            "Set NVIDIA_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+            "Set DEEPSEEK_API_KEY, NVIDIA_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, "
+            "or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+        )
+    if using_deepseek:
+        return (
+            "Chat is temporarily unavailable because the configured DeepSeek model "
+            "returned no usable response. Verify the model slug or credentials."
         )
     if using_nvidia:
         return (
@@ -361,12 +370,32 @@ def _build_report_context(report) -> str:
     if report.property_record:
         pr = report.property_record
         parts.append(f"- Lot Size: {pr.lot_size_sqft:,.0f} sqft")
+        if pr.lot_size_source:
+            src_labels = {"assessor": "county assessor record", "geometry": "GIS parcel geometry estimate"}
+            label = src_labels.get(pr.lot_size_source, pr.lot_size_source)
+            parts.append(f"  - Lot Source: {label}")
         if pr.lot_dimensions:
             parts.append(f"- Lot Dimensions: {pr.lot_dimensions}")
         if pr.year_built:
             parts.append(f"- Year Built: {pr.year_built}")
         if pr.assessed_value:
             parts.append(f"- Assessed Value: ${pr.assessed_value:,.0f}")
+        if pr.owner:
+            parts.append(f"- Owner: {pr.owner}")
+
+    if report.site_risk:
+        sr = report.site_risk
+        parts.append(f"- Site Risk: {sr.overall_risk}")
+        if sr.flood_zone:
+            parts.append(f"  - Flood Zone: {sr.flood_zone.zone} ({sr.flood_zone.risk_level})")
+        if sr.geologic_hazard:
+            gh = sr.geologic_hazard
+            if gh.fault_zone_status:
+                parts.append(f"  - Fault Zone: {gh.fault_zone_status}")
+            if gh.landslide_status:
+                parts.append(f"  - Landslide: {gh.landslide_status}")
+            if gh.liquefaction_status:
+                parts.append(f"  - Liquefaction: {gh.liquefaction_status}")
 
     if report.numeric_params:
         np_ = report.numeric_params
@@ -1232,15 +1261,35 @@ async def _execute_lookup_property(
                 "living_units": record.living_units,
             }
             muni = record.municipality or address
+            # The GIS layer's code (Track 1) and the ordinance code book (Track 2)
+            # can label the same district differently (e.g. GIS "RS20" vs. Clark
+            # County "R-E"). Crosswalk before steering the agent's ordinance search,
+            # else it searches the GIS code and matches nothing in the indexed text.
+            crosswalk = crosswalk_zoning_code(
+                record.zoning_code,
+                state=state,
+                county=record.county,
+                municipality=record.municipality,
+            )
+            if crosswalk.matched:
+                result["ordinance_district_code"] = crosswalk.search_code
             zoning_query = (
-                f"{record.zoning_code} setbacks density height"
+                f"{crosswalk.search_code} setbacks density height"
                 if record.zoning_code
                 else f"{muni} zoning setbacks density height allowed uses"
             )
-            result["next_step"] = (
-                f"Now call search_zoning_ordinance with municipality='{muni}' "
-                f"and query='{zoning_query}' to get the zoning regulations for this property"
-            )
+            if crosswalk.matched:
+                result["next_step"] = (
+                    f"The GIS layer labels this parcel '{record.zoning_code}', but the adopted "
+                    f"ordinance uses '{crosswalk.search_code}' for that district. Now call "
+                    f"search_zoning_ordinance with municipality='{muni}' and query='{zoning_query}' "
+                    f"— search under '{crosswalk.search_code}', not '{record.zoning_code}'."
+                )
+            else:
+                result["next_step"] = (
+                    f"Now call search_zoning_ordinance with municipality='{muni}' "
+                    f"and query='{zoning_query}' to get the zoning regulations for this property"
+                )
             return json.dumps(result)
         return json.dumps(
             {
@@ -1252,7 +1301,7 @@ async def _execute_lookup_property(
         return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
 
 
-async def _execute_zoning_search(municipality: str, query: str) -> str:
+async def _execute_zoning_search(municipality: str, query: str, session_id: str = "") -> str:
     """Search the local zoning ordinance database via hybrid RAG.
 
     Uses the same hybrid_search (vector + full-text + RRF fusion) and
@@ -1261,18 +1310,54 @@ async def _execute_zoning_search(municipality: str, query: str) -> str:
     with start_span(name="chat_zoning_search", span_type="RETRIEVER") as span:
         span.set_inputs({"municipality": municipality, "query": query, "limit": 15})
 
+        # Boost chunks tagged with this parcel's exact ordinance district code.
+        # Prefer the crosswalked ordinance code (e.g. "R-E") established by
+        # lookup_property_info; fall back to the raw GIS code.
+        boost = ""
+        if session_id:
+            ctx = _sessions.get_property_context(session_id)
+            if ctx:
+                boost = str(ctx.get("ordinance_district_code") or ctx.get("zoning_code") or "")
+
         session = await get_session()
         try:
-            results = await hybrid_search(session, municipality, query, limit=15)
+            results = await hybrid_search(
+                session, municipality, query, limit=15, zone_code_boost=boost or None
+            )
         finally:
             await session.close()
 
         if not results:
             span.set_outputs({"result_count": 0, "status": "no_results"})
+            # Anti-hallucination contract: echo the zoning code already established
+            # this session and tell the agent exactly how to present a coverage gap
+            # without fabricating contacts, URLs, or "could not be retrieved" wording.
+            known_zoning_code = ""
+            if session_id:
+                ctx = _sessions.get_property_context(session_id)
+                if ctx:
+                    known_zoning_code = str(ctx.get("zoning_code") or "")
+            if known_zoning_code:
+                guidance = (
+                    f"The zoning code ({known_zoning_code}) is already confirmed for this parcel "
+                    "from lookup_property_info — STATE IT PLAINLY. Its dimensional standards are "
+                    f"simply not yet indexed in the PlotLot database for {municipality}. Tell the "
+                    "user that and offer to ingest the ordinance. Do NOT say the zoning could not "
+                    "be retrieved, and NEVER fabricate phone numbers, office names, URLs, or "
+                    "numeric zoning values."
+                )
+            else:
+                guidance = (
+                    f"No indexed ordinance text for {municipality}. Report this honestly and offer "
+                    "to ingest the municipality's ordinance or run a web_search. NEVER fabricate "
+                    "phone numbers, office names, URLs, or numeric zoning values."
+                )
             return json.dumps(
                 {
                     "status": "no_results",
                     "message": f"No ordinance sections found for '{query}' in {municipality}",
+                    "known_zoning_code": known_zoning_code,
+                    "presentation_guidance": guidance,
                 }
             )
 
@@ -1297,8 +1382,13 @@ async def _execute_zoning_search(municipality: str, query: str) -> str:
         return json.dumps({"status": "success", "results": chunks})
 
 
-async def _execute_municode_live_search(municipality: str, query: str) -> str:
-    """Search live Municode sections for a municipality using heading-based matching."""
+async def _execute_municode_live_search(municipality: str, query: str, session_id: str = "") -> str:
+    """Search live Municode sections for a municipality using heading-based matching.
+
+    When the municipality is not on Municode (e.g. San Diego, served from a local
+    PDF index), fall back to the indexed ordinance search so the agent gets real
+    ordinance text instead of a dead end.
+    """
     from plotlot.ingestion.discovery import get_municode_configs
     from plotlot.ingestion.scraper import MunicodeScraper
 
@@ -1311,12 +1401,9 @@ async def _execute_municode_live_search(municipality: str, query: str) -> str:
             ]
             config = candidates[0] if candidates else None
         if not config:
-            return json.dumps(
-                {
-                    "status": "no_results",
-                    "message": f"No live Municode authority found for {municipality}",
-                }
-            )
+            # Not on Municode — serve indexed ordinance text (and the anti-hallucination
+            # contract) rather than returning nothing.
+            return await _execute_zoning_search(municipality, query, session_id)
 
         scraper = MunicodeScraper(max_concurrent=3)
         raw_terms = [term.lower() for term in re.findall(r"[a-z0-9-]+", query) if len(term) >= 3]
@@ -1838,11 +1925,13 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
         return await _execute_zoning_search(
             args.get("municipality", ""),
             args.get("query", ""),
+            session_id=session_id,
         )
     elif name == "search_municode_live":
         return await _execute_municode_live_search(
             args.get("municipality", ""),
             args.get("query", ""),
+            session_id=session_id,
         )
     elif name == "discover_open_data_layers":
         return await _execute_open_data_discovery(
@@ -2195,6 +2284,9 @@ async def chat(request: ChatRequest, http_request: Request):
                                             "municipality": prop.get("municipality", ""),
                                             "county": prop.get("county", ""),
                                             "zoning_code": prop.get("zoning_code", ""),
+                                            "ordinance_district_code": prop.get(
+                                                "ordinance_district_code", ""
+                                            ),
                                             "zoning_description": prop.get(
                                                 "zoning_description", ""
                                             ),

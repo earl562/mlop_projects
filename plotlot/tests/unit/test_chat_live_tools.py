@@ -20,6 +20,7 @@ from plotlot.api.chat import (
     _execute_open_data_discovery,
     _execute_tool,
     _execute_web_search,
+    _execute_zoning_search,
 )
 from plotlot.core.types import MunicodeConfig, TocNode
 from plotlot.property.models import DatasetInfo
@@ -189,6 +190,83 @@ async def test_execute_municode_live_search_returns_no_results_when_headings_do_
 
     assert payload["status"] == "no_results"
     assert "shipyard cranes" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_zoning_search_no_results_echoes_known_zoning_code_and_forbids_fabrication():
+    """Regression: un-indexed RS20 must surface the code + ban fabricated contacts.
+
+    Previously the agent invented a Clark County phone number and said the zoning
+    "could not be retrieved" — even though lookup_property_info had returned RS20.
+    """
+    session_id = "sess-vegas"
+    _sessions.set_property_context(
+        session_id,
+        {
+            "address": "2975 Montessouri St",
+            "municipality": "Las Vegas",
+            "county": "Clark",
+            "zoning_code": "RS20",
+            "zoning_description": "Residential Single-Family 20",
+            "lot_size_sqft": 23522.0,
+        },
+    )
+    fake_session = AsyncMock()
+    fake_session.close = AsyncMock()
+
+    with (
+        patch("plotlot.api.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("plotlot.api.chat.hybrid_search", AsyncMock(return_value=[])),
+    ):
+        payload = json.loads(
+            await _execute_zoning_search("Las Vegas", "RS20 setbacks", session_id=session_id)
+        )
+
+    assert payload["status"] == "no_results"
+    assert payload["known_zoning_code"] == "RS20"
+    guidance = payload["presentation_guidance"].lower()
+    assert "rs20" in guidance
+    assert "not yet indexed" in guidance or "not yet in the plotlot database" in guidance
+    assert "never fabricate" in guidance
+    # The guidance must instruct AGAINST the "could not be retrieved" phrasing.
+    assert "do not say the zoning could not be retrieved" in guidance
+    _sessions.delete_session(session_id)
+
+
+@pytest.mark.asyncio
+async def test_zoning_search_no_results_without_session_still_forbids_fabrication():
+    """No session context → still honest, still bans fabricated phone numbers/URLs."""
+    fake_session = AsyncMock()
+    fake_session.close = AsyncMock()
+
+    with (
+        patch("plotlot.api.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("plotlot.api.chat.hybrid_search", AsyncMock(return_value=[])),
+    ):
+        payload = json.loads(await _execute_zoning_search("Nowhere", "R-1 setbacks"))
+
+    assert payload["status"] == "no_results"
+    assert payload["known_zoning_code"] == ""
+    assert "never fabricate" in payload["presentation_guidance"].lower()
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_passes_session_id_to_zoning_search():
+    """The dispatcher must thread session_id so the no-results guidance can echo zoning."""
+    captured: dict = {}
+
+    async def _spy(municipality, query, session_id=""):
+        captured["session_id"] = session_id
+        return json.dumps({"status": "no_results", "results": []})
+
+    with patch("plotlot.api.chat._execute_zoning_search", _spy):
+        await _execute_tool(
+            "search_zoning_ordinance",
+            {"municipality": "Las Vegas", "query": "RS20"},
+            session_id="sess-xyz",
+        )
+
+    assert captured["session_id"] == "sess-xyz"
 
 
 @pytest.mark.asyncio

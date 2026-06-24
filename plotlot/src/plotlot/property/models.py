@@ -14,7 +14,7 @@ class DatasetInfo(BaseModel):
     name: str
     url: str  # FeatureServer/MapServer URL
     layer_id: int = 0
-    dataset_type: str  # "parcels" | "zoning"
+    dataset_type: str  # "parcels" | "zoning" | "sales"
     county: str
     state: str
     fips: str | None = None

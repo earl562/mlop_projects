@@ -313,7 +313,7 @@ def ingest_main() -> None:
         print("  <key>                                  Ingest a single municipality by key")
         print()
         print(
-            "  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco"
+            "  County keys for CA: sacramento, contra_costa, alameda, santa_clara, san_mateo, san_francisco, marin"
         )
         print(
             "  --san-diego                            Ingest San Diego from city-hosted PDFs (not on Municode)"

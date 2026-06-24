@@ -79,7 +79,7 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex min-h-[100dvh] overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -97,7 +97,7 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
         >
           <SidebarToggle onClick={handleToggle} />
           <div className="ml-2 flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-strong)] text-[10px] font-black text-white shadow-[0_10px_30px_rgba(180,83,9,0.18)]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-strong)] text-[10px] font-black text-white shadow-[var(--shadow-card)]">
               P
             </div>
             <span className="font-display text-base tracking-tight text-[var(--text-primary)]">

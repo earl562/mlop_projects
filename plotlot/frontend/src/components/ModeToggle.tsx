@@ -12,8 +12,9 @@ export default function ModeToggle({ mode, onChange }: ModeToggleProps) {
     <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-inset)] p-0.5">
       <button
         type="button"
+        aria-pressed={mode === "lookup"}
         onClick={() => onChange("lookup")}
-        className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${
+        className={`rounded-full px-2 py-1 text-[10px] font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] sm:px-3 sm:text-[11px] ${
           mode === "lookup"
             ? "bg-[var(--text-primary)] text-[var(--bg-primary)]"
             : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
@@ -23,8 +24,9 @@ export default function ModeToggle({ mode, onChange }: ModeToggleProps) {
       </button>
       <button
         type="button"
+        aria-pressed={mode === "agent"}
         onClick={() => onChange("agent")}
-        className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${
+        className={`rounded-full px-2 py-1 text-[10px] font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] sm:px-3 sm:text-[11px] ${
           mode === "agent"
             ? "bg-[var(--text-primary)] text-[var(--bg-primary)]"
             : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"

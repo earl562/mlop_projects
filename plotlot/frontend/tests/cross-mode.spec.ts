@@ -25,10 +25,8 @@ test.describe("Canonical cross-mode lane", () => {
 
   test("lookup flow stays clean when switching modes", async ({ page }) => {
     await gotoHome(page);
-
-    await page.getByTestId("lookup-input").fill("7940 Plantation Blvd, Miramar, FL 33023");
-    await page.getByTestId("send-button").click();
-    await expect(page.getByTestId("pipeline-stepper")).toBeVisible();
+    await runLookupFlow(page, "7940 Plantation Blvd, Miramar, FL 33023");
+    await waitForReport(page);
 
     await switchToAgent(page);
     await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);

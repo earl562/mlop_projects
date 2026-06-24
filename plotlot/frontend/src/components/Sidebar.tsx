@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type ComponentType, type SVGProps, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeProvider";
-import PortfolioPanel from "@/components/PortfolioPanel";
-import ProjectTree from "@/components/ProjectTree";
-import WorkspaceSelector from "@/components/WorkspaceSelector";
-import NewProjectModal from "@/components/NewProjectModal";
+import {
+  BarChart3,
+  FileText,
+  FileSearch,
+  LayoutGrid,
+  MapPin,
+  Menu,
+  Network,
+  Plus,
+} from "lucide-react";
 import ChatHistory from "@/components/ChatHistory";
 import type { ChatSession } from "@/lib/sessions";
 import type { AppMode } from "@/components/ModeToggle";
@@ -30,18 +36,24 @@ interface SidebarProps {
 type NavItem = {
   id: string;
   label: string;
-  icon: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
   mode?: AppMode;
   href?: string;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "site-finder", label: "Site Finder", icon: "⌖", mode: "lookup", href: "/workspace" },
-  { id: "analyses", label: "Analyses", icon: "◫", href: "/analyses" },
-  { id: "evidence", label: "Evidence", icon: "◉", href: "/evidence" },
-  { id: "reports", label: "Reports", icon: "☰", href: "/reports" },
-  { id: "harness-workspace", label: "Harness Workspace", icon: "✳", mode: "agent", href: "/workspace" },
-  { id: "connectors", label: "Connectors", icon: "◎", href: "/connectors" },
+  { id: "site-finder", label: "Site Finder", icon: MapPin, mode: "lookup", href: "/workspace" },
+  { id: "analyses", label: "Analyses", icon: BarChart3, href: "/analyses" },
+  { id: "evidence", label: "Evidence", icon: FileSearch, href: "/evidence" },
+  { id: "reports", label: "Reports", icon: FileText, href: "/reports" },
+  {
+    id: "harness-workspace",
+    label: "Harness Workspace",
+    icon: LayoutGrid,
+    mode: "agent",
+    href: "/workspace",
+  },
+  { id: "connectors", label: "Connectors", icon: Network, href: "/connectors" },
 ];
 
 function resolveActiveNavId(pathname: string | null, modeParam: string | null): string {
@@ -129,25 +141,23 @@ export default function Sidebar({
 
       <aside
         className={`
-          fixed left-0 top-0 z-50 h-full w-[320px] border-r transition-transform duration-200
+          fixed left-0 top-0 z-50 h-full w-[320px] border-r border-[var(--border)] bg-[var(--bg-sidebar)] transition-transform duration-200
           lg:relative lg:z-auto
           ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
-        style={{
-          background: "#f2f2f4",
-          borderColor: "#e5e7eb",
-        }}
       >
         <div className="flex h-full flex-col overflow-hidden">
-          <div className="border-b border-[#e5e7eb] px-3 pb-3 pt-3">
+          <div className="border-b border-[var(--border-soft)] px-3 pb-3 pt-3">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-black text-sm font-bold text-white">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--brand-strong)] text-sm font-bold text-white">
                   P
                 </div>
                 <div className="leading-tight">
-                  <p className="font-medium text-[#111827]">PlotLot</p>
-                  <p className="text-xs tracking-wide text-[#6b7280]">AI ZONING ANALYSIS</p>
+                  <p className="font-medium text-[var(--text-primary)]">PlotLot</p>
+                  <p className="text-xs tracking-wide text-[var(--text-muted)]">
+                    AI ZONING ANALYSIS
+                  </p>
                 </div>
               </div>
               <ThemeToggle />
@@ -156,17 +166,19 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onNewChat}
-              className="flex h-12 w-full items-center justify-between rounded-xl border border-[#d7dbe3] bg-white px-4 text-left text-sm font-medium text-[#111827] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+              className="flex h-12 w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 text-left text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-inset)]"
             >
-              <span className="inline-flex items-center gap-2">
-                <span className="text-base">⊕</span>
-                New analysis
-              </span>
-              <span className="rounded-md bg-[#eef1f5] px-2 py-1 text-xs font-semibold text-[#64748b]">⌘ K</span>
+                <span className="inline-flex items-center gap-2">
+                  <Plus size={16} strokeWidth={2.25} aria-hidden="true" />
+                  New analysis
+                </span>
+                <span className="rounded-md bg-[var(--bg-inset)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)]">
+                  ⌘ K
+                </span>
             </button>
           </div>
 
-          <div className="border-b border-[#e5e7eb] px-3 py-3">
+          <div className="border-b border-[var(--border-soft)] px-3 py-3">
             <ul className="space-y-1">
               {NAV_ITEMS.map((item) => {
                 const active = item.id === activeNavId;
@@ -179,11 +191,15 @@ export default function Sidebar({
                       data-testid={`sidebar-nav-${item.id}`}
                       className={`flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-medium transition-colors ${
                         active
-                          ? "bg-[#e5e7eb] text-[#111827]"
-                          : "text-[#374151] hover:bg-[#eceff3]"
+                          ? "bg-[var(--bg-surface-raised)] text-[var(--text-primary)]"
+                          : "text-[var(--text-secondary)] hover:bg-[var(--bg-inset)]"
                       }`}
                     >
-                      <span className="w-5 text-center text-base leading-none">{item.icon}</span>
+                      <item.icon
+                        className="h-5 w-5 text-[var(--text-secondary)]"
+                        strokeWidth={2.2}
+                        aria-hidden="true"
+                      />
                       <span>{item.label}</span>
                     </button>
                   </li>
@@ -198,11 +214,11 @@ export default function Sidebar({
               placeholder="Search conversations..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-11 w-full rounded-xl border border-[#d7dbe3] bg-white px-3 text-sm text-[#111827] placeholder:text-[#9ca3af] outline-none transition-colors focus:border-[#b7c0cf]"
+              className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none transition-colors focus:border-[var(--brand-strong)] focus:ring-2 focus:ring-[var(--brand-subtle)]"
             />
           </div>
 
-          <div className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9ca3af]">
+          <div className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             Chat History
           </div>
 
@@ -215,7 +231,7 @@ export default function Sidebar({
             />
           </div>
 
-          <div className="border-t border-[#e5e7eb] px-4 py-3 text-xs text-[#6b7280]">
+          <div className="border-t border-[var(--border-soft)] px-4 py-3 text-xs text-[var(--text-muted)]">
             <div className="flex items-center justify-between">
               <span>104 municipalities</span>
               <span>Free</span>
@@ -235,22 +251,7 @@ export function SidebarToggle({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--bg-surface)] transition-colors hover:bg-[var(--bg-surface-raised)]"
     >
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        <title>Toggle sidebar</title>
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
+      <Menu size={18} strokeWidth={2} className="text-[var(--text-secondary)]" aria-hidden="true" />
     </button>
   );
 }

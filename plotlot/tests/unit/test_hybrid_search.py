@@ -112,7 +112,7 @@ def test_chat_agent_prompt_contains_permitted_uses_diversification():
 def test_chat_agent_prompt_version_updated():
     from plotlot.observability.prompts import get_prompt_version
 
-    assert get_prompt_version("chat_agent") == "v5"
+    assert get_prompt_version("chat_agent") == "v7"
 
 
 def test_chat_agent_prompt_contains_generate_document_instruction():

@@ -20,7 +20,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
-from plotlot.pipeline.lookup import _agentic_analysis, PIPELINE_VERSION
+from plotlot.pipeline.lookup import _agentic_analysis, GENERIC_ZONING_QUERY, PIPELINE_VERSION
 from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
 from plotlot.observability.prompts import log_prompt_to_run
 from plotlot.storage.db import get_session
@@ -274,13 +274,58 @@ async def analyze_stream(request: AnalyzeRequest):
                 },
             )
             search_query = (
-                prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+                prop_record.zoning_code
+                if prop_record and prop_record.zoning_code
+                else GENERIC_ZONING_QUERY
             )
             session = await get_session()
             try:
                 search_results = await hybrid_search(session, municipality, search_query, limit=15)
             finally:
                 await session.close()
+
+            # ACP: on-demand ingestion when municipality has no indexed data
+            if not search_results:
+                from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": f"No data found for {municipality} — ingesting now…",
+                    },
+                )
+                async for progress in run_on_demand_ingestion(
+                    IngestRequest(
+                        municipality=municipality,
+                        state=state,
+                        county=county,
+                        trigger="search_miss",
+                    )
+                ):
+                    yield _sse_event("ingestion_progress", progress.model_dump())
+
+                # Re-run search after ingestion (may still be empty if ingestion failed)
+                session = await get_session()
+                try:
+                    search_results = await hybrid_search(
+                        session, municipality, search_query, limit=15
+                    )
+                finally:
+                    await session.close()
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": (
+                            f"Ingestion complete — found {len(search_results)} sections"
+                            if search_results
+                            else "Ingestion complete — proceeding with limited data"
+                        ),
+                        "complete": True,
+                    },
+                )
 
             yield _sse_event(
                 "status",
@@ -512,11 +557,13 @@ async def analyze_stream(request: AnalyzeRequest):
                     },
                 )
                 try:
+                    from plotlot.pipeline.cost_model import get_cost_model
                     from plotlot.pipeline.proforma import calculate_land_pro_forma
 
                     report.pro_forma = calculate_land_pro_forma(
                         density=report.density_analysis,
                         comps=report.comp_analysis,
+                        cost_model=get_cost_model(state, county),
                     )
                     pf_msg = (
                         f"Max offer: ${report.pro_forma.max_land_price:,.0f}"
@@ -538,6 +585,23 @@ async def analyze_stream(request: AnalyzeRequest):
                     "status",
                     {"step": "proforma", "message": "Skipped", "complete": True},
                 )
+
+            # Step 7.5: Deal analysis — Dani Kleyman underwriting (Steps 2-10)
+            if report.density_analysis and report.property_record:
+                from plotlot.pipeline.deal_analysis import run_deal_analysis
+                try:
+                    report.deal_analysis = await run_deal_analysis(
+                        zoning_report=report,
+                        county=geo.get("county", ""),
+                        state=geo.get("state", "FL"),
+                        land_purchase_price=(
+                            report.pro_forma.max_land_price
+                            if report.pro_forma and report.pro_forma.max_land_price > 0
+                            else 0
+                        ),
+                    )
+                except Exception as e:
+                    logger.warning("Deal analysis failed (non-blocking): %s", e)
 
             # Step 8: Site risk — FEMA flood zone + NWI wetlands (non-blocking)
             if "site_risk" not in request.skip_steps and lat and lng:

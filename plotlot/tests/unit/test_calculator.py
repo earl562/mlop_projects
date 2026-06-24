@@ -2,6 +2,7 @@
 
 from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.calculator import (
+    _derive_max_stories,
     calculate_max_units,
     parse_lot_dimensions,
 )
@@ -76,11 +77,11 @@ class TestDensityConstraint:
         assert result.max_units == 1
 
     def test_minimum_one_unit(self):
-        """Very small lot still returns at least 1 unit."""
+        """Very small lot can evaluate to 0 units."""
         params = NumericZoningParams(max_density_units_per_acre=6.0)
         result = calculate_max_units(1000, params)
 
-        assert result.max_units == 1
+        assert result.max_units == 0
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +342,7 @@ class TestRealWorldScenarios:
             lot_depth_ft=100.0,
         )
 
-        assert result.max_units == 1
+        assert result.max_units == 0
         assert result.confidence == "high"
         assert len(result.constraints) >= 3
 
@@ -368,3 +369,224 @@ class TestRealWorldScenarios:
         # density: 25 * 0.5 = 12.5 → 12
         assert result.max_units <= 12
         assert result.confidence == "high"
+
+
+# ---------------------------------------------------------------------------
+# Lot coverage constraint (Task 5.1)
+# ---------------------------------------------------------------------------
+
+
+class TestLotCoverageConstraint:
+    def test_lot_coverage_reduces_units(self):
+        """10K sqft, 25% coverage, 2 stories, 800sf/unit → 6 units."""
+        params = NumericZoningParams(
+            max_lot_coverage_pct=25.0,
+            max_stories=2,
+            min_unit_size_sqft=800.0,
+        )
+        result = calculate_max_units(10000, params)
+
+        coverage_constraint = next(c for c in result.constraints if c.name == "lot_coverage")
+        # (0.25 * 10000 * 2) / 800 = 5000 / 800 = 6.25 → 6
+        assert coverage_constraint.max_units == 6
+        assert coverage_constraint.raw_value == 6.25
+
+    def test_lot_coverage_skipped_without_stories(self):
+        """Without max_stories or max_height, coverage constraint skipped."""
+        params = NumericZoningParams(
+            max_lot_coverage_pct=40.0,
+            min_unit_size_sqft=750.0,
+        )
+        result = calculate_max_units(7500, params)
+
+        coverage = [c for c in result.constraints if c.name == "lot_coverage"]
+        assert len(coverage) == 0
+
+    def test_lot_coverage_skipped_without_unit_size(self):
+        """Without min_unit_size, coverage constraint skipped."""
+        params = NumericZoningParams(
+            max_lot_coverage_pct=40.0,
+            max_stories=2,
+        )
+        result = calculate_max_units(7500, params)
+
+        coverage = [c for c in result.constraints if c.name == "lot_coverage"]
+        assert len(coverage) == 0
+
+    def test_lot_coverage_from_height_derived_stories(self):
+        """35ft height, 40% coverage, 7500 sqft, 750sf/unit → 3 stories."""
+        params = NumericZoningParams(
+            max_lot_coverage_pct=40.0,
+            max_height_ft=35.0,
+            min_unit_size_sqft=750.0,
+        )
+        result = calculate_max_units(7500, params)
+
+        coverage = next(c for c in result.constraints if c.name == "lot_coverage")
+        # derived stories = int(35 // 11) = 3
+        # (0.40 * 7500 * 3) / 750 = 9000 / 750 = 12
+        assert coverage.max_units == 12
+
+
+# ---------------------------------------------------------------------------
+# Height → stories derivation (Task 5.2)
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveMaxStories:
+    def test_explicit_stories_wins(self):
+        """Explicit max_stories takes precedence over height."""
+        assert _derive_max_stories(max_height_ft=50.0, max_stories=2) == 2
+
+    def test_height_35_ft_gives_3_stories(self):
+        """35 ft / 11 = 3.18 → 3 stories."""
+        assert _derive_max_stories(max_height_ft=35.0, max_stories=None) == 3
+
+    def test_height_45_ft_gives_4_stories(self):
+        """45 ft / 11 = 4.09 → 4 stories."""
+        assert _derive_max_stories(max_height_ft=45.0, max_stories=None) == 4
+
+    def test_height_10_ft_gives_1_story(self):
+        """Very low height still yields at least 1 story."""
+        assert _derive_max_stories(max_height_ft=10.0, max_stories=None) == 1
+
+    def test_both_none_returns_none(self):
+        """When neither is available, return None."""
+        assert _derive_max_stories(max_height_ft=None, max_stories=None) is None
+
+    def test_zero_values_ignored(self):
+        """Zero height or stories treated as unavailable."""
+        assert _derive_max_stories(max_height_ft=0.0, max_stories=0) is None
+
+
+# ---------------------------------------------------------------------------
+# max(1, floor()) consolidation (Task 5.3)
+# ---------------------------------------------------------------------------
+
+
+class TestMaxOneFloorConsolidation:
+    def test_tiny_lot_returns_zero_with_note(self):
+        """100 sqft lot with density 6/acre → constraint shows 0 and max_units stays 0."""
+        params = NumericZoningParams(max_density_units_per_acre=6.0)
+        result = calculate_max_units(100, params)
+
+        # Constraint shows real computed value (0)
+        density = next(c for c in result.constraints if c.name == "density")
+        assert density.max_units == 0
+
+        assert result.max_units == 0
+        assert any("too small" in note for note in result.notes)
+
+    def test_normal_lot_same_as_before(self):
+        """7500 sqft, 6/acre → still returns 1, no 'too small' note."""
+        params = NumericZoningParams(max_density_units_per_acre=6.0)
+        result = calculate_max_units(7500, params)
+
+        assert result.max_units == 1
+        assert not any("too small" in note for note in result.notes)
+
+    def test_governing_constraint_preserves_real_value(self):
+        """Governing constraint stores floor(raw), even if 0."""
+        params = NumericZoningParams(
+            max_density_units_per_acre=1.0,
+            min_lot_area_per_unit_sqft=20000.0,
+        )
+        # 5000 sqft, 1 unit/acre → 5000/43560 = 0.114 → 0
+        # min_lot_area: 5000/20000 = 0.25 → 0
+        result = calculate_max_units(5000, params)
+
+        # Governing constraint has max_units=0
+        assert result.governing_constraint in ("density", "min_lot_area")
+        governing = next(c for c in result.constraints if c.name == result.governing_constraint)
+        assert governing.max_units == 0
+        assert result.max_units == 0
+
+
+# ---------------------------------------------------------------------------
+# Parking constraint (Task 5.4)
+# ---------------------------------------------------------------------------
+
+
+class TestParkingConstraint:
+    def test_parking_zero_skips_constraint(self):
+        """parking_spaces_per_unit=0 produces no parking constraint."""
+        params = NumericZoningParams(
+            parking_spaces_per_unit=0.0,
+            max_stories=2,
+            min_unit_size_sqft=1000.0,
+        )
+        result = calculate_max_units(10000, params, lot_width_ft=100.0, lot_depth_ft=100.0)
+        parking = [c for c in result.constraints if c.name == "parking"]
+        assert len(parking) == 0
+
+    def test_parking_none_skips_constraint(self):
+        """parking_spaces_per_unit=None (default) → no parking constraint."""
+        params = NumericZoningParams(
+            max_stories=2,
+            min_unit_size_sqft=1000.0,
+        )
+        result = calculate_max_units(10000, params, lot_width_ft=100.0, lot_depth_ft=100.0)
+        parking = [c for c in result.constraints if c.name == "parking"]
+        assert len(parking) == 0
+
+    def test_parking_reduces_units_10k_lot(self):
+        """10K sqft, 2 parking/unit, 350sf/space → 2 units × 700sf = 1400sf consumed.
+        Envelope: 10000 × 1 / 5000 = 2. Parking: buildable 8600 → 1 unit."""
+        params = NumericZoningParams(
+            parking_spaces_per_unit=2.0,
+            max_stories=1,
+            min_unit_size_sqft=5000.0,
+        )
+        result = calculate_max_units(10000, params, lot_width_ft=100.0, lot_depth_ft=100.0)
+
+        parking_c = next(c for c in result.constraints if c.name == "parking")
+        assert parking_c.max_units == 1
+        assert result.governing_constraint == "parking"
+        assert result.max_units == 1
+
+    def test_parking_constrains_below_envelope(self):
+        """Envelope gives 5 units; parking cuts to 3."""
+        params = NumericZoningParams(
+            parking_spaces_per_unit=2.0,
+            max_stories=1,
+            min_unit_size_sqft=2000.0,
+        )
+        result = calculate_max_units(10000, params, lot_width_ft=100.0, lot_depth_ft=100.0)
+
+        envelope = next(c for c in result.constraints if c.name == "buildable_envelope")
+        assert envelope.max_units == 5
+
+        parking_c = next(c for c in result.constraints if c.name == "parking")
+        assert parking_c.max_units == 3
+        assert result.governing_constraint == "parking"
+        assert result.max_units == 3
+
+    def test_parking_skipped_without_lot_dimensions(self):
+        """Without lot dimensions, buildable area unknown → parking skipped."""
+        params = NumericZoningParams(
+            parking_spaces_per_unit=2.0,
+            max_density_units_per_acre=6.0,
+            min_unit_size_sqft=1000.0,
+        )
+        result = calculate_max_units(10000, params)
+        parking = [c for c in result.constraints if c.name == "parking"]
+        assert len(parking) == 0
+
+    def test_parking_applies_with_setbacks(self):
+        """75x100 lot, 25' front/rear, 7.5' side → buildable 3000.
+        Envelope: 3000 × 2 / 750 = 8. Parking 2/unit → reduces further."""
+        params = NumericZoningParams(
+            parking_spaces_per_unit=2.0,
+            max_stories=2,
+            min_unit_size_sqft=750.0,
+            setback_front_ft=25.0,
+            setback_rear_ft=25.0,
+            setback_side_ft=7.5,
+        )
+        result = calculate_max_units(7500, params, lot_width_ft=75.0, lot_depth_ft=100.0)
+
+        parking_c = next(c for c in result.constraints if c.name == "parking")
+        # envelope = 8, parking_consumed = 8 * 700 = 5600 > 3000 → effective=0 → 0 units
+        assert parking_c.max_units == 0
+        assert result.governing_constraint == "parking"
+        assert result.max_units == 0

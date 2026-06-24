@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -159,6 +159,24 @@ class ReportCache(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ZoningParamsCache(Base):
+    """L2 cache for NumericZoningParams — persists across process restarts.
+
+    L1 is in-memory (zoning_cache._ZONING_PARAMS_CACHE). This table is the
+    L2 DB fallback.  24-hour TTL enforced in both layers.
+    """
+
+    __tablename__ = "zoning_params_cache"
+
+    cache_key: Mapped[str] = mapped_column(String, primary_key=True)
+    params_json: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    text_fields_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    chunk_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ConnectorCredential(Base):
@@ -332,6 +350,23 @@ class AnalysisRun(Base):
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AssumptionSet(Base):
+    """Versioned assumption set for an analysis — separates inputs from results."""
+
+    __tablename__ = "assumption_sets"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    analysis_id = Column(String(36), ForeignKey("analyses.id"), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    inputs_json = Column(JSON, nullable=False, default=dict)
+    labels_json = Column(JSON, nullable=False, default=dict)
+    created_by = Column(String(255), nullable=False)
+    supersedes_id = Column(String(36), ForeignKey("assumption_sets.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -577,3 +612,37 @@ class EvalCaseResult(Base):
     evidence_metrics_json = Column(JSON, nullable=False, default=dict)
     trajectory_metrics_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CountySchema(Base):
+    """Discovered ArcGIS dataset schemas and field mappings for any US county.
+
+    Single source of truth for dynamic county property/zoning lookup.
+    Replaces Firestore cache — county_key is the primary key (e.g. "san diego").
+    TTL enforced in application code (default 7 days / 168 hours).
+    """
+
+    __tablename__ = "county_schemas"
+
+    county_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+
+    # Serialised DatasetInfo objects (nullable — may not have zoning layer)
+    parcels_dataset: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    zoning_dataset: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Serialised FieldMapping (nullable — generated on first lookup)
+    field_mapping: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    ttl_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=168)
+    last_verified: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )

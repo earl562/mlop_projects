@@ -89,6 +89,7 @@ docs/research/_tmp-*
 HANDOFF.md
 OUTREACH.md
 outreach-agent
-
+AGENTS.md
 # Claude Code local settings (contains personal permissions/hooks)
 .claude/settings.json
+PLOTLOT_PHASE1_IMPLEMENTATION.md

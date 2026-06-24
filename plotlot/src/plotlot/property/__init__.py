@@ -20,6 +20,7 @@ from plotlot.property.registry import get_provider, register_provider, registere
 
 from plotlot.property.broward import BrowardProvider
 from plotlot.property.california import CaliforniaProvider
+from plotlot.property.clark_county_nv import ClarkCountyNVProvider
 from plotlot.property.mecklenburg import MecklenburgProvider
 from plotlot.property.miami_dade import MiamiDadeProvider
 from plotlot.property.palm_beach import PalmBeachProvider
@@ -33,6 +34,11 @@ register_provider("miami-dade", _miami_dade)
 register_provider("miami dade", _miami_dade)  # alias — Geocodio sometimes omits hyphen
 register_provider("broward", _broward)
 register_provider("palm beach", _palm_beach)
+
+# NV providers
+_clark_county_nv = ClarkCountyNVProvider()
+
+register_provider("clark", _clark_county_nv)  # Geocodio returns "Clark" for Clark County NV
 
 # NC providers
 _mecklenburg = MecklenburgProvider()
@@ -60,6 +66,10 @@ register_provider("san mateo", _california)
 
 # San Diego County — uses CA statewide parcel layer (no county-specific config needed)
 register_provider("san diego", _california)
+
+# Marin County — uses CA statewide parcel layer (no county-specific config needed)
+# Covers Sausalito, Tiburon, Belvedere Tiburon, San Rafael, Novato, Mill Valley, etc.
+register_provider("marin", _california)
 
 
 # Convenience top-level lookup ---------------------------------------------------

@@ -6,7 +6,6 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/stripe/webhook", // Stripe sends unsigned webhooks — must stay public
   "/api/gis-proxy(.*)", // GIS tile proxy — no auth needed
-  "/api/fal/(.*)", // FAL AI proxy
 ]);
 
 const clerkEnabled = Boolean(

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { streamAnalysis, type AnalysisError } from "../../src/lib/api";
+import {
+  streamAnalysis,
+  type AnalysisError,
+  type ZoningReportData,
+} from "../../src/lib/api";
 
 describe("streamAnalysis", () => {
   afterEach(() => {
@@ -108,14 +112,14 @@ describe("streamAnalysis", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    let receivedResult: typeof report | null = null;
+    let receivedResult: ZoningReportData | null = null;
     let receivedError: AnalysisError | null = null;
 
     const pending = streamAnalysis(
       { address: report.address },
       () => {},
       (result) => {
-        receivedResult = result as typeof report;
+        receivedResult = result;
       },
       (error) => {
         receivedError = error;
@@ -197,7 +201,7 @@ describe("streamAnalysis", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const statuses: string[] = [];
-    let receivedResult: typeof report | null = null;
+    let receivedResult: ZoningReportData | null = null;
     let receivedError: AnalysisError | null = null;
 
     await streamAnalysis(
@@ -206,7 +210,7 @@ describe("streamAnalysis", () => {
         statuses.push(status.step);
       },
       (result) => {
-        receivedResult = result as typeof report;
+        receivedResult = result;
       },
       (error) => {
         receivedError = error;

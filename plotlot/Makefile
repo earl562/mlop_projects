@@ -1,4 +1,4 @@
-.PHONY: install install-local-tools auth-readiness auth-bootstrap live-agent-e2e mutation test verify-local verify-local-no-browser lint fmt discover ingest db-up db-down clean
+.PHONY: install install-local-tools auth-readiness auth-bootstrap agent-loop agent-loop-smoke live-agent-e2e mutation test verify-local verify-local-no-browser lint fmt discover ingest db-up db-down clean
 
 install:  ## Install all dependencies (including dev)
 	uv sync --extra dev
@@ -11,6 +11,12 @@ auth-readiness:  ## Report which credential-backed/live test lanes are ready
 
 auth-bootstrap:  ## Bootstrap live credentials into .env via CLIs (see script --help)
 	python3 scripts/bootstrap_live_auth.py --help
+
+agent-loop:  ## Run the full local agent work loop and write sanitized evidence
+	python3 scripts/agent_work_loop.py --profile full
+
+agent-loop-smoke:  ## Run the fast planning/debug/hygiene agent loop
+	python3 scripts/agent_work_loop.py --profile smoke
 
 live-agent-e2e:  ## Start/verify backend and run served frontend live agent Playwright E2E
 	bash scripts/run_live_agent_e2e.sh

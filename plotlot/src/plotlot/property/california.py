@@ -157,11 +157,31 @@ _COUNTY_CONFIG: dict[str, dict] = {
         "lot_fields": ["Shape__Area"],
         "lot_unit": "sqm",
         "folio_fields": ["PARCEL_APN"],
+        "assessor_lot_url": True,  # override statewide polygon with County Assessor legal lot
     },
 }
 
-# sq meters → sq ft conversion (used when lot_unit = "sqm")
+# sq meters -> sq ft conversion (used when lot_unit = "sqm")
 _SQM_TO_SQFT = 10.7639
+
+# Geometry-derived lot fields (polygon area, not a named assessor record).
+# When lot_size_source matches one of these, the lot area is a GIS estimate,
+# not an authoritative legal-record figure.
+_GEOMETRY_LOT_FIELDS = {"shape__area", "shape_area", "shape.starea()"}
+
+
+def _is_geometry_lot_field(field: str) -> bool:
+    """Return True if *field* is a polygon-area field rather than a named assessor record."""
+    return field.lower().strip() in _GEOMETRY_LOT_FIELDS
+
+
+# San Diego County Assessor - authoritative legal lot area via PDS_Layers.
+# Public ArcGIS REST service (no token required).
+# Fields: APN, ACREAGE (acres, often null), Shape.STArea() (sqft).
+_SD_ASSESSOR_PARCEL_URL = (
+    "https://gis-public.sandiegocounty.gov/arcgis/rest/services"
+    "/PDS/PDS_Layers/MapServer/0/query"
+)
 
 # ---------------------------------------------------------------------------
 # CA statewide parcel layer (fallback for counties without a specific config)
@@ -248,6 +268,15 @@ class CaliforniaProvider(PropertyProvider):
             if zoning_code:
                 record.zoning_code = zoning_code
                 record.zoning_description = zoning_desc
+
+        # --- 3. Authoritative lot-size override (San Diego assessor layer) ---
+        if config.get("assessor_lot_url") and record.folio:
+            assessor_lot, owner_name = await self._assessor_lot_sqft(record.folio)
+            if assessor_lot is not None:
+                record.lot_size_sqft = assessor_lot
+                record.lot_size_source = "assessor"
+            if owner_name and not record.owner:
+                record.owner = owner_name
 
         return record
 
@@ -340,6 +369,46 @@ class CaliforniaProvider(PropertyProvider):
             logger.debug("CaliforniaProvider zoning spatial failed: %s", exc)
             return "", ""
 
+    async def _assessor_lot_sqft(self, apn: str) -> tuple[float | None, str]:
+        """Query the SD County Assessor parcel layer for the authoritative legal lot area.
+
+        Returns (sqft, owner_name) — sqft from ACREAGE or Shape.STArea(), or None on miss.
+        Owner name returned as empty string when unavailable.
+        Public endpoint — no token required.
+        """
+        where = f"APN='{apn}'"
+        out_fields = "ACREAGE,Shape.STArea(),OWN_NAME1"
+        params = {
+            "where": where,
+            "outFields": out_fields,
+            "returnGeometry": "false",
+            "f": "json",
+            "resultRecordCount": "1",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(_SD_ASSESSOR_PARCEL_URL, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            features = data.get("features")
+            if not features:
+                return None, ""
+            attrs = features[0].get("attributes", {})
+            owner = str(attrs.get("OWN_NAME1") or "").strip()
+            # Prefer recorded ACREAGE (legal acres from assessor) over geometry STArea.
+            acreage = attrs.get("ACREAGE")
+            if acreage and float(acreage) > 0:
+                return float(acreage) * 43_560, owner
+            st_area = attrs.get("Shape.STArea()")
+            if st_area and float(st_area) > 0:
+                return float(st_area), owner
+            return None, owner
+        except Exception as exc:
+            logger.warning(
+                "CaliforniaProvider: SD assessor lot query failed for APN %s: %s", apn, exc
+            )
+            return None, ""
+
     def _parse_feature(
         self,
         feature: dict,
@@ -380,6 +449,10 @@ class CaliforniaProvider(PropertyProvider):
                 lot_sqft = raw_lot * _SQM_TO_SQFT
             else:
                 lot_sqft = raw_lot
+
+        # Tag lot-size provenance — geometry-derived fields vs. named assessor fields
+        matched_field = self._first_field_name(attrs, config["lot_fields"])
+        lot_source = "geometry" if _is_geometry_lot_field(matched_field) else "assessor"
 
         # Owner — field names vary by county (confirmed from schema probes)
         owner = str(
@@ -438,6 +511,7 @@ class CaliforniaProvider(PropertyProvider):
             zoning_code=zoning_code,
             zoning_description=zoning_desc,
             lot_size_sqft=lot_sqft,
+            lot_size_source=lot_source,
             year_built=year_built,
             assessed_value=assessed,
             building_area_sqft=building_sqft,
@@ -453,6 +527,15 @@ class CaliforniaProvider(PropertyProvider):
             val = attrs.get(f)
             if val is not None and str(val).strip() not in ("", "None", "null"):
                 return val
+        return ""
+
+    @staticmethod
+    def _first_field_name(attrs: dict, fields: list[str]) -> str:
+        """Return the field name of the first non-empty field, or ''."""
+        for f in fields:
+            val = attrs.get(f)
+            if val is not None and str(val).strip() not in ("", "None", "null"):
+                return f
         return ""
 
     @staticmethod
@@ -562,6 +645,7 @@ class CaliforniaProvider(PropertyProvider):
             zoning_code="",  # not available; ordinance search resolves zoning
             zoning_description="",
             lot_size_sqft=lot_sqft,
+            lot_size_source="geometry",
             lat=feat_lat,
             lng=feat_lng,
         )

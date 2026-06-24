@@ -6,8 +6,10 @@ Supports three modes:
   3. Streaming chat: call_llm_stream() yields tokens for conversational UI
 
 Auth:
-  - Primary (OpenAI):
-      - OPENAI_API_KEY for direct API-key auth
+  - Primary:
+      - DEEPSEEK_API_KEY for DeepSeek V4 Flash (preferred default)
+      - NVIDIA_API_KEY as OpenAI-compatible alternative
+      - OPENAI_API_KEY for direct OpenAI auth
       - OPENAI_ACCESS_TOKEN for OAuth-backed bearer tokens supplied by the caller
       - OPENAI_BASE_URL for gateway / proxy deployments
   - Fallback (Groq, OpenAI-compatible):
@@ -21,7 +23,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
 
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 2
 BASE_DELAY = 1.0
 DEFAULT_OPENAI_MODEL = "gpt-4.1"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 OPENAI_TIMEOUT_SECONDS = 60.0
 DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
@@ -213,13 +216,19 @@ def _has_openai_credentials() -> bool:
         from pathlib import Path
 
         return has_saved_tokens(Path(settings.codex_auth_file).expanduser())
+    if settings.deepseek_api_key:
+        return True
     if settings.nvidia_api_key:
         return True
     return False
 
 
 def _using_nvidia_mainline() -> bool:
-    return bool(settings.nvidia_api_key)
+    return bool(settings.nvidia_api_key) and not bool(settings.deepseek_api_key)
+
+
+def _using_deepseek_mainline() -> bool:
+    return bool(settings.deepseek_api_key)
 
 
 async def _get_codex_oauth_token() -> str:
@@ -237,6 +246,8 @@ async def _get_codex_oauth_token() -> str:
 
 
 def _get_openai_model() -> str:
+    if _using_deepseek_mainline():
+        return settings.deepseek_model or DEFAULT_DEEPSEEK_MODEL
     if _using_nvidia_mainline():
         return settings.nvidia_model or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     return settings.openai_model or DEFAULT_OPENAI_MODEL
@@ -258,13 +269,38 @@ def _usable_response(result: dict | None) -> bool:
     return bool(result.get("content") or result.get("tool_calls"))
 
 
+def _resolve_codex_oauth_api_key() -> str:
+    """Return a cached or freshly refreshed OAuth token if possible.
+
+    This is callable-friendly because OpenAI accepts ``api_key`` callbacks
+    in some SDK usage patterns. When called inside a running loop we return
+    the best-sync token already available in settings to avoid nested-loop
+    deadlocks.
+    """
+    if not settings.openai_oauth_client_id:
+        return settings.openai_access_token
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            return asyncio.run(_get_codex_oauth_token())
+        except Exception:
+            return settings.openai_access_token
+
+    return settings.openai_access_token
+
+
 def _get_openai_client() -> AsyncOpenAI:
-    if _using_nvidia_mainline():
-        api_key: str | Any = settings.nvidia_api_key
+    api_key: str | Callable[[], str]
+    if _using_deepseek_mainline():
+        api_key = settings.deepseek_api_key
+    elif _using_nvidia_mainline():
+        api_key = settings.nvidia_api_key
     elif settings.openai_api_key:
         api_key = settings.openai_api_key
     elif settings.use_codex_oauth:
-        api_key = _get_codex_oauth_token
+        api_key = _resolve_codex_oauth_api_key
     else:
         api_key = settings.openai_access_token
 
@@ -272,15 +308,35 @@ def _get_openai_client() -> AsyncOpenAI:
         "api_key": api_key,
         "timeout": OPENAI_TIMEOUT_SECONDS,
     }
-    if _using_nvidia_mainline():
+    if _using_deepseek_mainline():
+        kwargs["base_url"] = settings.deepseek_base_url
+    elif _using_nvidia_mainline():
         kwargs["base_url"] = settings.nvidia_base_url
     elif settings.openai_base_url:
         kwargs["base_url"] = settings.openai_base_url
-    if settings.openai_organization and not _using_nvidia_mainline():
+    if settings.openai_organization and not (
+        _using_deepseek_mainline() or _using_nvidia_mainline()
+    ):
         kwargs["organization"] = settings.openai_organization
-    if settings.openai_project and not _using_nvidia_mainline():
+    if settings.openai_project and not (_using_deepseek_mainline() or _using_nvidia_mainline()):
         kwargs["project"] = settings.openai_project
     return AsyncOpenAI(**kwargs)
+
+
+def _primary_provider_label() -> str:
+    if _using_deepseek_mainline():
+        return "DeepSeek"
+    if _using_nvidia_mainline():
+        return "NVIDIA"
+    return "OpenAI"
+
+
+def _primary_provider_slug() -> str:
+    if _using_deepseek_mainline():
+        return "deepseek"
+    if _using_nvidia_mainline():
+        return "nvidia"
+    return "openai"
 
 
 def _prepare_primary_messages(messages: list[dict]) -> list[dict]:
@@ -300,7 +356,8 @@ def _prepare_primary_messages(messages: list[dict]) -> list[dict]:
 
 def _sanitize_primary_content(content: str | None) -> str:
     text = (content or "").strip()
-    if not _using_nvidia_mainline():
+
+    if not (_using_nvidia_mainline() or _using_deepseek_mainline()):
         return text
     if text.startswith("<think>"):
         if "</think>" in text:
@@ -404,8 +461,10 @@ async def _call_openai(
                         "max_completion_tokens": max_completion_tokens,
                         "parallel_tool_calls": False,
                     }
-                    if not _using_nvidia_mainline():
+                    if not (_using_nvidia_mainline() or _using_deepseek_mainline()):
                         kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
+                    if _using_deepseek_mainline():
+                        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
                     if tools:
                         kwargs["tools"] = tools
                         kwargs["tool_choice"] = "auto"
@@ -417,7 +476,7 @@ async def _call_openai(
                     tool_calls = _message_to_tool_calls(message)
                     content = _sanitize_primary_content(message.content)
                     prompt_tokens, completion_tokens = _log_usage(
-                        "nvidia" if _using_nvidia_mainline() else "openai",
+                        _primary_provider_slug(),
                         response.usage,
                     )
 
@@ -644,6 +703,7 @@ async def _call_llm_with_fallback(
 async def call_llm(
     messages: list[dict],
     tools: list[dict] | None = None,
+    temperature: float = 0.0,
 ) -> dict | None:
     """Call the LLM with tool definitions and return the response."""
     clean_messages = _clean_messages_for_api(messages)
@@ -651,8 +711,8 @@ async def call_llm(
         clean_messages,
         tools=tools,
         max_completion_tokens=4000,
-        temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        temperature=temperature,
+        openai_provider_name=f"{_primary_provider_label()}/{_get_openai_model()}",
         groq_provider_name=f"Groq/{_get_groq_model()}",
     )
 
@@ -682,11 +742,9 @@ async def call_llm_stream(messages: list[dict]):
                     if text:
                         yield text
 
-    # Primary: OpenAI
+    # Primary: configured provider
     if _has_openai_credentials():
-        provider_name = (
-            f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}"
-        )
+        provider_name = f"{_primary_provider_label()}/{_get_openai_model()}"
         breaker = _get_breaker(provider_name)
         if breaker.allow_request():
             try:
@@ -698,8 +756,11 @@ async def call_llm_stream(messages: list[dict]):
                     "max_completion_tokens": 2000,
                     "stream": True,
                 }
-                if not _using_nvidia_mainline():
+                if not (_using_nvidia_mainline() or _using_deepseek_mainline()):
                     kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
+                if _using_deepseek_mainline():
+                    kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
                 stream = await client.chat.completions.create(**kwargs)
                 async for chunk in stream:
                     for choice in chunk.choices:
@@ -771,8 +832,13 @@ def _clean_messages_for_api(messages: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 DIRECT_SYSTEM_PROMPT = """\
-You are a zoning analysis expert for South Florida real estate. You analyze municipal zoning \
-ordinance text and extract structured zoning information for a given property address.
+You are a zoning analyst. You extract structured zoning information from retrieved municipal \
+ordinance text for any US municipality.
+
+GROUNDING RULE: Every value you extract MUST be explicitly stated in the retrieved chunks. \
+If a value is not found in the text, use empty string "" or empty array []. \
+Do NOT use your training knowledge to fill gaps — wrong numbers cause real financial harm. \
+Null/empty is always correct when the text does not state the value.
 
 Given the zoning ordinance chunks retrieved for a municipality, extract and return a JSON object \
 with the following fields. Use empty string "" for fields you cannot determine from the provided text. \
@@ -858,7 +924,7 @@ async def analyze_zoning(
         response_format={"type": "json_object"},
         max_completion_tokens=2000,
         temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        openai_provider_name=f"{_primary_provider_label()}/{_get_openai_model()}",
         groq_provider_name=f"Groq/{_get_groq_model()}",
     )
     if not result or not result.get("content"):

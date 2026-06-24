@@ -8,6 +8,7 @@ const workspaceRoot = path.join(__dirname, "..", "..");
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: workspaceRoot,
+  devIndicators: process.env.PLAYWRIGHT_TESTING === "1" ? false : undefined,
   turbopack: {
     root: workspaceRoot,
   },

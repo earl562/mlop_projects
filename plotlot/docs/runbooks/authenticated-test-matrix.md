@@ -49,7 +49,7 @@ bash scripts/verify_local_success.sh --strict-auth --skip-browser --skip-build
 | Group | Purpose | Required values |
 | --- | --- | --- |
 | `database_backed_e2e` | DB-backed frontend e2e and backend smoke tests | `DATABASE_URL` plus reachable Postgres (`make db-up` for local Docker DB) |
-| `llm_agent` | Live chat, LLM extraction fallback, live evals | one of `OPENAI_API_KEY`, `OPENAI_ACCESS_TOKEN`, `NVIDIA_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or Codex OAuth with `PLOTLOT_USE_CODEX_OAUTH=1` and an existing `PLOTLOT_CODEX_AUTH_FILE` |
+| `llm_agent` | Live chat, LLM extraction fallback, live evals | one of `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `OPENAI_ACCESS_TOKEN`, `NVIDIA_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or Codex OAuth with `PLOTLOT_USE_CODEX_OAUTH=1` and an existing `PLOTLOT_CODEX_AUTH_FILE` |
 | `geocoding` | Live Geocodio address lookup | `GEOCODIO_API_KEY` |
 | `web_search` | Agent web-source search through Jina | `JINA_API_KEY` |
 | `google_workspace` | Google Docs/Sheets creation tools | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |

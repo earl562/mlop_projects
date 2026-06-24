@@ -360,6 +360,7 @@ async def health():
     agent_chat_ready = bool(
         _has_text_setting("openai_access_token")
         or _has_text_setting("openai_api_key")
+        or _has_text_setting("deepseek_api_key")
         or _has_text_setting("nvidia_api_key")
         or _has_text_setting("groq_api_key")
         # Legacy compatibility for tests/deployments that still use the old
@@ -461,55 +462,86 @@ async def debug_llm():
 
     diag: dict = {"providers": {}}
 
-    using_nvidia = bool(_s.nvidia_api_key)
-    token = _s.nvidia_api_key if using_nvidia else (_s.openai_access_token or _s.openai_api_key)
+    using_deepseek = bool(_s.deepseek_api_key)
+    using_nvidia = bool(_s.nvidia_api_key) and not using_deepseek
+    using_openai = bool(_s.openai_access_token or _s.openai_api_key) and not (
+        using_deepseek or using_nvidia
+    )
+
+    if using_deepseek:
+        token = _s.deepseek_api_key
+    elif using_nvidia:
+        token = _s.nvidia_api_key
+    elif using_openai:
+        token = _s.openai_access_token or _s.openai_api_key
+    else:
+        token = ""
+
+    if using_deepseek:
+        provider_name = "deepseek"
+        model = _s.deepseek_model or "deepseek-v4-flash"
+        base_url = _s.deepseek_base_url
+        messages = [{"role": "user", "content": "Say 'ok' in one word."}]
+    elif using_nvidia:
+        provider_name = "nvidia"
+        model = _s.nvidia_model or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+        base_url = _s.nvidia_base_url
+        messages = [
+            {"role": "system", "content": "/no_think"},
+            {"role": "user", "content": "Say 'ok' in one word."},
+        ]
+    elif using_openai:
+        provider_name = "openai"
+        model = _s.openai_model or "gpt-4.1"
+        base_url = _s.openai_base_url
+        messages = [{"role": "user", "content": "Say 'ok' in one word."}]
+    else:
+        provider_name = "openai"
+        model = "gpt-4.1"
+        base_url = _s.openai_base_url
+        messages = [{"role": "user", "content": "Say 'ok' in one word."}]
+
     if token:
         t0 = time.monotonic()
         try:
             client_kwargs = {"api_key": token, "timeout": 15.0}
-            base_url = _s.nvidia_base_url if using_nvidia else _s.openai_base_url
             if base_url:
                 client_kwargs["base_url"] = base_url
-            if _s.openai_organization and not using_nvidia:
+            if _s.openai_organization and not (using_deepseek or using_nvidia):
                 client_kwargs["organization"] = _s.openai_organization
-            if _s.openai_project and not using_nvidia:
+            if _s.openai_project and not (using_deepseek or using_nvidia):
                 client_kwargs["project"] = _s.openai_project
             client = AsyncOpenAI(**client_kwargs)
             kwargs = {
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
-                "messages": (
-                    [
-                        {"role": "system", "content": "/no_think"},
-                        {"role": "user", "content": "Say 'ok' in one word."},
-                    ]
-                    if using_nvidia
-                    else [{"role": "user", "content": "Say 'ok' in one word."}]
-                ),
+                "model": model,
+                "messages": messages,
                 "max_completion_tokens": 8,
                 "temperature": 0,
             }
-            if not using_nvidia:
+            if not (using_deepseek or using_nvidia):
                 kwargs["reasoning_effort"] = _s.openai_reasoning_effort
+            if using_deepseek:
+                kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = await client.chat.completions.create(**kwargs)
             elapsed = round(time.monotonic() - t0, 2)
             text = resp.choices[0].message.content or ""
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider_name] = {
                 "status": "ok",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": model,
                 "base_url": base_url,
                 "latency_s": elapsed,
                 "response": text[:100],
             }
         except Exception as e:
             elapsed = round(time.monotonic() - t0, 2)
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider_name] = {
                 "status": "error",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": model,
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }
     else:
-        diag["providers"]["nvidia" if using_nvidia else "openai"] = {"status": "no_credentials"}
+        diag["providers"][provider_name] = {"status": "no_credentials"}
 
     # --- Groq (fallback) ---
     if _s.groq_api_key:

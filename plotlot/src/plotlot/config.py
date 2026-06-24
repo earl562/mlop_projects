@@ -81,8 +81,12 @@ class Settings(BaseSettings):
     # API keys
     geocodio_api_key: str = ""
     hf_token: str = ""
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-flash"
     nvidia_api_key: str = ""
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    hud_api_key: str = ""
     nvidia_model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     nvidia_fallback_model: str = "minimaxai/minimax-m2.5"
     anthropic_api_key: str = ""
@@ -129,8 +133,12 @@ class Settings(BaseSettings):
         for field in (
             "geocodio_api_key",
             "hf_token",
+            "deepseek_api_key",
+            "deepseek_base_url",
+            "deepseek_model",
             "nvidia_api_key",
             "nvidia_base_url",
+            "hud_api_key",
             "nvidia_model",
             "nvidia_fallback_model",
             "anthropic_api_key",
@@ -204,7 +212,7 @@ class Settings(BaseSettings):
 
     # ArcGIS Hub
     arcgis_hub_api_url: str = "https://hub.arcgis.com/api/v3/datasets"
-    hub_discovery_timeout: float = 10.0
+    hub_discovery_timeout: float = 20.0
     hub_cache_ttl_hours: int = 168  # 7 days
 
     # Logging

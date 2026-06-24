@@ -138,7 +138,7 @@ function SessionRow({ session, isActive, onSelect, onDelete, assignMenu }: Sessi
         type="button"
         onClick={onSelect}
         className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
-          isActive ? "bg-amber-50 dark:bg-amber-900/20" : "hover:bg-stone-100 dark:hover:bg-stone-800"
+          isActive ? "bg-[var(--warning-subtle)]" : "hover:bg-[var(--bg-inset)]"
         }`}
       >
         <span

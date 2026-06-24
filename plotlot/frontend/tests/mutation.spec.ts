@@ -3,10 +3,21 @@ import {
   expect,
   gotoHome,
   switchToAgent,
+  typeLookupInput,
+  typeAgentInput,
   runLookupFlow,
   stubAnalyzeStream,
   stubAgentChatErrorSse,
 } from "./helpers";
+import type { Route } from "@playwright/test";
+
+function messageFromRoute(route: Route): string {
+  const body = route.request().postDataJSON();
+  if (typeof body === "object" && body !== null && !Array.isArray(body) && "message" in body) {
+    return typeof body.message === "string" ? body.message : "";
+  }
+  return "";
+}
 
 test.describe("Canonical mutation lane", () => {
   test("lookup timeout shows retry affordance", async ({ page }) => {
@@ -29,8 +40,7 @@ test.describe("Canonical mutation lane", () => {
 
   test("lookup bad address shows actionable recovery", async ({ page }) => {
     await gotoHome(page);
-
-    await page.getByTestId("lookup-input").fill("hello world");
+    await typeLookupInput(page, "hello world");
     await page.getByTestId("send-button").click();
 
     await expect(
@@ -169,11 +179,41 @@ test.describe("Canonical mutation lane", () => {
 
     await stubAgentChatErrorSse(page, "LLM returned empty response");
 
-    await page.getByTestId("agent-input").fill("What is the max height for RM-25?");
+    await typeAgentInput(page, "What is the max height for RM-25?");
     await page.getByTestId("send-button").click();
 
     await expect(page.getByTestId("report-error")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("LLM returned empty response")).toBeVisible();
+  });
+
+  test("agent suggestion click sends the clicked text when input is empty", async ({ page }) => {
+    await gotoHome(page);
+    await switchToAgent(page);
+
+    const postedMessages: string[] = [];
+    await page.route("**/api/v1/chat", async (route) => {
+      const nextMessage = messageFromRoute(route);
+      postedMessages.push(nextMessage);
+      const responseText = postedMessages.length === 1 ? "Initial handled" : "Suggestion handled";
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: [
+          `event: session\ndata: ${JSON.stringify({ session_id: "test-session" })}\n\n`,
+          `event: done\ndata: ${JSON.stringify({ full_content: responseText })}\n\n`,
+        ].join(""),
+      });
+    });
+
+    await typeAgentInput(page, "What is the zoning?");
+    await page.getByTestId("send-button").click();
+    await expect(page.getByText("Initial handled")).toBeVisible({ timeout: 15_000 });
+
+    await expect(page.getByTestId("agent-input")).toHaveValue("");
+    await page.getByRole("button", { name: "What can I build on this lot?" }).click();
+
+    await expect.poll(() => postedMessages.at(1) ?? "", { timeout: 15_000 }).toBe("What can I build on this lot?");
+    await expect(page.getByText("Suggestion handled")).toBeVisible();
   });
 
   test("agent chat missing credentials shows actionable recovery", async ({ page }) => {
@@ -185,7 +225,7 @@ test.describe("Canonical mutation lane", () => {
       "Chat is temporarily unavailable because no LLM credentials are configured. Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN to enable agent responses.",
     );
 
-    await page.getByTestId("agent-input").fill("What is the max height for RM-25?");
+    await typeAgentInput(page, "What is the max height for RM-25?");
     await page.getByTestId("send-button").click();
 
     await expect(page.getByTestId("report-error")).toBeVisible({ timeout: 15_000 });

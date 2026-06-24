@@ -13,9 +13,9 @@ interface DealHeroCardProps {
 
 function MetricBox({ label, value, highlight, subtext }: { label: string; value: string; highlight?: boolean; subtext?: string }) {
   return (
-    <div className={`rounded-xl p-3 sm:p-4 ${highlight ? "bg-amber-50 dark:bg-amber-950/40" : "bg-[var(--bg-surface-raised)]"}`}>
+    <div className={`rounded-lg p-3 sm:p-4 ${highlight ? "bg-[var(--brand-subtle)]" : "bg-[var(--bg-surface-raised)]"}`}>
       <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
-      <div className={`mt-1 text-lg font-bold sm:text-xl ${highlight ? "text-amber-700 dark:text-amber-400" : "text-[var(--text-primary)]"}`}>
+      <div className={`mt-1 text-lg font-bold sm:text-xl ${highlight ? "text-[var(--brand)]" : "text-[var(--text-primary)]"}`}>
         {value}
       </div>
       {subtext && <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">{subtext}</div>}
@@ -37,7 +37,7 @@ function MiniInput({ label, value, onChange, prefix, suffix, placeholder, min, m
   return (
     <div className="space-y-1">
       <label className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</label>
-      <div className={`flex items-center gap-1 rounded-lg border bg-[var(--bg-surface)] px-2 py-1.5 ${hasError ? "border-red-400" : "border-[var(--border)]"}`}>
+      <div className={`flex items-center gap-1 rounded-lg border bg-[var(--bg-surface)] px-2 py-1.5 ${hasError ? "border-[var(--danger)]" : "border-[var(--border)]"}`}>
         {prefix && <span className="text-xs text-[var(--text-muted)]">{prefix}</span>}
         <input
           type="text"
@@ -49,9 +49,9 @@ function MiniInput({ label, value, onChange, prefix, suffix, placeholder, min, m
         />
         {suffix && <span className="text-xs text-[var(--text-muted)]">{suffix}</span>}
       </div>
-      {isInvalid && <p className="text-[9px] text-red-500">Enter a number</p>}
+      {isInvalid && <p className="text-[9px] text-[var(--danger)]">Enter a number</p>}
       {isOutOfRange && !isInvalid && (
-        <p className="text-[9px] text-red-500">
+        <p className="text-[9px] text-[var(--danger)]">
           {min !== undefined && max !== undefined ? `Must be ${min}–${max}` : min !== undefined ? `Min ${min}` : `Max ${max}`}
         </p>
       )}
@@ -111,27 +111,175 @@ function MetricGrid({ metrics }: { metrics: Array<{ label: string; value: string
 // Land Deal Hero
 // ---------------------------------------------------------------------------
 
+function propertyTypeLabel(pt: string): string {
+  switch (pt) {
+    case "commercial":
+      return "Commercial";
+    case "commercial_mf":
+      return "Commercial Mixed-Use";
+    case "multifamily":
+      return "Multifamily";
+    case "single_family":
+      return "Single-Family";
+    case "land":
+      return "Land";
+    default:
+      return "Residential";
+  }
+}
+
 function LandDealHero({ report }: { report: ZoningReportData }) {
-  const da = report.density_analysis;
+  const da = report.deal_analysis;
+  const density = report.density_analysis;
+  const numeric = report.numeric_params;
+  const comps = report.comp_analysis;
   const pf = report.pro_forma;
-  const maxUnits = da?.max_units ?? 0;
-  const maxOffer = pf?.max_land_price ?? 0;
-  const rlvPerDoor = maxUnits > 0 && maxOffer > 0 ? maxOffer / maxUnits : 0;
-  const gdv = pf?.gross_development_value ?? 0;
-  const totalCost = (pf?.hard_costs ?? 0) + (pf?.soft_costs ?? 0) + maxOffer;
-  const devMargin = gdv > 0 ? ((gdv - totalCost) / gdv) * 100 : null;
-  const governing = da?.governing_constraint?.replace(/_/g, " ") || "N/A";
+  const propertyType = numeric?.property_type ?? da?.property_type ?? "";
+  const isCommercial = propertyType === "commercial";
+  const isMultifamily = propertyType === "multifamily" || propertyType === "commercial_mf";
+  const daMetrics = da?.metrics;
+  const units = density?.max_units ?? da?.max_units ?? 0;
+  const maxGLA = density?.max_gla_sqft ?? numeric?.max_gla_sqft ?? 0;
+
+  const badge = propertyType ? (
+    <span className="rounded-full bg-[var(--bg-inset)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]">
+      {propertyTypeLabel(propertyType)}
+    </span>
+  ) : null;
+
+  if ((isCommercial || propertyType === "commercial_mf") && maxGLA > 0) {
+    const far = numeric?.far;
+    const coverage = numeric?.max_lot_coverage_pct;
+    const height = numeric?.max_height_ft;
+    const capRate = daMetrics?.cap_rate ?? null;
+    const yieldOnCost = daMetrics?.yield_on_cost ?? null;
+    const uses = report.allowed_uses ?? [];
+    return (
+      <div className="space-y-3">
+        {badge}
+        <MetricGrid
+          metrics={[
+            { label: "Max GLA", value: `${maxGLA.toLocaleString()} sqft`, highlight: true },
+            { label: "FAR", value: far != null ? far.toFixed(2) : "N/A" },
+            { label: "Lot Coverage", value: coverage != null ? `${coverage}%` : "N/A" },
+            { label: "Max Height", value: height != null ? `${height} ft` : "N/A" },
+            {
+              label: "Cap Rate",
+              value: capRate != null ? fmtPct(capRate) : "N/A",
+              subtext: capRate != null ? (capRate >= 6 ? "Strong" : "Fair") : undefined,
+            },
+            {
+              label: "Yield on Cost",
+              value: yieldOnCost != null ? fmtPct(yieldOnCost) : "N/A",
+              subtext: yieldOnCost != null ? (yieldOnCost >= 7 ? "Strong" : undefined) : undefined,
+            },
+            { label: "Permitted Uses", value: uses.length > 0 ? uses.slice(0, 3).join(", ") : "See zoning tab" },
+          ]}
+        />
+      </div>
+    );
+  }
+
+  if (isMultifamily && da && daMetrics && units >= 5) {
+    const maxOffer = da.max_offer_price ?? 0;
+    const recOffer = da.recommended_offer ?? 0;
+    const rating = da.investment_rating ?? "";
+    const coc = daMetrics.levered_cash_on_cash ?? 0;
+    const dscr = daMetrics.dscr ?? 0;
+    const yieldOnCost = daMetrics.yield_on_cost ?? 0;
+    return (
+      <div className="space-y-3">
+        {badge}
+        <MetricGrid
+          metrics={[
+            { label: "Units", value: units.toString(), highlight: true },
+            {
+              label: "Rating",
+              value: rating || "Pending",
+              highlight: !rating || rating.includes("Buy") || rating.includes("Strong"),
+            },
+            {
+              label: "Cash-on-Cash",
+              value: coc > 0 ? fmtPct(coc) : "N/A",
+              subtext: coc >= 10 ? "Strong" : coc >= 7 ? "Fair" : coc > 0 ? "Low" : undefined,
+            },
+            {
+              label: "DSCR",
+              value: dscr > 0 ? dscr.toFixed(2) : "N/A",
+              subtext: dscr >= 1.25 ? "Pass" : dscr > 0 ? "Below" : undefined,
+            },
+            {
+              label: "Yield on Cost",
+              value: yieldOnCost > 0 ? fmtPct(yieldOnCost) : "N/A",
+              subtext: yieldOnCost >= 7 ? "Strong" : undefined,
+            },
+            {
+              label: "Max Offer",
+              value: maxOffer > 0 ? fmt(maxOffer) : "N/A",
+              highlight: true,
+            },
+            {
+              label: "Recommended",
+              value: recOffer > 0 ? fmt(recOffer) : "N/A",
+              subtext: recOffer > 0 ? "Offer" : undefined,
+            },
+          ]}
+        />
+      </div>
+    );
+  }
+
+  if (units > 0) {
+    const adv = comps?.adv_per_unit ?? 0;
+    const hardCost = pf?.hard_costs ?? 0;
+    const constructionPsf = pf?.construction_cost_psf ?? 0;
+    const avgSqft = pf?.avg_unit_size_sqft ?? 0;
+    const maxLand = pf?.max_land_price ?? 0;
+    const costPerDoor = pf?.cost_per_door ?? 0;
+    const buildCostSubtext =
+      constructionPsf > 0 && avgSqft > 0
+        ? `$${constructionPsf}/sf x ${avgSqft}sf from pro forma`
+        : undefined;
+    return (
+      <div className="space-y-3">
+        {badge}
+        <MetricGrid
+          metrics={[
+            { label: "Max Lots/Units", value: units.toString(), highlight: true },
+            { label: "ARV per Lot/Unit", value: adv > 0 ? fmt(adv) : "No comps", highlight: true },
+            {
+              label: "Est. Build Cost",
+              value: hardCost > 0 ? fmt(hardCost) : "Needs pro forma",
+              subtext: buildCostSubtext,
+            },
+            {
+              label: "Residual Land Value",
+              value: maxLand > 0 ? fmt(maxLand) : "Needs pro forma",
+              subtext: maxLand > 0 ? "from backend pro forma" : undefined,
+            },
+            {
+              label: "Cost / Door",
+              value: costPerDoor > 0 ? fmt(costPerDoor) : "N/A",
+              subtext: costPerDoor > 0 ? "from pro forma" : undefined,
+            },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
-    <MetricGrid
-      metrics={[
-        { label: "Max Units", value: maxUnits > 0 ? maxUnits.toString() : "N/A", highlight: true },
-        { label: "Max Offer (RLV)", value: fmt(maxOffer), highlight: true },
-        { label: "RLV / Door", value: fmt(rlvPerDoor) },
-        { label: "Dev Margin", value: fmtPct(devMargin) },
-        { label: "Governing", value: governing },
-      ]}
-    />
+    <div className="space-y-3">
+      {badge}
+      <MetricGrid
+        metrics={[
+          { label: "Address", value: report.formatted_address ?? report.address ?? "—" },
+          { label: "Lot Size", value: report.property_record?.lot_size_sqft
+            ? `${report.property_record.lot_size_sqft.toLocaleString()} sqft` : "—" },
+          { label: "Zoning", value: report.zoning_district ?? report.property_record?.zoning_code ?? "—" },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -323,15 +471,15 @@ export default function DealHeroCard({ report, dealType }: DealHeroCardProps) {
   };
 
   const confidenceColors: Record<string, string> = {
-    high: "text-emerald-600 dark:text-emerald-400",
-    medium: "text-amber-600 dark:text-amber-400",
-    low: "text-red-500 dark:text-red-400",
+    high: "text-[var(--success)]",
+    medium: "text-[var(--warning)]",
+    low: "text-[var(--danger)]",
   };
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+        <span className="rounded-full bg-[var(--brand-subtle)] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--brand)]">
           {DEAL_LABELS[dealType]}
         </span>
         {report.confidence && (

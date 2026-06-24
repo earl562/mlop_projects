@@ -28,6 +28,24 @@ def parse_lot_dimensions(dims: str) -> tuple[float | None, float | None]:
     return float(m.group(1)), float(m.group(2))
 
 
+def _derive_max_stories(
+    max_height_ft: float | None,
+    max_stories: int | None,
+) -> int | None:
+    """Derive max stories from explicit value or height limit.
+
+    When max_stories is given and positive, it takes precedence.
+    Otherwise, derives from max_height_ft using 11 ft/story
+    (9 ft ceilings + 16-24" trusses per Danni's methodology).
+    Returns None when neither is available.
+    """
+    if max_stories is not None and max_stories > 0:
+        return max_stories
+    if max_height_ft is not None and max_height_ft > 0:
+        return max(1, int(max_height_ft // 11.0))
+    return None
+
+
 @trace(name="calculate_max_units", span_type="TOOL")
 def calculate_max_units(
     lot_size_sqft: float,
@@ -51,6 +69,8 @@ def calculate_max_units(
     constraints: list[ConstraintResult] = []
     notes: list[str] = []
 
+    derived_max_stories = _derive_max_stories(params.max_height_ft, params.max_stories)
+
     # ── Constraint 1: Density (units per acre) ──
     if params.max_density_units_per_acre is not None and params.max_density_units_per_acre > 0:
         lot_acres = lot_size_sqft / SQFT_PER_ACRE
@@ -58,7 +78,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="density",
-                max_units=max(1, math.floor(raw)),
+                max_units=math.floor(raw),
                 raw_value=raw,
                 formula=(
                     f"{params.max_density_units_per_acre:g} units/acre "
@@ -73,7 +93,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="min_lot_area",
-                max_units=max(1, math.floor(raw)),
+                max_units=math.floor(raw),
                 raw_value=raw,
                 formula=(
                     f"{lot_size_sqft:,.0f} sqft / "
@@ -94,7 +114,7 @@ def calculate_max_units(
         constraints.append(
             ConstraintResult(
                 name="floor_area_ratio",
-                max_units=max(1, math.floor(raw)),
+                max_units=math.floor(raw),
                 raw_value=raw,
                 formula=(
                     f"FAR {params.far:g} x {lot_size_sqft:,.0f} sqft = "
@@ -104,7 +124,34 @@ def calculate_max_units(
             )
         )
 
-    # ── Constraint 4: Buildable envelope ──
+    # ── Constraint 4: Lot coverage ──
+    if (
+        params.max_lot_coverage_pct is not None
+        and params.max_lot_coverage_pct > 0
+        and lot_size_sqft > 0
+    ):
+        coverage_footprint = (params.max_lot_coverage_pct / 100.0) * lot_size_sqft
+        if (
+            derived_max_stories is not None
+            and params.min_unit_size_sqft is not None
+            and params.min_unit_size_sqft > 0
+        ):
+            raw = coverage_footprint * derived_max_stories / params.min_unit_size_sqft
+            constraints.append(
+                ConstraintResult(
+                    name="lot_coverage",
+                    max_units=math.floor(raw),
+                    raw_value=raw,
+                    formula=(
+                        f"{params.max_lot_coverage_pct:g}% x {lot_size_sqft:,.0f} sqft = "
+                        f"{coverage_footprint:,.0f} sqft footprint x "
+                        f"{derived_max_stories} stories / "
+                        f"{params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
+                    ),
+                )
+            )
+
+    # ── Constraint 5: Buildable envelope ──
     buildable_sqft = _calc_buildable_area(
         lot_width_ft,
         lot_depth_ft,
@@ -117,17 +164,51 @@ def calculate_max_units(
         and params.min_unit_size_sqft is not None
         and params.min_unit_size_sqft > 0
     ):
-        stories = params.max_stories if params.max_stories and params.max_stories > 0 else 1
+        stories = derived_max_stories if derived_max_stories is not None else 1
         total_floor_area = buildable_sqft * stories
         raw = total_floor_area / params.min_unit_size_sqft
         constraints.append(
             ConstraintResult(
                 name="buildable_envelope",
-                max_units=max(1, math.floor(raw)),
+                max_units=math.floor(raw),
                 raw_value=raw,
                 formula=(
                     f"({buildable_sqft:,.0f} sqft buildable x {stories} stories) / "
                     f"{params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
+                ),
+            )
+        )
+
+    # ── Constraint 6: Parking ──
+    if (
+        params.parking_spaces_per_unit is not None
+        and params.parking_spaces_per_unit > 0
+        and buildable_sqft is not None
+        and buildable_sqft > 0
+        and params.min_unit_size_sqft is not None
+        and params.min_unit_size_sqft > 0
+    ):
+        stories = derived_max_stories if derived_max_stories is not None else 1
+        envelope_max_units_raw = buildable_sqft * stories / params.min_unit_size_sqft
+        envelope_max_units = math.floor(envelope_max_units_raw)
+        parking_area_per_unit = params.parking_spaces_per_unit * 350.0
+        parking_consumed = envelope_max_units * parking_area_per_unit
+        effective_buildable = max(0.0, buildable_sqft - parking_consumed)
+        raw = effective_buildable * stories / params.min_unit_size_sqft
+        parking_constrained_units = math.floor(raw)
+        constraints.append(
+            ConstraintResult(
+                name="parking",
+                max_units=min(envelope_max_units, parking_constrained_units),
+                raw_value=raw,
+                formula=(
+                    f"{params.parking_spaces_per_unit:g} spaces/unit x 350 sqft/space = "
+                    f"{parking_area_per_unit:,.0f} sqft/unit; "
+                    f"{envelope_max_units} units x {parking_area_per_unit:,.0f} sqft/unit = "
+                    f"{parking_consumed:,.0f} sqft parking; "
+                    f"buildable {buildable_sqft:,.0f} - parking {parking_consumed:,.0f} = "
+                    f"{effective_buildable:,.0f} sqft x {stories} stories / "
+                    f"{params.min_unit_size_sqft:,.0f} sqft/unit = {parking_constrained_units}"
                 ),
             )
         )
@@ -158,6 +239,9 @@ def calculate_max_units(
         confidence = "medium"
     else:
         confidence = "low"
+
+    if governing.max_units < 1:
+        notes.append("Lot too small for any unit under current zoning.")
 
     return DensityAnalysis(
         max_units=governing.max_units,
