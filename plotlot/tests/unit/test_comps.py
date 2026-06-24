@@ -2,9 +2,12 @@
 
 from datetime import datetime, timezone
 
+import pytest
+
 from plotlot.core.types import CompAnalysis, ComparableSale
 from plotlot.pipeline.comps import (
     _classify_improved,
+    _discover_sales_dataset,
     _feature_latlng,
     _haversine_miles,
     _is_arms_length,
@@ -189,3 +192,20 @@ class TestCompAnalysis:
         assert len(ca.comparables) == 2
         assert ca.median_price_per_acre == 889_350
         assert ca.confidence == 0.5
+
+
+class TestStaticSalesDataset:
+    @pytest.mark.asyncio
+    async def test_static_sales_dataset_miami_dade(self):
+        """_discover_sales_dataset returns a URL for Miami-Dade from the static catalog."""
+        result = await _discover_sales_dataset("Miami-Dade", "FL")
+        assert result is not None
+        url, fields = result
+        assert "8Pc9XBTAsYuxx9Ny" in url
+        assert len(fields) > 0
+
+    @pytest.mark.asyncio
+    async def test_static_sales_dataset_unknown_county(self):
+        """_discover_sales_dataset returns None for an unknown county (falls through to Hub search)."""
+        result = await _discover_sales_dataset("Unknown County", "XX")
+        assert result is None
