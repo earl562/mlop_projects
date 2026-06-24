@@ -29,6 +29,8 @@ def test_calculate_development_land_offer_income_approach_base_case() -> None:
             ),
             desired_sweat_equity_pct=25.0,
             recommended_offer_pct_of_max=85.0,
+            market_profile_key="miami_dade_fl",
+            location_notes=["Base assumptions selected from Miami-Dade market profile."],
             evidence_ids=["density-run-1", "rent-comps-1", "cost-template-1"],
             assumption_ids=["base-rent", "base-cap-rate"],
         )
@@ -42,6 +44,8 @@ def test_calculate_development_land_offer_income_approach_base_case() -> None:
     assert result.max_land_purchase_price_per_unit == 48_125
     assert result.recommended_offer_per_unit == 40_906.25
     assert result.as_built_value_source == "income_approach"
+    assert result.market_profile_key == "miami_dade_fl"
+    assert result.location_notes == ["Base assumptions selected from Miami-Dade market profile."]
     assert result.confidence == "high"
     assert result.warnings == []
 
@@ -59,6 +63,7 @@ def test_calculate_development_land_offer_uses_override_value() -> None:
             cost_stack=CostStack(hard_costs=650_000, soft_costs=130_000),
             desired_sweat_equity_pct=20.0,
             recommended_offer_pct_of_max=90.0,
+            market_profile_key="san_diego_ca",
         )
     )
 
@@ -75,6 +80,7 @@ def test_negative_residual_land_value_is_preserved_but_offer_is_zero() -> None:
             as_built_value=AsBuiltValueInputs(override_value=1_000_000),
             cost_stack=CostStack(hard_costs=900_000, soft_costs=250_000, contingency=100_000),
             desired_sweat_equity_pct=25.0,
+            market_profile_key="san_diego_ca",
         )
     )
 
@@ -97,6 +103,7 @@ def test_missing_value_inputs_return_low_confidence_with_warnings() -> None:
     assert result.max_land_purchase_price == 0
     assert result.recommended_offer == 0
     assert result.confidence == "low"
+    assert any("market profile" in warning for warning in result.warnings)
     assert any("No positive unit capacity" in warning for warning in result.warnings)
     assert any("No development costs" in warning for warning in result.warnings)
     assert any("Annual NOI" in warning for warning in result.warnings)
@@ -110,6 +117,7 @@ def test_out_of_range_percentages_fall_back_to_defaults() -> None:
             cost_stack=CostStack(hard_costs=200_000),
             desired_sweat_equity_pct=125.0,
             recommended_offer_pct_of_max=-10.0,
+            market_profile_key="broward_fl",
         )
     )
 
