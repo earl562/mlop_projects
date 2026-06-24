@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from plotlot.pipeline.skills.playwright_comps import (
-    _build_filter_state,
     _build_zillow_url,
     _extract_listings,
     _extract_sold_price,
@@ -60,70 +59,23 @@ def test_extract_sold_price_zero() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Filter state construction (Kleyman deal-path scenarios)
+# URL construction (path-based)
 # ---------------------------------------------------------------------------
 
 
-def test_filter_state_rental_has_for_rent() -> None:
-    fs = _build_filter_state("rental")
-    assert fs["isForRent"]["value"] is True
-    assert fs["isForSaleByAgent"]["value"] is False
+def test_build_zillow_url_rental() -> None:
+    url = _build_zillow_url("33165", "rental")
+    assert "for_rent/33165_rb/" in url
 
 
-def test_filter_state_land_has_lot_land() -> None:
-    fs = _build_filter_state("land")
-    assert fs["isLotLand"]["value"] is True
-    assert fs["isSingleFamily"]["value"] is False
-    assert fs["isRecentlySold"]["value"] is True
-    assert fs["doz"]["value"] == "12m"
+def test_build_zillow_url_sold() -> None:
+    url = _build_zillow_url("33165", "land")
+    assert "33165_rb/sold/" in url
 
 
-def test_filter_state_land_with_acreage() -> None:
-    fs = _build_filter_state("land", min_acres=1, max_acres=10)
-    assert fs["lotSize"]["min"] == 1
-    assert fs["lotSize"]["max"] == 10
-    assert fs["lotSize"]["units"] == "acres"
-
-
-def test_filter_state_new_build_has_built_range() -> None:
-    fs = _build_filter_state("new_build")
-    assert fs["isSingleFamily"]["value"] is True
-    assert fs["isRecentlySold"]["value"] is True
-    assert "built" in fs
-    assert fs["built"]["max"] >= fs["built"]["min"]
-
-
-def test_filter_state_renovated_has_keyword() -> None:
-    fs = _build_filter_state("renovated")
-    assert fs["keywords"]["value"] == "renovated"
-    assert fs["isRecentlySold"]["value"] is True
-
-
-def test_filter_state_small_mf_has_multi_family() -> None:
-    fs = _build_filter_state("small_mf")
-    assert fs["isMultiFamily"]["value"] is True
-    assert fs["isLotLand"]["value"] is False
-    assert fs["isRecentlySold"]["value"] is True
-
-
-# ---------------------------------------------------------------------------
-# URL construction
-# ---------------------------------------------------------------------------
-
-
-def test_build_zillow_url_contains_zip() -> None:
-    fs = _build_filter_state("rental")
-    url = _build_zillow_url("33165", fs)
-    assert "33165_rb" in url
-    assert "searchQueryState" in url
-
-
-def test_build_zillow_url_encodes_json() -> None:
-    fs = _build_filter_state("rental")
-    url = _build_zillow_url("33165", fs)
-    # URL should be properly encoded — no raw braces
-    assert "{" not in url
-    assert "}" not in url
+def test_build_zillow_url_new_build() -> None:
+    url = _build_zillow_url("33165", "new_build")
+    assert "33165_rb/sold/" in url
 
 
 # ---------------------------------------------------------------------------
@@ -253,16 +205,6 @@ async def test_handler_no_zip_code() -> None:
     result = await handle_fetch_zillow_comps({"address": "123 Main St, Miami, FL"})
     assert result.output_json["count"] == 0
     assert "No ZIP code" in result.output_json["error"]
-
-
-@pytest.mark.asyncio
-async def test_handler_unknown_scenario_defaults_to_rental() -> None:
-    with patch("plotlot.pipeline.skills.playwright_comps.run_stealth_fetch") as mock_fetch:
-        mock_fetch.return_value = {"data": {"comparables": [], "count": 0}, "cookies": [], "captcha_solved": False, "title": "test"}
-        await handle_fetch_zillow_comps({"address": "123 Main St, Miami, FL 33169", "listing_type": "unknown"})
-        args = mock_fetch.call_args
-        url = args[0][0]
-        assert "33165" not in url  # 33169 is the zip
 
 
 @pytest.mark.asyncio

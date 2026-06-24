@@ -6,15 +6,15 @@ bypassing PerimeterX bot detection via ``gui_click_and_hold("#px-captcha")``.
 Supports Daniel Kleyman's deal-path comping methodology:
 - **land** → sold land with similar acreage (establishes land basis)
 - **new_build** → sold homes built within last year (ARV for Path 1/2)
-- **renovated** → sold homes with renovation indicators (ARV for Path 1/2)
+- **renovated** → sold homes (ARV for Path 1/2, client-filtered)
 - **small_mf** → sold duplexes / 2-4 unit buildings (ARV for Path 2)
 - **rental** → rental listings (NOI for Path 3, ≥5 units)
 
-Each scenario builds a Zillow ``searchQueryState`` JSON with the appropriate
-``filterState`` to filter by property type, lot size, year built, etc.
-
-URLs search by ZIP code area to get search result pages (not property detail
-redirects). Cookie reuse between scenarios avoids re-triggering CAPTCHAs.
+URLs use Zillow's path-based format (/homes/{zip}_rb/sold/ or
+/homes/for_rent/{zip}_rb/) which Zillow reliably respects for listing
+status. Property type filtering is done client-side after extraction
+because Zillow silently drops searchQueryState property type filters.
+Cookie reuse between scenarios avoids re-triggering CAPTCHAs.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import urllib.parse
 from typing import Any
 
 from plotlot.pipeline.skills.browser_manager import run_stealth_fetch
@@ -38,6 +37,15 @@ _ZILLOW_BASE = "https://www.zillow.com/homes"
 _ZIP_RE = re.compile(r"\b(\d{5})\b")
 _CURRENT_YEAR = 2026
 
+# Property types that qualify for each Kleyman scenario.
+_SCENARIO_TYPES: dict[str, frozenset[str]] = {
+    "land": frozenset({"LOT", "VACANT_RESIDENTIAL_LOT"}),
+    "new_build": frozenset({"SINGLE_FAMILY"}),
+    "renovated": frozenset({"SINGLE_FAMILY"}),
+    "small_mf": frozenset({"MULTI_FAMILY", "DUPLEX"}),
+    "rental": frozenset(),  # empty = accept all types
+}
+
 
 def _extract_zip(address: str) -> str | None:
     """Extract a 5-digit ZIP code from an address string.
@@ -49,114 +57,20 @@ def _extract_zip(address: str) -> str | None:
     return match.group(1) if match else None
 
 
-# ---------------------------------------------------------------------------
-# Kleyman deal-path filter states
-# ---------------------------------------------------------------------------
+def _build_zillow_url(zip_code: str, scenario: str) -> str:
+    """Build a Zillow search URL using path segments.
 
-# Common "sold" filter — disables all for-sale statuses, enables recently sold.
-_SOLD_BASE: dict[str, Any] = {
-    "isRecentlySold": {"value": True},
-    "isForSaleByAgent": {"value": False},
-    "isForSaleByOwner": {"value": False},
-    "isNewConstruction": {"value": False},
-    "isAuction": {"value": False},
-    "isForSaleForeclosure": {"value": False},
-    "isComingSoon": {"value": False},
-}
+    Zillow's searchQueryState filterState is silently dropped for property
+    type filters. Instead, we use the path-based URL format that Zillow
+    reliably respects for listing status, then filter by property type
+    client-side after extraction.
 
-# Property type exclusions (all false by default, enable what's needed).
-_ALL_TYPES_OFF: dict[str, Any] = {
-    "isSingleFamily": {"value": False},
-    "isCondo": {"value": False},
-    "isTownhouse": {"value": False},
-    "isMultiFamily": {"value": False},
-    "isLotLand": {"value": False},
-    "isManufactured": {"value": False},
-}
-
-
-def _build_filter_state(scenario: str, **kwargs: Any) -> dict[str, Any]:
-    """Build Zillow filterState for a Kleyman deal-path comp scenario.
-
-    Args:
-        scenario: One of "land", "new_build", "renovated", "small_mf", "rental".
-        **kwargs: Extra params (e.g., min_acres, max_acres for land).
-
-    Returns:
-        filterState dict for Zillow's searchQueryState.
+    - rental  → /homes/for_rent/{zip}_rb/
+    - sold    → /homes/{zip}_rb/sold/  (recently sold)
     """
-    fs: dict[str, Any] = dict(_ALL_TYPES_OFF)
-
-    if scenario == "land":
-        fs["isLotLand"] = {"value": True}
-        fs.update(_SOLD_BASE)
-        fs["doz"] = {"value": "12m"}
-        fs["sortSelection"] = {"value": "days"}
-        min_acres = kwargs.get("min_acres")
-        max_acres = kwargs.get("max_acres")
-        if min_acres is not None or max_acres is not None:
-            fs["lotSize"] = {
-                "min": min_acres,
-                "max": max_acres,
-                "units": "acres",
-            }
-
-    elif scenario == "new_build":
-        fs["isSingleFamily"] = {"value": True}
-        fs.update(_SOLD_BASE)
-        fs["built"] = {"min": _CURRENT_YEAR - 1, "max": _CURRENT_YEAR}
-        fs["doz"] = {"value": "12m"}
-        fs["sortSelection"] = {"value": "days"}
-
-    elif scenario == "renovated":
-        fs["isSingleFamily"] = {"value": True}
-        fs.update(_SOLD_BASE)
-        fs["keywords"] = {"value": "renovated"}
-        fs["doz"] = {"value": "12m"}
-        fs["sortSelection"] = {"value": "days"}
-
-    elif scenario == "small_mf":
-        fs["isMultiFamily"] = {"value": True}
-        fs.update(_SOLD_BASE)
-        fs["doz"] = {"value": "12m"}
-        fs["sortSelection"] = {"value": "days"}
-
-    elif scenario == "rental":
-        fs["isForRent"] = {"value": True}
-        fs["isForSaleByAgent"] = {"value": False}
-        fs["isForSaleByOwner"] = {"value": False}
-        fs["isNewConstruction"] = {"value": False}
-        fs["isAuction"] = {"value": False}
-        fs["isForSaleForeclosure"] = {"value": False}
-        fs["isComingSoon"] = {"value": False}
-        fs["sortSelection"] = {"value": "days"}
-        fs["isSingleFamily"] = {"value": True}
-        fs["isCondo"] = {"value": True}
-        fs["isTownhouse"] = {"value": True}
-        fs["isMultiFamily"] = {"value": True}
-
-    return fs
-
-
-def _build_zillow_url(zip_code: str, filter_state: dict[str, Any]) -> str:
-    """Build a Zillow search URL with searchQueryState.
-
-    Args:
-        zip_code: 5-digit ZIP code to search in.
-        filter_state: filterState dict from _build_filter_state().
-
-    Returns:
-        Full Zillow URL with encoded searchQueryState.
-    """
-    sqs = {
-        "pagination": {},
-        "isMapVisible": False,
-        "isListVisible": True,
-        "filterState": filter_state,
-        "usersSearchTerm": str(zip_code),
-    }
-    encoded = urllib.parse.quote(json.dumps(sqs, separators=(",", ":")))
-    return f"{_ZILLOW_BASE}/{zip_code}_rb/?searchQueryState={encoded}"
+    if scenario == "rental":
+        return f"{_ZILLOW_BASE}/for_rent/{zip_code}_rb/"
+    return f"{_ZILLOW_BASE}/{zip_code}_rb/sold/"
 
 
 # ---------------------------------------------------------------------------
@@ -281,8 +195,10 @@ def _make_extract_fn(scenario: str, max_results: int) -> Any:
 
     Returns a function that:
     1. Evaluates __NEXT_DATA__ JS on the page
-    2. Extracts and normalizes listings
-    3. Returns dict with comparables, count, listing_type
+    2. Extracts all listings from cat1/cat2
+    3. Filters by property type and year built (client-side, since Zillow
+       silently drops searchQueryState property type filters)
+    4. Normalizes and returns the filtered comps
     """
 
     def extract(sb: Any) -> dict[str, Any]:
@@ -301,19 +217,35 @@ def _make_extract_fn(scenario: str, max_results: int) -> Any:
             return {"comparables": [], "count": 0, "listing_type": scenario}
 
         raw_listings = _extract_listings(next_data, scenario)
-        comps = [
-            normalize_zillow_listing(raw, scenario)
-            for raw in raw_listings[:max_results]
-        ]
+        all_comps = [normalize_zillow_listing(raw, scenario) for raw in raw_listings]
+
+        allowed_types = _SCENARIO_TYPES.get(scenario, frozenset())
+        min_year = _CURRENT_YEAR - 1 if scenario == "new_build" else None
+
+        filtered = []
+        for comp in all_comps:
+            ptype = comp.get("property_type")
+            if allowed_types and ptype not in allowed_types:
+                continue
+            if min_year is not None:
+                yb = comp.get("year_built")
+                if yb is not None and yb < min_year:
+                    continue
+            if comp["price"] <= 0:
+                continue
+            filtered.append(comp)
+            if len(filtered) >= max_results:
+                break
 
         logger.info(
-            "Extracted %d %s listings (raw: %d)",
-            len(comps), scenario, len(raw_listings),
+            "Extracted %d %s listings (raw: %d, after filter: %d)",
+            len(filtered), scenario, len(raw_listings), len(filtered),
         )
         return {
-            "comparables": comps,
-            "count": len(comps),
+            "comparables": filtered,
+            "count": len(filtered),
             "listing_type": scenario,
+            "raw_count": len(raw_listings),
         }
 
     return extract
@@ -396,14 +328,7 @@ async def handle_fetch_zillow_comps(inputs_json: dict[str, Any]) -> HandlerResul
             },
         )
 
-    # Build filter state for the Kleyman scenario
-    filter_kwargs: dict[str, Any] = {}
-    if scenario == "land":
-        filter_kwargs["min_acres"] = inputs_json.get("min_acres")
-        filter_kwargs["max_acres"] = inputs_json.get("max_acres")
-
-    filter_state = _build_filter_state(scenario, **filter_kwargs)
-    url = _build_zillow_url(zip_code, filter_state)
+    url = _build_zillow_url(zip_code, scenario)
 
     logger.info("Scraping Zillow %s comps for ZIP %s (from %s)", scenario, zip_code, address)
 
