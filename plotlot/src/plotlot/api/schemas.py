@@ -114,6 +114,39 @@ class SourceRefResponse(BaseModel):
     score: float = 0.0
 
 
+class LookupFieldResponse(BaseModel):
+    key: str
+    label: str
+    value: str | int | float | bool | None = None
+    unit: str = ""
+    display_state: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    source_priority: list[str] = Field(default_factory=list)
+    fallback_sources: list[str] = Field(default_factory=list)
+    failure_behavior: str
+    confidence: float
+    freshness: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class CalculationTraceResponse(BaseModel):
+    calculator_name: str
+    calculator_version: str
+    formula: str
+    input_evidence_ids: list[str] = Field(default_factory=list)
+    output_label: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class LookupSnapshotResponse(BaseModel):
+    lookup_snapshot_id: str
+    site_id: str
+    run_id: str
+    fields: list[LookupFieldResponse] = Field(default_factory=list)
+    calculations: list[CalculationTraceResponse] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ZoningReportResponse(BaseModel):
     """Full zoning analysis response."""
 
@@ -144,6 +177,7 @@ class ZoningReportResponse(BaseModel):
     density_analysis: MaxAllowableUnitsResponse | None = None
     comp_analysis: "CompAnalysisResponse | None" = None
     pro_forma: "LandProFormaResponse | None" = None
+    deal_analysis: dict | None = None
 
     summary: str = ""
     sources: list[str] = []
@@ -151,6 +185,7 @@ class ZoningReportResponse(BaseModel):
 
     # Inline citations — source ordinance chunks backing extracted values
     source_refs: list[SourceRefResponse] = []
+    lookup_snapshot: LookupSnapshotResponse | None = None
 
     # Progressive autonomy metadata (Klarna confidence-gated pattern)
     confidence_warning: str = ""
