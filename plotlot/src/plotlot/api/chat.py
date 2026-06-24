@@ -1637,6 +1637,13 @@ def _build_active_analysis_context(payload: dict) -> str:
             )
         if val.get("max_land_price_residual") is not None:
             lines.append(f"Max land price (residual): ${val['max_land_price_residual']:,.0f}")
+        # Full cost stack so the narrator quotes the verified line items instead of
+        # reconstructing them (it used lot area for construction and dropped soft costs
+        # + builder margin, so its breakdown never reconciled to this residual).
+        if val.get("residual_formula"):
+            lines.append(f"  Residual cost stack: {val['residual_formula']}")
+        if val.get("hard_cost_basis"):
+            lines.append(f"  ({val['hard_cost_basis']})")
         rng = val.get("land_value_range")
         if rng and rng[1]:  # only when comps gave a real range (else it's $0–$0)
             lines.append(f"Land value range: ${rng[0]:,.0f}–${rng[1]:,.0f}")
@@ -1861,6 +1868,23 @@ def _analysis_covers_address(analysis: dict | None, address: str) -> bool:
     return bool(a and b and (a.startswith(b) or b.startswith(a)))
 
 
+def _message_names_new_parcel(message: str, existing: dict | None) -> bool:
+    """True when the message names an explicit street address the active grounded
+    analysis does NOT already cover.
+
+    Naming a new parcel must (re)ground that parcel even WITHOUT a deal/source
+    keyword. Otherwise a bare address ("1230 Hueneme St") or a non-deal question
+    about a named parcel ("who owns 1230 Hueneme St") left the grounded payload
+    pinned to the PREVIOUS parcel: the owner/source echoes and the injected active
+    context answered the stale property while the model free-formed the displayed
+    one — the two silently diverged (1230 displayed, 1233 grounded). The inner
+    force-analyze guard still skips a re-run when the address is already covered."""
+    m = _ADDRESS_RE.search(message or "")
+    if not m:
+        return False
+    return not _analysis_covers_address(existing, m.group(0).strip().rstrip(".,"))
+
+
 def _resolve_deal_address(
     message: str,
     session_id: str,
@@ -2027,6 +2051,134 @@ def _echo_address_matches(message: str, *contexts: dict | None) -> bool:
     return any(_analysis_covers_address(ctx, cand) for ctx in contexts if ctx)
 
 
+# "What are comps / what's land trading for nearby / what's my exit / what do
+# finished units sell for?" — the exit (ADV) value, land-value range, and comp
+# provenance are deterministic pipeline outputs. The weak narrator otherwise
+# FABRICATES a table of specific nearby sales (invented addresses, lot sizes, and
+# $/sqft the pipeline never produced) AND falsely claims it has no comps tool. Echo
+# the grounded valuation instead — including the honest "no local sold comps were
+# found, this is a regional estimate" when that is the case.
+_COMPS_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"comps?|comparable|comparables|"
+    r"trading\s+for|selling\s+for|sell\s+for|sale\s+prices?|going\s+rate|resale|"
+    r"price\s+per\s+(?:sq|square\s+foot|sf|acre)|"
+    r"land\s+(?:sales|trading|comps)|"
+    r"(?:my\s+)?exit(?:\s+(?:price|value|pricing|strategy))?|"
+    r"what\s+do\s+(?:finished\s+)?units?\s+sell"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# "What are San Diego's impact / development fees per unit?" — the fee schedule is a
+# grounded payload field (itemized DIF line items WITH citations when a schedule is
+# registered, else a labeled coarse aggregate). The narrator threw the verified DIFs
+# away and invented a generic park/fire/library/water/school table from "similar
+# municipalities" — so echo the grounded fees deterministically.
+_FEE_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"impact\s+fees?|development\s+fees?|dev\s+fees?|\bdifs?\b|"
+    r"fees?\s+per\s+unit|per[-\s]?unit\s+fees?|permit\s+fees?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# A comps/fee question is only safe to answer with the deterministic echo ALONE when
+# it isn't also asking a decision/density/risk/entitlement thing the echo would
+# silently drop (mirrors _is_pure_owner_query). These markers force the full model
+# path (which still runs forced grounding), so a compound question keeps every part.
+_ECHO_DECISION_RE = re.compile(
+    r"\b(?:"
+    r"pencils?|does\s+(?:this|it)\s+(?:pencil|work|make\s+sense)|residual|"
+    r"most\s+i\s+can\s+pay|max(?:imum)?\s+land|asking\s+price|should\s+i\s+(?:buy|pay|offer)|"
+    r"how\s+many\s+units?|by[-\s]?right|buildable|"
+    r"flood|coastal|wetland|geologic|seismic|liquefaction|landslide|fault|site\s+risk|"
+    r"entitle|\bcup\b|conditional\s+use|rezon|timeline|how\s+long"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_pure_comps_query(message: str) -> bool:
+    """Standalone comps/exit/land-value question — safe to answer from the echo alone."""
+    msg = message or ""
+    return bool(_COMPS_QUERY_RE.search(msg) and not _ECHO_DECISION_RE.search(msg))
+
+
+def _is_pure_fee_query(message: str) -> bool:
+    """Standalone impact/development-fee question — safe to answer from the echo alone."""
+    msg = message or ""
+    return bool(_FEE_QUERY_RE.search(msg) and not _ECHO_DECISION_RE.search(msg))
+
+
+# "What if construction jumps 20% / exit softens 10%?" — the residual sensitivity grid
+# is a grounded pipeline output (pre-labeled scenarios). The narrator otherwise
+# re-derives the cells with its own wrong arithmetic and CONTRADICTS the grounded
+# grid (it said construction +20% "pencils" when the grid says it does not). Echo the
+# grid.
+_SENSITIVITY_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"what\s+if|sensitivit(?:y|ies)|stress(?:\s+test)?|downside|worst[-\s]?case|"
+    r"construction\s+(?:jump|jumps|rise|rises|increase|increases|spike|spikes|up\b|"
+    r"higher|overrun|goes?\s+up)|"
+    r"(?:exit|price|value)\s+(?:soften|softens|soft\b|drop|drops|fall|falls|decline|"
+    r"declines|lower|down\b|dip|dips)|"
+    r"costs?\s+(?:go\s+up|rise|rises|increase|increases|jump|jumps)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# "What's the most I can pay / does this pencil at $X?" — the residual and its full
+# cost stack are grounded; the narrator quoted the right residual but a fabricated
+# breakdown (lot-area construction, no soft costs or builder margin). Echo the stack.
+_RESIDUAL_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"most\s+i\s+can\s+pay|max(?:imum)?\s+(?:land|i\s+can\s+pay|offer|price)|residual|"
+    r"(?:does|will|would)\s+(?:this|it|that)\s+pencil|still\s+pencils?|"
+    r"how\s+much\s+(?:can|should)\s+i\s+pay|what\s+can\s+i\s+pay|can\s+i\s+afford|"
+    r"still\s+make\s+(?:margins?|money)|make\s+margins?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# A dollar amount in the message (asking price for the pencil test). Tolerates
+# "$1,500,000", "$1.5M", "1.5 million", "750k". Only values ≥ $50k are treated as a
+# land asking price so unit counts / percentages don't get read as money.
+_MONEY_RE = re.compile(
+    r"\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m|mm|million|thousand)?\b",
+    re.IGNORECASE,
+)
+
+
+def _is_sensitivity_query(message: str) -> bool:
+    """True for a construction/exit 'what if' stress question."""
+    return bool(_SENSITIVITY_QUERY_RE.search(message or ""))
+
+
+def _is_residual_query(message: str) -> bool:
+    """True for a 'most I can pay / does this pencil' residual question."""
+    return bool(_RESIDUAL_QUERY_RE.search(message or ""))
+
+
+def _extract_asking_price(message: str) -> float | None:
+    """Largest plausible dollar amount in the message, or None — the asking price for
+    a pencil test ('at a $1,500,000 asking price, does this pencil?')."""
+    best: float | None = None
+    for m in _MONEY_RE.finditer(message or ""):
+        try:
+            val = float(m.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        suffix = (m.group(2) or "").lower()
+        if suffix in ("k", "thousand"):
+            val *= 1_000
+        elif suffix in ("m", "mm", "million"):
+            val *= 1_000_000
+        if val >= 50_000:
+            best = val if best is None else max(best, val)
+    return best
+
+
 def _build_owner_answer(payload: dict | None, prop_ctx: dict | None) -> str | None:
     """Deterministic answer to 'who owns this / is it already being developed?'.
 
@@ -2077,6 +2229,230 @@ def _build_owner_answer(payload: dict | None, prop_ctx: dict | None) -> str | No
             lines.append(
                 f"Permit holders (contractors/applicants, not necessarily the owner): {holders}."
             )
+    return "\n".join(lines)
+
+
+def _fmt_money(value: object) -> str | None:
+    """Format a numeric dollar value, or None when it isn't a usable number."""
+    try:
+        return f"${float(value):,.0f}"  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_comps_answer(payload: dict | None) -> str | None:
+    """Deterministic answer to 'what are comps / what's land trading for / what's my
+    exit?'. Reproduces the grounded valuation — exit (ADV) per unit + range, GDV,
+    land value, and the comp PROVENANCE — instead of letting the narrator fabricate a
+    table of specific nearby sales (it invented addresses, lot sizes, and $/sqft the
+    pipeline never produced, and falsely claimed it had no comps tool). When no local
+    sold comps were found it says so plainly rather than inventing them. Returns
+    ``None`` when no valuation was grounded, so the caller falls back to the model."""
+    val = (payload or {}).get("valuation") or {}
+    adv = val.get("adv_per_unit")
+    adv_money = _fmt_money(adv)
+    if not adv_money:
+        return None
+
+    adv_source = (val.get("adv_source") or "").strip()
+    adv_rng = val.get("adv_per_unit_range") or []
+    land_money = _fmt_money(val.get("estimated_land_value"))
+    land_rng = val.get("land_value_range") or []
+    gdv_money = _fmt_money(val.get("gross_development_value"))
+    residual_money = _fmt_money(val.get("max_land_price_residual"))
+    market = (val.get("market") or "").strip()
+    state = ((payload or {}).get("state") or "").strip().upper()
+    addr = (payload or {}).get("address") or ""
+    units = ((payload or {}).get("by_right") or {}).get("max_units")
+
+    def _range(rng: list) -> str:
+        lo, hi = (_fmt_money(rng[0]), _fmt_money(rng[1])) if len(rng) == 2 else (None, None)
+        return f" (range {lo}–{hi})" if lo and hi else ""
+
+    lines = ["**Exit value & comps" + (f" — {addr}" if addr else "") + "**", ""]
+    if adv_source == "comps":
+        lines.append(
+            f"- Finished-unit exit (ADV): **{adv_money}/unit**{_range(adv_rng)} — from "
+            "sold-unit comparables near this parcel."
+        )
+        if units and gdv_money:
+            lines.append(
+                f"- Gross development value: {units} units × {adv_money}/unit = **{gdv_money}**."
+            )
+        if land_money:
+            lines.append(f"- Implied land value from comps: {land_money}{_range(land_rng)}.")
+    else:
+        lines.append(
+            "- No verified local sold-unit comps were found for this parcel, so I won't "
+            "invent specific nearby sales. The exit is a **regional market estimate**: "
+            f"**{adv_money}/unit**" + (f" ({market} market default)" if market else "") + "."
+        )
+        if state == "CA":
+            lines.append(
+                "- Why no comps: California's open parcel/assessor layers carry no sale "
+                "price (assessed ≠ market) and there's no free sold-price feed — a real "
+                "comp set needs a paid source or a broker pull."
+            )
+        else:
+            lines.append(
+                "- Treat the exit as an estimate, not appraised — no open sold-price comps "
+                "were available for this market."
+            )
+        if units and gdv_money:
+            lines.append(
+                f"- At that estimate: {units} units × {adv_money}/unit = **{gdv_money}** gross "
+                "development value (an estimate, not appraised)."
+            )
+        if residual_money:
+            lines.append(
+                f"- Grounded residual at this estimate: max land **{residual_money}** — what "
+                "the deal supports, not what land is listed at."
+            )
+    return "\n".join(lines)
+
+
+def _build_fees_answer(payload: dict | None) -> str | None:
+    """Deterministic answer to 'what are the impact/development fees per unit?'.
+    Reproduces the grounded fee schedule — the itemized DIF line items WITH citations
+    when a real schedule is registered (plus the basis note explaining which fees are
+    separate), else the labeled coarse aggregate. Never breaks a coarse aggregate into
+    invented per-category amounts the way the narrator did (a fabricated park/fire/
+    library/water/school table). Returns ``None`` when no fee figure was grounded."""
+    val = (payload or {}).get("valuation") or {}
+    per_unit = val.get("impact_fees_per_unit")
+    breakdown = val.get("impact_fee_breakdown") or []
+    basis = (val.get("impact_fees_basis") or "").strip()
+    dif_total = val.get("itemized_city_dif_per_unit")
+    if per_unit is None and not breakdown:
+        return None
+
+    units = ((payload or {}).get("by_right") or {}).get("max_units")
+    addr = (payload or {}).get("address") or ""
+    lines = ["**Impact / development fees" + (f" — {addr}" if addr else "") + "**", ""]
+
+    if breakdown:
+        lines.append("Verified itemized fees (per dwelling unit):")
+        lines.append("")
+        for c in breakdown:
+            amt = _fmt_money(c.get("amount_per_unit"))
+            cite = (c.get("citation") or "").strip()
+            lines.append(
+                f"- {c.get('name') or 'fee'}: {amt or 'n/a'}/unit" + (f" — {cite}" if cite else "")
+            )
+        itemized_total = dif_total
+        if not itemized_total:
+            comp_sum = sum((c.get("amount_per_unit") or 0) for c in breakdown)
+            itemized_total = comp_sum or per_unit
+        total_money = _fmt_money(itemized_total)
+        if total_money:
+            across = ""
+            if units and isinstance(itemized_total, (int, float)):
+                project = _fmt_money(itemized_total * units)
+                across = f", or {project} across {units} units" if project else ""
+            lines += ["", f"**Itemized total = {total_money}/unit{across}.**"]
+        # The basis string already states which fees are separate (RTCIP/school/utility)
+        # and the conservative all-in the residual budgets — reproduce it, don't paraphrase.
+        if basis:
+            lines += ["", basis]
+    else:
+        amt = _fmt_money(per_unit)
+        across = ""
+        if units and isinstance(per_unit, (int, float)):
+            project = _fmt_money(per_unit * units)
+            across = f" ({project} across {units} units)" if project else ""
+        lines.append(f"- Impact/development fees budget at **{amt}/unit**{across}.")
+        lines.append(
+            "- This is a single coarse regional aggregate (school/park/traffic/utility "
+            "combined), NOT an itemized published schedule — I won't break it into "
+            "per-category amounts the data doesn't contain. For exact line items, pull the "
+            "jurisdiction's current development-impact-fee schedule."
+        )
+    return "\n".join(lines)
+
+
+def _build_residual_answer(payload: dict | None, message: str = "") -> str | None:
+    """Deterministic answer to 'what's the most I can pay / does this pencil at $X?'.
+    Reproduces the grounded residual COST STACK verbatim — GDV − hard − soft − builder
+    margin − impact fees = max land — so the breakdown reconciles to the residual. The
+    narrator quoted the right residual but a fabricated stack (it used the LOT area for
+    construction and dropped soft costs and builder margin). When the message carries an
+    asking price, adds the pencil verdict + gap. Returns ``None`` when no residual was
+    grounded, so the caller falls back to the model."""
+    val = (payload or {}).get("valuation") or {}
+    residual = val.get("max_land_price_residual")
+    if residual is None:
+        return None
+    residual_money = _fmt_money(residual)
+    if not residual_money:
+        return None
+
+    addr = (payload or {}).get("address") or ""
+    units = ((payload or {}).get("by_right") or {}).get("max_units")
+    adv_source = (val.get("adv_source") or "").strip()
+    lines = ["**Most you can pay (residual land value)" + (f" — {addr}" if addr else "") + "**", ""]
+    lines.append(f"- **Max land price: {residual_money}**" + (f" across {units} units" if units else ""))
+    if val.get("residual_formula"):
+        lines.append(f"- Cost stack: {val['residual_formula']}")
+    if val.get("hard_cost_basis"):
+        lines.append(f"  - {val['hard_cost_basis']}")
+    if adv_source and adv_source != "comps":
+        lines.append(
+            "- Exit value is a regional market estimate (no local sold comps), so treat "
+            "the residual as an estimate, not appraised."
+        )
+
+    # Pencil test when the message names an asking price.
+    asking = _extract_asking_price(message)
+    if asking is not None and isinstance(residual, (int, float)):
+        asking_money = _fmt_money(asking)
+        if asking > residual:
+            gap = _fmt_money(asking - residual)
+            lines += [
+                "",
+                f"- **At {asking_money}, this does NOT pencil** — that's {gap} above the "
+                f"{residual_money} the deal supports. You'd need lower construction cost, a "
+                "higher exit, or more units to close the gap.",
+            ]
+        else:
+            room = _fmt_money(residual - asking)
+            lines += [
+                "",
+                f"- **At {asking_money}, this pencils** — {room} below the {residual_money} "
+                "maximum, so the margin assumption holds with room to spare.",
+            ]
+    return "\n".join(lines)
+
+
+def _build_sensitivity_answer(payload: dict | None) -> str | None:
+    """Deterministic answer to 'what if construction +20% / exit softens 10%?'.
+    Reproduces the grounded sensitivity scenarios verbatim. The narrator otherwise
+    re-derives the cells with its own arithmetic and contradicts the grounded grid
+    (it called construction +20% 'pencils' when the grid says it does not). Returns
+    ``None`` when no sensitivity grid was grounded."""
+    sens = (payload or {}).get("sensitivity") or {}
+    scenarios = sens.get("scenarios") or []
+    if not scenarios:
+        return None
+
+    addr = (payload or {}).get("address") or ""
+    base = _fmt_money(sens.get("base_max_land_price"))
+    base_constr = _fmt_money(sens.get("base_construction_psf"))
+    base_adv = _fmt_money(sens.get("base_adv_per_unit"))
+    lines = ["**Sensitivity — max land price under stress" + (f" — {addr}" if addr else "") + "**", ""]
+    if base:
+        basis = []
+        if base_constr:
+            basis.append(f"{base_constr}/sf construction")
+        if base_adv:
+            basis.append(f"{base_adv}/unit exit")
+        basis_note = f" (base {base}" + (f" at {', '.join(basis)}" if basis else "") + ")"
+        lines.append(f"Negative = the deal does not pencil at that move{basis_note}:")
+    else:
+        lines.append("Negative = the deal does not pencil at that move:")
+    lines.append("")
+    for s in scenarios:
+        lines.append(f"- {s}")
+    lines += ["", "These are the grounded stress cells — I won't invent cost or price ranges beyond them."]
     return "\n".join(lines)
 
 
@@ -2490,6 +2866,29 @@ def _format_grounded_analysis(report) -> dict:
         valuation["max_land_price_residual"] = _round(pf.max_land_price)
         valuation["gross_development_value"] = _round(pf.gross_development_value)
         valuation["impact_fees_per_unit"] = _round(pf.impact_fees_per_unit)
+        # Full residual COST STACK. The narrator otherwise reconstructed this from the
+        # inputs and got it wrong — it multiplied $/sf by the LOT area instead of the
+        # buildable area, and dropped soft costs and builder margin entirely, so its
+        # listed costs didn't reconcile to the (correct) residual. Surface the exact
+        # computed line items so every breakdown is read, not re-derived.
+        valuation["hard_costs"] = _round(pf.hard_costs)
+        valuation["soft_costs"] = _round(pf.soft_costs)
+        valuation["builder_margin"] = _round(pf.builder_margin)
+        valuation["impact_fees_total"] = _round(pf.impact_fees)
+        if pf.gross_development_value and pf.max_land_price is not None:
+            valuation["residual_formula"] = (
+                f"GDV ${_round(pf.gross_development_value):,.0f} "
+                f"− hard ${_round(pf.hard_costs):,.0f} "
+                f"− soft ${_round(pf.soft_costs):,.0f} "
+                f"− builder margin ${_round(pf.builder_margin):,.0f} "
+                f"− impact fees ${_round(pf.impact_fees):,.0f} "
+                f"= max land ${_round(pf.max_land_price):,.0f}"
+            )
+        if pf.max_units and pf.avg_unit_size_sqft and pf.construction_cost_psf:
+            valuation["hard_cost_basis"] = (
+                f"hard costs = {pf.max_units} units × {pf.avg_unit_size_sqft:,.0f} sqft/unit "
+                f"× ${pf.construction_cost_psf:,.0f}/sf (BUILDABLE area — never the lot area)"
+            )
         # If a real itemized fee schedule is registered for this jurisdiction, emit
         # the verified line items (the agent MAY cite these). Otherwise the fee is a
         # single coarse regional aggregate — label it so the agent can't invent a
@@ -3599,8 +3998,17 @@ async def chat(request: ChatRequest, http_request: Request):
             # request.report_context means a deal question about the on-screen property
             # refreshes it. Cached per address: only the first deal question for a
             # parcel pays the latency; a non-resolvable address just falls through.
-            if _needs_grounded_analysis(request.message):
-                _existing = _sessions.get_analysis(session_id)
+            #
+            # We force not only on deal/source KEYWORDS but also whenever the message
+            # NAMES A NEW PARCEL the active analysis doesn't cover — a bare address or
+            # a non-deal question about a different address ("who owns 1230 ...") must
+            # swap the grounded payload to that parcel, else the echoes and injected
+            # context keep answering the previous one while the model free-forms the
+            # named one (the 1230-displayed / 1233-grounded divergence).
+            _existing = _sessions.get_analysis(session_id)
+            if _needs_grounded_analysis(request.message) or _message_names_new_parcel(
+                request.message, _existing
+            ):
                 _deal_addr = _resolve_deal_address(
                     request.message, session_id, _existing, request.report_context
                 )
@@ -3744,6 +4152,85 @@ async def chat(request: ChatRequest, http_request: Request):
                     if len(memory) > MAX_MEMORY_MESSAGES:
                         del memory[:-MAX_MEMORY_MESSAGES]
                     yield _sse_event("done", {"full_content": owner_answer})
+                    return
+
+            # Deterministic comps/exit echo. The exit (ADV) value and comp provenance
+            # are grounded fields; the narrator otherwise fabricates a table of specific
+            # nearby sales it never retrieved (invented addresses + $/sqft) and falsely
+            # claims it has no comps tool. Answer from the grounded valuation instead —
+            # including the honest "no local comps, this is a regional estimate".
+            if (
+                active_analysis
+                and _is_pure_comps_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                comps_answer = _build_comps_answer(active_analysis)
+                if comps_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_comps", "args": {}})
+                    yield _sse_event("token", {"content": comps_answer})
+                    memory.append({"role": "assistant", "content": comps_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": comps_answer})
+                    return
+
+            # Deterministic impact-fee echo. The fee schedule (itemized DIF line items
+            # with citations, or a labeled coarse aggregate) is grounded; the narrator
+            # threw the verified DIFs away and invented a generic per-category table from
+            # "similar municipalities". Answer from the grounded fees instead.
+            if (
+                active_analysis
+                and _is_pure_fee_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                fees_answer = _build_fees_answer(active_analysis)
+                if fees_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_fees", "args": {}})
+                    yield _sse_event("token", {"content": fees_answer})
+                    memory.append({"role": "assistant", "content": fees_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": fees_answer})
+                    return
+
+            # Deterministic sensitivity echo. The residual sensitivity grid is grounded;
+            # the narrator re-derived the cells with its own arithmetic and contradicted
+            # the grid (calling construction +20% "pencils" when the grid says it does
+            # not). Checked BEFORE the residual echo so a "what if … does it pencil?"
+            # routes to the grid. Reproduce the grounded scenarios verbatim.
+            if (
+                active_analysis
+                and _is_sensitivity_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                sens_answer = _build_sensitivity_answer(active_analysis)
+                if sens_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_sensitivity", "args": {}})
+                    yield _sse_event("token", {"content": sens_answer})
+                    memory.append({"role": "assistant", "content": sens_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": sens_answer})
+                    return
+
+            # Deterministic residual / pencil echo. The residual and its full cost stack
+            # are grounded; the narrator quoted the right residual but a fabricated
+            # breakdown (lot-area construction, no soft costs or builder margin, that
+            # didn't reconcile). Reproduce the stack — and the pencil verdict when the
+            # message names an asking price.
+            if (
+                active_analysis
+                and _is_residual_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                residual_answer = _build_residual_answer(active_analysis, request.message)
+                if residual_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_residual", "args": {}})
+                    yield _sse_event("token", {"content": residual_answer})
+                    memory.append({"role": "assistant", "content": residual_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": residual_answer})
                     return
 
             # Token budget check — prevent runaway cost

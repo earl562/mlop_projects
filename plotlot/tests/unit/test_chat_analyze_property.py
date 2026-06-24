@@ -589,6 +589,218 @@ def test_echo_address_guard_blocks_wrong_parcel():
     assert not _echo_address_matches("who owns 456 Oak Ave, Austin, TX 78701?", None)
 
 
+def test_message_names_new_parcel_forces_regrounding():
+    """A message naming a parcel the active analysis doesn't cover must trigger a
+    fresh grounding — even with no deal/source keyword. This is the fix for the
+    1230-displayed / 1233-grounded divergence: typing a new bare address (or asking
+    a non-deal question about a different address) left the grounded payload pinned
+    to the previous parcel, so the owner/source echoes answered the wrong property."""
+    from plotlot.api.chat import _message_names_new_parcel
+
+    cached = {"address": "1233 Hueneme St, San Diego, CA 92110"}
+    # Bare new address (no deal keyword) → must reground.
+    assert _message_names_new_parcel("1230 Hueneme St", cached)
+    # Non-deal question naming a different parcel → must reground.
+    assert _message_names_new_parcel("who owns 1230 Hueneme St", cached)
+    # Same parcel named (partial) → already covered, no re-run.
+    assert not _message_names_new_parcel("who owns 1233 Hueneme St?", cached)
+    # No address in the message → referential, keep the active parcel.
+    assert not _message_names_new_parcel("what's the residual?", cached)
+    # Nothing grounded yet + an address → ground it.
+    assert _message_names_new_parcel("1230 Hueneme St", None)
+    # No address, nothing grounded → nothing to do.
+    assert not _message_names_new_parcel("hello", None)
+
+
+def test_comps_and_fee_query_detection():
+    """The pure-comps / pure-fee gates fire on the standalone factual questions the
+    narrator fabricated over, and stand down on compound decision questions (which
+    keep the full model path so no part is dropped)."""
+    from plotlot.api.chat import _is_pure_comps_query, _is_pure_fee_query
+
+    assert _is_pure_comps_query("What's land trading for nearby — the range, not one number?")
+    assert _is_pure_comps_query("What do finished units sell for here (my exit)?")
+    assert _is_pure_comps_query("show me comps")
+    # Compound decision/risk questions must NOT short-circuit to the comps echo.
+    assert not _is_pure_comps_query("At a $1,500,000 asking price, does this pencil?")
+    assert not _is_pure_comps_query("What's the most I can pay for the land?")
+
+    assert _is_pure_fee_query("What are San Diego's impact/dev fees per unit?")
+    assert _is_pure_fee_query("how much are the DIFs?")
+    assert not _is_pure_fee_query("does it still pencil after impact fees?")
+
+
+def test_comps_answer_states_no_local_comps_never_fabricates():
+    """The worst transcript bug: asked for nearby comps, the narrator denied it had a
+    comps tool and invented a table of specific sales. With no local comps the echo
+    must say so plainly and give the regional estimate — never fabricate sales."""
+    from plotlot.api.chat import _build_comps_answer
+
+    report = _hueneme_report()
+    report.comp_analysis = None
+    report.pro_forma.adv_source = "regional_default"
+    answer = _build_comps_answer(_format_grounded_analysis(report))
+
+    assert answer is not None
+    assert "No verified local sold-unit comps" in answer
+    assert "$420,000/unit" in answer  # the grounded regional estimate
+    assert "regional market estimate" in answer
+    assert "broker" in answer  # the honest "why no comps" for CA
+    # The grounded GDV/residual anchor the estimate; no invented per-sale rows.
+    assert "$2,520,000" in answer
+    assert "miles away" not in answer and "Recent Sale" not in answer
+
+
+def test_comps_answer_uses_real_comps_when_found():
+    """When sold-unit comps exist, the echo cites them (per-unit exit + implied land
+    value) rather than a regional default."""
+    from plotlot.api.chat import _build_comps_answer
+
+    answer = _build_comps_answer(_format_grounded_analysis(_hueneme_report()))
+    assert answer is not None
+    assert "sold-unit comparables" in answer
+    assert "$420,000/unit" in answer
+    assert "$1,200,000" in answer  # implied land value from comps
+
+
+def test_fees_answer_echoes_itemized_difs_never_invents():
+    """Turn 11 regression: the narrator had the verified itemized DIFs (it cited them
+    a turn earlier) yet invented a generic park/fire/library/water/school table. The
+    echo reproduces the real line items + citations and the conservative all-in note."""
+    from plotlot.api.chat import _build_fees_answer
+    from plotlot.pipeline.fee_schedule import FeeComponent, FeeSchedule, register_fee_schedule
+
+    report = _hueneme_report()
+    register_fee_schedule(
+        FeeSchedule(
+            jurisdiction="City of San Diego",
+            state="CA",
+            source="FY26 Citywide DIFs",
+            effective_date="2025-07-01",
+            covers_all_fees=False,
+            components=(
+                FeeComponent("Citywide Park DIF", 15438.0, "Parks for All of Us"),
+                FeeComponent("Citywide Mobility DIF", 4627.0, "R-314273"),
+            ),
+        ),
+        county="San Diego",
+    )
+    answer = _build_fees_answer(_format_grounded_analysis(report))
+
+    assert answer is not None
+    assert "Citywide Park DIF" in answer
+    assert "$15,438/unit" in answer
+    assert "Parks for All of Us" in answer  # the verified citation
+    assert "Itemized total = $20,065/unit" in answer
+    assert "$120,390 across 6 units" in answer  # 20,065 × 6
+    # Must NOT invent the categories the narrator fabricated.
+    assert "Water" not in answer and "School" not in answer
+
+
+def test_fees_answer_coarse_aggregate_refuses_to_itemize():
+    """Without a registered schedule the fee is a single coarse aggregate — the echo
+    states the per-unit figure and refuses to break it into invented categories."""
+    from plotlot.api.chat import _build_fees_answer
+
+    answer = _build_fees_answer(_format_grounded_analysis(_hueneme_report()))
+    assert answer is not None
+    assert "$18,000/unit" in answer
+    assert "$108,000 across 6 units" in answer  # 18,000 × 6
+    assert "coarse regional aggregate" in answer
+    assert "Park DIF" not in answer  # no invented line items
+
+
+def test_payload_surfaces_full_cost_stack():
+    """The residual's hard/soft/builder-margin line items must be grounded so the
+    narrator quotes them instead of reconstructing a stack that doesn't reconcile
+    (it used the lot area for construction and dropped soft costs + builder margin)."""
+    report = _hueneme_report()
+    report.pro_forma.hard_costs = 1_837_500.0
+    report.pro_forma.soft_costs = 404_250.0
+    report.pro_forma.builder_margin = 630_000.0
+    report.pro_forma.impact_fees = 108_000.0
+    val = _format_grounded_analysis(report)["valuation"]
+
+    assert val["hard_costs"] == 1_837_500
+    assert val["soft_costs"] == 404_250
+    assert val["builder_margin"] == 630_000
+    assert "builder margin" in val["residual_formula"]
+    assert "BUILDABLE area" in val["hard_cost_basis"]  # never the lot area
+
+
+def test_sensitivity_and_residual_query_detection():
+    from plotlot.api.chat import (
+        _extract_asking_price,
+        _is_residual_query,
+        _is_sensitivity_query,
+    )
+
+    assert _is_sensitivity_query("What if construction jumps 20% or exit softens 10%?")
+    assert _is_residual_query("What's the most I can pay for the land and still make margins?")
+    assert _is_residual_query("At a $1,500,000 asking price, does this pencil?")
+    # A "what if ... pencil" is a sensitivity question (the handler checks it first).
+    assert _is_sensitivity_query("what if construction rises, does it still pencil?")
+
+    assert _extract_asking_price("At a $1,500,000 asking price, does this pencil?") == 1_500_000
+    assert _extract_asking_price("$1.5M") == 1_500_000
+    assert _extract_asking_price("does this pencil?") is None
+    # Percentages / unit counts are not money.
+    assert _extract_asking_price("what if construction jumps 20%?") is None
+
+
+def test_residual_answer_reconciles_cost_stack():
+    """The residual echo reproduces the FULL grounded stack — including the soft costs
+    and builder margin the narrator dropped — and flags construction as buildable area."""
+    from plotlot.api.chat import _build_residual_answer
+
+    report = _hueneme_report()
+    report.pro_forma.hard_costs = 1_837_500.0
+    report.pro_forma.soft_costs = 404_250.0
+    report.pro_forma.builder_margin = 630_000.0
+    report.pro_forma.impact_fees = 108_000.0
+    answer = _build_residual_answer(
+        _format_grounded_analysis(report), "what's the most I can pay?"
+    )
+
+    assert answer is not None
+    assert "$980,000" in answer  # the grounded residual
+    assert "builder margin" in answer  # the dropped line items are present
+    assert "soft" in answer
+    assert "BUILDABLE area" in answer  # construction basis, not lot area
+
+
+def test_residual_answer_pencil_verdict_when_over_and_under():
+    """With an asking price in the message, the echo adds the pencil verdict + gap."""
+    from plotlot.api.chat import _build_residual_answer
+
+    payload = _format_grounded_analysis(_hueneme_report())  # residual $980,000
+    over = _build_residual_answer(payload, "At a $1,500,000 asking price, does this pencil?")
+    assert over is not None
+    assert "does NOT pencil" in over
+    assert "$520,000" in over  # gap = 1,500,000 − 980,000
+
+    under = _build_residual_answer(payload, "does this pencil at $400,000?")
+    assert under is not None
+    assert "pencils" in under
+    assert "$580,000" in under  # room = 980,000 − 400,000
+
+
+def test_sensitivity_answer_echoes_grounded_grid_never_invents():
+    """Turn 10 regression: the narrator re-derived sensitivity cells and contradicted
+    the grounded grid. The echo reproduces the exact grounded scenarios, including the
+    'does not pencil' flag, and never invents ranges."""
+    from plotlot.api.chat import _build_sensitivity_answer
+
+    answer = _build_sensitivity_answer(_format_grounded_analysis(_hueneme_report()))
+    assert answer is not None
+    # Fixture grid: construction +20% at base exit = $380,000; -20% = $1,400,000;
+    # the combined adverse cell is negative (does not pencil).
+    assert "Construction +20%" in answer and "$380,000" in answer
+    assert "Construction -20%" in answer and "$1,400,000" in answer
+    assert "does not pencil" in answer
+    assert "won't invent" in answer
+
+
 def test_owner_answer_echoes_assessor_owner():
     from plotlot.api.chat import _build_owner_answer
 
