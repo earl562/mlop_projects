@@ -161,6 +161,24 @@ class ReportCache(Base):
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ZoningParamsCache(Base):
+    """L2 cache for NumericZoningParams — persists across process restarts.
+
+    L1 is in-memory (zoning_cache._ZONING_PARAMS_CACHE). This table is the
+    L2 DB fallback.  24-hour TTL enforced in both layers.
+    """
+
+    __tablename__ = "zoning_params_cache"
+
+    cache_key: Mapped[str] = mapped_column(String, primary_key=True)
+    params_json: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    text_fields_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    chunk_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ConnectorCredential(Base):
     """SMTP credentials for the Outreach connector, encrypted at rest with Fernet.
 
@@ -332,6 +350,23 @@ class AnalysisRun(Base):
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AssumptionSet(Base):
+    """Versioned assumption set for an analysis — separates inputs from results."""
+
+    __tablename__ = "assumption_sets"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+    analysis_id = Column(String(36), ForeignKey("analyses.id"), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    inputs_json = Column(JSON, nullable=False, default=dict)
+    labels_json = Column(JSON, nullable=False, default=dict)
+    created_by = Column(String(255), nullable=False)
+    supersedes_id = Column(String(36), ForeignKey("assumption_sets.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
