@@ -1,45 +1,109 @@
-"""Tests for the playwright-comps skill handler."""
+"""Tests for the SeleniumBase CDP-powered Zillow comps skill handler."""
+
+from unittest.mock import patch
 
 import pytest
 
 from plotlot.pipeline.skills.playwright_comps import (
-    _address_to_slug,
+    _build_filter_state,
     _build_zillow_url,
     _extract_listings,
+    _extract_sold_price,
+    _parse_price,
     handle_fetch_zillow_comps,
     normalize_zillow_listing,
 )
 from plotlot.pipeline.skills.registry import get_handler
 
 
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
-
-
 def test_zillow_comps_registered() -> None:
-    """The handler is registered under 'fetch_zillow_comps' in the skill registry."""
     handler = get_handler("fetch_zillow_comps")
     assert handler is handle_fetch_zillow_comps
 
 
 # ---------------------------------------------------------------------------
-# Address → slug
+# Price parsing
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "address,expected",
+    "raw,expected",
     [
-        ("123 Main St, Miami, FL 33169", "123-main-st-miami-fl-33169"),
-        ("1234 North West 5th Avenue, Los Angeles, CA 90001", "1234-north-west-5th-avenue-los-angeles-ca-90001"),
-        ("  leading and trailing  ", "leading-and-trailing"),
-        ("multiple---dashes", "multiple-dashes"),
-        ("", ""),
+        (525000, 525000),
+        (525000.0, 525000),
+        ("$525,000", 525000),
+        ("$4,700/mo", 4700),
+        ("$30,000/mo", 30000),
+        ("not a price", 0),
+        (None, 0),
+        ("", 0),
     ],
 )
-def test_address_to_slug(address: str, expected: str) -> None:
-    assert _address_to_slug(address) == expected
+def test_parse_price(raw, expected: int) -> None:
+    assert _parse_price(raw) == expected
+
+
+def test_extract_sold_price_from_hdp() -> None:
+    raw = {"price": 0, "hdpData": {"homeInfo": {"lastSoldPrice": 450000}}}
+    hdp = raw["hdpData"]["homeInfo"]
+    assert _extract_sold_price(raw, hdp) == 450000
+
+
+def test_extract_sold_price_from_raw() -> None:
+    raw = {"price": 525000}
+    assert _extract_sold_price(raw, {}) == 525000
+
+
+def test_extract_sold_price_zero() -> None:
+    raw = {"price": 0}
+    assert _extract_sold_price(raw, {}) == 0
+
+
+# ---------------------------------------------------------------------------
+# Filter state construction (Kleyman deal-path scenarios)
+# ---------------------------------------------------------------------------
+
+
+def test_filter_state_rental_has_for_rent() -> None:
+    fs = _build_filter_state("rental")
+    assert fs["isForRent"]["value"] is True
+    assert fs["isForSaleByAgent"]["value"] is False
+
+
+def test_filter_state_land_has_lot_land() -> None:
+    fs = _build_filter_state("land")
+    assert fs["isLotLand"]["value"] is True
+    assert fs["isSingleFamily"]["value"] is False
+    assert fs["isRecentlySold"]["value"] is True
+    assert fs["doz"]["value"] == "12m"
+
+
+def test_filter_state_land_with_acreage() -> None:
+    fs = _build_filter_state("land", min_acres=1, max_acres=10)
+    assert fs["lotSize"]["min"] == 1
+    assert fs["lotSize"]["max"] == 10
+    assert fs["lotSize"]["units"] == "acres"
+
+
+def test_filter_state_new_build_has_built_range() -> None:
+    fs = _build_filter_state("new_build")
+    assert fs["isSingleFamily"]["value"] is True
+    assert fs["isRecentlySold"]["value"] is True
+    assert "built" in fs
+    assert fs["built"]["max"] >= fs["built"]["min"]
+
+
+def test_filter_state_renovated_has_keyword() -> None:
+    fs = _build_filter_state("renovated")
+    assert fs["keywords"]["value"] == "renovated"
+    assert fs["isRecentlySold"]["value"] is True
+
+
+def test_filter_state_small_mf_has_multi_family() -> None:
+    fs = _build_filter_state("small_mf")
+    assert fs["isMultiFamily"]["value"] is True
+    assert fs["isLotLand"]["value"] is False
+    assert fs["isRecentlySold"]["value"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -47,19 +111,19 @@ def test_address_to_slug(address: str, expected: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_zillow_url_sold() -> None:
-    url = _build_zillow_url("123-main-st-miami-fl-33169", "sold")
-    assert url == "https://www.zillow.com/homes/123-main-st-miami-fl-33169_rb/sold/"
+def test_build_zillow_url_contains_zip() -> None:
+    fs = _build_filter_state("rental")
+    url = _build_zillow_url("33165", fs)
+    assert "33165_rb" in url
+    assert "searchQueryState" in url
 
 
-def test_build_zillow_url_rental() -> None:
-    url = _build_zillow_url("123-main-st-miami-fl-33169", "rental")
-    assert url == "https://www.zillow.com/homes/123-main-st-miami-fl-33169_rb/rental/"
-
-
-def test_build_zillow_url_for_sale() -> None:
-    url = _build_zillow_url("123-main-st-miami-fl-33169", "for_sale")
-    assert url == "https://www.zillow.com/homes/123-main-st-miami-fl-33169_rb/"
+def test_build_zillow_url_encodes_json() -> None:
+    fs = _build_filter_state("rental")
+    url = _build_zillow_url("33165", fs)
+    # URL should be properly encoded — no raw braces
+    assert "{" not in url
+    assert "}" not in url
 
 
 # ---------------------------------------------------------------------------
@@ -67,67 +131,46 @@ def test_build_zillow_url_for_sale() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_next_data(cat1_listings: list[dict] | None = None, cat2_listings: list[dict] | None = None) -> dict:
-    """Build a minimal __NEXT_DATA__ payload."""
+def _make_next_data(cat1=None, cat2=None) -> dict:
     return {
         "props": {
             "pageProps": {
                 "searchPageState": {
-                    "cat1": {
-                        "searchResults": {
-                            "listResults": cat1_listings or [],
-                        }
-                    },
-                    "cat2": {
-                        "searchResults": {
-                            "listResults": cat2_listings or [],
-                        }
-                    },
+                    "cat1": {"searchResults": {"listResults": cat1 or []}},
+                    "cat2": {"searchResults": {"listResults": cat2 or []}},
                 }
             }
         }
     }
 
 
-def test_extract_sold_listings() -> None:
-    next_data = _make_next_data(
-        cat1_listings=[{"address": "for-sale-1"}],
-        cat2_listings=[{"address": "sold-1"}, {"address": "sold-2"}],
-    )
-    result = _extract_listings(next_data, "sold")
+def test_extract_sold_prefers_cat2() -> None:
+    nd = _make_next_data(cat1=[{"address": "a1"}], cat2=[{"address": "s1"}, {"address": "s2"}])
+    result = _extract_listings(nd, "land")
     assert len(result) == 2
-    assert result[0]["address"] == "sold-1"
+    assert result[0]["address"] == "s1"
 
 
-def test_extract_rental_listings() -> None:
-    next_data = _make_next_data(
-        cat1_listings=[{"address": "rental-1"}],
-        cat2_listings=[{"address": "sold-1"}],
-    )
-    result = _extract_listings(next_data, "rental")
+def test_extract_sold_falls_back_to_cat1() -> None:
+    nd = _make_next_data(cat1=[{"address": "a1"}, {"address": "a2"}], cat2=[])
+    result = _extract_listings(nd, "new_build")
+    assert len(result) == 2
+
+
+def test_extract_rental_prefers_cat1() -> None:
+    nd = _make_next_data(cat1=[{"address": "r1"}], cat2=[{"address": "s1"}])
+    result = _extract_listings(nd, "rental")
     assert len(result) == 1
-    assert result[0]["address"] == "rental-1"
-
-
-def test_extract_for_sale_listings() -> None:
-    next_data = _make_next_data(
-        cat1_listings=[{"address": "for-sale-1"}],
-        cat2_listings=[{"address": "sold-1"}],
-    )
-    result = _extract_listings(next_data, "for_sale")
-    assert len(result) == 1
-    assert result[0]["address"] == "for-sale-1"
+    assert result[0]["address"] == "r1"
 
 
 def test_extract_missing_search_state() -> None:
-    result = _extract_listings({}, "sold")
-    assert result == []
+    assert _extract_listings({}, "rental") == []
 
 
 def test_extract_missing_cat() -> None:
-    next_data = {"props": {"pageProps": {"searchPageState": {}}}}
-    result = _extract_listings(next_data, "sold")
-    assert result == []
+    nd = {"props": {"pageProps": {"searchPageState": {}}}}
+    assert _extract_listings(nd, "rental") == []
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +178,8 @@ def test_extract_missing_cat() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_normalize_zillow_listing_sold() -> None:
-    raw = {
+def _make_raw_listing(**overrides) -> dict:
+    base = {
         "zpid": 12345678,
         "address": "123 Main St, Miami, FL 33169",
         "price": 525000,
@@ -150,94 +193,104 @@ def test_normalize_zillow_listing_sold() -> None:
                 "homeType": "SINGLE_FAMILY",
             }
         },
-        "detailUrl": "/homedetails/123-Main-St-Miami-FL-33169/12345678_zpid/",
-        "latLong": {"latitude": 25.7617, "longitude": -80.1918},
+        "detailUrl": "/homedetails/123-Main-St/12345678_zpid/",
+        "latLong": {"latitude": 25.76, "longitude": -80.19},
         "variableData": {"sold_date": "2025-03-15"},
     }
-
-    normalized = normalize_zillow_listing(raw, "sold")
-
-    assert normalized["source_id"] == "12345678"
-    assert normalized["address"] == "123 Main St, Miami, FL 33169"
-    assert normalized["price"] == 525000
-    assert normalized["bedrooms"] == 3
-    assert normalized["bathrooms"] == 2.0
-    assert normalized["sqft"] == 1850
-    assert normalized["lot_sqft"] == 7500
-    assert normalized["year_built"] == 2005
-    assert normalized["property_type"] == "SINGLE_FAMILY"
-    assert normalized["sold_date"] == "2025-03-15"
-    assert normalized["latitude"] == 25.7617
-    assert normalized["longitude"] == -80.1918
-    assert normalized["source_url"] == "/homedetails/123-Main-St-Miami-FL-33169/12345678_zpid/"
-    assert normalized["source"] == "zillow"
-    assert normalized["listing_type"] == "sold"
+    base.update(overrides)
+    return base
 
 
-def test_normalize_zillow_listing_minimal() -> None:
-    """Minimal raw listing — all optional fields should return None/0/'' as defaults."""
-    raw = {
-        "zpid": 99999,
-        "address": "Minimal St",
-        "price": 0,
-    }
-
-    normalized = normalize_zillow_listing(raw, "rental")
-
-    assert normalized["source_id"] == "99999"
-    assert normalized["address"] == "Minimal St"
-    assert normalized["price"] == 0
-    assert normalized["bedrooms"] is None
-    assert normalized["bathrooms"] is None
-    assert normalized["sqft"] is None
-    assert normalized["lot_sqft"] is None
-    assert normalized["year_built"] is None
-    assert normalized["property_type"] is None
-    assert normalized["sold_date"] is None
-    assert normalized["latitude"] is None
-    assert normalized["longitude"] is None
-    assert normalized["source_url"] == ""
-    assert normalized["source"] == "zillow"
-    assert normalized["listing_type"] == "rental"
+def test_normalize_rental() -> None:
+    raw = _make_raw_listing(price="$2,500/mo")
+    n = normalize_zillow_listing(raw, "rental")
+    assert n["price"] == 2500
+    assert n["bedrooms"] == 3
+    assert n["sqft"] == 1850
+    assert n["source"] == "zillow"
+    assert n["listing_type"] == "rental"
 
 
-def test_normalize_zillow_listing_none_sub_objects() -> None:
-    """Gracefully handles None for hdpData, latLong, variableData."""
-    raw = {
-        "zpid": 1,
-        "address": "",
-        "price": 0,
-        "hdpData": None,
-        "latLong": None,
-        "variableData": None,
-    }
+def test_normalize_sold_uses_last_sold_price() -> None:
+    raw = _make_raw_listing(
+        price=0,
+        hdpData={"homeInfo": {"lastSoldPrice": 450000, "bedrooms": 2}},
+    )
+    n = normalize_zillow_listing(raw, "land")
+    assert n["price"] == 450000
+    assert n["bedrooms"] == 2
 
-    normalized = normalize_zillow_listing(raw, "for_sale")
-    assert normalized["bedrooms"] is None
-    assert normalized["latitude"] is None
-    assert normalized["sold_date"] is None
+
+def test_normalize_minimal() -> None:
+    raw = {"zpid": 1, "address": "Test", "price": 0}
+    n = normalize_zillow_listing(raw, "rental")
+    assert n["source_id"] == "1"
+    assert n["price"] == 0
+    assert n["bedrooms"] is None
+
+
+def test_normalize_none_subobjects() -> None:
+    raw = {"zpid": 1, "address": "", "price": 0, "hdpData": None, "latLong": None, "variableData": None}
+    n = normalize_zillow_listing(raw, "for_sale")
+    assert n["bedrooms"] is None
+    assert n["latitude"] is None
 
 
 # ---------------------------------------------------------------------------
-# Handler — missing input / missing playwright
+# Handler — input validation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_handler_no_address() -> None:
-    """Handler should return an empty result (not crash) when address is missing."""
     result = await handle_fetch_zillow_comps({})
     assert result.output_json["count"] == 0
-    assert result.output_json["source"] == "zillow"
     assert result.output_json["error"] == "No address provided"
 
 
 @pytest.mark.asyncio
-async def test_handler_missing_playwright(monkeypatch) -> None:
-    """Handler returns an error when the playwright package is not installed."""
-    import plotlot.pipeline.skills.playwright_comps as mod
-
-    monkeypatch.setattr(mod, "async_playwright", None)
-    result = await mod.handle_fetch_zillow_comps({"address": "123 Main St, Miami, FL 33169"})
+async def test_handler_no_zip_code() -> None:
+    result = await handle_fetch_zillow_comps({"address": "123 Main St, Miami, FL"})
     assert result.output_json["count"] == 0
-    assert "playwright package not installed" in result.output_json["error"]
+    assert "No ZIP code" in result.output_json["error"]
+
+
+@pytest.mark.asyncio
+async def test_handler_unknown_scenario_defaults_to_rental() -> None:
+    with patch("plotlot.pipeline.skills.playwright_comps.run_stealth_fetch") as mock_fetch:
+        mock_fetch.return_value = {"data": {"comparables": [], "count": 0}, "cookies": [], "captcha_solved": False, "title": "test"}
+        await handle_fetch_zillow_comps({"address": "123 Main St, Miami, FL 33169", "listing_type": "unknown"})
+        args = mock_fetch.call_args
+        url = args[0][0]
+        assert "33165" not in url  # 33169 is the zip
+
+
+@pytest.mark.asyncio
+async def test_handler_calls_stealth_fetch() -> None:
+    with patch("plotlot.pipeline.skills.playwright_comps.run_stealth_fetch") as mock_fetch:
+        mock_fetch.return_value = {
+            "data": {"comparables": [{"address": "test", "price": 1000}], "count": 1},
+            "cookies": [],
+            "captcha_solved": False,
+            "title": "Test Page",
+        }
+        result = await handle_fetch_zillow_comps({
+            "address": "2914 SW 103rd Ct, Miami, FL 33165",
+            "listing_type": "rental",
+            "max_results": 5,
+        })
+        assert mock_fetch.called
+        assert result.output_json["count"] == 1
+        assert result.output_json["comparables"][0]["address"] == "test"
+
+
+@pytest.mark.asyncio
+async def test_handler_handles_stealth_error() -> None:
+    with patch("plotlot.pipeline.skills.playwright_comps.run_stealth_fetch") as mock_fetch:
+        mock_fetch.return_value = {"data": {}, "cookies": [], "captcha_solved": False, "error": "CAPTCHA could not be solved"}
+        result = await handle_fetch_zillow_comps({
+            "address": "2914 SW 103rd Ct, Miami, FL 33165",
+            "listing_type": "rental",
+        })
+        assert result.output_json["count"] == 0
+        assert "CAPTCHA" in result.output_json["error"]

@@ -1,110 +1,246 @@
-"""Playwright-based Zillow comps skill — extracts sold/rental comparables via __NEXT_DATA__.
+"""SeleniumBase UC+CDP-powered Zillow comps skill.
 
-Handles three listing types:
-- "sold" → cat2.searchResults.listResults
-- "rental" → cat1.searchResults.listResults
-- "for_sale" → cat1.searchResults.listResults (no trailing path segment)
+Uses SeleniumBase's ``SB(uc=True) + activate_cdp_mode()`` for maximum stealth,
+bypassing PerimeterX bot detection via ``gui_click_and_hold("#px-captcha")``.
+
+Supports Daniel Kleyman's deal-path comping methodology:
+- **land** → sold land with similar acreage (establishes land basis)
+- **new_build** → sold homes built within last year (ARV for Path 1/2)
+- **renovated** → sold homes with renovation indicators (ARV for Path 1/2)
+- **small_mf** → sold duplexes / 2-4 unit buildings (ARV for Path 2)
+- **rental** → rental listings (NOI for Path 3, ≥5 units)
+
+Each scenario builds a Zillow ``searchQueryState`` JSON with the appropriate
+``filterState`` to filter by property type, lot size, year built, etc.
+
+URLs search by ZIP code area to get search result pages (not property detail
+redirects). Cookie reuse between scenarios avoids re-triggering CAPTCHAs.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
+import urllib.parse
 from typing import Any
 
-try:
-    from playwright.async_api import async_playwright  # type: ignore[import-untyped]
-except ImportError:  # pragma: no cover — playwright not installed in dev
-    async_playwright = None  # type: ignore[assignment]
-
+from plotlot.pipeline.skills.browser_manager import run_stealth_fetch
 from plotlot.pipeline.skills.registry import HandlerResult, register_skill
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# URL / slug construction
+# URL construction
 # ---------------------------------------------------------------------------
 
 _ZILLOW_BASE = "https://www.zillow.com/homes"
-
-# Realistic desktop Chrome UA + viewport (anti-detection baseline).
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/125.0.0.0 Safari/537.36"
-)
-_VIEWPORT = {"width": 1920, "height": 1080}
-
-_PAGE_TIMEOUT_MS = 60_000
-_PAGE_WAIT_UNTIL = "domcontentloaded"
+_ZIP_RE = re.compile(r"\b(\d{5})\b")
+_CURRENT_YEAR = 2026
 
 
-def _address_to_slug(address: str) -> str:
-    """Normalize an address string to a Zillow URL slug.
+def _extract_zip(address: str) -> str | None:
+    """Extract a 5-digit ZIP code from an address string.
 
-    Lowercases, replaces non-alphanumeric runs with a single hyphen, and
-    strips leading/trailing hyphens.
-
-    >>> _address_to_slug("123 Main St, Miami, FL 33169")
-    '123-main-st-miami-fl-33169'
+    >>> _extract_zip("123 Main St, Miami, FL 33169")
+    '33169'
     """
-    slug = ""
-    prev_hyphen = True  # suppress leading hyphen
-    for ch in address.lower():
-        if ch.isalnum():
-            slug += ch
-            prev_hyphen = False
-        elif not prev_hyphen:
-            slug += "-"
-            prev_hyphen = True
-    return slug.rstrip("-")
-
-
-def _build_zillow_url(address_slug: str, listing_type: str) -> str:
-    """Build the Zillow search URL for a given address slug and listing type.
-
-    "sold" and "rental" append a trailing path segment; "for_sale" does not.
-    """
-    path = f"/{listing_type}/" if listing_type in ("sold", "rental") else "/"
-    return f"{_ZILLOW_BASE}/{address_slug}_rb{path}"
+    match = _ZIP_RE.search(address)
+    return match.group(1) if match else None
 
 
 # ---------------------------------------------------------------------------
-# __NEXT_DATA__ extraction helpers
+# Kleyman deal-path filter states
 # ---------------------------------------------------------------------------
 
+# Common "sold" filter — disables all for-sale statuses, enables recently sold.
+_SOLD_BASE: dict[str, Any] = {
+    "isRecentlySold": {"value": True},
+    "isForSaleByAgent": {"value": False},
+    "isForSaleByOwner": {"value": False},
+    "isNewConstruction": {"value": False},
+    "isAuction": {"value": False},
+    "isForSaleForeclosure": {"value": False},
+    "isComingSoon": {"value": False},
+}
 
-def _extract_listings(next_data: dict[str, Any], listing_type: str) -> list[dict[str, Any]]:
-    """Extract listing dicts from a parsed __NEXT_DATA__ payload.
+# Property type exclusions (all false by default, enable what's needed).
+_ALL_TYPES_OFF: dict[str, Any] = {
+    "isSingleFamily": {"value": False},
+    "isCondo": {"value": False},
+    "isTownhouse": {"value": False},
+    "isMultiFamily": {"value": False},
+    "isLotLand": {"value": False},
+    "isManufactured": {"value": False},
+}
 
-    - "sold"  → cat2.searchResults.listResults
-    - "rental" / "for_sale"  → cat1.searchResults.listResults
+
+def _build_filter_state(scenario: str, **kwargs: Any) -> dict[str, Any]:
+    """Build Zillow filterState for a Kleyman deal-path comp scenario.
+
+    Args:
+        scenario: One of "land", "new_build", "renovated", "small_mf", "rental".
+        **kwargs: Extra params (e.g., min_acres, max_acres for land).
+
+    Returns:
+        filterState dict for Zillow's searchQueryState.
     """
-    cat_key = "cat2" if listing_type == "sold" else "cat1"
+    fs: dict[str, Any] = dict(_ALL_TYPES_OFF)
+
+    if scenario == "land":
+        fs["isLotLand"] = {"value": True}
+        fs.update(_SOLD_BASE)
+        fs["doz"] = {"value": "12m"}
+        fs["sortSelection"] = {"value": "days"}
+        min_acres = kwargs.get("min_acres")
+        max_acres = kwargs.get("max_acres")
+        if min_acres is not None or max_acres is not None:
+            fs["lotSize"] = {
+                "min": min_acres,
+                "max": max_acres,
+                "units": "acres",
+            }
+
+    elif scenario == "new_build":
+        fs["isSingleFamily"] = {"value": True}
+        fs.update(_SOLD_BASE)
+        fs["built"] = {"min": _CURRENT_YEAR - 1, "max": _CURRENT_YEAR}
+        fs["doz"] = {"value": "12m"}
+        fs["sortSelection"] = {"value": "days"}
+
+    elif scenario == "renovated":
+        fs["isSingleFamily"] = {"value": True}
+        fs.update(_SOLD_BASE)
+        fs["keywords"] = {"value": "renovated"}
+        fs["doz"] = {"value": "12m"}
+        fs["sortSelection"] = {"value": "days"}
+
+    elif scenario == "small_mf":
+        fs["isMultiFamily"] = {"value": True}
+        fs.update(_SOLD_BASE)
+        fs["doz"] = {"value": "12m"}
+        fs["sortSelection"] = {"value": "days"}
+
+    elif scenario == "rental":
+        fs["isForRent"] = {"value": True}
+        fs["isForSaleByAgent"] = {"value": False}
+        fs["isForSaleByOwner"] = {"value": False}
+        fs["isNewConstruction"] = {"value": False}
+        fs["isAuction"] = {"value": False}
+        fs["isForSaleForeclosure"] = {"value": False}
+        fs["isComingSoon"] = {"value": False}
+        fs["sortSelection"] = {"value": "days"}
+        fs["isSingleFamily"] = {"value": True}
+        fs["isCondo"] = {"value": True}
+        fs["isTownhouse"] = {"value": True}
+        fs["isMultiFamily"] = {"value": True}
+
+    return fs
+
+
+def _build_zillow_url(zip_code: str, filter_state: dict[str, Any]) -> str:
+    """Build a Zillow search URL with searchQueryState.
+
+    Args:
+        zip_code: 5-digit ZIP code to search in.
+        filter_state: filterState dict from _build_filter_state().
+
+    Returns:
+        Full Zillow URL with encoded searchQueryState.
+    """
+    sqs = {
+        "pagination": {},
+        "isMapVisible": False,
+        "isListVisible": True,
+        "filterState": filter_state,
+        "usersSearchTerm": str(zip_code),
+    }
+    encoded = urllib.parse.quote(json.dumps(sqs, separators=(",", ":")))
+    return f"{_ZILLOW_BASE}/{zip_code}_rb/?searchQueryState={encoded}"
+
+
+# ---------------------------------------------------------------------------
+# __NEXT_DATA__ extraction
+# ---------------------------------------------------------------------------
+
+_NEXT_DATA_JS = """
+(() => {
+    const el = document.getElementById('__NEXT_DATA__');
+    if (!el) return null;
+    try { return JSON.parse(el.textContent); } catch(_) { return null; }
+})()
+"""
+
+
+def _extract_listings(next_data: dict[str, Any], scenario: str) -> list[dict[str, Any]]:
+    """Extract listing dicts from __NEXT_DATA__.
+
+    When using searchQueryState, Zillow may place results in cat1 or cat2
+    depending on the filter combination. We check both and return whichever
+    has results, preferring cat2 for sold scenarios and cat1 for rentals.
+    """
     try:
         search_state = next_data["props"]["pageProps"]["searchPageState"]
-        results: list[dict[str, Any]] = (
-            search_state.get(cat_key, {}).get("searchResults", {}).get("listResults", [])
-        )
-        return results
     except (KeyError, TypeError):
         return []
 
+    cat1_results = (
+        search_state.get("cat1", {}).get("searchResults", {}).get("listResults", [])
+    )
+    cat2_results = (
+        search_state.get("cat2", {}).get("searchResults", {}).get("listResults", [])
+    )
 
-# ---------------------------------------------------------------------------
-# Normalization
-# ---------------------------------------------------------------------------
+    is_sold = scenario in ("land", "new_build", "renovated", "small_mf")
+    if is_sold:
+        return cat2_results if cat2_results else cat1_results
+    return cat1_results if cat1_results else cat2_results
+
+
+def _parse_price(raw_price: Any) -> int:
+    """Parse Zillow price value into a numeric integer.
+
+    Handles int, float, and string formats like "$4,700/mo" or "$30,000".
+    """
+    if isinstance(raw_price, (int, float)):
+        return int(raw_price)
+    if isinstance(raw_price, str):
+        # Strip $, commas, /mo, /mo, and trailing text
+        cleaned = raw_price.replace("$", "").replace(",", "").split("/")[0].strip()
+        try:
+            return int(float(cleaned))
+        except (ValueError, TypeError):
+            return 0
+    return 0
+
+
+def _extract_sold_price(raw: dict[str, Any], hdp: dict[str, Any]) -> int:
+    """Extract sold price from multiple possible Zillow fields.
+
+    Recently-sold listings may store price in:
+    1. raw["price"] (top-level, sometimes populated)
+    2. hdp["lastSoldPrice"] (homeInfo)
+    3. hdp["zestimate"] (fallback estimate)
+    4. raw["hdpData"]["priceInfo"]["salePrice"]
+    """
+    for source in (
+        raw.get("price"),
+        hdp.get("lastSoldPrice"),
+        hdp.get("zestimate"),
+        raw.get("hdpData", {}).get("priceInfo", {}).get("salePrice") if isinstance(raw.get("hdpData"), dict) else None,
+    ):
+        parsed = _parse_price(source)
+        if parsed > 0:
+            return parsed
+    return 0
 
 
 def normalize_zillow_listing(raw: dict[str, Any], listing_type: str) -> dict[str, Any]:
-    """Normalize a single raw Zillow listing dict into the standard comp dict.
-
-    Returns a flat dict with keys: address, price, bedrooms, bathrooms, sqft,
-    lot_sqft, year_built, property_type, sold_date, latitude, longitude,
-    source_url, source_id, source, listing_type.
+    """Normalize a raw Zillow listing dict into the standard comp dict.
 
     Args:
         raw: Raw listing object from Zillow's __NEXT_DATA__.
-        listing_type: "sold", "rental", or "for_sale".
+        listing_type: Scenario name (land, new_build, renovated, small_mf, rental).
     """
     hdp = raw.get("hdpData", {}).get("homeInfo", {}) if isinstance(raw.get("hdpData"), dict) else {}
     lat_long = raw.get("latLong", {}) if isinstance(raw.get("latLong"), dict) else {}
@@ -112,13 +248,17 @@ def normalize_zillow_listing(raw: dict[str, Any], listing_type: str) -> dict[str
         raw.get("variableData", {}) if isinstance(raw.get("variableData"), dict) else {}
     )
 
+    is_sold = listing_type in ("land", "new_build", "renovated", "small_mf")
+    price = _extract_sold_price(raw, hdp) if is_sold else _parse_price(raw.get("price", 0))
+
     return {
         "address": raw.get("address", ""),
-        "price": raw.get("price", 0),
+        "price": price,
         "bedrooms": hdp.get("bedrooms"),
         "bathrooms": hdp.get("bathrooms"),
         "sqft": hdp.get("livingArea"),
         "lot_sqft": hdp.get("lotAreaValue"),
+        "lot_area_units": hdp.get("lotAreaUnits"),
         "year_built": hdp.get("yearBuilt"),
         "property_type": hdp.get("homeType"),
         "sold_date": variable_data.get("sold_date"),
@@ -132,30 +272,111 @@ def normalize_zillow_listing(raw: dict[str, Any], listing_type: str) -> dict[str
 
 
 # ---------------------------------------------------------------------------
+# Extraction function (passed to run_stealth_fetch)
+# ---------------------------------------------------------------------------
+
+
+def _make_extract_fn(scenario: str, max_results: int) -> Any:
+    """Create a sync extraction function for the SB instance.
+
+    Returns a function that:
+    1. Evaluates __NEXT_DATA__ JS on the page
+    2. Extracts and normalizes listings
+    3. Returns dict with comparables, count, listing_type
+    """
+
+    def extract(sb: Any) -> dict[str, Any]:
+        next_data_raw = sb.cdp.evaluate(_NEXT_DATA_JS)
+
+        if isinstance(next_data_raw, str):
+            try:
+                next_data = json.loads(next_data_raw)
+            except (json.JSONDecodeError, TypeError):
+                next_data = None
+        else:
+            next_data = next_data_raw
+
+        if not next_data or not isinstance(next_data, dict):
+            logger.warning("No __NEXT_DATA__ found for scenario=%s", scenario)
+            return {"comparables": [], "count": 0, "listing_type": scenario}
+
+        raw_listings = _extract_listings(next_data, scenario)
+        comps = [
+            normalize_zillow_listing(raw, scenario)
+            for raw in raw_listings[:max_results]
+        ]
+
+        logger.info(
+            "Extracted %d %s listings (raw: %d)",
+            len(comps), scenario, len(raw_listings),
+        )
+        return {
+            "comparables": comps,
+            "count": len(comps),
+            "listing_type": scenario,
+        }
+
+    return extract
+
+
+# ---------------------------------------------------------------------------
 # Registered skill handler
 # ---------------------------------------------------------------------------
+
+_VALID_SCENARIOS = frozenset({
+    "land", "new_build", "renovated", "small_mf", "rental", "sold", "for_sale",
+})
 
 
 @register_skill("fetch_zillow_comps")
 async def handle_fetch_zillow_comps(inputs_json: dict[str, Any]) -> HandlerResult:
-    """Scrape Zillow sold/rental comparable listings via __NEXT_DATA__ extraction.
+    """Scrape Zillow comparables using SeleniumBase UC+CDP stealth mode.
+
+    Supports Daniel Kleyman's deal-path comping methodology with scenario-
+    specific Zillow filterState:
+
+    - ``land``: sold land with similar acreage (land basis for land deals)
+    - ``new_build``: sold homes built within last year (ARV for Path 1/2)
+    - ``renovated``: sold homes with renovation keyword (ARV for Path 1/2)
+    - ``small_mf``: sold duplexes/2-4 unit buildings (ARV for Path 2)
+    - ``rental``: rental listings (NOI for Path 3, ≥5 units)
+    - ``sold``: general recently sold (backwards compat → new_build)
+    - ``for_sale``: active for-sale listings (backwards compat → rental)
 
     Args:
         inputs_json: Dictionary containing:
-            - address: Full property address string (required)
-            - listing_type: "sold", "rental", or "for_sale" (default "sold")
+            - address: Full property address string (required, must include ZIP)
+            - listing_type: Scenario name (default "rental")
             - max_results: Maximum listings to return (default 25)
+            - min_acres: Min acreage for land scenario (optional)
+            - max_acres: Max acreage for land scenario (optional)
+            - headless: Run headless (default False — headed is stealthier)
+            - cookies: Reusable session cookies from prior scrape (optional)
 
     Returns:
         HandlerResult with output_json containing:
             - comparables: list of normalized listing dicts
             - source: "zillow"
             - count: number of listings returned
-            - listing_type: the listing type searched
+            - listing_type: the scenario searched
+            - search_url: the URL scraped
+            - cookies: session cookies for reuse (if available)
     """
     address: str = inputs_json.get("address", "")
-    listing_type: str = inputs_json.get("listing_type", "sold")
+    scenario: str = inputs_json.get("listing_type", "rental")
     max_results: int = inputs_json.get("max_results", 25)
+    headless: bool = inputs_json.get("headless", False)
+    cookies_in: list[dict[str, Any]] | None = inputs_json.get("cookies")
+
+    # Backwards compat: map old listing types to scenarios
+    if scenario == "sold":
+        scenario = "new_build"
+    elif scenario == "for_sale":
+        scenario = "rental"
+
+    if scenario not in _VALID_SCENARIOS:
+        logger.warning("Unknown scenario '%s' — defaulting to 'rental'", scenario)
+        scenario = "rental"
 
     if not address:
         logger.warning("fetch_zillow_comps called without address")
@@ -163,83 +384,71 @@ async def handle_fetch_zillow_comps(inputs_json: dict[str, Any]) -> HandlerResul
             output_json={"comparables": [], "source": "zillow", "count": 0, "error": "No address provided"},
         )
 
-    if async_playwright is None:
-        logger.warning("playwright package not installed — cannot scrape Zillow")
+    zip_code = _extract_zip(address)
+    if not zip_code:
+        logger.warning("No ZIP code found in address: %s", address)
         return HandlerResult(
             output_json={
                 "comparables": [],
                 "source": "zillow",
                 "count": 0,
-                "error": "playwright package not installed",
+                "error": f"No ZIP code in address: {address}",
             },
         )
 
-    slug = _address_to_slug(address)
-    url = _build_zillow_url(slug, listing_type)
-    logger.info("Scraping Zillow %s listings for %s", listing_type, address)
+    # Build filter state for the Kleyman scenario
+    filter_kwargs: dict[str, Any] = {}
+    if scenario == "land":
+        filter_kwargs["min_acres"] = inputs_json.get("min_acres")
+        filter_kwargs["max_acres"] = inputs_json.get("max_acres")
 
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent=_UA,
-                viewport=_VIEWPORT,
-                locale="en-US",
-            )
-            page = await context.new_page()
+    filter_state = _build_filter_state(scenario, **filter_kwargs)
+    url = _build_zillow_url(zip_code, filter_state)
 
-            try:
-                from playwright_stealth import stealth_async
-                await stealth_async(page)
-            except ImportError:
-                pass
+    logger.info("Scraping Zillow %s comps for ZIP %s (from %s)", scenario, zip_code, address)
 
-            try:
-                await page.goto(url, wait_until=_PAGE_WAIT_UNTIL, timeout=_PAGE_TIMEOUT_MS)
-
-                next_data: dict[str, Any] | None = await page.evaluate("""
-                    () => {
-                        const el = document.getElementById('__NEXT_DATA__');
-                        if (!el) return null;
-                        try {
-                            return JSON.parse(el.textContent);
-                        } catch (_) {
-                            return null;
-                        }
-                    }
-                """)
-
-                if not next_data:
-                    logger.warning("No __NEXT_DATA__ found for %s", url)
-                    raw_listings: list[dict[str, Any]] = []
-                else:
-                    raw_listings = _extract_listings(next_data, listing_type)
-
-            finally:
-                await browser.close()
-
-    except Exception as exc:
-        logger.exception("Zillow scrape failed for %s: %s", address, exc)
-        return HandlerResult(
-            output_json={
-                "comparables": [],
-                "source": "zillow",
-                "count": 0,
-                "error": str(exc),
-            },
-        )
-
-    comps = [
-        normalize_zillow_listing(raw, listing_type) for raw in raw_listings[:max_results]
-    ]
-
-    logger.info("Returned %d Zillow %s listings for %s", len(comps), listing_type, address)
-    return HandlerResult(
-        output_json={
-            "comparables": comps,
-            "source": "zillow",
-            "count": len(comps),
-            "listing_type": listing_type,
-            "search_url": url,
-        },
+    extract_fn = _make_extract_fn(scenario, max_results)
+    result = await run_stealth_fetch(
+        url,
+        extract_fn,
+        use_chromium=True,
+        headless=headless,
+        ad_block=True,
+        locale="en",
+        cookies=cookies_in,
     )
+
+    if "error" in result:
+        return HandlerResult(
+            output_json={
+                "comparables": [],
+                "source": "zillow",
+                "count": 0,
+                "error": result["error"],
+                "listing_type": scenario,
+                "search_url": url,
+            },
+        )
+
+    data = result.get("data", {})
+    comps = data.get("comparables", [])
+
+    output: dict[str, Any] = {
+        "comparables": comps,
+        "source": "zillow",
+        "count": len(comps),
+        "listing_type": scenario,
+        "search_url": url,
+        "captcha_solved": result.get("captcha_solved", False),
+        "title": result.get("title", ""),
+    }
+
+    if result.get("cookies"):
+        output["cookies"] = result["cookies"]
+
+    logger.info(
+        "Returned %d Zillow %s comps for ZIP %s (CAPTCHA solved: %s)",
+        len(comps), scenario, zip_code, result.get("captcha_solved", False),
+    )
+
+    return HandlerResult(output_json=output)
