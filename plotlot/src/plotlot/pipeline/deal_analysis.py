@@ -554,6 +554,7 @@ async def run_deal_analysis(
             zillow_listing_type = "small_mf"
         else:
             zillow_listing_type = "new_build"
+        # "renovated" scenario is opt-in only (manual listing_type override) — no auto-routing
         comp_result = await handle_fetch_zillow_comps({
             "address": zoning_report.formatted_address or zoning_report.address,
             "listing_type": zillow_listing_type,
