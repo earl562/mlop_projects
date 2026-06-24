@@ -11,7 +11,6 @@ pro forma → financing → comps → deal metrics.
 from __future__ import annotations
 
 from plotlot.core.types import DealMetrics
-from plotlot.observability.tracing import trace
 
 
 # ---------------------------------------------------------------------------
@@ -96,9 +95,9 @@ def evaluate_coc_threshold(coc_pct: float) -> str:
     +===========+=========================+
     | >= 10%    | ``"strong_go"``         |
     +-----------+-------------------------+
-    | >= 7%     | ``"go"``                |
+    | >= 5%     | ``"go"``                |
     +-----------+-------------------------+
-    | < 7%      | ``"no_go"``             |
+    | < 5%      | ``"no_go"``             |
     +-----------+-------------------------+
 
     Args:
@@ -109,7 +108,7 @@ def evaluate_coc_threshold(coc_pct: float) -> str:
     """
     if coc_pct >= 10.0:
         return "strong_go"
-    if coc_pct >= 7.0:
+    if coc_pct >= 5.0:
         return "go"
     return "no_go"
 
@@ -120,7 +119,7 @@ def evaluate_sweat_equity_threshold(se_pct: float) -> str:
     +-----------+-------------------------+
     | SE Range  | Verdict                 |
     +===========+=========================+
-    | >= 30%    | ``"strong_go"``         |
+    | >= 20%    | ``"strong_go"``         |
     +-----------+-------------------------+
     | > 0%      | ``"building_wealth"``   |
     +-----------+-------------------------+
@@ -133,7 +132,7 @@ def evaluate_sweat_equity_threshold(se_pct: float) -> str:
     Returns:
         Threshold verdict string.
     """
-    if se_pct >= 30.0:
+    if se_pct >= 20.0:
         return "strong_go"
     if se_pct > 0.0:
         return "building_wealth"
