@@ -855,6 +855,31 @@ def test_upside_answer_rebuts_sb9_even_without_grounded_programs():
     assert "SB 9 does not apply" in answer
 
 
+def test_strip_placeholder_links_collapses_dead_citations():
+    """The narrator emits '[Art.01 Div.04](section link)' — a citation it tries to link
+    with placeholder filler, which renders as a dead link. Display hygiene collapses
+    those to plain text but keeps real URLs/anchors intact."""
+    from plotlot.api.chat import _strip_placeholder_links
+
+    assert _strip_placeholder_links("per [Art.01 Div.04](section link).") == "per Art.01 Div.04."
+    assert _strip_placeholder_links("see [here](link)") == "see here"
+    assert _strip_placeholder_links("[breakdown](source)") == "breakdown"
+    # Real targets are preserved untouched.
+    assert (
+        _strip_placeholder_links("[code](https://docs.sandiego.gov/x)")
+        == "[code](https://docs.sandiego.gov/x)"
+    )
+    assert _strip_placeholder_links("[jump](#fees)") == "[jump](#fees)"
+    # Mixed: drop the dead one, keep the real one.
+    assert (
+        _strip_placeholder_links("[a](link) and [b](https://x.com)")
+        == "a and [b](https://x.com)"
+    )
+    # No links → unchanged; empty → empty.
+    assert _strip_placeholder_links("plain text, no links") == "plain text, no links"
+    assert _strip_placeholder_links("") == ""
+
+
 def test_owner_answer_echoes_assessor_owner():
     from plotlot.api.chat import _build_owner_answer
 

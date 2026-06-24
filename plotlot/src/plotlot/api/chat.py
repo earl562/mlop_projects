@@ -1918,6 +1918,30 @@ def _resolve_deal_address(
 # routed upstream in call_llm; this only cleans unparseable residue.
 _TOOL_CALL_RESIDUE_RE = re.compile(r"<tool_call>.*?(?:</tool_call>|$)", re.DOTALL)
 
+# Display-hygiene: a markdown link whose href is placeholder filler, not a real
+# target. The weak narrator emits "[Art.01 Div.04](section link)" / "[here](link)" —
+# a citation it wants to hyperlink but has no URL for — which renders as a dead link.
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]\n]+)\]\(([^)\n]*)\)")
+_REAL_HREF_RE = re.compile(r"^(?:https?://|/|#|mailto:|tel:)", re.IGNORECASE)
+
+
+def _strip_placeholder_links(text: str) -> str:
+    """Collapse markdown links with a placeholder (non-URL) href to plain text.
+
+    Keeps links with a real http(s)/anchor/mailto/tel target; for everything else
+    (``[Art.01 Div.04](section link)``, ``[here](link)``, ``[breakdown](source)``) it
+    drops the dead-link wrapper and keeps the visible label, so a citation reads as
+    plain text instead of an un-clickable link. The deterministic source echo already
+    formats real citations; this only cleans the model's free-formed narration."""
+    if not text or "](" not in text:
+        return text
+
+    def _repl(m: re.Match[str]) -> str:
+        label, href = m.group(1), m.group(2).strip()
+        return m.group(0) if _REAL_HREF_RE.match(href) else label
+
+    return _MARKDOWN_LINK_RE.sub(_repl, text)
+
 
 def _build_source_answer(payload: dict) -> str | None:
     """Deterministic answer to 'what's the source / can I trust this?'.
@@ -4370,9 +4394,11 @@ async def chat(request: ChatRequest, http_request: Request):
                 if not tool_calls:
                     # No tools — stream the text response. Strip any unparseable
                     # <tool_call> residue so raw tool-call JSON never reaches the
-                    # user (parseable blobs were already recovered + routed upstream).
+                    # user (parseable blobs were already recovered + routed upstream),
+                    # and collapse dead placeholder citation links to plain text.
                     if content and "<tool_call>" in content:
                         content = _TOOL_CALL_RESIDUE_RE.sub("", content).strip()
+                    content = _strip_placeholder_links(content)
                     if content:
                         yield _sse_event("token", {"content": content})
                         memory.append({"role": "assistant", "content": content})
@@ -4607,6 +4633,7 @@ async def chat(request: ChatRequest, http_request: Request):
                     content
                     or "I gathered some information but couldn't fully answer. Could you rephrase your question?"
                 )
+            final_content = _strip_placeholder_links(final_content)
             yield _sse_event("token", {"content": final_content})
             memory.append({"role": "assistant", "content": final_content})
             yield _sse_event("done", {"full_content": final_content})
