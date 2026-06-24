@@ -79,11 +79,17 @@ class AsBuiltValueInputs:
 
 @dataclass(frozen=True)
 class DevelopmentLandOfferInputs:
-    """Inputs required to calculate a residual land offer."""
+    """Inputs required to calculate a residual land offer.
+
+    Residential scenarios should provide `max_units`. Commercial scenarios
+    should provide `commercial_gla_sqft`. The calculator can price either path
+    while keeping per-unit and per-buildable-square-foot outputs separate.
+    """
 
     max_units: int
     cost_stack: CostStack
     as_built_value: AsBuiltValueInputs
+    commercial_gla_sqft: float = 0.0
     desired_sweat_equity_pct: float = 25.0
     recommended_offer_pct_of_max: float = 85.0
     scenario_name: str = "base"
@@ -99,6 +105,7 @@ class DevelopmentLandOfferResult:
 
     scenario_name: str
     max_units: int
+    commercial_gla_sqft: float
     as_built_value: float
     as_built_value_source: str
     desired_sweat_equity: float
@@ -107,6 +114,8 @@ class DevelopmentLandOfferResult:
     recommended_offer: float
     max_land_purchase_price_per_unit: float
     recommended_offer_per_unit: float
+    max_land_purchase_price_per_buildable_sqft: float
+    recommended_offer_per_buildable_sqft: float
     confidence: str
     warnings: list[str]
     formulas: dict[str, str]
@@ -157,8 +166,10 @@ def calculate_development_land_offer(
             "No market profile key supplied; location-sensitive assumptions are untracked."
         )
 
-    if inputs.max_units <= 0:
-        warnings.append("No positive unit capacity supplied from density study.")
+    has_residential_capacity = inputs.max_units > 0
+    has_commercial_capacity = inputs.commercial_gla_sqft > 0
+    if not has_residential_capacity and not has_commercial_capacity:
+        warnings.append("No positive unit capacity or commercial GLA supplied from feasibility study.")
 
     total_costs = inputs.cost_stack.total_excluding_land
     if total_costs <= 0:
@@ -186,10 +197,9 @@ def calculate_development_land_offer(
         warnings.append("Residual land value is negative at the supplied assumptions.")
 
     recommended_offer = max(max_land_purchase_price, 0.0) * (offer_pct / 100.0)
-    per_unit_denominator = inputs.max_units if inputs.max_units > 0 else 0
 
     confidence = _confidence(
-        max_units=inputs.max_units,
+        has_capacity=has_residential_capacity or has_commercial_capacity,
         as_built_value=as_built_value,
         total_costs=total_costs,
         evidence_count=len(inputs.evidence_ids),
@@ -199,21 +209,26 @@ def calculate_development_land_offer(
     return DevelopmentLandOfferResult(
         scenario_name=inputs.scenario_name,
         max_units=inputs.max_units,
+        commercial_gla_sqft=round(inputs.commercial_gla_sqft, 2),
         as_built_value=round(as_built_value, 2),
         as_built_value_source=value_source,
         desired_sweat_equity=round(desired_sweat_equity, 2),
         total_costs_before_land=round(total_costs, 2),
         max_land_purchase_price=round(max_land_purchase_price, 2),
         recommended_offer=round(recommended_offer, 2),
-        max_land_purchase_price_per_unit=round(
-            max_land_purchase_price / per_unit_denominator,
-            2,
-        )
-        if per_unit_denominator
-        else 0.0,
-        recommended_offer_per_unit=round(recommended_offer / per_unit_denominator, 2)
-        if per_unit_denominator
-        else 0.0,
+        max_land_purchase_price_per_unit=_safe_divide(
+            max_land_purchase_price,
+            inputs.max_units,
+        ),
+        recommended_offer_per_unit=_safe_divide(recommended_offer, inputs.max_units),
+        max_land_purchase_price_per_buildable_sqft=_safe_divide(
+            max_land_purchase_price,
+            inputs.commercial_gla_sqft,
+        ),
+        recommended_offer_per_buildable_sqft=_safe_divide(
+            recommended_offer,
+            inputs.commercial_gla_sqft,
+        ),
         confidence=confidence,
         warnings=warnings,
         formulas={
@@ -227,6 +242,8 @@ def calculate_development_land_offer(
                 "as_built_value - desired_sweat_equity - total_costs_before_land"
             ),
             "recommended_offer": "max(max_land_purchase_price, 0) * recommended_offer_pct",
+            "per_unit_outputs": "residential land value outputs divide by max_units",
+            "per_buildable_sqft_outputs": "commercial land value outputs divide by GLA sqft",
         },
         market_profile_key=inputs.market_profile_key,
         location_notes=list(inputs.location_notes),
@@ -270,14 +287,20 @@ def _positive_or_zero(value: float) -> float:
     return value if value > 0 else 0.0
 
 
+def _safe_divide(numerator: float, denominator: float | int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 2)
+
+
 def _confidence(
-    max_units: int,
+    has_capacity: bool,
     as_built_value: float,
     total_costs: float,
     evidence_count: int,
     warning_count: int,
 ) -> str:
-    if max_units <= 0 or as_built_value <= 0 or total_costs <= 0:
+    if not has_capacity or as_built_value <= 0 or total_costs <= 0:
         return "low"
     if warning_count > 0:
         return "low"
