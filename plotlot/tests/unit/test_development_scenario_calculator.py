@@ -57,7 +57,11 @@ def test_residential_sale_scenario_is_sellout_driven() -> None:
             average_sale_price_per_unit=500_000,
             selling_cost_pct_of_gross_sellout=6.0,
             required_profit_pct_of_net_sellout=20.0,
-            cost_stack=CostStack(hard_costs=950_000, soft_costs=200_000, contingency=50_000),
+            cost_stack=CostStack(
+                hard_costs=950_000,
+                soft_costs=200_000,
+                contingency=50_000,
+            ),
             market_profile_key="san_diego_ca",
         )
     )
@@ -82,7 +86,11 @@ def test_commercial_lease_scenario_is_gla_and_annual_rent_psf_driven() -> None:
             vacancy_rate_pct=8.0,
             operating_expense_ratio_pct=35.0,
             market_cap_rate_pct=7.0,
-            cost_stack=CostStack(hard_costs=1_800_000, soft_costs=300_000, contingency=100_000),
+            cost_stack=CostStack(
+                hard_costs=1_800_000,
+                soft_costs=300_000,
+                contingency=100_000,
+            ),
             market_profile_key="broward_fl",
             evidence_ids=["gla", "lease-comps", "cost-template"],
         )
