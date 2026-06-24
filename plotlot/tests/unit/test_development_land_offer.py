@@ -8,10 +8,16 @@ from plotlot.pipeline.development_land_offer import (
 
 
 def test_calculate_as_built_value_from_noi_and_cap_rate() -> None:
-    assert calculate_as_built_value(annual_noi=120_000, market_cap_rate_pct=6.0) == 2_000_000
+    result = calculate_as_built_value(
+        annual_noi=120_000,
+        market_cap_rate_pct=6.0,
+    )
+
+    assert result == 2_000_000
 
 
 def test_calculate_development_land_offer_income_approach_base_case() -> None:
+    location_notes = ["Base assumptions selected from Miami-Dade market profile."]
     result = calculate_development_land_offer(
         DevelopmentLandOfferInputs(
             scenario_name="base",
@@ -30,7 +36,7 @@ def test_calculate_development_land_offer_income_approach_base_case() -> None:
             desired_sweat_equity_pct=25.0,
             recommended_offer_pct_of_max=85.0,
             market_profile_key="miami_dade_fl",
-            location_notes=["Base assumptions selected from Miami-Dade market profile."],
+            location_notes=location_notes,
             evidence_ids=["density-run-1", "rent-comps-1", "cost-template-1"],
             assumption_ids=["base-rent", "base-cap-rate"],
         )
@@ -45,7 +51,7 @@ def test_calculate_development_land_offer_income_approach_base_case() -> None:
     assert result.recommended_offer_per_unit == 40_906.25
     assert result.as_built_value_source == "income_approach"
     assert result.market_profile_key == "miami_dade_fl"
-    assert result.location_notes == ["Base assumptions selected from Miami-Dade market profile."]
+    assert result.location_notes == location_notes
     assert result.confidence == "high"
     assert result.warnings == []
 
@@ -78,7 +84,11 @@ def test_negative_residual_land_value_is_preserved_but_offer_is_zero() -> None:
         DevelopmentLandOfferInputs(
             max_units=6,
             as_built_value=AsBuiltValueInputs(override_value=1_000_000),
-            cost_stack=CostStack(hard_costs=900_000, soft_costs=250_000, contingency=100_000),
+            cost_stack=CostStack(
+                hard_costs=900_000,
+                soft_costs=250_000,
+                contingency=100_000,
+            ),
             desired_sweat_equity_pct=25.0,
             market_profile_key="san_diego_ca",
         )
