@@ -1,62 +1,102 @@
 /goal
 
-You are Codex working in the `earl562/plotlot-v2` repository on branch `feature/deal-analysis-pipeline`. Implement the next PlotLot product slice: an agentic development-acquisition harness for real estate developers and land-acquisition investors.
+You are Codex working in `earl562/plotlot-v2` on branch
+`feature/deal-analysis-pipeline`.
 
-This is not a generic chatbot feature. PlotLot must become a governed, evidence-backed, workspace-native feasibility and underwriting harness that helps a user decide:
+Build PlotLot into an AI Land Developer Harness for real estate developers,
+land-acquisition investors, infill builders, build-to-rent operators,
+entitlement investors, land wholesalers, and small commercial developers.
+
+PlotLot should help a user decide:
 
 - What can this parcel support?
-- Should I buy it?
-- What is the highest safe land offer?
-- What assumptions drive the answer?
-- What evidence supports the recommendation?
-- What report or lender/investor package can be generated from the run?
+- Can I build the concept I have in mind?
+- What is the supportable land value?
+- What is the highest safe offer?
+- What assumptions drive the decision?
+- Which facts are sourced versus assumed?
+- What risks or diligence items should stop the deal?
+- What acquisition, lender, or investor memo can be generated from the run?
 
-## Existing repo context to respect
+## Source-of-truth instruction
 
-Read and follow these existing product/contracts before editing code:
+Do not use existing PlotLot PRDs or old branch notes as the primary design
+source. Use them only as historical context after you inspect the current branch.
 
-- `plotlot/docs/PLOTLOT_FLOW_CONTRACT.md`
-- `plotlot/.omx/plans/prd-plotlot-workspace-harness.md`
-- `plotlot/.omx/plans/prd-agentic-land-use-harness.md`
-- `.claude/rules/plotlot-pipeline.md`
-- `.claude/rules/plotlot-data-models.md`
-- `.claude/rules/plotlot-chat.md`
+The primary domain methodology for this goal is Rehab Valuator's ground-up
+development material:
 
-Preserve the current product split:
+- `https://rehabvaluator.com/rehabbing-ground-up`
+- `https://rehabvaluator.com/value-vacant-land`
+- `https://rehabvaluator.com/building-apartments`
+- `https://rehabvaluator.com/development-feasibility-lender-proposal-rental-comps`
+- `https://rehabvaluator.com/development-project-management-training`
 
-- `Lookup` = fast address-driven feasibility answer.
-- `Agent` = persistent, higher-capability decision-support workspace.
+Treat the Rehab Valuator material as an operating framework, not merely RAG
+content. Convert the workflow into repeatable skills, deterministic calculators,
+assumption schemas, evidence requirements, and report artifacts.
 
-Do not turn `Lookup` into free-form chat. Do not bury trust-critical facts under optional downstream analysis. Do not market durable memory unless the data layer is actually durable.
+## Mandatory research and planning TODO
+
+Before broad implementation, perform a fresh research and repo-analysis pass.
+The current working goal is allowed to guide implementation, but the final
+Codex `/goal` prompt must be regenerated after research is complete.
+
+Research TODO:
+
+1. Deep research the Rehab Valuator ground-up development workflow.
+2. Decompose the workflow into developer jobs-to-be-done.
+3. Inspect the current branch implementation, especially the deal-analysis,
+   calculator, agent-run, evidence, frontend, and harness files.
+4. Identify gaps between current PlotLot and a true AI land-developer harness.
+5. Produce a refreshed `/goal` prompt after research and branch analysis.
+6. Only then broaden implementation beyond the first deterministic calculator
+   and market-profile slices.
+
+## Current implementation slice to preserve
+
+The current branch already contains a deal-analysis pipeline. This goal adds a
+new deterministic foundation that should be preserved and extended:
+
+- `plotlot/src/plotlot/pipeline/development_land_offer.py`
+- `plotlot/src/plotlot/pipeline/development_market_profile.py`
+- `plotlot/src/plotlot/pipeline/development_scenario_calculator.py`
+- `plotlot/tests/unit/test_development_land_offer.py`
+- `plotlot/tests/unit/test_development_market_profile.py`
+- `plotlot/tests/unit/test_development_scenario_calculator.py`
+
+This foundation is intentionally zero-I/O. It should become the calculation
+kernel that the agent, API, and frontend call into.
 
 ## Product thesis
 
-Implement the first durable slice of this workflow:
+The core workflow is:
 
 ```text
 Address / Parcel
   -> parcel + jurisdiction + zoning facts
-  -> dimensional standards + max unit capacity
-  -> development concept / unit mix
-  -> rent or sales assumptions
-  -> hard costs + soft costs + contingency
-  -> financing assumptions
-  -> as-built value
-  -> total development cost
+  -> dimensional standards + max residential units or commercial GLA
+  -> development concept
+  -> location-specific assumptions
+  -> asset-class-specific underwriting
+  -> as-built value or net sellout value
+  -> total development cost excluding land
   -> max supportable land price
   -> risk-adjusted offer range
   -> evidence-backed acquisition memo
 ```
 
-The foundational underwriting logic should mirror the real estate development workflow:
+The foundational underwriting logic should mirror the development workflow:
 
-1. Run a density study.
-2. Determine as-built value.
-3. Back out desired developer profit / sweat equity / required margin.
-4. Back out hard costs, soft costs, contingency, financing, carrying, closing, and reserves.
+1. Run a density or capacity study.
+2. Determine as-built value or net sellout value.
+3. Back out required developer profit, sweat equity, or target margin.
+4. Back out hard costs, soft costs, contingency, financing, carrying, closing,
+   reserves, impact fees, and risk buffer.
 5. Arrive at max supportable land purchase price.
-6. Present conservative/base/aggressive scenarios.
-7. Generate a memo with sources, assumptions, calculations, risks, and next steps.
+6. Present conservative, base, and aggressive scenarios.
+7. Generate a memo with sources, assumptions, calculations, risks, and next
+   steps.
 
 ## Non-negotiable product rules
 
@@ -64,151 +104,140 @@ Always separate these categories in data models, API responses, UI, and reports:
 
 ```text
 Fact:
-  Source-backed parcel, zoning, jurisdiction, ordinance, comp, or market information.
+  Source-backed parcel, zoning, jurisdiction, ordinance, comp, market, or
+  physical site information.
 
 Assumption:
-  User-provided or defaulted value such as rent, cap rate, hard cost, soft cost, vacancy, expense ratio, contingency, or financing terms.
+  User-provided or defaulted value such as rent, sale price, cap rate, hard
+  cost, soft cost, vacancy, expense ratio, contingency, financing, or impact
+  fee.
 
 Calculation:
   Deterministic formula output, with inputs and formula version recorded.
 
 Recommendation:
-  Downstream interpretation such as recommended offer range, feasibility conclusion, or next action.
+  Downstream interpretation such as recommended offer range, feasibility
+  conclusion, or next action.
 ```
 
-The LLM may interpret, explain, and orchestrate. It must not freehand financial math. All zoning-capacity and underwriting math must run through deterministic, tested calculators.
+The LLM may interpret, explain, orchestrate, draft memos, and ask for missing
+inputs. It must not freehand zoning capacity or underwriting math.
 
-## Implementation scope
+## Location is first-class
 
-Deliver a practical MVP slice, not a broad rewrite.
+Deals are variable depending on location. The harness must not share one default
+set across Miami, San Diego, the Bay Area, Charlotte, Las Vegas, or unknown
+markets.
 
-### 1. Domain contracts
+Every scenario should carry a market profile or explicit user assumptions.
+Market profiles should influence starter defaults for:
 
-Add or extend typed contracts for development-acquisition analysis. Prefer Pydantic models on the backend and matching frontend TypeScript types where applicable.
-
-Required domain objects:
-
-- `DevelopmentAssumptionSet`
-- `DevelopmentScenario`
-- `UnitMixItem`
-- `RentAssumption`
-- `SalesValueAssumption`
-- `CostAssumptionSet`
-- `FinancingAssumptionSet`
-- `OperatingAssumptionSet`
-- `DevelopmentMetrics`
-- `MaxLandOfferResult`
-- `DevelopmentFeasibilityRun`
-- `AcquisitionMemoSection`
-
-At minimum, support these scenario fields:
-
-- scenario name: conservative/base/aggressive/custom
-- parcel/site reference
-- max units / selected units
-- unit mix
-- average rent or sales value
-- vacancy
-- operating expense ratio
-- cap rate
-- hard cost per square foot or per unit
+- residential hard cost psf
+- commercial hard cost psf
 - soft cost percentage
 - contingency percentage
-- financing terms
-- target developer profit / required margin
-- acquisition closing costs
-- carrying costs
+- financing and closing cost assumptions
+- impact fees
 - risk buffer
+- cap rate
+- desired sweat equity / required margin
+- recommended offer discount
+- entitlement risk
+- evidence requirements
 
-### 2. Deterministic calculators
+Every default must be labeled as an assumption until replaced by sourced local
+bids, comps, fee schedules, or user-provided values.
 
-Create a calculator module for real estate development underwriting. Keep it isolated, tested, and free of external API calls.
+## Residential and commercial calculations are different
 
-Required calculations:
+Do not force all deals through unit-count math.
+
+Residential rental calculations:
 
 ```text
 Gross Scheduled Rent = units * average_monthly_rent * 12
-Effective Gross Income = Gross Scheduled Rent - vacancy_loss + other_income
-NOI = Effective Gross Income - operating_expenses
+Vacancy Loss = Gross Scheduled Rent * vacancy_rate
+Other Income = Gross Scheduled Rent * other_income_rate
+Effective Revenue = Gross Scheduled Rent - Vacancy Loss + Other Income
+Operating Expenses = Effective Revenue * operating_expense_ratio
+NOI = Effective Revenue - Operating Expenses
 As-Built Value = NOI / cap_rate
-Total Development Cost Excluding Land = hard_costs + soft_costs + contingency + financing_costs + carrying_costs + closing_costs + reserves
-Max Land Price = As-Built Value - Total Development Cost Excluding Land - required_profit - risk_buffer
-Loan-to-Cost = loan_amount / total_development_cost
-Loan-to-Value = loan_amount / as_built_value
-DSCR = NOI / annual_debt_service
-Yield on Cost = NOI / total_development_cost
-Cash-on-Cash = annual_cash_flow / cash_invested
+Max Land Price = As-Built Value - required_margin - costs_before_land
 ```
 
-Also support sale-oriented scenarios where value comes from sellout rather than stabilized NOI:
+Residential for-sale calculations:
 
 ```text
-Gross Sellout Value = units * average_sale_price
-Net Sellout Value = Gross Sellout Value - selling_costs
-Max Land Price = Net Sellout Value - development_costs_excluding_land - required_profit - risk_buffer
+Gross Sellout Value = units * average_sale_price_per_unit
+Selling Costs = Gross Sellout Value * selling_cost_rate
+Net Sellout Value = Gross Sellout Value - Selling Costs
+Max Land Price = Net Sellout Value - required_profit - costs_before_land
 ```
 
-Every calculation result must include:
+Commercial lease calculations:
 
-- input values
-- output value
-- formula name
-- formula version
-- warnings for missing, zero, or suspicious assumptions
+```text
+Base Rent = commercial_gla_sqft * annual_rent_psf
+Vacancy Loss = Base Rent * vacancy_rate
+Other Income = Base Rent * other_income_rate
+Effective Revenue = Base Rent - Vacancy Loss + Other Income
+Operating Expenses = Effective Revenue * operating_expense_ratio
+NOI = Effective Revenue - Operating Expenses
+As-Built Value = NOI / commercial_cap_rate
+Max Land Price = As-Built Value - required_margin - costs_before_land
+Land Value PSF = Max Land Price / commercial_gla_sqft
+```
 
-### 3. Harness skill manifests
+Commercial outputs should show value per buildable/leasable square foot.
+Residential outputs should show value per unit/door.
 
-Add repo-owned skill/playbook specs for:
+## Harness skills to implement
 
-- `development_feasibility`
+Create or extend repo-owned skill/playbook specs for:
+
+- `quick_zoning_feasibility`
+- `density_study`
+- `commercial_capacity_study`
+- `market_profile_selection`
+- `residential_rental_underwriting`
+- `residential_for_sale_underwriting`
+- `commercial_lease_underwriting`
 - `max_land_offer`
 - `scenario_comparison`
 - `acquisition_memo`
 - `lender_package`
 - `due_diligence_checklist`
 
-These can be YAML or Markdown, but they must define:
+Each skill must define:
 
 - purpose
 - required inputs
 - optional inputs
-- tools/calculators used
+- calculators used
 - output schema
 - risk class
 - evidence requirements
 - evaluation criteria
 
-The initial `max_land_offer` skill should run without live external APIs when given mocked parcel/zoning/assumption inputs.
+## Runtime integration
 
-### 4. Runtime integration
+Extend the existing PlotLot harness rather than replacing current MVP behavior.
 
-Extend the existing harness direction rather than replacing the current MVP.
-
-Add a runtime path that can execute development-feasibility analysis through a `HarnessRuntime` or equivalent facade.
-
-Required behavior:
+Required runtime behavior:
 
 - Accept a project/site/scenario request.
 - Use existing zoning/density output when available.
 - Use deterministic underwriting calculators for scenario math.
 - Record assumptions and calculations as evidence-linked run artifacts.
-- Emit structured events such as:
-  - `run_started`
-  - `tool_started`
-  - `tool_completed`
-  - `calculation_completed`
-  - `evidence_recorded`
-  - `approval_required`
-  - `run_completed`
-  - `run_failed`
+- Emit structured events such as `run_started`, `calculation_completed`,
+  `evidence_recorded`, `approval_required`, `run_completed`, and `run_failed`.
+- Preserve existing `/api/v1/analyze`, `/api/v1/analyze/stream`, `/api/v1/chat`,
+  portfolio, document, geometry, and render behavior.
 
-Do not break existing `/api/v1/analyze`, `/api/v1/analyze/stream`, `/api/v1/chat`, portfolio, document, geometry, or render behavior.
+## Evidence requirements
 
-### 5. Evidence ledger integration
-
-Where the repo already has or is planning evidence/run records, integrate with that structure. Where it does not exist yet, add the smallest useful persistence/service seam.
-
-Evidence items for this feature must capture:
+Every trust-critical claim must have an evidence or assumption record.
+Evidence items must capture:
 
 - source type
 - source name or tool name
@@ -218,39 +247,27 @@ Evidence items for this feature must capture:
 - claim category: fact, assumption, calculation, recommendation
 - source reference or calculation formula
 
-Examples:
+Reports and memos may cite recorded evidence IDs and labeled assumptions only.
 
-```text
-Fact evidence:
-  "Zoning district is T6-80-O."
-
-Assumption evidence:
-  "Base scenario rent assumed at $2,400/month/unit."
-
-Calculation evidence:
-  "As-built value calculated as NOI / cap rate using formula v1."
-
-Recommendation evidence:
-  "Recommended offer range is 80% to 90% of max supportable land price due to entitlement risk."
-```
-
-### 6. Governance
-
-Respect the existing governance direction.
+## Governance requirements
 
 Default policy:
 
 - Read-only parcel/zoning/ordinance/property tools: auto-allow.
 - Deterministic calculators: auto-allow.
 - Internal memo/report draft creation: auto-allow or `WRITE_INTERNAL`.
-- Google Docs/Sheets creation, CRM writes, email sends, dataset exports, calendar actions: approval-gated `WRITE_EXTERNAL`.
-- Code execution, broad scraping, or sandbox execution: approval-gated or blocked unless explicitly configured.
+- Google Docs/Sheets creation, CRM writes, email sends, dataset exports, calendar
+  actions: approval-gated `WRITE_EXTERNAL`.
+- Code execution, broad scraping, or sandbox execution: approval-gated or blocked
+  unless explicitly configured.
 
-Add or update tests proving external-write tools cannot execute directly from agent/chat/tool paths without a governance decision.
+Add tests proving external-write tools cannot execute directly from agent, chat,
+or tool paths without a governance decision.
 
-### 7. API endpoints
+## API surface to build after calculator kernel
 
-Add minimal backend endpoints for the MVP slice. Names may be adapted to existing routing conventions, but preserve this capability set:
+Add minimal backend endpoints. Names may adapt to existing route conventions, but
+preserve this capability set:
 
 ```text
 POST /api/v1/projects/{project_id}/development-scenarios
@@ -263,35 +280,39 @@ GET  /api/v1/development-runs/{run_id}/evidence
 POST /api/v1/development-runs/{run_id}/memo
 ```
 
-If workspace/project/site persistence is not complete, use a thin compatibility seam and fixtures, but do not fake durability in the API contract. Make limitations explicit in code comments and docs.
+If workspace/project/site persistence is incomplete, use a thin compatibility
+seam and fixtures. Do not fake durable memory in the API contract.
 
-### 8. Frontend MVP surface
+## Frontend MVP surface
 
-Add the smallest frontend surface that proves the workflow without redesigning the whole app.
-
-Required UI components or fixtures:
+Add the smallest frontend surface that proves the workflow without redesigning
+the whole app:
 
 - scenario assumptions form/editor
+- market profile selector
+- residential rental / residential sale / commercial lease selector
 - conservative/base/aggressive scenario selector
 - development metrics summary card
 - max land offer result card
+- residential per-unit and commercial per-buildable-sf display
 - evidence rail or evidence list
 - acquisition memo preview section
 - approval panel hook for external document/export actions
 
 Keep existing home lookup/chat UI working.
 
-### 9. Acquisition memo generation
+## Acquisition memo generation
 
-Implement a generated memo structure, even if the first version is Markdown/JSON only.
+Implement a generated memo structure, even if the first version is Markdown/JSON
+only.
 
 Required sections:
 
 1. Executive summary
 2. Parcel and jurisdiction facts
 3. Zoning capacity and governing constraint
-4. Development concept and unit mix
-5. Rent/sales assumptions
+4. Development concept and unit mix or commercial GLA
+5. Rent, sale, or lease assumptions
 6. Cost assumptions
 7. Financing assumptions
 8. Development metrics
@@ -299,123 +320,70 @@ Required sections:
 10. Risks and open diligence items
 11. Evidence/source appendix
 
-The memo must label facts, assumptions, calculations, and recommendations distinctly.
-
-### 10. Due diligence checklist
-
-Generate a basic due diligence checklist from the run context.
-
-Minimum categories:
-
-- zoning confirmation
-- survey and title
-- setbacks/dimensional standards
-- parking/loading
-- utilities and capacity
-- flood/wetlands/environmental
-- impact fees
-- entitlement/permitting path
-- neighborhood/political risk
-- construction cost validation
-- rent/sales comp validation
-- financing/lender requirements
+The memo must label facts, assumptions, calculations, and recommendations.
 
 ## Testing requirements
 
-Add deterministic tests. Do not require live external API credentials for new core tests.
+Add deterministic tests. Do not require live external API credentials for new
+core tests.
 
 Required tests:
 
-- calculator unit tests for NOI, as-built value, total development cost, max land price, LTC, LTV, DSCR, yield on cost, and sale scenario math
+- location market profile selection tests
+- residential rental calculator tests
+- residential for-sale calculator tests
+- commercial lease calculator tests
+- max land offer tests for positive and negative residual value
 - invalid/missing assumption warning tests
 - scenario model validation tests
 - runtime event emission tests
-- evidence item creation tests for fact/assumption/calculation/recommendation categories
+- evidence item creation tests for fact, assumption, calculation, recommendation
 - governance tests blocking or approval-gating external writes
 - API route tests for scenario create/run/evidence/memo
-- frontend component tests or fixture-backed UI tests for assumptions, result card, evidence rail, and memo preview
+- frontend fixture-backed UI tests for assumptions, result card, evidence rail,
+  and memo preview
 
 Run or document results for:
 
 ```bash
+cd plotlot
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
+uv run mypy src/plotlot/ --no-error-summary
 uv run pytest tests/unit -q
-uv run pytest tests/integration -q
-cd frontend && npm run lint
-cd frontend && npm run test:ui
+cd frontend && npm run lint && npm run test:ui
 ```
 
-If pre-existing failures exist, document them clearly with evidence that the new feature did not cause them.
+If pre-existing failures exist, document them clearly with evidence that the new
+feature did not cause them.
 
 ## Evaluation fixtures
 
-Add or extend `plotlot-bench` / golden fixtures for at least five development-acquisition cases.
+Add or extend `plotlot-bench` or golden fixtures for at least five
+acquisition-development cases:
 
-Each case should include:
+1. stabilized residential rental multifamily base case
+2. conservative residential rental case with high cap rate / higher costs
+3. aggressive residential rental case with lower cap rate / lower costs
+4. residential for-sale townhouse or duplex case
+5. commercial lease case based on GLA and annual rent psf
+6. infeasible case where costs exceed value and max land price is negative
 
-- parcel/site input
-- zoning capacity input or mocked zoning output
-- assumptions
-- expected metrics
-- expected max land price
-- expected warnings
-- expected memo section presence
-
-Include at least:
-
-1. stabilized rental multifamily base case
-2. conservative rental case with high cap rate / higher costs
-3. aggressive rental case with lower cap rate / lower costs
-4. sale-oriented townhouse or duplex case
-5. infeasible case where costs exceed value and max land price is negative
-
-## Documentation updates
-
-Update or create docs explaining:
-
-- development-acquisition harness workflow
-- formulas and formula versions
-- assumptions schema
-- scenario comparison behavior
-- evidence categories
-- governance behavior for external writes
-- how to run the new tests/evals
+Each case should include input assumptions, expected metrics, expected max land
+price, expected warnings, and expected memo sections.
 
 ## Definition of done
 
 This goal is complete when:
 
-- Current Lookup and Agent behavior remain intact.
-- A user or test can create a development scenario for a site/project.
-- The system can run deterministic underwriting calculations.
+- Existing Lookup and Agent behavior remain intact.
+- A user or test can create a location-aware development scenario for a site.
+- The system can run residential rental, residential sale, and commercial lease
+  underwriting through deterministic calculators.
 - The system returns max supportable land price and recommended offer range.
-- The system emits or records run/evidence/calculation events.
-- The system can generate an acquisition memo with facts, assumptions, calculations, recommendations, and evidence appendix.
+- Residential outputs include per-unit metrics.
+- Commercial outputs include per-buildable-square-foot metrics.
+- Results separate facts, assumptions, calculations, and recommendations.
+- Evidence and assumptions are attached to runs and memos.
 - External writes are approval-gated.
-- New unit/integration/frontend tests pass or failures are documented as pre-existing.
-- The implementation is incremental, reviewable, and does not perform a broad rewrite of the app.
-
-## Suggested implementation order
-
-1. Read existing contracts and current backend/frontend structure.
-2. Add backend contracts and calculator tests first.
-3. Implement deterministic calculators.
-4. Add scenario/run/evidence service layer.
-5. Add API routes with tests.
-6. Add skill manifests/docs.
-7. Add runtime facade integration and event emission.
-8. Add frontend MVP components with fixture support.
-9. Add memo/checklist generation.
-10. Run tests and update documentation.
-
-## Hard constraints
-
-- Do not remove existing routes or break current MVP behavior.
-- Do not put financial math in prompts.
-- Do not use live external APIs in deterministic tests.
-- Do not execute external writes without governance approval.
-- Do not hide assumptions inside prose.
-- Do not make unsupported legal, zoning, or investment guarantees.
-- Do not claim official zoning/legal conclusions without source/freshness caveats.
-- Prefer small typed seams over monolithic rewrites.
-
-Proceed with implementation using the smallest coherent feature branch that satisfies the definition of done.
+- Unit tests and relevant frontend tests are added or updated.
