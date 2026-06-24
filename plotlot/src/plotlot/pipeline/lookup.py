@@ -468,6 +468,31 @@ async def lookup_address(address: str) -> ZoningReport | None:
             except Exception as e:
                 logger.warning("Phase 4 comps: failed (non-blocking): %s", e)
 
+        # ── Phase 5: Deal analysis — Dani Kleyman underwriting (Steps 2-10) ──
+        if report.density_analysis and report.property_record:
+            try:
+                from plotlot.pipeline.deal_analysis import run_deal_analysis
+
+                land_price = (
+                    report.pro_forma.max_land_price
+                    if report.pro_forma and report.pro_forma.max_land_price > 0
+                    else 0
+                )
+                report.deal_analysis = await asyncio.wait_for(
+                    run_deal_analysis(
+                        zoning_report=report,
+                        county=geo.get("county", "") if isinstance(geo, dict) else "",
+                        state=geo.get("state", "FL") if isinstance(geo, dict) else "FL",
+                        land_purchase_price=land_price,
+                    ),
+                    timeout=60,
+                )
+                logger.info("Phase 5 deal analysis: completed")
+            except asyncio.TimeoutError:
+                logger.warning("Phase 5 deal analysis: timed out after 60s (non-blocking)")
+            except Exception as e:
+                logger.warning("Phase 5 deal analysis: failed (non-blocking): %s", e)
+
         if isinstance(report, ZoningReport):
             report.lookup_snapshot = build_lookup_snapshot(report)
             save_lookup_snapshot(report.lookup_snapshot)

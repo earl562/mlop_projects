@@ -8,7 +8,6 @@ import type { DealType } from "./DealTypeSelector";
 import DealHeroCard from "./DealHeroCard";
 import ParcelViewer from "./ParcelViewer";
 import DensityBreakdown from "./DensityBreakdown";
-import BuildingRenderViewer from "./BuildingRenderViewer";
 import DocumentGenerator from "./DocumentGenerator";
 import FloorPlanViewer from "./FloorPlanViewer";
 import SetbackDiagram from "./SetbackDiagram";
@@ -488,25 +487,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
               );
             })()}
 
-            {/* AI Architectural Render */}
-            {lotWidth > 0 && lotDepth > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">AI Architectural Render</h3>
-                <ErrorBoundary><BuildingRenderViewer
-                  lotWidthFt={lotWidth}
-                  lotDepthFt={lotDepth}
-                  setbackFrontFt={setbackFront}
-                  setbackSideFt={setbackSide}
-                  setbackRearFt={setbackRear}
-                  maxHeightFt={report.numeric_params?.max_height_ft || 35}
-                  maxStories={report.numeric_params?.max_stories ?? undefined}
-                  propertyType={report.numeric_params?.property_type ?? undefined}
-                  maxUnits={report.density_analysis?.max_units ?? undefined}
-                  zoningDistrict={report.zoning_district}
-                  municipality={report.municipality}
-                /></ErrorBoundary>
-              </div>
-            )}
+            {/* AI Architectural Render removed — requires GOOGLE_API_KEY */}
 
             {/* Site Risk — FEMA flood zone + NWI wetlands */}
             {report.site_risk && (
