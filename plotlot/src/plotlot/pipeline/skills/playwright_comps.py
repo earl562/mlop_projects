@@ -34,8 +34,8 @@ _UA = (
 )
 _VIEWPORT = {"width": 1920, "height": 1080}
 
-_PAGE_TIMEOUT_MS = 30_000
-_PAGE_WAIT_UNTIL = "networkidle"
+_PAGE_TIMEOUT_MS = 60_000
+_PAGE_WAIT_UNTIL = "domcontentloaded"
 
 
 def _address_to_slug(address: str) -> str:
