@@ -11,14 +11,18 @@ ensure evidence, approvals, and artifacts are replayable.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from plotlot.api.tool_artifact_persistence import ToolArtifactContext, persist_tool_artifacts
+from plotlot.core.types import AnalysisRunStatus
+from plotlot.pipeline.skills.registry import HandlerResult, get_handler
 from plotlot.storage.db import get_session
-from plotlot.storage.models import Analysis, AnalysisRun, Project, Site, Workspace
+from plotlot.storage.models import Analysis, AnalysisRun, AssumptionSet, Project, Site, Workspace
 
 
 router = APIRouter(prefix="/api/v1", tags=["analysis_lifecycle"])
@@ -160,7 +164,7 @@ async def create_analysis_run(analysis_id: str, body: AnalysisRunCreateRequest):
             site_id=analysis.site_id,
             analysis_id=analysis.id,
             skill_name=analysis.skill_name,
-            status="pending",
+            status=AnalysisRunStatus.PENDING,
             input_json=body.input_json or {},
             output_json={},
         )
@@ -252,5 +256,118 @@ async def get_analysis_run(analysis_run_id: str):
             "started_at": row.started_at.isoformat() if row.started_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
         }
+    finally:
+        await session.close()
+
+
+def _run_response(run: AnalysisRun) -> dict:
+    """Serialize an AnalysisRun to a response dict.
+
+    Must be called BEFORE session.commit() — commit() expires attributes
+    which triggers a lazy-load that fails in async context (MissingGreenlet).
+    """
+    return {
+        "id": run.id,
+        "workspace_id": run.workspace_id,
+        "project_id": run.project_id,
+        "site_id": run.site_id,
+        "analysis_id": run.analysis_id,
+        "skill_name": run.skill_name,
+        "status": run.status,
+        "input_json": run.input_json,
+        "output_json": run.output_json,
+        "error_message": run.error_message,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "updated_at": run.updated_at.isoformat() if run.updated_at else None,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+@router.post("/analysis-runs/{run_id}/execute")
+async def execute_analysis_run(run_id: str):
+    """Execute a pending analysis run by dispatching to its registered skill handler."""
+    session = await get_session()
+    try:
+        run = await session.get(AnalysisRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Analysis run not found")
+        if run.status != AnalysisRunStatus.PENDING:
+            raise HTTPException(status_code=409, detail="Run is not pending")
+
+        # Transition to running
+        setattr(run, "status", AnalysisRunStatus.RUNNING)
+        setattr(run, "started_at", datetime.now(timezone.utc))
+        await session.commit()
+        await session.refresh(run)
+
+        # Load AssumptionSet for this analysis (if applicable)
+        assumption_set = None
+        if run.analysis_id:
+            stmt = select(AssumptionSet).where(AssumptionSet.analysis_id == run.analysis_id)
+            result = await session.execute(stmt)
+            assumption_set = result.scalar_one_or_none()
+
+        # Evidence-binding policy check
+        if assumption_set is not None:
+            from plotlot.pipeline.skills.evidence_policy import check_evidence_binding
+
+            policy_result = check_evidence_binding(assumption_set)
+            if policy_result.blocked:
+                setattr(run, "status", AnalysisRunStatus.FAILED)
+                setattr(run, "error_message", policy_result.message)
+                setattr(run, "completed_at", datetime.now(timezone.utc))
+                response = _run_response(run)
+                await session.commit()
+                return response
+
+        # Dispatch to skill handler
+        try:
+            handler = get_handler(getattr(run, "skill_name"))
+            inputs = (
+                getattr(assumption_set, "inputs_json", {})
+                if assumption_set
+                else getattr(run, "input_json", {})
+            )
+            handler_result: HandlerResult = await handler(inputs)
+        except KeyError:
+            setattr(run, "status", AnalysisRunStatus.FAILED)
+            setattr(run, "error_message", f"Unknown skill: {run.skill_name}")
+            setattr(run, "completed_at", datetime.now(timezone.utc))
+            response = _run_response(run)
+            await session.commit()
+            return response
+        except Exception as e:
+            setattr(run, "status", AnalysisRunStatus.FAILED)
+            setattr(run, "error_message", str(e))
+            setattr(run, "completed_at", datetime.now(timezone.utc))
+            response = _run_response(run)
+            await session.commit()
+            return response
+
+        # Success — persist output and artifacts
+        setattr(run, "output_json", handler_result.output_json)
+        setattr(run, "status", AnalysisRunStatus.COMPLETED)
+        setattr(run, "completed_at", datetime.now(timezone.utc))
+
+        result_payload = {
+            "artifacts": {
+                "report": {
+                    "status": "generated",
+                    "report_json": handler_result.output_json,
+                    "evidence_ids": handler_result.evidence_ids,
+                }
+            }
+        }
+        context = ToolArtifactContext(
+            workspace_id=getattr(run, "workspace_id"),
+            project_id=getattr(run, "project_id"),
+            site_id=getattr(run, "site_id"),
+            analysis_run_id=getattr(run, "id"),
+        )
+        response = _run_response(run)
+        await persist_tool_artifacts(session, result_payload, context)
+        await session.commit()
+        return response
     finally:
         await session.close()

@@ -6,6 +6,11 @@ domain model. Every other module imports from here.
 """
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from plotlot.core.lookup_snapshot import LookupSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -113,13 +118,23 @@ _FALLBACK_CONFIGS: dict[str, MunicodeConfig] = {
         job_id=483425,
         zoning_node_id="PTIIICOOR_CH33ZO",
     ),
+    # Fort Lauderdale: zoning spans 15 ULADRE articles at root level;
+    # empty string = walk entire root TOC (correct and intentional).
     "fort_lauderdale": MunicodeConfig(
         municipality="Fort Lauderdale",
         county="broward",
         client_id=2247,
         product_id=13463,
         job_id=482747,
-        zoning_node_id="UNLADERE_CH47UNLADERE_ARTIIZODIRE",
+        zoning_node_id="",
+    ),
+    "davie": MunicodeConfig(
+        municipality="Davie",
+        county="broward",
+        client_id=8419,
+        product_id=10630,
+        job_id=484015,
+        zoning_node_id="PTIICOOR_CH12LADECO",
     ),
     "miami_gardens": MunicodeConfig(
         municipality="Miami Gardens",
@@ -129,13 +144,15 @@ _FALLBACK_CONFIGS: dict[str, MunicodeConfig] = {
         job_id=481139,
         zoning_node_id="SPBLADECO",
     ),
+    # West Palm Beach: Ch94 ZONING AND LAND DEVELOPMENT is a root-level leaf
+    # (HasChildren=False). Empty string walks root TOC and finds it naturally.
     "west_palm_beach": MunicodeConfig(
         municipality="West Palm Beach",
         county="palm_beach",
         client_id=4897,
         product_id=10017,
         job_id=480641,
-        zoning_node_id="PTIICOOR_CH94ZOLADERE",
+        zoning_node_id="",
     ),
     "miramar": MunicodeConfig(
         municipality="Miramar",
@@ -144,6 +161,54 @@ _FALLBACK_CONFIGS: dict[str, MunicodeConfig] = {
         product_id=13202,
         job_id=479943,
         zoning_node_id="APXAFESC",
+    ),
+    # Boynton Beach: LAND DEVELOPMENT REGULATIONS (LADERE) is a root-level leaf
+    # (HasChildren=False). Empty string walks root TOC and finds it naturally.
+    "boynton_beach": MunicodeConfig(
+        municipality="Boynton Beach",
+        county="palm_beach",
+        client_id=1369,
+        product_id=12672,
+        job_id=492855,
+        zoning_node_id="",
+    ),
+    "miami_springs": MunicodeConfig(
+        municipality="Miami Springs",
+        county="miami_dade",
+        client_id=3290,
+        product_id=13202,
+        job_id=463573,
+        zoning_node_id="TITXVLAUS_CH150ZOCO",
+    ),
+    "opa_locka": MunicodeConfig(
+        municipality="Opa Locka",
+        county="miami_dade",
+        client_id=3696,
+        product_id=11375,
+        job_id=475408,
+        zoning_node_id="CIOCKFLLADERE",
+    ),
+    # South Miami: Code of Ordinances product (11587) has Ch20 ZONING (RESERVED).
+    # Switched to Land Development Code product (12667) which has 10 root-level
+    # articles (I–XII), all land-development related.
+    "south_miami": MunicodeConfig(
+        municipality="South Miami",
+        county="miami_dade",
+        client_id=4404,
+        product_id=12667,
+        job_id=469340,
+        zoning_node_id="",
+    ),
+    # Wellington: Code of Ordinances product (13115) has no zoning chapter.
+    # Switched to Unified Land Development Code product (14703) with 8 root-level
+    # articles (1–9), all land-development related.
+    "wellington": MunicodeConfig(
+        municipality="Wellington",
+        county="palm_beach",
+        client_id=10940,
+        product_id=14703,
+        job_id=476382,
+        zoning_node_id="",
     ),
 }
 
@@ -380,6 +445,7 @@ class NumericZoningParams:
     property_type: str | None = (
         None  # "land" | "single_family" | "multifamily" | "commercial_mf" | "commercial"
     )
+    provenance: str = ""
 
 
 @dataclass
@@ -494,8 +560,11 @@ class ZoningReport:
     # Inline citations — maps extracted values back to source ordinance chunks
     source_refs: list[SourceRef] = field(default_factory=list)
 
+    validation_warnings: list[str] = field(default_factory=list)
+
     # Site risk — FEMA flood zone + NWI wetland data
     site_risk: "SiteRisk | None" = None
+    lookup_snapshot: "LookupSnapshot | None" = None
 
 
 # ---------------------------------------------------------------------------
@@ -622,13 +691,15 @@ class LandProForma:
     """Residual land valuation for land deal intelligence.
 
     GDV = Max Units × ADV per Unit
-    Max Land Price = GDV - Hard Costs - Soft Costs - Builder Margin
+    Max Land Price = (GDV × (1 − sweat_equity%)) − Hard − Soft − Financing
     """
 
     gross_development_value: float = 0.0
     hard_costs: float = 0.0
     soft_costs: float = 0.0
     builder_margin: float = 0.0
+    sweat_equity: float = 0.0
+    financing_costs: float = 0.0
     max_land_price: float = 0.0
     cost_per_door: float = 0.0
     construction_cost_psf: float = 200.0
@@ -745,6 +816,7 @@ class SiteScorecard:
 # Deal Analysis types — Dani Kleyman Underwriting Framework
 # ============================================================================
 
+
 @dataclass
 class UnitMixEntry:
     unit_type: str = ""
@@ -778,6 +850,11 @@ class RentalCompSet:
     comp_count: int = 0
     median_rent: float = 0.0
     median_rent_per_sqft: float = 0.0
+    avg_rent: float = 0.0
+    avg_rent_per_sqft: float = 0.0
+    avg_sqft: float = 0.0
+    rent_range_low: float = 0.0
+    rent_range_high: float = 0.0
     source: str = ""
     confidence: float = 0.0
     notes: list[str] = field(default_factory=list)
@@ -811,6 +888,11 @@ class FinancingTerms:
     origination_fee_pct: float = 1.0
     developer_fee_pct: float = 8.0
     other_closing_costs_pct: float = 0.5
+    construction_loan_ltc: float = 70.0
+    construction_loan_rate: float = 7.0
+    construction_months: float = 14.0
+    permanent_loan_rate: float = 6.5
+    permanent_loan_amort_years: int = 30
     notes: list[str] = field(default_factory=list)
 
 
@@ -828,13 +910,22 @@ class CapitalStack:
     senior_debt: float = 0.0
     senior_debt_pct: float = 0.0
     mezzanine_debt: float = 0.0
+    mezzanine_debt_pct: float = 0.0
+    preferred_equity: float = 0.0
+    preferred_equity_pct: float = 0.0
     total_debt: float = 0.0
     sponsor_equity: float = 0.0
+    sponsor_equity_pct: float = 0.0
     investor_equity: float = 0.0
     total_equity: float = 0.0
     equity_required: float = 0.0
     ltc_pct: float = 0.0
     ltv_pct: float = 0.0
+    weighted_cost_of_debt: float = 0.0
+    weighted_cost_of_equity: float = 0.0
+    weighted_avg_cost_of_capital: float = 0.0
+    senior_terms: "FinancingTerms | None" = None
+    mezz_terms: "FinancingTerms | None" = None
     notes: list[str] = field(default_factory=list)
 
 
@@ -858,6 +949,21 @@ class DealMetrics:
 
 
 @dataclass
+class DataSufficiency:
+    """Gate that assesses whether the pipeline has enough data to produce a
+    reliable investment verdict.
+
+    Grade is one of ``"sufficient"`` (all required sources present),
+    ``"partial"`` (some gaps but analysis can proceed with caveats), or
+    ``"insufficient"`` (critical data missing — verdict must be withheld).
+    """
+
+    grade: str  # "sufficient" | "partial" | "insufficient"
+    reason: str  # human-readable explanation of what is missing
+    sources_checked: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DealAnalysis:
     address: str = ""
     municipality: str = ""
@@ -877,8 +983,61 @@ class DealAnalysis:
     metrics: "DealMetrics | None" = None
     max_offer_price: float = 0.0
     recommended_offer: float = 0.0
+    assignment_fee: float = 0.0
+    max_offer_to_seller: float = 0.0
+    user_mode: str = "builder"
     investment_rating: str = ""
+    data_sufficiency: "DataSufficiency | None" = None
     deal_breakers: list[str] = field(default_factory=list)
     summary: str = ""
     notes: list[str] = field(default_factory=list)
     confidence: str = "medium"
+
+    last_sale_price: float = 0.0
+    last_sale_date: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Infill lot analysis — Path 1: spec house / for-sale
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class InfillLotAnalysis:
+    """Path 1 valuation result for a spec house or infill lot (≤1 unit, for-sale).
+
+    Formula: Max Land = ARV × (1 − profit%) − Build Cost − (ARV × closing%)
+
+    All parameters sourced from ``RegionalCostModel`` (market-specific).
+    Negative ``max_land_value`` is allowed — it signals "don't build."
+    The calling code clamps to 0 and sets a flag; do NOT clamp here.
+    """
+
+    arv: float  # After-Repair (as-built) value
+    build_cost: float  # Hard construction cost ($)
+    profit_margin: float  # Builder profit ($)
+    closing_costs: float  # Sale closing costs ($)
+    max_land_value: float  # Residual land value ($)
+    exit_strategy: str = "for_sale"
+    market: str = ""
+    assignment_fee: float = 0.0
+    max_offer_to_seller: float = 0.0
+    notes: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Enum types
+# ---------------------------------------------------------------------------
+
+
+class AnalysisRunStatus(StrEnum):
+    """Lifecycle states for an AnalysisRun.
+
+    Additive over existing raw strings — ``StrEnum`` members ARE strings,
+    so existing comparisons like ``run.status == "pending"`` still work.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
