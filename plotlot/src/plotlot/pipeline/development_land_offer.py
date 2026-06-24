@@ -6,12 +6,12 @@ zoning lookup layer has produced a sourced density/capacity answer:
 1. Use the density study result as the capacity guardrail.
 2. Determine stabilized/as-built value.
 3. Back out required sweat equity or developer profit.
-4. Back out development costs before land.
+4. Back out location-sensitive development costs before land.
 5. Arrive at max land purchase price and a conservative offer.
 
 The calculator is intentionally deterministic and zero-I/O. Upstream tools are
-responsible for sourcing facts and labeling assumptions; this module only owns
-math and warnings.
+responsible for sourcing facts, choosing local market assumptions, and labeling
+assumptions; this module only owns math and warnings.
 """
 
 from __future__ import annotations
@@ -21,14 +21,24 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class CostStack:
-    """Development costs excluding land."""
+    """Development costs excluding land.
+
+    Deals vary by location, so this class accepts already-localized dollar
+    assumptions rather than pretending that a national default cost stack exists.
+    Market-profile utilities can produce these values, but this calculator only
+    sums and records them.
+    """
 
     hard_costs: float = 0.0
     soft_costs: float = 0.0
     financing_costs: float = 0.0
     closing_costs: float = 0.0
+    carrying_costs: float = 0.0
+    reserves: float = 0.0
     contingency: float = 0.0
     developer_fee: float = 0.0
+    impact_fees: float = 0.0
+    risk_buffer: float = 0.0
     other_costs: float = 0.0
 
     @property
@@ -40,8 +50,12 @@ class CostStack:
                 self.soft_costs,
                 self.financing_costs,
                 self.closing_costs,
+                self.carrying_costs,
+                self.reserves,
                 self.contingency,
                 self.developer_fee,
+                self.impact_fees,
+                self.risk_buffer,
                 self.other_costs,
             )
         )
@@ -73,6 +87,8 @@ class DevelopmentLandOfferInputs:
     desired_sweat_equity_pct: float = 25.0
     recommended_offer_pct_of_max: float = 85.0
     scenario_name: str = "base"
+    market_profile_key: str = ""
+    location_notes: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
     assumption_ids: list[str] = field(default_factory=list)
 
@@ -94,6 +110,8 @@ class DevelopmentLandOfferResult:
     confidence: str
     warnings: list[str]
     formulas: dict[str, str]
+    market_profile_key: str = ""
+    location_notes: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
     assumption_ids: list[str] = field(default_factory=list)
 
@@ -133,6 +151,11 @@ def calculate_development_land_offer(
     """
 
     warnings: list[str] = []
+
+    if not inputs.market_profile_key:
+        warnings.append(
+            "No market profile key supplied; location-sensitive assumptions are untracked."
+        )
 
     if inputs.max_units <= 0:
         warnings.append("No positive unit capacity supplied from density study.")
@@ -183,7 +206,8 @@ def calculate_development_land_offer(
         max_land_purchase_price=round(max_land_purchase_price, 2),
         recommended_offer=round(recommended_offer, 2),
         max_land_purchase_price_per_unit=round(
-            max_land_purchase_price / per_unit_denominator, 2
+            max_land_purchase_price / per_unit_denominator,
+            2,
         )
         if per_unit_denominator
         else 0.0,
@@ -195,10 +219,17 @@ def calculate_development_land_offer(
         formulas={
             "as_built_value": "override_value OR annual_noi / (market_cap_rate_pct / 100)",
             "desired_sweat_equity": "as_built_value * desired_sweat_equity_pct",
-            "total_costs_before_land": "hard + soft + financing + closing + contingency + developer_fee + other",
-            "max_land_purchase_price": "as_built_value - desired_sweat_equity - total_costs_before_land",
-            "recommended_offer": "max(max_land_purchase_price, 0) * recommended_offer_pct_of_max",
+            "total_costs_before_land": (
+                "hard + soft + financing + closing + carrying + reserves + "
+                "contingency + developer_fee + impact_fees + risk_buffer + other"
+            ),
+            "max_land_purchase_price": (
+                "as_built_value - desired_sweat_equity - total_costs_before_land"
+            ),
+            "recommended_offer": "max(max_land_purchase_price, 0) * recommended_offer_pct",
         },
+        market_profile_key=inputs.market_profile_key,
+        location_notes=list(inputs.location_notes),
         evidence_ids=list(inputs.evidence_ids),
         assumption_ids=list(inputs.assumption_ids),
     )
