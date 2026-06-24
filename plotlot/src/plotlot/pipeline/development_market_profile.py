@@ -323,7 +323,7 @@ def estimate_residential_cost_stack(
     )
     notes = [
         f"market_profile={profile.key}",
-        f"asset_class=residential",
+        "asset_class=residential",
         f"gross_area={gross_area:,.0f} sqft",
         f"hard_cost_psf=${cost_psf:.2f}",
         "Starter assumptions; replace with local bids and fee schedules.",
@@ -365,7 +365,7 @@ def estimate_commercial_cost_stack(
     )
     notes = [
         f"market_profile={profile.key}",
-        f"asset_class=commercial",
+        "asset_class=commercial",
         f"gla={gla_sqft:,.0f} sqft",
         f"hard_cost_psf=${cost_psf:.2f}",
         "Commercial costs are based on leasable/buildable area, not units.",
