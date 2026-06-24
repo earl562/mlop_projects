@@ -232,6 +232,10 @@ def _sync_stealth_scrape(
 # ---------------------------------------------------------------------------
 
 
+_CAPTCHA_RETRY_DELAY = 30
+_CAPTCHA_ERROR_MARKER = "CAPTCHA could not be solved"
+
+
 async def run_stealth_fetch(
     url: str,
     extract_fn: ExtractFn,
@@ -243,6 +247,9 @@ async def run_stealth_fetch(
     cookies: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Async wrapper that runs the sync SB() scrape in a thread executor.
+
+    If the first attempt fails with a CAPTCHA error, waits 30s and retries
+    once. Non-CAPTCHA errors are returned immediately without retry.
 
     Args:
         url: URL to navigate to.
@@ -257,13 +264,21 @@ async def run_stealth_fetch(
         Dict with ``data``, ``cookies``, ``captcha_solved``, ``title``,
         and optionally ``error``.
     """
-    return await asyncio.to_thread(
-        _sync_stealth_scrape,
-        url,
-        extract_fn,
-        use_chromium=use_chromium,
-        headless=headless,
-        ad_block=ad_block,
-        locale=locale,
-        cookies=cookies,
-    )
+    scrape_kwargs = {
+        "use_chromium": use_chromium,
+        "headless": headless,
+        "ad_block": ad_block,
+        "locale": locale,
+        "cookies": cookies,
+    }
+
+    result = await asyncio.to_thread(_sync_stealth_scrape, url, extract_fn, **scrape_kwargs)
+
+    if _CAPTCHA_ERROR_MARKER in result.get("error", ""):
+        logger.warning("CAPTCHA failed for %s — retrying after %ds", url, _CAPTCHA_RETRY_DELAY)
+        await asyncio.sleep(_CAPTCHA_RETRY_DELAY)
+        if result.get("cookies"):
+            scrape_kwargs["cookies"] = result["cookies"]
+        result = await asyncio.to_thread(_sync_stealth_scrape, url, extract_fn, **scrape_kwargs)
+
+    return result

@@ -32,6 +32,7 @@ from plotlot.core.types import (
     LandProForma,
     ProformaNOI,
     PropertyRecord,
+    RentalComp,
     RentalCompSet,
     UnitMixEntry,
     ZoningReport,
@@ -84,6 +85,29 @@ _COMMERCIAL_TYPES = frozenset({"commercial", "industrial", "retail", "office"})
 
 # Dani's threshold: ≤4 units → comp-based valuation. ≥5 units → NOI/cap-rate.
 _NOI_MIN_UNITS = 5
+
+
+def _zillow_comp_to_rental_comp(raw: dict, listing_type: str) -> RentalComp:
+    """Convert a Zillow comp dict to a RentalComp dataclass.
+
+    For rental listings, price = monthly rent.
+    For sold listings, price = sale price (monthly_rent stays 0).
+    """
+    sqft = float(raw.get("sqft") or 0)
+    price = float(raw.get("price") or 0)
+    is_rental = listing_type == "rental"
+    monthly_rent = price if is_rental else 0.0
+    rent_per_sqft = round(monthly_rent / sqft, 2) if sqft > 0 and monthly_rent > 0 else 0.0
+
+    return RentalComp(
+        address=raw.get("address", ""),
+        bedrooms=int(raw.get("bedrooms") or 0),
+        bathrooms=float(raw.get("bathrooms") or 0),
+        sqft=sqft,
+        monthly_rent=monthly_rent,
+        rent_per_sqft=rent_per_sqft,
+        source="zillow",
+    )
 
 
 def _is_residential(property_type: str | None) -> bool:
@@ -521,14 +545,20 @@ async def run_deal_analysis(
     try:
         from plotlot.pipeline.skills.playwright_comps import handle_fetch_zillow_comps
 
-        zillow_listing_type = "sold" if property_type == "land" else "rental"
+        zillow_listing_type = "land" if property_type == "land" else (
+            "rental" if max_units >= _NOI_MIN_UNITS else "new_build"
+        )
         comp_result = await handle_fetch_zillow_comps({
             "address": zoning_report.formatted_address or zoning_report.address,
             "listing_type": zillow_listing_type,
             "max_results": 25,
         })
-        zillow_comps = comp_result.output_json.get("comparables", [])
-        if zillow_comps:
+        zillow_comps_raw = comp_result.output_json.get("comparables", [])
+        if zillow_comps_raw:
+            zillow_comps = [
+                _zillow_comp_to_rental_comp(c, zillow_listing_type)
+                for c in zillow_comps_raw
+            ]
             rental_comp_set = _build_comp_set(zillow_comps, source=f"Zillow ({zillow_listing_type})")
             notes.append(f"Comps from Zillow skill: {len(zillow_comps)} {zillow_listing_type} listings")
         else:
