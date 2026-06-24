@@ -801,6 +801,60 @@ def test_sensitivity_answer_echoes_grounded_grid_never_invents():
     assert "won't invent" in answer
 
 
+def test_upside_query_detection():
+    from plotlot.api.chat import _is_pure_upside_query, _mentions_sb9
+
+    assert _is_pure_upside_query("What's my ADU and density bonus upside?")
+    assert _is_pure_upside_query("what about SB9?")
+    assert _mentions_sb9("can I use SB 9 here?")
+    assert _mentions_sb9("does sb9 apply?")
+    # A compound decision question keeps the full model path.
+    assert not _is_pure_upside_query("does it pencil with a density bonus?")
+
+
+def test_upside_answer_lists_only_grounded_programs():
+    """The grounded statutory programs (ADU/JADU §65852.2) are echoed; the fabricated
+    SB9 section (§143.0720) the narrator invented is never produced."""
+    from plotlot.api.chat import _build_upside_answer
+
+    answer = _build_upside_answer(
+        _format_grounded_analysis(_hueneme_report()), "what's my density bonus upside?"
+    )
+    assert answer is not None
+    assert "ADU/JADU" in answer
+    assert "Gov. Code 65852.2" in answer
+    assert "6 units" in answer  # firm by-right base
+    assert "12 units" in answer  # statutory ceiling
+    assert "143.0720" not in answer  # the fabricated SB9 section
+
+
+def test_upside_answer_rebuts_sb9_when_raised():
+    """Asked about SB9 on an RM-3-7 (multifamily) parcel, the echo states SB9 doesn't
+    apply (it's single-family) instead of inventing applicability — and still grounds
+    the real programs."""
+    from plotlot.api.chat import _build_upside_answer
+
+    answer = _build_upside_answer(
+        _format_grounded_analysis(_hueneme_report()), "can I use SB9 here?"
+    )
+    assert answer is not None
+    assert "SB 9 does not apply" in answer
+    assert "single-family" in answer
+    assert "ADU/JADU" in answer  # real program still listed alongside the rebuttal
+
+
+def test_upside_answer_rebuts_sb9_even_without_grounded_programs():
+    """When SB9 is raised but no programs are grounded, the echo still rebuts SB9
+    rather than returning None and letting the model invent its applicability."""
+    from plotlot.api.chat import _build_upside_answer
+
+    report = _hueneme_report()
+    report.density_uplift = None
+    answer = _build_upside_answer(_format_grounded_analysis(report), "what about SB 9?")
+    assert answer is not None
+    assert "SB 9 does not apply" in answer
+
+
 def test_owner_answer_echoes_assessor_owner():
     from plotlot.api.chat import _build_owner_answer
 

@@ -2150,6 +2150,35 @@ _MONEY_RE = re.compile(
 )
 
 
+# "What's my ADU / density-bonus / SB9 upside?" — the applicable statutory programs
+# are a grounded payload field (ca_upside.programs, with real statutes like ADU
+# §65852.2 and Density Bonus §65915). The narrator invented "SB 9" applicability
+# (SB 9 is a single-family lot-split law, not a multifamily program), a fabricated
+# §143.0720, and "+2 bonus units" — so echo only the grounded programs.
+_UPSIDE_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"\badu\b|\bjadu\b|accessory\s+dwelling|"
+    r"density\s+bonus|state\s+density|sb\s?9\b|"
+    r"bonus\s+units?|how\s+many\s+more\s+units|additional\s+units|"
+    r"unit\s+upside|density\s+upside"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_SB9_RE = re.compile(r"\bsb\s?9\b", re.IGNORECASE)
+
+
+def _mentions_sb9(message: str) -> bool:
+    return bool(_SB9_RE.search(message or ""))
+
+
+def _is_pure_upside_query(message: str) -> bool:
+    """Standalone ADU/density-bonus/SB9 upside question — safe to answer from the echo
+    alone (a compound decision/risk question keeps the full model path)."""
+    msg = message or ""
+    return bool(_UPSIDE_QUERY_RE.search(msg) and not _ECHO_DECISION_RE.search(msg))
+
+
 def _is_sensitivity_query(message: str) -> bool:
     """True for a construction/exit 'what if' stress question."""
     return bool(_SENSITIVITY_QUERY_RE.search(message or ""))
@@ -2453,6 +2482,63 @@ def _build_sensitivity_answer(payload: dict | None) -> str | None:
     for s in scenarios:
         lines.append(f"- {s}")
     lines += ["", "These are the grounded stress cells — I won't invent cost or price ranges beyond them."]
+    return "\n".join(lines)
+
+
+def _build_upside_answer(payload: dict | None, message: str = "") -> str | None:
+    """Deterministic answer to 'what's my ADU / density-bonus / SB9 upside?'.
+    Reproduces ONLY the grounded statutory programs (ca_upside.programs) — the narrator
+    invented "SB 9" applicability (SB 9 is a single-family lot-split law, not a
+    multifamily program), a fabricated §143.0720, and "+2 bonus units". When the user
+    raises SB 9 and it is not among the applicable programs, says so plainly rather than
+    inventing it. Returns ``None`` when no upside was grounded AND SB 9 wasn't raised, so
+    the caller falls back to the model (whose policy is to not invent programs)."""
+    upside = (payload or {}).get("ca_upside") or {}
+    programs = upside.get("programs") or []
+    sb9_raised = _mentions_sb9(message)
+    if not programs and not sb9_raised:
+        return None
+
+    addr = (payload or {}).get("address") or ""
+    zoning = (payload or {}).get("zoning_code") or ""
+    base = upside.get("base_units")
+    max_pot = upside.get("max_potential_units")
+    lines = ["**Density upside" + (f" — {addr}" if addr else "") + "**", ""]
+    if base is not None and max_pot is not None:
+        lines.append(
+            f"- Firm by-right base: **{base} units**. Statutory ceiling with programs: "
+            f"**up to {max_pot} units** (eligibility maxima, not guaranteed)."
+        )
+
+    if programs:
+        lines += ["", "Applicable programs (the only ones evaluated for this parcel — I won't invent others):"]
+        for p in programs:
+            add = p.get("additional_units")
+            pot = p.get("potential_units")
+            delta = f": +{add} → {pot} units" if add is not None and pot is not None else ""
+            elig = f" [{p.get('eligibility')}]" if p.get("eligibility") else ""
+            lines.append(f"- {p.get('name')} ({p.get('statute')}){delta}{elig}")
+    elif not sb9_raised:
+        lines.append(
+            "- No by-right statutory density program (ADU / density bonus) was found to add "
+            "units on this parcel."
+        )
+
+    # Explicit SB 9 rebuttal when the user raises it and it isn't a grounded program.
+    sb9_grounded = any(
+        _mentions_sb9(p.get("name") or "")
+        or "65852.21" in (p.get("statute") or "")
+        or "66411.7" in (p.get("statute") or "")
+        for p in programs
+    )
+    if sb9_raised and not sb9_grounded:
+        zone_note = f" this {zoning} parcel" if zoning else " this parcel"
+        lines += [
+            "",
+            "- **SB 9 does not apply here.** SB 9 (Gov. Code §65852.21 / §66411.7) is a "
+            "lot-split / two-unit law for parcels in **single-family (R-1)** zones — it is "
+            f"not among the programs applicable to{zone_note}.",
+        ]
     return "\n".join(lines)
 
 
@@ -4231,6 +4317,26 @@ async def chat(request: ChatRequest, http_request: Request):
                     if len(memory) > MAX_MEMORY_MESSAGES:
                         del memory[:-MAX_MEMORY_MESSAGES]
                     yield _sse_event("done", {"full_content": residual_answer})
+                    return
+
+            # Deterministic density-upside echo. The applicable ADU/density-bonus
+            # programs are grounded (ca_upside.programs); the narrator invented "SB 9"
+            # applicability (a single-family lot-split law, not a multifamily program), a
+            # fabricated §143.0720, and "+2 bonus units". Reproduce only the grounded
+            # programs and rebut SB 9 when raised.
+            if (
+                active_analysis
+                and _is_pure_upside_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                upside_answer = _build_upside_answer(active_analysis, request.message)
+                if upside_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_upside", "args": {}})
+                    yield _sse_event("token", {"content": upside_answer})
+                    memory.append({"role": "assistant", "content": upside_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": upside_answer})
                     return
 
             # Token budget check — prevent runaway cost
