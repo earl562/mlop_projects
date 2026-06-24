@@ -37,6 +37,7 @@ from plotlot.core.types import (
     UnitMixEntry,
     ZoningReport,
 )
+from plotlot.pipeline.cost_model import get_cost_model
 from plotlot.pipeline.county_costs import get_construction_cost_psf
 from plotlot.pipeline.deal_metrics import calculate_deal_metrics, determine_go_no_go
 from plotlot.pipeline.financing import calculate_capital_stack, calculate_monthly_payment
@@ -744,7 +745,7 @@ async def run_deal_analysis(
     elif land_val > 0:
         max_offer = land_val
 
-    if max_offer <= 0 and is_res and 0 < max_units < _NOI_MIN_UNITS:
+    if max_offer <= 0 and is_res and max_units < _NOI_MIN_UNITS:
         arv = rental_comp_set.median_rent if rental_comp_set.comp_count > 0 else 0.0
         if arv > 0:
             max_offer = arv * 0.70 - hard_costs - soft_costs
@@ -752,6 +753,29 @@ async def run_deal_analysis(
                 f"ARV-based valuation: ARV=${arv:,.0f} (median of "
                 f"{rental_comp_set.comp_count} sold comps), max offer=${max_offer:,.0f} "
                 f"(70% ARV - ${hard_costs + soft_costs:,.0f} construction)"
+            )
+
+    if max_offer <= 0 and not is_res and proforma_noi.net_operating_income > 0:
+        cost_model = get_cost_model(state, county)
+        cap_rate = cost_model.cap_rate if cost_model.cap_rate > 0 else 5.5
+        arv = proforma_noi.net_operating_income / (cap_rate / 100.0)
+        if arv > 0:
+            max_offer = arv * 0.80 - hard_costs - soft_costs
+            notes.append(
+                f"NOI-based valuation (income approach): "
+                f"Annual NOI=${proforma_noi.net_operating_income:,.0f}, "
+                f"cap rate={cap_rate}%, ARV=${arv:,.0f}, "
+                f"max offer=${max_offer:,.0f} (80% ARV - ${hard_costs + soft_costs:,.0f} construction)"
+            )
+
+    if max_offer <= 0 and not is_res and rental_comp_set.comp_count > 0:
+        arv = rental_comp_set.median_rent
+        if arv > 0:
+            max_offer = arv * 0.70 - hard_costs - soft_costs
+            notes.append(
+                f"ARV-based valuation (commercial comp fallback): "
+                f"ARV=${arv:,.0f} (median of {rental_comp_set.comp_count} sold comps), "
+                f"max offer=${max_offer:,.0f} (70% ARV - ${hard_costs + soft_costs:,.0f} construction)"
             )
 
     # Recommended offer: 85% of max for conservative underwriting
