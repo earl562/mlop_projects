@@ -1744,6 +1744,22 @@ def _build_active_analysis_context(payload: dict) -> str:
             lines.append(f"  Timeline driver: {d}")
         if etr.get("active_permits_exist"):
             lines.append("  Active permits on parcel — some approvals may already be in process.")
+        for d in etr.get("ceqa_strong_matches") or []:
+            sch = f"SCH {d.get('sch')}" if d.get("sch") else ""
+            lines.append(
+                f"  CEQA on parcel ({d.get('type')} {sch}, {d.get('match_basis')}): {d.get('url')}"
+            )
+        cands = etr.get("ceqa_candidates") or []
+        if cands:
+            lines.append(
+                "  Possible related CEQA filings requiring verification — NOT confirmed on "
+                "this parcel; do NOT cite as this parcel's CEQA status or use in the timeline:"
+            )
+            for d in cands[:5]:
+                sch = f"SCH {d.get('sch')}" if d.get("sch") else ""
+                lines.append(
+                    f"    - {d.get('type')} {sch} ({d.get('match_basis')}): {d.get('url')}"
+                )
 
     opr = payload.get("opposition_risk") or {}
     if opr:
@@ -2605,6 +2621,18 @@ def _format_grounded_analysis(report) -> dict:
 
     etr = report.entitlement_timeline_risk
     if etr is not None:
+
+        def _ceqa_brief(d):
+            return {
+                "sch": d.sch_number,
+                "type": d.doc_type,
+                "status": d.status,
+                "title": d.title[:120],
+                "url": d.source_url,
+                "match_basis": d.match_basis,
+                "match_confidence": d.match_confidence,
+            }
+
         out["entitlement_timeline_risk"] = {
             "est_months_min": round(etr.est_months_min, 1),
             "est_months_max": round(etr.est_months_max, 1),
@@ -2612,6 +2640,9 @@ def _format_grounded_analysis(report) -> dict:
             "confidence": etr.confidence,
             "key_drivers": list(etr.key_drivers),
             "active_permits_exist": etr.active_permits_exist,
+            # Tier 1 (parcel-confirmed, drives the timeline) vs Tier 2 (verify-only).
+            "ceqa_strong_matches": [_ceqa_brief(d) for d in etr.ceqa_documents],
+            "ceqa_candidates": [_ceqa_brief(d) for d in etr.ceqa_candidates],
         }
 
     opr = report.opposition_risk

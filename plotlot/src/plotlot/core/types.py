@@ -915,23 +915,43 @@ class UpzoningAnalysis:
 
 @dataclass
 class CEQADocument:
-    """A CEQA (California Environmental Quality Act) document for a project.
+    """A CEQA document for a project, retrieved live from CEQAnet.
 
-    NOTE: these are currently UNVERIFIED leads suggested by the LLM from its
-    training knowledge (there is no public CEQAnet API and ``call_llm`` has no
-    web access). Treat every field as a hint to confirm against CEQAnet, not as
-    fact. ``doc_type`` indicates the likely review timeline: CE (Categorical
-    Exemption) = 0–3mo, ND/MND = 6–12mo, EIR = 12–24mo+. ``on_parcel`` is
-    reserved for future spatial matching and is not yet populated.
+    Pulled from the State Clearinghouse CSV export (``ceqanet.lci.ca.gov``) —
+    these are REAL filed documents, not LLM guesses. ``doc_type`` indicates the
+    likely review timeline: NOE/CE (exemption) = none, ND/MND = 3–8mo, EIR
+    (NOP→EIR) = 12–24mo+. Location fields are populated for local projects and
+    blank for statewide/programmatic actions. ``match_tier`` records how
+    confidently the document was tied to the subject parcel (see
+    ``pipeline/ceqanet.py``): "strong" = APN exact or within the strong-match
+    radius (may drive the timeline); "candidate" = same city + a weaker signal
+    (display-only, never drives the timeline or confidence).
     """
 
-    doc_type: str  # "EIR" | "MND" | "ND" | "CE" | "Other"
-    status: str  # e.g. "in_progress", "completed", "withdrawn"
+    doc_type: str  # "EIR" | "MND" | "ND" | "NOP" | "NOE" | "NOD" | "Other"
+    status: str = ""  # e.g. "in_progress", "completed", "exempt"
     filed_date: str = ""
     description: str = ""
     lead_agency: str = ""
-    on_parcel: bool = False
-    source_url: str = ""
+    on_parcel: bool = False  # True iff match_tier == "strong"
+    source_url: str = ""  # CEQAnet Document Portal URL for this SCH
+    # Structured location/identity fields from the CEQAnet CSV export
+    sch_number: str = ""
+    title: str = ""
+    coordinates: str = ""  # raw DMS string as published
+    lat: float | None = None  # parsed decimal degrees
+    lng: float | None = None
+    parcel_number: str = ""  # as published (may be a real APN or free text)
+    cross_streets: str = ""
+    zip_code: str = ""
+    cities: str = ""
+    counties: str = ""
+    contact_name: str = ""
+    # Match metadata (set by the matcher in pipeline/ceqanet.py)
+    match_tier: str = ""  # "strong" | "candidate" | ""
+    match_basis: str = ""  # human-readable reason, e.g. "APN 760-057-00-02 exact"
+    match_confidence: float = 0.0  # 0..1
+    distance_m: float | None = None  # metres from parcel when coordinates known
 
 
 @dataclass
@@ -947,7 +967,10 @@ class EntitlementTimelineRisk:
     risk_level: str = "unknown"  # "low" | "moderate" | "high" | "unknown"
     confidence: str = "low"  # "high" | "medium" | "low"
     key_drivers: list[str] = field(default_factory=list)
-    ceqa_documents: list[CEQADocument] = field(default_factory=list)
+    ceqa_documents: list[CEQADocument] = field(default_factory=list)  # Tier 1: strong matches
+    ceqa_candidates: list[CEQADocument] = field(  # Tier 2: display-only, never drives
+        default_factory=list
+    )
     active_permits_exist: bool = False
     data_sources: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)

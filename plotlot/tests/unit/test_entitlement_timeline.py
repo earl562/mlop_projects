@@ -10,38 +10,16 @@ from plotlot.core.types import CEQADocument, EntitlementTimelineRisk
 from plotlot.pipeline.entitlement_timeline import (
     _check_active_permits,
     _estimate_timeline_range,
-    _parse_ceqa_llm_response,
     _risk_level,
     assess_timeline_risk,
 )
 
-
-# ---------------------------------------------------------------------------
-# CEQA document classification
-# ---------------------------------------------------------------------------
-
-
-def test_parse_ceqa_llm_response_empty():
-    assert _parse_ceqa_llm_response("[]") == []
-
-
-def test_parse_ceqa_llm_response_valid():
-    raw = '[{"doc_type": "EIR", "status": "in_progress", "description": "Test EIR", "lead_agency": "City of SD", "source_url": "https://example.com"}]'
-    docs = _parse_ceqa_llm_response(raw)
-    assert len(docs) == 1
-    assert docs[0].doc_type == "EIR"
-    assert docs[0].status == "in_progress"
-
-
-def test_parse_ceqa_llm_response_markdown_fenced():
-    raw = '```json\n[{"doc_type": "MND", "status": "completed", "description": "Test MND"}]\n```'
-    docs = _parse_ceqa_llm_response(raw)
-    assert len(docs) == 1
-    assert docs[0].doc_type == "MND"
+_CEQA = "plotlot.pipeline.ceqanet.find_parcel_ceqa"
+_PERMITS = "plotlot.pipeline.entitlement_timeline._check_active_permits"
 
 
 # ---------------------------------------------------------------------------
-# Timeline estimation
+# Timeline estimation (deterministic base + strong CEQA adjustments)
 # ---------------------------------------------------------------------------
 
 
@@ -52,19 +30,20 @@ def test_timeline_by_right_no_ceqa():
     assert len(drivers) == 0
 
 
-def test_timeline_by_right_with_ceqa_eir():
-    docs = [
-        CEQADocument(
-            doc_type="EIR",
-            status="in_progress",
-            description="Draft EIR for mixed-use project",
-        )
-    ]
+def test_timeline_strong_active_eir_extends_range():
+    docs = [CEQADocument(doc_type="EIR", status="in_progress", sch_number="2024010001")]
     est_min, est_max, drivers = _estimate_timeline_range("by_right", docs, "low")
-    # Unverified CEQA leads are advisory only — they must NOT inflate the
-    # deterministic by-right range, but they should surface as a flagged driver.
-    assert est_max == 6.0
-    assert any("EIR" in d and "unverified" in d.lower() for d in drivers)
+    # A confirmed active EIR on the parcel legitimately drives the range up.
+    assert est_min == 12.0
+    assert est_max == 24.0
+    assert any("Active EIR" in d and "2024010001" in d for d in drivers)
+
+
+def test_timeline_strong_exemption_does_not_extend():
+    docs = [CEQADocument(doc_type="NOE", status="exempt", sch_number="2024010002")]
+    est_min, est_max, drivers = _estimate_timeline_range("by_right", docs, "low")
+    assert (est_min, est_max) == (2.0, 6.0)
+    assert any("complete" in d.lower() for d in drivers)
 
 
 def test_timeline_conditional_use():
@@ -76,19 +55,7 @@ def test_timeline_conditional_use():
 def test_timeline_rezoning():
     est_min, est_max, drivers = _estimate_timeline_range("rezoning", [], "high")
     assert est_min == 12.0
-    assert est_max >= 30.0  # high complexity multiplier
-
-
-def test_timeline_categorical_exemption_minimal_impact():
-    docs = [
-        CEQADocument(
-            doc_type="CE",
-            status="completed",
-            description="Categorical exemption Class 32 infill",
-        )
-    ]
-    est_min, est_max, _drivers = _estimate_timeline_range("by_right", docs, "low")
-    assert pytest.approx(est_min, rel=0.1) == 2.0  # exemption = no CEQA timeline hit
+    assert est_max >= 30.0
 
 
 # ---------------------------------------------------------------------------
@@ -113,21 +80,15 @@ def test_risk_level_unknown():
 
 
 # ---------------------------------------------------------------------------
-# Full assess_timeline_risk (mocked network)
+# Full assess_timeline_risk (mocked CEQAnet + permits)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_assess_timeline_risk_by_right_ca():
+async def test_assess_by_right_no_data_is_low():
     with (
-        patch(
-            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
-            new=AsyncMock(return_value=[]),
-        ),
-        patch(
-            "plotlot.pipeline.entitlement_timeline._check_active_permits",
-            new=AsyncMock(return_value=False),
-        ),
+        patch(_CEQA, new=AsyncMock(return_value=([], []))),
+        patch(_PERMITS, new=AsyncMock(return_value=False)),
     ):
         result = await assess_timeline_risk(
             address="123 Main St, San Diego, CA",
@@ -137,25 +98,19 @@ async def test_assess_timeline_risk_by_right_ca():
             entitlement_path="by_right",
             entitlement_complexity="low",
         )
-
     assert isinstance(result, EntitlementTimelineRisk)
     assert result.est_months_min == 2.0
     assert result.est_months_max == 6.0
     assert result.risk_level == "low"
-    assert result.confidence == "low"  # no CEQA docs found
+    assert result.confidence == "low"
 
 
 @pytest.mark.asyncio
-async def test_assess_timeline_risk_with_active_permits():
+async def test_assess_strong_ceqa_drives_high_confidence():
+    strong = [CEQADocument(doc_type="EIR", status="in_progress", sch_number="2024010001")]
     with (
-        patch(
-            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
-            new=AsyncMock(return_value=[]),
-        ),
-        patch(
-            "plotlot.pipeline.entitlement_timeline._check_active_permits",
-            new=AsyncMock(return_value=True),
-        ),
+        patch(_CEQA, new=AsyncMock(return_value=(strong, []))),
+        patch(_PERMITS, new=AsyncMock(return_value=False)),
     ):
         result = await assess_timeline_risk(
             address="123 Main St",
@@ -165,23 +120,64 @@ async def test_assess_timeline_risk_with_active_permits():
             entitlement_path="by_right",
             entitlement_complexity="low",
         )
+    assert result.confidence == "high"  # parcel-confirmed real filing
+    assert result.risk_level == "high"
+    assert result.est_months_max >= 24.0
+    assert len(result.ceqa_documents) == 1
+    assert any("confirmed on this parcel" in n for n in result.notes)
 
-    assert result.est_months_min == 2.0
+
+@pytest.mark.asyncio
+async def test_assess_candidates_never_drive_timeline():
+    cands = [
+        CEQADocument(doc_type="EIR", status="in_progress", match_tier="candidate", sch_number="z")
+    ]
+    with (
+        patch(_CEQA, new=AsyncMock(return_value=([], cands))),
+        patch(_PERMITS, new=AsyncMock(return_value=False)),
+    ):
+        result = await assess_timeline_risk(
+            address="123 Main St",
+            municipality="San Diego",
+            county="San Diego",
+            state="CA",
+            entitlement_path="by_right",
+            entitlement_complexity="low",
+        )
+    # Candidates are carried but must NOT raise confidence or the range.
+    assert result.confidence == "low"
+    assert (result.est_months_min, result.est_months_max) == (2.0, 6.0)
+    assert len(result.ceqa_candidates) == 1
+    assert not result.ceqa_documents
+    assert any("do not affect the timeline" in n for n in result.notes)
+
+
+@pytest.mark.asyncio
+async def test_assess_with_active_permits_is_medium():
+    with (
+        patch(_CEQA, new=AsyncMock(return_value=([], []))),
+        patch(_PERMITS, new=AsyncMock(return_value=True)),
+    ):
+        result = await assess_timeline_risk(
+            address="123 Main St",
+            municipality="San Diego",
+            county="San Diego",
+            state="CA",
+            entitlement_path="by_right",
+            entitlement_complexity="low",
+        )
     assert result.active_permits_exist is True
+    assert result.confidence == "medium"
     assert any("permits" in n.lower() for n in result.notes)
 
 
 @pytest.mark.asyncio
-async def test_assess_timeline_risk_non_ca_skips_ceqa():
+async def test_assess_non_ca_skips_ceqa():
+    # State is FL → CEQAnet must not be consulted; a configured return is ignored.
+    strong = [CEQADocument(doc_type="EIR", status="in_progress", sch_number="x")]
     with (
-        patch(
-            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
-            new=AsyncMock(return_value=[CEQADocument(doc_type="EIR", status="in_progress")]),
-        ),
-        patch(
-            "plotlot.pipeline.entitlement_timeline._check_active_permits",
-            new=AsyncMock(return_value=False),
-        ),
+        patch(_CEQA, new=AsyncMock(return_value=(strong, []))) as ceqa_mock,
+        patch(_PERMITS, new=AsyncMock(return_value=False)),
     ):
         result = await assess_timeline_risk(
             address="123 Main St",
@@ -191,21 +187,17 @@ async def test_assess_timeline_risk_non_ca_skips_ceqa():
             entitlement_path="by_right",
             entitlement_complexity="low",
         )
+    ceqa_mock.assert_not_called()
     assert result.est_months_min == 2.0
-    assert result.confidence is not None
+    assert result.confidence == "low"
+    assert not result.ceqa_documents
 
 
 @pytest.mark.asyncio
-async def test_assess_timeline_risk_api_failure_degrades_gracefully():
+async def test_assess_api_failure_degrades_gracefully():
     with (
-        patch(
-            "plotlot.pipeline.entitlement_timeline._suggest_ceqa_documents",
-            new=AsyncMock(side_effect=Exception("API unavailable")),
-        ),
-        patch(
-            "plotlot.pipeline.entitlement_timeline._check_active_permits",
-            new=AsyncMock(side_effect=Exception("timeout")),
-        ),
+        patch(_CEQA, new=AsyncMock(side_effect=Exception("CEQAnet down"))),
+        patch(_PERMITS, new=AsyncMock(side_effect=Exception("timeout"))),
     ):
         result = await assess_timeline_risk(
             address="123 Main St",
@@ -215,7 +207,6 @@ async def test_assess_timeline_risk_api_failure_degrades_gracefully():
             entitlement_path="conditional_use",
             entitlement_complexity="medium",
         )
-    # Should still return a valid result with the base estimate
     assert isinstance(result, EntitlementTimelineRisk)
     assert result.est_months_min == 6.0
     assert result.confidence == "low"

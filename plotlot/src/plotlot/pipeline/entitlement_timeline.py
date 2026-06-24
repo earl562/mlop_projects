@@ -2,8 +2,10 @@
 
 Augments the deterministic ``EntitlementAssessment`` (path, hardcoded step
 timelines) with:
-  1. LLM-suggested CEQA document leads (CA only) — UNVERIFIED, not a live
-     lookup; advisory drivers only, they never move the headline range.
+  1. Real CEQA filings from CEQAnet (CA only), matched to the parcel via
+     ``pipeline/ceqanet.py``. Strong (parcel-confirmed) matches may drive the
+     range/confidence; weaker candidates are carried separately for display and
+     never drive anything.
   2. Active permit data from the existing ``permits.py`` pipeline (real data).
   3. Timeline risk range (optimistic vs pessimistic) and confidence level.
 
@@ -13,101 +15,18 @@ does not block the assessment; it just lowers confidence.
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from plotlot.core.types import CEQADocument, EntitlementTimelineRisk
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# CEQA document suggestions — the LLM proposes UNVERIFIED leads (no web access)
-# ---------------------------------------------------------------------------
-
-
-async def _suggest_ceqa_documents(address: str, municipality: str) -> list[CEQADocument]:
-    """Ask the LLM which CEQA documents MIGHT apply to a parcel.
-
-    IMPORTANT: this is NOT a live CEQAnet lookup. ``call_llm`` has no web
-    access, so these are the model's UNVERIFIED suggestions from training
-    knowledge — leads for a human to confirm against CEQAnet, never facts.
-    Returns an empty list on any failure.
-    """
-    try:
-        from plotlot.retrieval.llm import call_llm
-
-        search_prompt = (
-            "Based only on your existing knowledge (you do NOT have web access), "
-            "identify any CEQA environmental-review documents that may be associated "
-            f"with, or likely required for, development at {address}, {municipality}, "
-            "California. These will be treated as UNVERIFIED leads to confirm against "
-            "CEQAnet — do NOT fabricate filing numbers, dates, or URLs you are not "
-            "confident about; omit any field you do not know. "
-            "Return a JSON array of objects with keys: doc_type (EIR/MND/ND/CE/Other), "
-            "status, description, lead_agency, source_url, and filed_date (YYYY-MM-DD). "
-            "If you know of none, return an empty array []. Only return valid JSON."
-        )
-        response = await call_llm(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Return only valid JSON. Never invent unverifiable specifics.",
-                },
-                {"role": "user", "content": search_prompt},
-            ],
-        )
-        result = (response or {}).get("content", "")
-        docs = _parse_ceqa_llm_response(result)
-        if docs:
-            logger.info("CEQA leads suggested: %d for %s (unverified)", len(docs), address)
-        return docs
-    except Exception as exc:
-        logger.debug("CEQA suggestion failed for %s: %s", address, exc)
-        return []
-
-
-def _parse_ceqa_llm_response(raw: str) -> list[CEQADocument]:
-    """Extract a JSON array of CEQADocument from an LLM response."""
-    raw = raw.strip()
-    # Strip markdown fences if present
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1]
-        raw = raw.rsplit("\n", 1)[0] if raw.endswith("```") else raw
-        raw = raw.strip()
-    # Try to find a JSON array in the response
-    m = re.search(r"\[.*\]", raw, re.DOTALL)
-    if not m:
-        return []
-    try:
-        entries = json.loads(m.group())
-    except (json.JSONDecodeError, TypeError):
-        return []
-    docs: list[CEQADocument] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        doc_type = str(entry.get("doc_type", "Other"))
-        docs.append(
-            CEQADocument(
-                doc_type=doc_type if doc_type in ("EIR", "MND", "ND", "CE", "Other") else "Other",
-                status=str(entry.get("status", "")),
-                filed_date=str(entry.get("filed_date", "")),
-                description=str(entry.get("description", "")),
-                lead_agency=str(entry.get("lead_agency", "")),
-                source_url=str(entry.get("source_url", "")),
-            )
-        )
-    return docs
 
 
 # ---------------------------------------------------------------------------
 # Timeline risk estimation
 # ---------------------------------------------------------------------------
 
-# Timeline multipliers per complexity level
-# Optimistic = best-case processing (fast-track, cooperative board)
-# Pessimistic = worst-case (appeals, resubmittals, full EIR)
+# Deterministic base range per entitlement path (optimistic, pessimistic months).
 _TIMELINE_RANGES: dict[str, tuple[float, float]] = {
     "by_right": (2.0, 6.0),
     "conditional_use": (6.0, 18.0),
@@ -118,15 +37,16 @@ _TIMELINE_RANGES: dict[str, tuple[float, float]] = {
 
 def _estimate_timeline_range(
     path: str,
-    ceqa_docs: list[CEQADocument],
+    strong_ceqa: list[CEQADocument],
     complexity: str,
 ) -> tuple[float, float, list[str]]:
     """Compute (min_months, max_months, key_drivers) for the entitlement path.
 
-    The headline range is DETERMINISTIC — derived only from the entitlement
-    path and its complexity. CEQA documents are unverified LLM-suggested leads
-    (see ``_suggest_ceqa_documents``); they are surfaced as advisory drivers to
-    verify, but never move the headline range or the risk level.
+    The base range is deterministic (entitlement path + complexity). STRONG CEQA
+    matches are REAL filings confirmed on this parcel, so they legitimately
+    extend the range (an active EIR genuinely implies a 12–24mo review) and add
+    SCH-cited drivers. Candidate (Tier 2) matches are NOT passed here and never
+    affect the range.
     """
     base_min, base_max = _TIMELINE_RANGES.get(path, (0.0, 0.0))
     drivers: list[str] = []
@@ -146,26 +66,25 @@ def _estimate_timeline_range(
     elif complexity == "medium":
         base_max = max(base_max * 1.25, base_max + 3.0)
 
-    # CEQA leads are UNVERIFIED — advisory only, no effect on the range/risk.
-    for doc in ceqa_docs:
-        if doc.doc_type == "EIR":
+    # Strong, parcel-confirmed CEQA filings adjust the range by review stage.
+    for d in strong_ceqa:
+        sch = f" (SCH {d.sch_number})" if d.sch_number else ""
+        if d.status == "in_progress" and d.doc_type == "EIR":
+            base_min = max(base_min, 12.0)
+            base_max = max(base_max, 24.0)
             drivers.append(
-                "Possible EIR (unverified lead — confirm via CEQAnet): a full EIR "
-                "would add ~12–24 months of environmental review"
+                f"Active EIR on file for this parcel{sch} — 12–24 month environmental review"
             )
-        elif doc.doc_type == "MND":
+        elif d.status == "in_progress" and d.doc_type in ("MND", "ND"):
+            base_max = max(base_max, base_min + 8.0)
             drivers.append(
-                "Possible Mitigated Negative Declaration (unverified lead): "
-                "~4–8 months of environmental review"
+                f"Active {d.doc_type} on file for this parcel{sch} — ~3–8 month "
+                "environmental review"
             )
-        elif doc.doc_type == "ND":
+        elif d.status in ("completed", "exempt"):
+            label = "exemption (NOE)" if d.status == "exempt" else "determination (NOD)"
             drivers.append(
-                "Possible Negative Declaration (unverified lead): ~3–6 months "
-                "of environmental review"
-            )
-        elif doc.doc_type == "CE":
-            drivers.append(
-                "Possible categorical exemption (unverified lead): minimal CEQA timeline impact"
+                f"CEQA {label} already on file for this parcel{sch} — environmental review complete"
             )
 
     return round(base_min, 1), round(base_max, 1), drivers
@@ -222,18 +141,33 @@ async def assess_timeline_risk(
     apn: str = "",
     lat: float | None = None,
     lng: float | None = None,
+    parcel_zip: str = "",
+    owner: str = "",
 ) -> EntitlementTimelineRisk:
     """Assess entitlement timeline risk with live data augmentations.
 
-    Called after the base ``EntitlementAssessment`` to add real-time data:
-    CEQAnet search (CA only), permit status, and a risk range.
+    Pulls real CEQA filings (CA) matched to the parcel, checks active permits,
+    and returns a risk range. Strong CEQA matches and active permits raise
+    confidence; candidate CEQA matches are carried for display only.
     """
-    ceqa_docs: list[CEQADocument] = []
+    strong_ceqa: list[CEQADocument] = []
+    candidate_ceqa: list[CEQADocument] = []
     if state.upper() == "CA":
         try:
-            ceqa_docs = await _suggest_ceqa_documents(address, municipality)
+            from plotlot.pipeline.ceqanet import find_parcel_ceqa
+
+            strong_ceqa, candidate_ceqa = await find_parcel_ceqa(
+                county=county,
+                city=municipality,
+                parcel_apn=apn,
+                parcel_lat=lat,
+                parcel_lng=lng,
+                parcel_zip=parcel_zip,
+                parcel_address=address,
+                owner=owner,
+            )
         except Exception as exc:
-            logger.debug("CEQA suggestion failed in assess_timeline_risk: %s", exc)
+            logger.debug("CEQAnet lookup failed in assess_timeline_risk: %s", exc)
 
     try:
         active_permits = await _check_active_permits(apn, county)
@@ -242,23 +176,32 @@ async def assess_timeline_risk(
         active_permits = False
 
     est_min, est_max, drivers = _estimate_timeline_range(
-        entitlement_path, ceqa_docs, entitlement_complexity
+        entitlement_path, strong_ceqa, entitlement_complexity
     )
 
     data_sources: list[str] = []
-    if ceqa_docs:
-        data_sources.append("LLM-suggested CEQA leads (unverified — confirm via CEQAnet)")
+    if strong_ceqa or candidate_ceqa:
+        data_sources.append("CEQAnet — State Clearinghouse (ceqanet.lci.ca.gov)")
     if active_permits:
         data_sources.append("County permit system (Accela)")
+
+    # Strong CEQA matches are parcel-confirmed real filings → high confidence.
+    # Active permits are real but coarser → medium. Otherwise low.
+    if strong_ceqa:
+        confidence = "high"
+    elif active_permits:
+        confidence = "medium"
+    else:
+        confidence = "low"
 
     risk = EntitlementTimelineRisk(
         est_months_min=est_min,
         est_months_max=est_max,
         risk_level=_risk_level(est_min, est_max),
-        # Only real permit data raises confidence; unverified CEQA leads never do.
-        confidence="medium" if active_permits else "low",
+        confidence=confidence,
         key_drivers=drivers,
-        ceqa_documents=ceqa_docs,
+        ceqa_documents=strong_ceqa,
+        ceqa_candidates=candidate_ceqa,
         active_permits_exist=active_permits,
         data_sources=data_sources,
     )
@@ -268,15 +211,20 @@ async def assess_timeline_risk(
             "Parcel has active permits — some approvals may already be in process, "
             "which could shorten the remaining timeline."
         )
-    if ceqa_docs:
+    if strong_ceqa:
         risk.notes.append(
-            "Listed CEQA documents are unverified LLM suggestions, not confirmed "
-            "filings — verify each against CEQAnet before relying on them."
+            f"{len(strong_ceqa)} CEQA filing(s) confirmed on this parcel — see the SCH "
+            "link(s) for the official record."
+        )
+    elif candidate_ceqa:
+        risk.notes.append(
+            f"No CEQA filing confirmed on this parcel; {len(candidate_ceqa)} nearby/possible "
+            "filing(s) are listed separately for verification — they do not affect the timeline."
         )
     elif state.upper() == "CA":
         risk.notes.append(
-            "No CEQA leads were suggested for this parcel — confirm environmental "
-            "status directly via CEQAnet (ceqanet.lci.ca.gov); this is not a live lookup."
+            "No CEQA filings found for this parcel in CEQAnet (State Clearinghouse). "
+            "Not all local CEQA actions are submitted to the SCH — confirm with the city."
         )
 
     return risk

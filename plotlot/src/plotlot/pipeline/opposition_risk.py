@@ -1,9 +1,10 @@
 """Neighbor / political opposition risk — qualitative heuristic assessment.
 
 No centralized data source exists for opposition risk. This module uses:
-  1. Deterministic rules based on parcel context (density delta, adjacent uses).
+  1. Deterministic rules based on parcel context (density delta, zone type).
   2. An LLM-based qualitative assessment when the LLM is available.
-  3. Web search for recent planning controversies in the municipality.
+  3. LLM-suggested possible controversies — UNVERIFIED leads from the model's
+     training knowledge (``call_llm`` has no web access), surfaced but not scored.
 
 Every output is labeled as LOW confidence / qualitative — this is NOT a
 data-driven model. It surfaces risk factors a human should investigate,
@@ -123,7 +124,7 @@ async def _llm_opposition_assessment(
 
 
 # ---------------------------------------------------------------------------
-# Web search for recent controversies
+# LLM-suggested possible controversies (UNVERIFIED — no web access)
 # ---------------------------------------------------------------------------
 
 
@@ -166,7 +167,7 @@ async def _suggest_possible_controversies(municipality: str) -> list[str]:
                 return [str(i) for i in items if i]
         return []
     except Exception as exc:
-        logger.debug("Web search for controversies failed: %s", exc)
+        logger.debug("Controversy suggestion failed: %s", exc)
         return []
 
 

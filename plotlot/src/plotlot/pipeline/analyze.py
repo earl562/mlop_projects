@@ -204,14 +204,18 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Deep development signals failed for %s: %s", address[:60], exc)
 
-    # Entitlement timeline risk — real-time CEQAnet search + permit check (CA).
+    # Entitlement timeline risk — real CEQAnet filings + permit check (CA).
     if report.entitlement:
         try:
+            import re as _re
+
             from plotlot.pipeline.entitlement_timeline import assess_timeline_risk
 
+            _addr = report.formatted_address or report.address
+            _zip_m = _re.search(r"\b(\d{5})(?:-\d{4})?\b", _addr or "")
             report.entitlement_timeline_risk = await asyncio.wait_for(
                 assess_timeline_risk(
-                    address=report.formatted_address or report.address,
+                    address=_addr,
                     municipality=report.municipality,
                     county=report.county,
                     state=report.state,
@@ -220,8 +224,10 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
                     apn=apn,
                     lat=report.lat,
                     lng=report.lng,
+                    parcel_zip=_zip_m.group(1) if _zip_m else "",
+                    owner=report.property_record.owner if report.property_record else "",
                 ),
-                timeout=20,
+                timeout=25,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Deep timeline risk failed for %s: %s", address[:60], exc)
