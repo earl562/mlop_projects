@@ -92,21 +92,21 @@ def _zillow_comp_to_rental_comp(raw: dict, listing_type: str) -> RentalComp:
     """Convert a Zillow comp dict to a RentalComp dataclass.
 
     For rental listings, price = monthly rent.
-    For sold listings, price = sale price (monthly_rent stays 0).
+    For sold listings, price = sale price — stored in monthly_rent field
+    so _build_comp_set computes median/avg sale price (used as ARV for
+    ≤4 unit comp-based valuation per Kleyman Path 1/2).
     """
     sqft = float(raw.get("sqft") or 0)
     price = float(raw.get("price") or 0)
-    is_rental = listing_type == "rental"
-    monthly_rent = price if is_rental else 0.0
-    rent_per_sqft = round(monthly_rent / sqft, 2) if sqft > 0 and monthly_rent > 0 else 0.0
+    price_per_sqft = round(price / sqft, 2) if sqft > 0 and price > 0 else 0.0
 
     return RentalComp(
         address=raw.get("address", ""),
         bedrooms=int(raw.get("bedrooms") or 0),
         bathrooms=float(raw.get("bathrooms") or 0),
         sqft=sqft,
-        monthly_rent=monthly_rent,
-        rent_per_sqft=rent_per_sqft,
+        monthly_rent=price,
+        rent_per_sqft=price_per_sqft,
         source="zillow",
     )
 
@@ -737,10 +737,22 @@ async def run_deal_analysis(
 
     # ── Step 9: Price recommendation ───────────────────────────────────────
     max_offer = 0.0
+    arv = 0.0
+
     if pro_forma is not None and pro_forma.max_land_price > 0:
         max_offer = pro_forma.max_land_price
     elif land_val > 0:
         max_offer = land_val
+
+    if max_offer <= 0 and is_res and 0 < max_units < _NOI_MIN_UNITS:
+        arv = rental_comp_set.median_rent if rental_comp_set.comp_count > 0 else 0.0
+        if arv > 0:
+            max_offer = arv * 0.70 - hard_costs - soft_costs
+            notes.append(
+                f"ARV-based valuation: ARV=${arv:,.0f} (median of "
+                f"{rental_comp_set.comp_count} sold comps), max offer=${max_offer:,.0f} "
+                f"(70% ARV - ${hard_costs + soft_costs:,.0f} construction)"
+            )
 
     # Recommended offer: 85% of max for conservative underwriting
     recommended_offer = round(max_offer * 0.85, 2) if max_offer > 0 else 0.0
