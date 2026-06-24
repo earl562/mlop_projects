@@ -111,7 +111,7 @@ async def test_zillow_comps_residential_uses_rental_listings():
 
 @pytest.mark.asyncio
 async def test_zillow_comps_small_residential_uses_new_build_listings():
-    report = _report_with_density_and_record("multifamily", max_units=4)
+    report = _report_with_density_and_record("single_family", max_units=4)
 
     with patch(
         "plotlot.pipeline.skills.playwright_comps.handle_fetch_zillow_comps",
@@ -132,6 +132,31 @@ async def test_zillow_comps_small_residential_uses_new_build_listings():
     mock_zillow.assert_awaited_once()
     call_args = mock_zillow.call_args[0][0]
     assert call_args["listing_type"] == "new_build"
+
+
+@pytest.mark.asyncio
+async def test_zillow_comps_small_mf_uses_small_mf_listings():
+    report = _report_with_density_and_record("multifamily", max_units=3)
+
+    with patch(
+        "plotlot.pipeline.skills.playwright_comps.handle_fetch_zillow_comps",
+        new_callable=AsyncMock,
+        return_value=HandlerResult(
+            output_json={"comparables": [_zillow_comp("small_mf")], "source": "zillow", "count": 1},
+            evidence_ids=[],
+        ),
+    ) as mock_zillow:
+        await run_deal_analysis(
+            zoning_report=report,
+            county="broward",
+            state="FL",
+            land_purchase_price=500_000,
+            zip_code="33023",
+        )
+
+    mock_zillow.assert_awaited_once()
+    call_args = mock_zillow.call_args[0][0]
+    assert call_args["listing_type"] == "small_mf"
 
 
 @pytest.mark.asyncio

@@ -83,7 +83,8 @@ _DEFAULT_FINANCING_TERMS = FinancingTerms(
 _RESIDENTIAL_TYPES = frozenset({"multifamily", "commercial_mf", "single_family", "land", None})
 _COMMERCIAL_TYPES = frozenset({"commercial", "industrial", "retail", "office"})
 
-# Dani's threshold: ≤4 units → comp-based valuation. ≥5 units → NOI/cap-rate.
+_SMALL_MF_TYPES = frozenset({"multifamily", "commercial_mf"})
+
 _NOI_MIN_UNITS = 5
 
 
@@ -545,9 +546,14 @@ async def run_deal_analysis(
     try:
         from plotlot.pipeline.skills.playwright_comps import handle_fetch_zillow_comps
 
-        zillow_listing_type = "land" if property_type == "land" else (
-            "rental" if max_units >= _NOI_MIN_UNITS else "new_build"
-        )
+        if property_type == "land":
+            zillow_listing_type = "land"
+        elif max_units >= _NOI_MIN_UNITS:
+            zillow_listing_type = "rental"
+        elif property_type in _SMALL_MF_TYPES and max_units >= 2:
+            zillow_listing_type = "small_mf"
+        else:
+            zillow_listing_type = "new_build"
         comp_result = await handle_fetch_zillow_comps({
             "address": zoning_report.formatted_address or zoning_report.address,
             "listing_type": zillow_listing_type,
