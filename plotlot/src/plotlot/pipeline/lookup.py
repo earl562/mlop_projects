@@ -28,10 +28,20 @@ from plotlot.observability.tracing import (
 )
 from plotlot.observability.prompts import get_active_prompt, log_prompt_to_run
 from plotlot.pipeline.calculator import calculate_max_units, calculate_max_gla, parse_lot_dimensions
+from plotlot.pipeline.lookup_snapshot import build_lookup_snapshot
+from plotlot.pipeline.lookup_snapshot_serialization import lookup_snapshot_to_dict
+from plotlot.pipeline.lookup_snapshot_store import save_lookup_snapshot
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
+from plotlot.pipeline.zoning_cache import (
+    CachedZoningData,
+    _get_cached_zoning_data,
+    _get_cached_zoning_params,
+    _store_zoning_params,
+    clear_zoning_params_cache,  # noqa: F401 — re-exported for backward compat
+)
 from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -119,6 +129,10 @@ def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
         }
     else:
         result["property_record"] = None
+
+    if isinstance(report, ZoningReport):
+        snapshot = report.lookup_snapshot or build_lookup_snapshot(report)
+        result["lookup_snapshot"] = lookup_snapshot_to_dict(snapshot)
 
     return result
 
@@ -261,16 +275,25 @@ async def lookup_address(address: str) -> ZoningReport | None:
             "Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng
         )
 
-        # Geocoding accuracy check — reject low-confidence matches
+        # Geocoding accuracy check — three-tier: reject / degraded / normal
         # Geocodio returns numeric `accuracy` (0-1) AND string `accuracy_type`
         accuracy_score = geo.get("accuracy")
-        if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
-            set_tag("status", "rejected")
-            set_tag("failure_reason", "low_accuracy_geocode")
-            raise ValueError(
-                f"Could not confidently locate this address (geocoding accuracy: {accuracy_score}). "
-                f"Please check the address and try again."
-            )
+        if isinstance(accuracy_score, (int, float)):
+            if accuracy_score < 0.5:
+                set_tag("status", "rejected")
+                set_tag("failure_reason", "low_accuracy_geocode")
+                raise ValueError(
+                    f"Could not locate this address (geocoding accuracy: {accuracy_score}). "
+                    f"Please check the address and try again."
+                )
+            elif accuracy_score < 0.8:
+                set_tag("status", "degraded")
+                set_tag("geocode_accuracy", str(accuracy_score))
+                geo["accuracy_warning"] = True
+                geo["accuracy_note"] = (
+                    f"Low geocode confidence ({accuracy_score}). "
+                    f"Results may not be for the exact address."
+                )
 
         # Step 2: Property Appraiser lookup
         prop_record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
@@ -313,6 +336,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
         # the municipality's ordinance via the ACP coordinator and re-search — so the
         # MCP/ACP path works for any source-adapter-reachable place, not just pre-ingested ones.
         gis_zoning_code = prop_record.zoning_code if prop_record else ""
+        if gis_zoning_code.strip().upper() in ("NONE", "UNKNOWN", "UNCLASSIFIED", ""):
+            gis_zoning_code = ""
         crosswalk = crosswalk_zoning_code(
             gis_zoning_code, state=state, county=county, municipality=municipality
         )
@@ -419,6 +444,10 @@ async def lookup_address(address: str) -> ZoningReport | None:
                 }
             )
 
+        if isinstance(report, ZoningReport):
+            report.lookup_snapshot = build_lookup_snapshot(report)
+            save_lookup_snapshot(report.lookup_snapshot)
+
         # Log full report as artifact
         log_dict(report_to_dict(report), "report.json")
         set_tag("status", "success")
@@ -440,7 +469,41 @@ async def _agentic_analysis(
     ordinance_code: str = "",
 ) -> ZoningReport:
     """LLM analysis with tool access for additional searches."""
-    from plotlot.retrieval.llm import call_llm
+    from plotlot.retrieval.llm import _get_openai_model, call_llm
+
+    chunk_ids = (
+        [str(r.chunk_id) for r in search_results if getattr(r, "chunk_id", None) is not None]
+        if search_results
+        else []
+    )
+    model_id = _get_openai_model()
+
+    # S7 short-circuit: if cached zoning params exist for this zone code,
+    # skip the LLM entirely and build the report from cache + search results.
+    # This reduces warm-lookup from ~114s to <2s.
+    if prop_record and prop_record.zoning_code:
+        cached_data = _get_cached_zoning_data(
+            county,
+            municipality,
+            prop_record.zoning_code,
+            chunk_ids=chunk_ids,
+            model_id=model_id,
+        )
+        if cached_data and cached_data.numeric_params:
+            logger.info(
+                "Cache HIT for zone %s — skipping LLM analysis",
+                prop_record.zoning_code,
+            )
+            all_sources = [f"{r.section} — {r.section_title}" for r in search_results if r.section]
+            return _build_report_from_cache(
+                cached_data.numeric_params,
+                address,
+                geo,
+                prop_record,
+                all_sources,
+                search_results,
+                cached_data=cached_data,
+            )
 
     # Build context message with all collected data
     context_msg = _build_context_message(
@@ -597,7 +660,7 @@ async def _agentic_analysis(
 
         with start_span(name=f"llm_turn_{turn + 1}", span_type="CHAT_MODEL") as span:
             span.set_inputs({"turn": turn + 1, "message_count": len(messages)})
-            response = await call_llm(messages, tools=tools)
+            response = await call_llm(messages, tools=tools, temperature=0.0)
             if not response:
                 span.set_outputs({"error": "empty_response"})
                 logger.error("LLM returned empty on turn %d", turn + 1)
@@ -618,7 +681,9 @@ async def _agentic_analysis(
             # Try to parse content as JSON report (some models return JSON directly)
             try:
                 parsed = json.loads(content.strip().strip("`").lstrip("json\n"))
-                return _build_report(parsed, address, geo, prop_record, all_sources, search_results)
+                return await _build_report(
+                    parsed, address, geo, prop_record, all_sources, search_results
+                )
             except (json.JSONDecodeError, ValueError):
                 pass
 
@@ -699,7 +764,7 @@ async def _agentic_analysis(
                 logger.info("Agent submitted report")
                 # Deduplicate sources
                 all_sources = list(dict.fromkeys(all_sources))
-                return _build_report(
+                return await _build_report(
                     fn_args, address, geo, prop_record, all_sources, search_results
                 )
 
@@ -935,7 +1000,59 @@ def _extract_fallback_insights(
     return (extracted, params if has_any else None)
 
 
-def _build_report(
+def _validate_numeric_params(
+    params: NumericZoningParams,
+    zoning_code: str = "",
+    lot_size_sqft: float | None = None,
+) -> list[str]:
+    """Flag suspicious LLM outputs. Returns warnings, never rejects values."""
+    warnings: list[str] = []
+
+    if params.max_density_units_per_acre is not None and params.max_density_units_per_acre > 200:
+        warnings.append(
+            f"Suspiciously high density ({params.max_density_units_per_acre} du/acre). "
+            f"Typical maximum for US zoning is 200 du/acre. Verify ordinance text."
+        )
+
+    if params.far is not None and params.far > 5.0:
+        warnings.append(
+            f"Suspiciously high FAR ({params.far}). "
+            f"Typical maximum for US zoning is 5.0. Verify ordinance text."
+        )
+
+    sf_prefixes = ("RS-", "R-1", "RE-", "RU-1", "R-1A")
+    if (
+        params.max_height_ft is not None
+        and params.max_height_ft > 100
+        and zoning_code
+        and any(zoning_code.upper().startswith(p) for p in sf_prefixes)
+    ):
+        warnings.append(
+            f"Suspiciously high height limit ({params.max_height_ft} ft) for "
+            f"single-family zone ({zoning_code}). Verify ordinance text."
+        )
+
+    if params.max_lot_coverage_pct is not None and params.max_lot_coverage_pct > 100:
+        warnings.append(
+            f"Lot coverage exceeds 100% ({params.max_lot_coverage_pct}%). "
+            f"Likely a parsing error. Verify ordinance text."
+        )
+
+    if (
+        params.min_lot_area_per_unit_sqft is not None
+        and lot_size_sqft is not None
+        and params.min_lot_area_per_unit_sqft > lot_size_sqft
+    ):
+        warnings.append(
+            f"Minimum lot area per unit ({params.min_lot_area_per_unit_sqft}) exceeds "
+            f"parcel lot size ({lot_size_sqft}). "
+            f"This combination cannot yield any units. Verify ordinance text."
+        )
+
+    return warnings
+
+
+async def _build_report(
     args: dict,
     address: str,
     geo: dict,
@@ -944,11 +1061,65 @@ def _build_report(
     search_results: list | None = None,
 ) -> ZoningReport:
     """Build ZoningReport from agent submit_report args."""
-    # Build numeric params from LLM-extracted values
+    from plotlot.retrieval.llm import _get_openai_model
+
     numeric_params = _extract_numeric_params(args)
+
+    lot_size = None
+    if prop_record and prop_record.lot_size_sqft > 0:
+        lot_size = prop_record.lot_size_sqft
+    validation_warnings = (
+        _validate_numeric_params(
+            numeric_params or NumericZoningParams(),
+            zoning_code=args.get("zoning_district", ""),
+            lot_size_sqft=lot_size,
+        )
+        if numeric_params
+        else []
+    )
+
+    if numeric_params and prop_record and prop_record.zoning_code:
+        county = geo.get("county", "")
+        municipality = geo.get("municipality", "")
+        chunk_ids = [
+            str(r.chunk_id)
+            for r in (search_results or [])
+            if getattr(r, "chunk_id", None) is not None
+        ]
+        model_id = _get_openai_model()
+        cached = _get_cached_zoning_params(
+            county,
+            municipality,
+            prop_record.zoning_code,
+            chunk_ids=chunk_ids,
+            model_id=model_id,
+        )
+        if cached:
+            numeric_params = cached
+        else:
+            await _store_zoning_params(
+                county,
+                municipality,
+                prop_record.zoning_code,
+                CachedZoningData(
+                    numeric_params=numeric_params,
+                    zoning_description=args.get("zoning_description", ""),
+                    allowed_uses=_coerce_list(args.get("allowed_uses", [])),
+                    conditional_uses=_coerce_list(args.get("conditional_uses", [])),
+                    prohibited_uses=_coerce_list(args.get("prohibited_uses", [])),
+                    summary=args.get("summary", ""),
+                    confidence=args.get("confidence", ""),
+                ),
+                chunk_ids=chunk_ids,
+                model_id=model_id,
+            )
 
     # Build source_refs from top search results (for inline citations)
     source_refs = _build_source_refs(search_results)
+
+    confidence = args.get("confidence", "low")
+    if geo.get("accuracy_warning") and confidence != "low":
+        confidence = "low"
 
     return ZoningReport(
         address=address,
@@ -977,13 +1148,303 @@ def _build_report(
         property_record=prop_record,
         summary=args.get("summary", ""),
         sources=sources,
-        confidence=args.get("confidence", "low"),
+        confidence=confidence,
         source_refs=source_refs,
+        validation_warnings=validation_warnings,
     )
 
 
-def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
-    """Extract NumericZoningParams from submit_report args. Returns None if all empty."""
+def _build_report_from_cache(
+    numeric_params,
+    address: str,
+    geo: dict,
+    prop_record,
+    sources: list[str],
+    search_results: list | None = None,
+    cached_data: CachedZoningData | None = None,
+) -> ZoningReport:
+    """Build ZoningReport from cached data — no LLM call.
+
+    When cached_data is available, text descriptions come from the LLM-extracted
+    stored text fields. Otherwise fall back to regex extraction from search results.
+    """
+    zone_codes = list(
+        dict.fromkeys(
+            code
+            for result in (search_results or [])
+            for code in getattr(result, "zone_codes", [])
+            if code
+        )
+    )
+    zoning_district = (prop_record.zoning_code if prop_record else "") or (
+        zone_codes[0] if zone_codes else ""
+    )
+
+    if cached_data is not None:
+        zoning_description = cached_data.zoning_description
+        allowed_uses = cached_data.allowed_uses
+        conditional_uses = cached_data.conditional_uses
+        prohibited_uses = cached_data.prohibited_uses
+        if cached_data.summary:
+            summary = cached_data.summary
+        elif cached_data.extracted_at:
+            summary = (
+                f"Cached zoning analysis for {zoning_district}. "
+                f"Numeric parameters extracted by LLM on {cached_data.extracted_at}. "
+                f"Source ordinance text may have been updated since extraction."
+            )
+        else:
+            summary = (
+                f"Cached zoning analysis for {zoning_district}. "
+                f"Numeric parameters extracted on unknown date. "
+                f"Source ordinance text may have been updated since extraction."
+            )
+        confidence = cached_data.confidence or "medium"
+        sf = (
+            f"{numeric_params.setback_front_ft:g} ft"
+            if numeric_params and numeric_params.setback_front_ft
+            else ""
+        )
+        ss = (
+            f"{numeric_params.setback_side_ft:g} ft"
+            if numeric_params and numeric_params.setback_side_ft
+            else ""
+        )
+        sr = (
+            f"{numeric_params.setback_rear_ft:g} ft"
+            if numeric_params and numeric_params.setback_rear_ft
+            else ""
+        )
+        mh = (
+            f"{numeric_params.max_height_ft:g} ft"
+            if numeric_params and numeric_params.max_height_ft
+            else ""
+        )
+        md = (
+            f"{numeric_params.max_density_units_per_acre:g} units/acre"
+            if numeric_params and numeric_params.max_density_units_per_acre
+            else ""
+        )
+        far = f"{numeric_params.far:g}" if numeric_params and numeric_params.far else ""
+        lc = (
+            f"{numeric_params.max_lot_coverage_pct:g}%"
+            if numeric_params and numeric_params.max_lot_coverage_pct
+            else ""
+        )
+        mls = (
+            f"{numeric_params.min_lot_area_per_unit_sqft:,.0f} sqft"
+            if numeric_params and numeric_params.min_lot_area_per_unit_sqft
+            else ""
+        )
+        pr = (
+            f"{numeric_params.parking_spaces_per_unit:g} per unit"
+            if numeric_params and numeric_params.parking_spaces_per_unit
+            else ""
+        )
+        setbacks = Setbacks(front=sf, side=ss, rear=sr)
+    else:
+        extracted, _ = _extract_fallback_insights(search_results)
+        zoning_description = prop_record.zoning_description if prop_record else ""
+        allowed_uses = []
+        conditional_uses = []
+        prohibited_uses = []
+        summary = (
+            f"Cached zoning analysis for {zoning_district}. "
+            f"Numeric parameters extracted on unknown date. "
+            f"Source ordinance text may have been updated since extraction."
+        )
+        confidence = "medium"
+        setbacks = Setbacks(
+            front=extracted.get("setbacks_front", ""),
+            side=extracted.get("setbacks_side", ""),
+            rear=extracted.get("setbacks_rear", ""),
+        )
+        mh = extracted.get("max_height", "")
+        md = extracted.get("max_density", "")
+        far = extracted.get("floor_area_ratio", "")
+        lc = extracted.get("lot_coverage", "")
+        mls = extracted.get("min_lot_size", "")
+        pr = extracted.get("parking_requirements", "")
+
+    source_refs = _build_source_refs(search_results)
+
+    if geo.get("accuracy_warning") and confidence != "low":
+        confidence = "low"
+
+    return ZoningReport(
+        address=address,
+        formatted_address=geo.get("formatted_address", address),
+        municipality=geo.get("municipality", ""),
+        county=geo.get("county", ""),
+        lat=geo.get("lat"),
+        lng=geo.get("lng"),
+        zoning_district=zoning_district,
+        zoning_description=zoning_description,
+        allowed_uses=allowed_uses,
+        conditional_uses=conditional_uses,
+        prohibited_uses=prohibited_uses,
+        setbacks=setbacks,
+        max_height=mh,
+        max_density=md,
+        floor_area_ratio=far,
+        lot_coverage=lc,
+        min_lot_size=mls,
+        parking_requirements=pr,
+        numeric_params=numeric_params,
+        property_record=prop_record,
+        summary=summary,
+        sources=sources,
+        confidence=confidence,
+        source_refs=source_refs,
+        validation_warnings=[],
+    )
+
+
+def _detect_property_type(zoning_code: str, land_use_code: str = "") -> str:
+    """Detect property type from FL zoning code prefix with DOR land_use_code fallback.
+
+    Deterministic string matching — zero LLM calls, zero network requests.
+
+    Fallback chain:
+        1. Zone code prefix → property_type (longest/most-specific prefix first)
+        2. DOR land_use_code first 2 digits → property_type
+        3. Default: ``"land"``
+
+    Returns:
+        One of: ``"single_family"``, ``"multifamily"``, ``"commercial"``,
+        ``"mixed_use"``, ``"office"``, ``"industrial"``, ``"land"``.
+    """
+    code = zoning_code.strip().upper()
+
+    # Priority-ordered zone prefix map — longest / most-specific first to
+    # avoid ``R-`` matching before ``RU-``, ``RS-``, ``RD-``, ``RM-``.
+    zone_prefix_map: list[tuple[str, str]] = [
+        ("SF-R", "single_family"),
+        ("RU-", "single_family"),
+        ("RS-", "single_family"),
+        ("RD-", "multifamily"),
+        ("RM-", "multifamily"),
+        ("MF-", "multifamily"),
+        ("MU-", "mixed_use"),
+        ("BU-", "commercial"),
+        ("CC-", "commercial"),
+        ("GC-", "commercial"),
+        ("OP-", "office"),
+        ("RO-", "office"),
+        ("CI-", "industrial"),
+        ("IU-", "industrial"),
+        ("T6-", "commercial"),
+        ("T5-", "commercial"),
+        ("T4-", "mixed_use"),
+        ("T3-", "multifamily"),
+        ("T2-", "land"),
+        ("T1-", "land"),
+        ("BR", "commercial"),
+        ("B-", "commercial"),
+        ("C-", "commercial"),
+        ("R-", "single_family"),
+        ("I-", "industrial"),
+    ]
+
+    if code:
+        for prefix, prop_type in zone_prefix_map:
+            if code.startswith(prefix):
+                return prop_type
+
+    # DOR land_use_code fallback (first 2 digits)
+    lu = land_use_code.strip()
+    if lu:
+        prefix2 = lu[:2]
+        dor_map: dict[str, str] = {
+            "01": "single_family",
+            "02": "multifamily",
+            "03": "land",  # vacant
+            "04": "commercial",
+            "05": "industrial",
+            "06": "land",  # vacant residential
+            "07": "land",  # vacant other
+            "08": "land",  # vacant commercial
+            "09": "land",  # vacant industrial
+            "11": "commercial",  # institutional
+        }
+        result = dor_map.get(prefix2)
+        if result:
+            return result
+
+    return "land"
+
+
+def _zone_prefix_defaults(
+    zoning_district: str | None, property_type: str | None
+) -> NumericZoningParams:
+    """Return conservative default NumericZoningParams based on zoning district prefix.
+
+    Used as fallback when LLM extraction returns all-null params (no ordinance data ingested).
+    These are CONSERVATIVE defaults — not actual zoning requirements. The confidence
+    should be 'low' and the user should verify with the actual ordinance.
+    """
+    district = (zoning_district or "").upper().strip()
+
+    # Determine defaults from zone prefix
+    if any(district.startswith(p) for p in ("R-", "RS", "RE", "RU", "RD-1", "RD-2")):
+        # Single-family residential
+        return NumericZoningParams(
+            far=0.5,
+            max_height_ft=35,
+            max_lot_coverage_pct=40,
+            max_stories=3,
+            property_type="residential",
+        )
+    elif any(
+        district.startswith(p)
+        for p in ("RM", "MF", "T3-", "T4-", "RD-3", "RD-4")
+    ):
+        # Multifamily residential
+        return NumericZoningParams(
+            far=1.0,
+            max_height_ft=45,
+            max_lot_coverage_pct=60,
+            max_stories=4,
+            property_type="multifamily",
+        )
+    elif any(
+        district.startswith(p)
+        for p in ("C-", "B-", "BU", "CC", "GC", "T5-", "T6-", "MU")
+    ):
+        # Commercial / mixed-use
+        return NumericZoningParams(
+            far=1.5,
+            max_height_ft=45,
+            max_lot_coverage_pct=70,
+            max_stories=3,
+            property_type="commercial",
+        )
+    elif any(district.startswith(p) for p in ("I-", "CI", "M-", "MP")):
+        # Industrial
+        return NumericZoningParams(
+            far=2.0,
+            max_height_ft=50,
+            max_lot_coverage_pct=80,
+            max_stories=3,
+            property_type="industrial",
+        )
+    else:
+        # Unknown — conservative residential defaults
+        return NumericZoningParams(
+            far=0.5,
+            max_height_ft=35,
+            max_lot_coverage_pct=40,
+            max_stories=3,
+            property_type=property_type or "residential",
+        )
+
+
+def _extract_numeric_params(args: dict) -> NumericZoningParams:
+    """Extract NumericZoningParams from submit_report args.
+
+    Falls back to conservative zone-prefix-based defaults (via _zone_prefix_defaults)
+    when no numeric values are found, so the density calculator can always run.
+    """
 
     def _num(key: str) -> float | None:
         val = args.get(key)
@@ -1007,19 +1468,25 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
 
     # Extract property_type — auto-detect from zoning district if not provided
     prop_type = args.get("property_type")
-    if not prop_type:
-        district = (args.get("zoning_district") or "").upper()
+    district = (args.get("zoning_district") or "").upper()
+    if not prop_type or prop_type == "land":
         if any(district.startswith(p) for p in ("R-", "RS-", "RE-")):
             prop_type = "single_family"
         elif any(district.startswith(p) for p in ("RD-", "RM-", "MF-")):
             max_d = _num("max_density_units_per_acre")
             prop_type = "commercial_mf" if max_d and max_d > 12 else "multifamily"
         elif any(district.startswith(p) for p in ("C-", "B-", "MU-", "CI-", "CC-", "BU-", "GC-")):
-            # Pure commercial vs mixed-use
             if any(district.startswith(p) for p in ("MU-",)):
                 prop_type = "commercial_mf"
             else:
                 prop_type = "commercial"
+        elif any(district.startswith(p) for p in ("T6-", "T5-")):
+            prop_type = "commercial"
+        elif district.startswith("T4-"):
+            prop_type = "commercial_mf"
+        elif district.startswith("T3-"):
+            max_d = _num("max_density_units_per_acre")
+            prop_type = "commercial_mf" if max_d and max_d > 12 else "multifamily"
 
     params = NumericZoningParams(
         max_density_units_per_acre=_num("max_density_units_per_acre"),
@@ -1041,9 +1508,17 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
         property_type=prop_type,
     )
 
-    # Return None if no values were extracted
-    has_any = any(getattr(params, f.name) is not None for f in params.__dataclass_fields__.values())
-    return params if has_any else None
+    # If no numeric params were extracted, return conservative zone-prefix
+    # defaults so the density calculator can still run (with low confidence).
+    # Exclude provenance (metadata) and property_type (auto-detected, not LLM-extracted).
+    has_any = any(
+        getattr(params, f.name) is not None
+        for f in params.__dataclass_fields__.values()
+        if f.name not in ("provenance", "property_type")
+    )
+    if not has_any:
+        return _zone_prefix_defaults(district or None, prop_type)
+    return params
 
 
 def _build_fallback_report(

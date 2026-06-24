@@ -1,5 +1,6 @@
 """Tests for property_type auto-detection in _extract_numeric_params."""
 
+from plotlot.core.types import NumericZoningParams
 from plotlot.pipeline.lookup import _extract_numeric_params
 
 
@@ -96,7 +97,9 @@ class TestPropertyTypeAutoDetect:
         assert params is not None
         assert params.property_type == "single_family"
 
-    def test_no_params_returns_none(self):
+    def test_no_params_returns_fallback(self):
         args = {}
         params = _extract_numeric_params(args)
-        assert params is None
+        assert params is not None
+        assert isinstance(params, NumericZoningParams)
+        assert params.far == 0.5  # conservative default for unknown zone
