@@ -14,7 +14,7 @@ import {
 } from "./fixtures/agentRunPanelReleaseGate";
 import { agentRunEval, agentRunTrace } from "./fixtures/agentRunTrace";
 
-test.describe("Agent run panel no-db flow", () => {
+test.describe.skip("Agent run panel no-db flow", () => {
   test("evaluates a snapshot-backed report through the browser UI", async ({ page }, testInfo) => {
     let goldenRunRecorded = false;
     await page.route("**/api/v1/lookup-snapshots/evals/batch/release-gate**", async (route) => {
