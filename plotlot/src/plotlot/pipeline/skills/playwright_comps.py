@@ -181,8 +181,18 @@ async def handle_fetch_zillow_comps(inputs_json: dict[str, Any]) -> HandlerResul
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=_UA, viewport=_VIEWPORT)
+            context = await browser.new_context(
+                user_agent=_UA,
+                viewport=_VIEWPORT,
+                locale="en-US",
+            )
             page = await context.new_page()
+
+            try:
+                from playwright_stealth import stealth_async
+                await stealth_async(page)
+            except ImportError:
+                pass
 
             try:
                 await page.goto(url, wait_until=_PAGE_WAIT_UNTIL, timeout=_PAGE_TIMEOUT_MS)
