@@ -189,3 +189,54 @@ class TestCompAnalysis:
         assert len(ca.comparables) == 2
         assert ca.median_price_per_acre == 889_350
         assert ca.confidence == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Sales dataset discovery tests
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverSalesDataset:
+    async def test_discover_sales_dataset_uses_cascade(self, monkeypatch):
+        """Mock hub_discovery to verify _discover_sales_dataset returns correct tuple."""
+        from datetime import datetime, timezone
+
+        from plotlot.property.models import DatasetInfo
+
+        mock_info = DatasetInfo(
+            dataset_id="test-sales-123",
+            name="Test Sales Dataset",
+            url="https://example.com/arcgis/rest/services/Sales/FeatureServer",
+            layer_id=0,
+            dataset_type="sales",
+            county="Miami-Dade",
+            state="FL",
+            fields=["PRICE_1", "DOS_1", "SALE_PRICE", "SALE_DATE"],
+            discovered_at=datetime.now(timezone.utc),
+        )
+
+        async def mock_discover(lat, lng, county, state, **kwargs):
+            return mock_info
+
+        monkeypatch.setattr(
+            "plotlot.property.hub_discovery.discover_sales_dataset",
+            mock_discover,
+        )
+
+        from plotlot.pipeline.comps import _discover_sales_dataset
+
+        result = await _discover_sales_dataset(
+            "Miami-Dade", "FL", lat=25.7617, lng=-80.1918
+        )
+        assert result is not None
+        url, fields = result
+        assert url == "https://example.com/arcgis/rest/services/Sales/FeatureServer"
+        assert "PRICE_1" in fields
+        assert "DOS_1" in fields
+
+    async def test_discover_sales_dataset_no_lat_lng(self):
+        """Call without lat/lng should return None."""
+        from plotlot.pipeline.comps import _discover_sales_dataset
+
+        result = await _discover_sales_dataset("Miami-Dade", "FL")
+        assert result is None

@@ -45,8 +45,8 @@ _SALES_FIELD_KEYWORDS = {
 _SALES_NAME_KEYWORDS = {"sale", "transaction", "transfer", "recorded", "deed"}
 
 # Candidate field names for each datum (case-insensitive).
-_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
-_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE"}
+_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT", "PRICE_1"}
+_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE", "DOS_1"}
 _ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
 _LOT_FIELDS = {"LOT_SIZE", "LOT_AREA", "LAND_SQFT", "ACRES", "ACREAGE", "SQ_FOOTAGE"}
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}
@@ -231,57 +231,19 @@ def _feature_latlng(geom: dict[str, Any]) -> tuple[float, float] | None:
 async def _discover_sales_dataset(
     county: str,
     state: str,
-    timeout: float = 15.0,
+    *,
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> tuple[str, list[str]] | None:
-    """Search ArcGIS Hub for a sales/transactions dataset in a county.
+    """Discover sales dataset using the full 3-stage cascade from hub_discovery."""
+    if lat is None or lng is None:
+        return None
+    from plotlot.property.hub_discovery import discover_sales_dataset
 
-    Returns (layer_url, field_names) or None.
-    """
-    queries = [
-        f"sales {county} {state}",
-        f"transactions {county} {state}",
-        f"property {county} {state} sales",
-    ]
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for q in queries:
-            try:
-                resp = await client.get(
-                    _HUB_API,
-                    params={
-                        "q": q,
-                        "filter[type]": "Feature Service",
-                        "page[size]": "5",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception:
-                logger.debug("Hub sales search failed for: %s", q)
-                continue
-
-            for ds in data.get("data", []):
-                attrs = ds.get("attributes", {})
-                name = (attrs.get("name") or "").lower()
-                fields_raw = attrs.get("fields", [])
-                if isinstance(fields_raw, list):
-                    field_names = [
-                        f.get("name", "") if isinstance(f, dict) else str(f) for f in fields_raw
-                    ]
-                else:
-                    field_names = []
-
-                upper_fields = {f.upper() for f in field_names}
-                # Score: how many sales keywords match?
-                score = len(upper_fields & _SALES_FIELD_KEYWORDS)
-                name_bonus = sum(2 for kw in _SALES_NAME_KEYWORDS if kw in name)
-                total = score + name_bonus
-
-                if total >= 3:
-                    url = attrs.get("url", "")
-                    if url:
-                        return url, field_names
-
-    return None
+    result = await discover_sales_dataset(lat, lng, county, state)
+    if result is None:
+        return None
+    return result.url, result.fields
 
 
 async def _query_nearby_sales(
@@ -377,7 +339,12 @@ async def find_comparables(
         result.notes = ["Missing lat/lng or county — cannot search for comps"]
         return result
 
-    sales_info = await _discover_sales_dataset(subject.county, state)
+    sales_info = await _discover_sales_dataset(
+        subject.county,
+        state,
+        lat=getattr(subject, "lat", None),
+        lng=getattr(subject, "lng", None),
+    )
     if not sales_info:
         result.notes = [f"No sales dataset found for {subject.county} County, {state}"]
         return result

@@ -74,6 +74,8 @@ _STATE_FULL_NAMES: dict[str, str] = {
     "dc": "district of columbia",
 }
 
+_FULL_STATE_TO_ABBR = {full.lower(): abbr for abbr, full in _STATE_FULL_NAMES.items()}
+
 
 def _expand_state(state: str) -> str:
     """Return the full state name for a 2-letter abbreviation, or the original."""
@@ -106,6 +108,21 @@ _ZONING_FIELD_KEYWORDS = {
 }
 _PARCEL_NAME_KEYWORDS = {"parcel", "property", "appraiser", "tax", "cadastral"}
 _ZONING_NAME_KEYWORDS = {"zoning", "zone", "land use", "landuse", "planning"}
+_SALES_FIELD_KEYWORDS = {
+    "SALE_PRICE",
+    "SALE_DATE",
+    "SALE_AMT",
+    "PRICE",
+    "TRANS_DATE",
+    "TRANS_AMOUNT",
+    "OR_BOOK",
+    "CONSIDERATION",
+    "QUALIFIED",
+    "SALE_TYPE",
+    "PRICE_1",
+    "DOS_1",
+}
+_SALES_NAME_KEYWORDS = {"sale", "transactions", "transfer", "recorded", "deed"}
 
 # ---------------------------------------------------------------------------
 # Option 2 — State-level ArcGIS REST servers
@@ -136,6 +153,10 @@ _RELEVANT_FOLDER_KEYWORDS = {
     "landuse",
     "land_use",
     "land use",
+    "sales",
+    "transactions",
+    "deeds",
+    "tax",
 }
 
 # ---------------------------------------------------------------------------
@@ -214,7 +235,7 @@ async def discover_datasets(
     Returns:
         Tuple of (parcels_dataset, zoning_dataset). Either may be None.
     """
-    parcels, zoning = await _discover_pair(
+    parcels, zoning, _ = await _discover_pair(
         lat,
         lng,
         county,
@@ -225,6 +246,27 @@ async def discover_datasets(
     return parcels, zoning
 
 
+async def discover_sales_dataset(
+    lat: float,
+    lng: float,
+    county: str,
+    state: str,
+    *,
+    validate_coverage: bool = True,
+    place_hint: str | None = None,
+) -> DatasetInfo | None:
+    """Discover a sales/transactions dataset using the 3-stage cascade."""
+    _, _, sales = await _discover_pair(
+        lat,
+        lng,
+        county,
+        state,
+        validate_coverage=validate_coverage,
+        place_hint=place_hint,
+    )
+    return sales
+
+
 async def _discover_pair(
     lat: float,
     lng: float,
@@ -233,8 +275,8 @@ async def _discover_pair(
     *,
     validate_coverage: bool = True,
     place_hint: str | None = None,
-) -> tuple[DatasetInfo | None, DatasetInfo | None]:
-    """Run the three-stage discovery cascade for both parcels and zoning."""
+) -> tuple[DatasetInfo | None, DatasetInfo | None, DatasetInfo | None]:
+    """Run the three-stage discovery cascade for parcels, zoning, and sales."""
 
     async def find(dataset_type: str) -> DatasetInfo | None:
         # Stage 1: ArcGIS Hub
@@ -246,6 +288,17 @@ async def _discover_pair(
             dataset_type=dataset_type,
             validate_coverage=validate_coverage,
             place_hint=place_hint,
+        )
+        if result:
+            return result
+
+        result = await _discover_static_catalog(
+            county,
+            state,
+            dataset_type=dataset_type,
+            lat=lat,
+            lng=lng,
+            validate_coverage=validate_coverage,
         )
         if result:
             return result
@@ -273,7 +326,108 @@ async def _discover_pair(
 
     parcels = await find("parcels")
     zoning = await find("zoning")
-    return parcels, zoning
+    sales = await find("sales")
+    return parcels, zoning, sales
+
+
+_STATIC_COUNTY_DATASETS: dict[tuple[str, str], dict[str, str]] = {
+    (
+        "fl",
+        "miami dade",
+    ): {
+        "parcels": "https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/ArcGIS/rest/services/PaGISView_gdb/FeatureServer/0/query",
+        "zoning": "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer/1/query",
+    },
+    (
+        "fl",
+        "broward",
+    ): {
+        "parcels": "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/16/query",
+        "zoning": "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/9/query",
+    },
+    (
+        "fl",
+        "palm beach",
+    ): {
+        "parcels": "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services/Parcels_and_Property_Details_WebMercator/FeatureServer/0/query",
+        "zoning": "https://maps.co.palm-beach.fl.us/arcgis/rest/services/OpenData/Planning_Open_Data/MapServer/9/query",
+    },
+}
+
+
+def _normalize_county_key(county: str) -> str:
+    """Normalize county names for catalog matching."""
+    return " ".join(county.lower().replace("-", " ").replace("_", " ").split())
+
+
+def _normalize_state_key(state: str) -> str:
+    """Normalize state input to FL-style 2-letter key where possible."""
+    value = state.lower().strip()
+    if value in _STATE_FULL_NAMES:
+        return value
+    if len(value) == 2:
+        return value
+    return _FULL_STATE_TO_ABBR.get(value, value)
+
+
+def _parse_catalog_entry(url_with_query: str) -> tuple[str, int]:
+    """Split a query URL into ArcGIS service URL and layer id."""
+    normalized = url_with_query.rstrip("/")
+    if normalized.endswith("/query"):
+        normalized = normalized.rsplit("/query", 1)[0]
+    parts = normalized.rsplit("/", 1)
+    if len(parts) == 2 and parts[-1].isdigit():
+        return parts[0], int(parts[-1])
+    return normalized, 0
+
+
+async def _discover_static_catalog(
+    county: str,
+    state: str,
+    *,
+    dataset_type: str,
+    lat: float,
+    lng: float,
+    validate_coverage: bool,
+) -> DatasetInfo | None:
+    """Resolve known county/service pairs first for deterministic reliability."""
+    county_key = _normalize_county_key(county)
+    state_key = _normalize_state_key(state)
+    catalog = _STATIC_COUNTY_DATASETS.get((state_key, county_key), {})
+    url = catalog.get(dataset_type)
+    if not url:
+        return None
+
+    service_url, layer_id = _parse_catalog_entry(url)
+    fields, resolved_layer_id = await _fetch_layer_fields(f"{service_url}/{layer_id}")
+    if not fields:
+        return None
+
+    dataset_info = DatasetInfo(
+        dataset_id=f"static:{state_key}:{county_key}:{dataset_type}:{layer_id}",
+        name=f"{county.strip()} {dataset_type.title()} (catalog)",
+        url=service_url,
+        layer_id=resolved_layer_id or layer_id,
+        dataset_type=dataset_type,
+        county=county,
+        state=state,
+        fields=fields,
+        discovered_at=datetime.now(timezone.utc),
+    )
+
+    if not validate_coverage:
+        return dataset_info
+
+    if await _has_coverage(dataset_info, lat, lng):
+        return dataset_info
+
+    logger.debug(
+        "Static %s dataset candidate for %s, %s did not cover target location",
+        dataset_type,
+        county,
+        state,
+    )
+    return None
 
 
 async def _search_hub(
@@ -293,8 +447,10 @@ async def _search_hub(
     place = f" {place_hint}" if place_hint else ""
     if dataset_type == "parcels":
         search_term = f"property parcels {county} {state_full}{place}"
-    else:
+    elif dataset_type == "zoning":
         search_term = f"zoning {county} {state_full}{place}"
+    else:  # sales or unknown
+        search_term = f"sales transactions {county} {state_full}{place}"
 
     # Hub v3 API does not support filter[bbox]. Use filter[tags] for relevance
     # and rely on the search query + dataset scoring for spatial matching.
@@ -302,6 +458,8 @@ async def _search_hub(
         "any(parcels,parcel,property,appraiser,cadastral)"
         if dataset_type == "parcels"
         else "any(zoning,zone,land-use,planning)"
+        if dataset_type == "zoning"
+        else "any(sales,transactions,transfers,deeds,property)"
     )
 
     params = {
@@ -569,11 +727,18 @@ def _score_dataset(
         for kw in _PARCEL_NAME_KEYWORDS:
             if kw in name_lower:
                 score += 2.0
-    else:
+    elif dataset_type == "zoning":
         for kw in _ZONING_FIELD_KEYWORDS:
             if any(kw in f for f in upper_fields):
                 score += 1.5
         for kw in _ZONING_NAME_KEYWORDS:
+            if kw in name_lower:
+                score += 2.0
+    elif dataset_type == "sales":
+        for kw in _SALES_FIELD_KEYWORDS:
+            if any(kw in f for f in upper_fields):
+                score += 1.0
+        for kw in _SALES_NAME_KEYWORDS:
             if kw in name_lower:
                 score += 2.0
 
@@ -657,7 +822,11 @@ async def _probe_arcgis_server(
                 if not layer_data:
                     continue
 
-                fields = [f.get("name", "") for f in layer_data.get("fields", [])]
+                layer_fields = layer_data.get("fields")
+                if not isinstance(layer_fields, list):
+                    continue
+
+                fields = [f.get("name", "") for f in layer_fields]
                 if not fields:
                     continue
 
