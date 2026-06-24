@@ -273,7 +273,10 @@ function LandDealHero({ report }: { report: ZoningReportData }) {
       {badge}
       <MetricGrid
         metrics={[
-          { label: "Analysis", value: "Pending data", subtext: "Zoning analysis in progress" },
+          { label: "Address", value: report.formatted_address ?? report.address ?? "—" },
+          { label: "Lot Size", value: report.property_record?.lot_size_sqft
+            ? `${report.property_record.lot_size_sqft.toLocaleString()} sqft` : "—" },
+          { label: "Zoning", value: report.zoning_district ?? report.property_record?.zoning_code ?? "—" },
         ]}
       />
     </div>

@@ -14,8 +14,7 @@ import FloorPlanViewer from "./FloorPlanViewer";
 import SetbackDiagram from "./SetbackDiagram";
 import PropertyIntelligence from "./PropertyIntelligence";
 import SiteRiskCard from "./SiteRiskCard";
-import AgentRunPanel from "./AgentRunPanel";
-import LookupReleaseGatePanel from "./LookupReleaseGatePanel";
+
 import { useToast } from "./Toast";
 import ErrorBoundary from "./ErrorBoundary";
 import {
@@ -321,11 +320,7 @@ export default function TabbedReport({ report, dealType }: TabbedReportProps) {
 
         {/* Hero card — deal-type-specific */}
         <DealHeroCard report={report} dealType={dealType} />
-        <AgentRunPanel report={report} />
-        <LookupReleaseGatePanel
-          address={report.address}
-          snapshotId={report.lookup_snapshot?.lookup_snapshot_id ?? null}
-        />
+
       </div>
 
       {/* Tab bar */}

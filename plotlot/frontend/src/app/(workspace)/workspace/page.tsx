@@ -14,7 +14,7 @@ import type { AppMode } from "@/components/ModeToggle";
 import DocumentCanvas from "@/components/DocumentCanvas";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import InputBar from "@/components/InputBar";
-import LookupReleaseGatePanel from "@/components/LookupReleaseGatePanel";
+
 import ThinkingIndicator from "@/components/ThinkingIndicator";
 import { useToast } from "@/components/Toast";
 import {
@@ -836,13 +836,7 @@ export default function Home() {
               )}
             </motion.form>
 
-            <motion.div
-              {...fadeUp}
-              transition={{ ...springGentle, delay: 0.35 }}
-              className="w-full max-w-4xl self-center"
-            >
-              <LookupReleaseGatePanel />
-            </motion.div>
+
 
             {/* Footer */}
             <motion.p
