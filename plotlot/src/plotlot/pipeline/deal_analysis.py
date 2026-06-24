@@ -20,6 +20,7 @@ flags gaps as low-confidence or deal-breakers. Never fails outright.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from plotlot.core.types import (
     CapitalStack,
@@ -27,8 +28,10 @@ from plotlot.core.types import (
     DealAnalysis,
     DealMetrics,
     FinancingTerms,
+    DensityAnalysis,
     LandProForma,
     ProformaNOI,
+    PropertyRecord,
     RentalCompSet,
     UnitMixEntry,
     ZoningReport,
@@ -36,7 +39,12 @@ from plotlot.core.types import (
 from plotlot.pipeline.county_costs import get_construction_cost_psf
 from plotlot.pipeline.deal_metrics import calculate_deal_metrics, determine_go_no_go
 from plotlot.pipeline.financing import calculate_capital_stack, calculate_monthly_payment
-from plotlot.pipeline.rental_comps import default_unit_mix, fetch_rental_comps
+from plotlot.pipeline.rental_comps import _build_comp_set, default_unit_mix
+from plotlot.pipeline.rental_market_comps import (
+    MarketCompTarget,
+    discover_market_comps,
+    market_listings_to_rental_comp_set,
+)
 from plotlot.observability.tracing import trace
 
 logger = logging.getLogger(__name__)
@@ -52,6 +60,7 @@ _DEFAULT_SOFT_COST_PCT = 20.0  # % of hard costs
 _DEFAULT_AVG_UNIT_SIZE_SQFT = 1000.0
 _DEFAULT_CONSTRUCTION_COST_PSF = 175.0
 _DEFAULT_COMMERCIAL_RENT_PSF_YEAR = 18.0  # low-confidence fallback
+_MARKET_COMP_AREA_TOLERANCE = 0.25
 
 # Standard conventional financing terms (non-quoted defaults)
 _DEFAULT_FINANCING_TERMS = FinancingTerms(
@@ -70,9 +79,7 @@ _DEFAULT_FINANCING_TERMS = FinancingTerms(
 # Property-type routing
 # ---------------------------------------------------------------------------
 
-_RESIDENTIAL_TYPES = frozenset(
-    {"multifamily", "commercial_mf", "single_family", "land", None}
-)
+_RESIDENTIAL_TYPES = frozenset({"multifamily", "commercial_mf", "single_family", "land", None})
 _COMMERCIAL_TYPES = frozenset({"commercial", "industrial", "retail", "office"})
 
 # Dani's threshold: ≤4 units → comp-based valuation. ≥5 units → NOI/cap-rate.
@@ -92,6 +99,90 @@ def _is_residential(property_type: str | None) -> bool:
     if pt in _COMMERCIAL_TYPES:
         return False
     return True
+
+
+async def _fetch_market_fallback_comps(
+    zoning_report: ZoningReport,
+    property_type: str | None,
+    state: str,
+    zip_code: str,
+    lot_sqft: float,
+    density: DensityAnalysis | None,
+    property_record: PropertyRecord | None,
+) -> RentalCompSet:
+    """Resolve Zillow/Redfin comps when HUD results are missing.
+
+    For non-land deals this uses rental listings. For land deals it targets
+    sold/new-construction-style listings first, which are useful for land
+    development and early-stage value discovery.
+    """
+    listing_type = _select_market_listing_type(property_type)
+    max_gla_sqft = float(density.max_gla_sqft) if density and density.max_gla_sqft else 0.0
+    target = _market_comp_target(
+        zoning_report=zoning_report,
+        property_type=property_type,
+        state=state,
+        zip_code=zip_code,
+        lot_sqft=lot_sqft,
+        density_gla_sqft=max_gla_sqft,
+        property_record=property_record,
+    )
+
+    market_listings = await discover_market_comps(target=target, listing_type=listing_type)
+    if not market_listings:
+        return RentalCompSet(source=f"Market comps ({listing_type}) - no matches")
+
+    market_comps = market_listings_to_rental_comp_set(
+        listings=market_listings,
+        source_label="Market comps",
+    )
+    return _build_comp_set(market_comps, source=f"Market comps ({listing_type})")
+
+
+def _select_market_listing_type(property_type: str | None) -> Literal["rentals", "sold"]:
+    """Return the market listing type for rental-comp fallback."""
+    return "sold" if (property_type or "").strip().lower() == "land" else "rentals"
+
+
+def _derive_city_from_report(zoning_report: ZoningReport) -> str:
+    """Best-effort city extraction from municipality or address."""
+    if zoning_report.municipality:
+        return zoning_report.municipality.strip()
+
+    parts = [part.strip() for part in zoning_report.address.split(",")]
+    if len(parts) >= 2 and parts[1]:
+        return parts[1]
+
+    return ""
+
+
+def _market_comp_target(
+    zoning_report: ZoningReport,
+    property_type: str | None,
+    state: str,
+    zip_code: str,
+    lot_sqft: float,
+    density_gla_sqft: float,
+    property_record: PropertyRecord | None,
+) -> MarketCompTarget:
+    """Build a typed `MarketCompTarget` from report context."""
+    building_size_sqft = 0.0
+    if property_record is not None:
+        building_size_sqft = property_record.building_area_sqft or property_record.living_area_sqft
+
+    if building_size_sqft <= 0:
+        building_size_sqft = density_gla_sqft
+
+    return MarketCompTarget(
+        address=zoning_report.address,
+        city=_derive_city_from_report(zoning_report),
+        state=state,
+        zip_code=zip_code,
+        building_size_sqft=building_size_sqft,
+        lot_size_sqft=lot_sqft,
+        land_deal=(property_type or "").strip().lower() == "land",
+        area_tolerance_pct=_MARKET_COMP_AREA_TOLERANCE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +236,6 @@ def _populate_unit_mix_rents(
 
         monthly_rent = round(median, 2)
         rent_psf = round(monthly_rent / entry.sqft, 2) if entry.sqft > 0 else 0.0
-        total_monthly = round(monthly_rent * entry.unit_count, 2)
-
         populated.append(
             UnitMixEntry(
                 unit_type=entry.unit_type,
@@ -157,12 +246,6 @@ def _populate_unit_mix_rents(
                 percentage_of_total=entry.percentage_of_total,
                 monthly_rent=monthly_rent,
                 rent_per_sqft=rent_psf,
-                total_monthly_rent=total_monthly,
-                notes=(
-                    f"Matched {len(rents)} comp(s) for {entry.unit_type}"
-                    if rents
-                    else f"No direct comps — used set median ${universal_median:.0f}"
-                ),
             )
         )
 
@@ -204,9 +287,7 @@ def build_proforma_noi(
     if not unit_mix:
         return ProformaNOI(notes=["Empty unit mix — zero NOI"])
 
-    total_monthly_gpr = sum(
-        entry.monthly_rent * entry.unit_count for entry in unit_mix
-    )
+    total_monthly_gpr = sum(entry.monthly_rent * entry.unit_count for entry in unit_mix)
     total_unit_count = sum(e.unit_count for e in unit_mix)
 
     gross_potential_rent = total_monthly_gpr * 12.0
@@ -224,17 +305,21 @@ def build_proforma_noi(
     )
 
     return ProformaNOI(
-        gross_potential_rent=round(gross_potential_rent, 2),
-        other_income=round(other_income, 2),
-        vacancy_loss=round(vacancy_loss, 2),
+        unit_mix=unit_mix,
+        total_units=total_unit_count,
+        gross_monthly_income=round(total_monthly_gpr, 2),
+        gross_annual_income=round(gross_potential_rent, 2),
         vacancy_rate_pct=vacancy_rate_pct,
+        operating_expense_ratio_pct=round(opex_ratio * 100.0, 2),
+        operating_expenses=round(total_operating_expenses, 2),
         effective_gross_income=round(effective_gross_income, 2),
-        total_operating_expenses=round(total_operating_expenses, 2),
-        expense_ratio_pct=round(expense_ratio, 2),
         net_operating_income=round(noi, 2),
-        noi_per_unit=round(noi / total_unit_count, 2) if total_unit_count > 0 else 0.0,
-        revenue_per_unit=round(effective_gross_income / total_unit_count, 2) if total_unit_count > 0 else 0.0,
-        opex_per_unit=round(total_operating_expenses / total_unit_count, 2) if total_unit_count > 0 else 0.0,
+        monthly_noi=round(noi / 12.0, 2),
+        expense_items={
+            "other_income": round(other_income, 2),
+            "vacancy_loss": round(vacancy_loss, 2),
+            "expense_ratio_pct": round(expense_ratio, 2),
+        },
         notes=[
             f"opex_ratio={opex_ratio:.2f}",
             f"units={total_unit_count}",
@@ -275,13 +360,20 @@ def _build_commercial_noi(
     )
 
     return ProformaNOI(
-        gross_potential_rent=round(gross_potential_rent, 2),
-        vacancy_loss=round(vacancy_loss, 2),
+        unit_mix=[],
+        total_units=0,
+        gross_monthly_income=0.0,
+        gross_annual_income=round(gross_potential_rent, 2),
         vacancy_rate_pct=vacancy_rate_pct,
+        operating_expense_ratio_pct=round(opex_ratio * 100.0, 2),
+        operating_expenses=round(total_operating_expenses, 2),
         effective_gross_income=round(effective_gross_income, 2),
-        total_operating_expenses=round(total_operating_expenses, 2),
-        expense_ratio_pct=round(expense_ratio, 2),
         net_operating_income=round(noi, 2),
+        monthly_noi=round(noi / 12.0, 2),
+        expense_items={
+            "vacancy_loss": round(vacancy_loss, 2),
+            "expense_ratio_pct": round(expense_ratio, 2),
+        },
         notes=[
             f"commercial_gla={max_gla_sqft:,.0f}sqft",
             f"rent_psf_year=${rent_psf_year:.2f}",
@@ -408,7 +500,7 @@ async def run_deal_analysis(
     numeric = zoning_report.numeric_params
     prop_record = zoning_report.property_record
 
-    property_type = numeric.property_type if numeric else "multifamily"
+    property_type = numeric.property_type if numeric and numeric.property_type else "multifamily"
     max_units = density.max_units if density else 0
     max_gla = density.max_gla_sqft if density else 0.0
     lot_sqft = (
@@ -424,22 +516,58 @@ async def run_deal_analysis(
     # ── Residential / commercial routing ───────────────────────────────────
     is_res = _is_residential(property_type)
 
-    # ── Step 2: Fetch rental comps ─────────────────────────────────────────
+    # ── Step 2: Fetch comps via Zillow skill (primary) ─────────────────────
     rental_comp_set: RentalCompSet
     try:
-        rental_comp_set = await fetch_rental_comps(
-            county=county, state=state, zip_code=zip_code,
-        )
+        from plotlot.pipeline.skills.playwright_comps import handle_fetch_zillow_comps
+
+        zillow_listing_type = "sold" if property_type == "land" else "rental"
+        comp_result = await handle_fetch_zillow_comps({
+            "address": zoning_report.formatted_address or zoning_report.address,
+            "listing_type": zillow_listing_type,
+            "max_results": 25,
+        })
+        zillow_comps = comp_result.output_json.get("comparables", [])
+        if zillow_comps:
+            rental_comp_set = _build_comp_set(zillow_comps, source=f"Zillow ({zillow_listing_type})")
+            notes.append(f"Comps from Zillow skill: {len(zillow_comps)} {zillow_listing_type} listings")
+        else:
+            rental_comp_set = RentalCompSet(
+                source="Zillow skill — no results",
+                comps=[],
+                comp_count=0,
+            )
+            notes.append("Zillow comps skill returned no listings")
     except Exception as exc:
-        logger.warning("Rental comp fetch failed: %s", exc)
+        logger.warning("Zillow comp fetch failed: %s", exc)
         rental_comp_set = RentalCompSet(
             source="fetch error",
             comps=[],
             comp_count=0,
         )
-        notes.append(f"Rental comps unavailable: {exc}")
+        notes.append(f"Comps unavailable: {exc}")
         if confidence == "medium":
             confidence = "low"
+
+    if is_res and rental_comp_set.comp_count == 0:
+        try:
+            market_comps = await _fetch_market_fallback_comps(
+                zoning_report=zoning_report,
+                property_type=property_type,
+                state=state,
+                zip_code=zip_code,
+                lot_sqft=lot_sqft,
+                density=density,
+                property_record=prop_record,
+            )
+            if market_comps.comp_count > 0:
+                rental_comp_set = market_comps
+                notes.append("HUD rental comps unavailable — using market fallback (Zillow/Redfin)")
+            else:
+                notes.append("Market comp fallback returned no usable units")
+        except Exception as exc:
+            logger.warning("Market comp fallback failed: %s", exc)
+            notes.append(f"Market comp fallback unavailable: {exc}")
 
     if rental_comp_set.comp_count == 0:
         notes.append("No rental comparables — NOI will be zero or imputed")
@@ -447,8 +575,6 @@ async def run_deal_analysis(
 
     # ── Steps 3-4: Unit mix / commercial allocation ────────────────────────
     unit_mix: list[UnitMixEntry] = []
-
-    use_noi = (not is_res) or (is_res and max_units >= _NOI_MIN_UNITS)
 
     if is_res and max_units >= _NOI_MIN_UNITS:
         raw_mix = default_unit_mix(property_type=property_type, max_units=max_units)
@@ -476,9 +602,7 @@ async def run_deal_analysis(
             proforma_noi = ProformaNOI(
                 notes=["Commercial property with no GLA — cannot compute NOI"]
             )
-            deal_breakers.append(
-                "Commercial property has no GLA data — NOI cannot be computed"
-            )
+            deal_breakers.append("Commercial property has no GLA data — NOI cannot be computed")
             confidence = "low"
     else:
         # Residential ≤4 units — comp-based, skip NOI
@@ -587,17 +711,14 @@ async def run_deal_analysis(
     # ── Deal-breaker checks ────────────────────────────────────────────────
     if overall_verdict == "no_go":
         deal_breakers.append(
-            f"Go/no-go returned '{overall_verdict}' "
-            f"(CoC={coc_verdict}, SE={se_verdict})"
+            f"Go/no-go returned '{overall_verdict}' (CoC={coc_verdict}, SE={se_verdict})"
         )
 
     if max_offer <= 0 and land_purchase_price <= 0:
         deal_breakers.append("No land price data — cannot price the deal")
 
     if monthly_noi <= 0:
-        deal_breakers.append(
-            "Stabilized NOI is zero — check rental comps and unit assumptions"
-        )
+        deal_breakers.append("Stabilized NOI is zero — check rental comps and unit assumptions")
 
     if investment_rating == "Pass":
         deal_breakers.append("Investment thesis does not support purchase")
