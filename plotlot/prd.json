@@ -1,28 +1,32 @@
 {
   "branchName": "dev",
   "project": "PlotLot Agentic Zoning & Land-Acquisition Harness",
-  "source": "IMPLEMENTATION_PLAN.md (converted to Carson prd.json format 2026-06-26)",
+  "source": "Consolidated 2026-06-26 from prd.json + IMPLEMENTATION_PLAN.md into this single file. IMPLEMENTATION_PLAN.md is deprecated.",
+  "spec": "specs/agentic-zoning-harness.md",
   "conventions": {
     "priority": "lower = first. Agent picks highest-priority story where passes: false.",
-    "passes": "set true ONLY when ALL acceptanceCriteria are met AND make verify-local is green.",
+    "passes": "set true ONLY when ALL acceptanceCriteria are met AND make verify-local is green AND (for features with live behavior) a live integration test pins it. A module that compiles + passes its own tests but isn't wired to its consumer is NOT done.",
     "acceptanceCriteria": "behavioral outcomes (WHAT to verify), not implementation (HOW). Each must include a connection criterion where applicable.",
     "stop": "emit <promise>COMPLETE</promise> only when ALL stories pass. Otherwise end normally (loop continues)."
   },
   "userStories": [
     {
       "id": "WIRE-1.1b",
-      "title": "Wire calculate_max_units to consume DistrictDimensionalStandard",
+      "title": "Wire calculate_max_units to consume DistrictDimensionalStandard (production path)",
       "phase": "backfill",
       "priority": 1,
-      "passes": true,
+      "passes": false,
       "acceptanceCriteria": [
-        "calculate_max_units accepts a DistrictDimensionalStandard (or a caller converts via .to_numeric_zoning_params()) when one is available for the parcel's district",
+        "calculate_max_units accepts a DistrictDimensionalStandard (already done in commit 04f9004 — verify still works)",
+        "A storage/query function exists: given (municipality, district_code) it returns a stored DistrictDimensionalStandard or None",
+        "lookup.py calls the storage function before LLM extraction; when a standard is available, passes it to calculate_max_units instead of report.numeric_params",
         "When given a DistrictDimensionalStandard, the resulting DensityAnalysis is labeled as derived from a verified-fact source (origin=local_authority), not LLM-extracted",
-        "The existing LLM-extracted NumericZoningParams path still works as fallback when no typed standard is available",
+        "The existing LLM-extracted NumericZoningParams path still works as fallback when no typed standard is available (origin=unknown, labeled assumption-grade)",
         "Contract test: given a DistrictDimensionalStandard for RS-8, calculate_max_units returns the same max_units as the equivalent NumericZoningParams",
+        "Contract test: lookup.py with a standard present does not invoke the LLM extraction for zoning params; without, the LLM path runs",
         "make verify-local green"
       ],
-      "notes": "Slice 1.1 built the extractor + type but it's an island. This wires the consumer. lookup.py:_agentic_analysis is the call site that should prefer the typed standard when available."
+      "notes": "Half-done: calculator side wired (04f9004), but lookup.py never passes a typed standard. Marked passes=false to reflect reality. Merge with 3.3 (claim provenance). Start with a JSON-file fixture for Fort Lauderdale standards (simplest, testable); real DB table comes in 3.2."
     },
     {
       "id": "WIRE-2.1b",
@@ -42,32 +46,18 @@
     },
     {
       "id": "3.2",
-      "title": "Generalize dimensional extractor to 3 municipalities",
+      "title": "Generalize dimensional extractor to 3 municipalities + DB storage",
       "phase": "3",
       "priority": 3,
       "passes": false,
       "acceptanceCriteria": [
         "extract_dimensional_standards runs on Fort Lauderdale + 2 more FL municipalities (e.g. Miami, Hollywood) and returns typed rows for each",
+        "Extracted rows are stored in a DistrictDimensionalStandard DB table (or persistent fixture) queryable by (municipality, district_code)",
         "Each row has source_section_id provenance pointing at the originating ordinance section",
-        "Live verification (PLOTLOT_LIVE_TESTS=1): integration test asserts ≥1 municipality returns rows with all numeric fields populated for ≥3 districts",
+        "Live verification (PLOTLOT_LIVE_TESTS=1): integration test asserts >=1 municipality returns rows with all numeric fields populated for >=3 districts",
         "make verify-local green"
       ],
-      "notes": "Slice 1.1 proved FL works; this generalizes. Reconcile field names against live schema per Slice 1.2 lesson."
-    },
-    {
-      "id": "3.3",
-      "title": "calculate_max_units reads from DistrictDimensionalStandard (production path)",
-      "phase": "3",
-      "priority": 4,
-      "passes": false,
-      "acceptanceCriteria": [
-        "When a DistrictDimensionalStandard exists for the parcel's district, lookup.py uses it instead of LLM-extracted NumericZoningParams",
-        "The resulting standards.max_units Claim is kind=calculation, origin=local_authority (inherited from the source standard)",
-        "When no standard exists, falls back to LLM extraction with kind=calculation, origin=unknown (labeled assumption-grade)",
-        "Contract test: with a standard present, no LLM call is made for zoning params; without, the LLM path runs",
-        "make verify-local green"
-      ],
-      "notes": "Depends on WIRE-1.1b + 3.2. This is the verified-fact path replacing LLM extraction at query time."
+      "notes": "Slice 1.1 proved FL works; this generalizes + adds the storage WIRE-1.1b's fixture was a stand-in for. Reconcile field names against live schema per Slice 1.2 lesson."
     },
     {
       "id": "3.4",
@@ -176,11 +166,11 @@
       "passes": false,
       "acceptanceCriteria": [
         "step_3_stabilized_value has two methods: income_approach (precondition product.unit_count >= 5) and comp_approach (precondition <= 4)",
-        "The dispatch is typed in domain/methodology.py, not a prompt hope",
+        "The dispatch is typed in domain/methodology.py (already built), and a consumer (the pipeline or planner) calls select_method() to route",
         "Contract test: a 3-unit product routes to comp_approach; a 10-unit product routes to income_approach",
         "make verify-local green"
       ],
-      "notes": "Your resi/commercial divergence as a typed dispatch."
+      "notes": "methodology.py already has the dispatch; needs a real consumer. Your resi/commercial divergence."
     },
     {
       "id": "4.6",
@@ -223,7 +213,664 @@
         "make verify-local green"
       ],
       "notes": "The planner doesn't exist on dev yet. This builds it using the HTN spine from Slice 2.2. Connects the steps/methodology island."
+    },
+    {
+      "id": "5.2",
+      "title": "planner_rules.py as Kleyman dependency rules; SpecialistLane = step capability scope",
+      "phase": "5",
+      "priority": 16,
+      "passes": false,
+      "acceptanceCriteria": [
+        "planner_rules.py encodes the step→lane→allowed_tools mapping",
+        "SpecialistLane is a capability scope (tool-authorization boundary), not a fake persona",
+        "Contract test: a lane's allowed_tools does not include tools outside its step",
+        "make verify-local green"
+      ],
+      "notes": "Lanes become real authorization boundaries."
+    },
+    {
+      "id": "5.3",
+      "title": "agent_loop.py — ReAct over active step toolset",
+      "phase": "5",
+      "priority": 17,
+      "passes": false,
+      "acceptanceCriteria": [
+        "harness/agent_loop.py exists and runs a ReAct loop over the active step's allowed_tools",
+        "A mock LLM attempting a step-5 tool during step 2 is blocked by the policy gate",
+        "The loop appends real RunTraceSteps (not static ones)",
+        "Contract test: step-2-only tools are the only ones authorized during step 2",
+        "make verify-local green"
+      ],
+      "notes": "start_agent_run finally runs an agent."
+    },
+    {
+      "id": "5.4",
+      "title": "Tool results emit typed Claims (HandlerResult.claims)",
+      "phase": "5",
+      "priority": 18,
+      "passes": false,
+      "acceptanceCriteria": [
+        "HandlerResult gains a claims: tuple[Claim, ...] field",
+        "calculate_max_units emits a standards.max_units claim with evidence_ids + assumptions",
+        "Contract test: a calculator tool's HandlerResult carries typed claims with correct kind/origin",
+        "make verify-local green"
+      ],
+      "notes": "Tools produce typed claims the planner/validator consume."
+    },
+    {
+      "id": "5.5",
+      "title": "Synthesis parsing — step 8 emits recommendation + hypothesis claims",
+      "phase": "5",
+      "priority": 19,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Step 8 LLM response parsed into recommendation.go_no_go (calc) + recommendation.entitlement_upside (hypothesis, with next_verification_step)",
+        "Hypothesis claims are never kind=verified_fact",
+        "Contract test: step-8 synthesis produces both claim kinds",
+        "make verify-local green"
+      ],
+      "notes": "The overlooked-value hypothesis track."
+    },
+    {
+      "id": "5.6",
+      "title": "/agent-runs/{id}/events SSE stream",
+      "phase": "5",
+      "priority": 20,
+      "passes": false,
+      "acceptanceCriteria": [
+        "GET /agent-runs/{id}/events streams HarnessEvents (tool_call, tool_result, step_activated, escalation_recorded, claim_produced, run_completed)",
+        "Contract test: a run produces the expected event sequence",
+        "make verify-local green"
+      ],
+      "notes": "Frontend single-consumer (Phase 13) depends on this."
+    },
+    {
+      "id": "6.1",
+      "title": "ClaimLog table + append-only writes",
+      "phase": "6",
+      "priority": 21,
+      "passes": false,
+      "acceptanceCriteria": [
+        "ClaimLog DB table: run_id, step, kind, origin, evidence_ids, freshness",
+        "Claims are append-only (no updates — corrections are new claims with kind=contradiction)",
+        "Contract test: writing a claim + reading it back preserves all fields",
+        "make verify-local green"
+      ],
+      "notes": "The auditable underwriting workbook."
+    },
+    {
+      "id": "6.2",
+      "title": "Conversation + AssumptionOverride tables",
+      "phase": "6",
+      "priority": 22,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Conversation table chains AgentRuns on a workspace",
+        "AssumptionOverride stores user-provided cap_rate/cost as kind=assumption, origin=user_provided claims",
+        "An override never satisfies a verified_fact prerequisite",
+        "Contract test: an override claim is kind=assumption",
+        "make verify-local green"
+      ],
+      "notes": "Real multi-turn memory."
+    },
+    {
+      "id": "6.3",
+      "title": "ContextBroker binds to ClaimLog",
+      "phase": "6",
+      "priority": 23,
+      "passes": false,
+      "acceptanceCriteria": [
+        "ContextBroker builds packets from ClaimLog rows, not in-memory bags",
+        "Contract test: a packet assembled from a ClaimLog reflects the claims correctly",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "6.4",
+      "title": "Delete in-memory SessionStore",
+      "phase": "6",
+      "priority": 24,
+      "passes": false,
+      "acceptanceCriteria": [
+        "grep -r 'SessionStore' src/ returns nothing",
+        "api/chat.py has no _sessions references",
+        "Conversation memory is DB-backed (Phase 6.1-6.3)",
+        "make verify-local green"
+      ],
+      "notes": "Restart-safe conversations."
+    },
+    {
+      "id": "7.1",
+      "title": "api/chat.py → thin wrapper over start_agent_run (< 250 lines)",
+      "phase": "7",
+      "priority": 25,
+      "passes": false,
+      "acceptanceCriteria": [
+        "POST /chat starts an agent run and streams events",
+        "chat.py < 250 lines",
+        "Parity: chat still resolves addresses, searches zoning, generates docs",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "7.2",
+      "title": "/analyze/stream wraps agent-run events",
+      "phase": "7",
+      "priority": 26,
+      "passes": false,
+      "acceptanceCriteria": [
+        "SSE events from /analyze/stream are the same HarnessEvents as /agent-runs/{id}/events",
+        "One execution path for analyze + chat",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "7.3",
+      "title": "MCP + tools REST consistency",
+      "phase": "7",
+      "priority": 27,
+      "passes": false,
+      "acceptanceCriteria": [
+        "MCPAdapter.list_tools() and the chat tool surface return identical tool sets",
+        "Contract test: tool parity",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "8.1",
+      "title": "AgenticRAG retrieval tools (search_index/open_section/follow_cross_ref/read_dimensional_table)",
+      "phase": "8",
+      "priority": 28,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Four retrieval tools registered in the harness",
+        "Hard query ('can I build a 4-plex under the missing-middle overlay?') triggers cross-ref navigation",
+        "Contract test: follow_cross_ref resolves a section's cross-references",
+        "make verify-local green"
+      ],
+      "notes": "Paper 129 pattern. Replaces single-shot hybrid_search for hard queries."
+    },
+    {
+      "id": "8.2",
+      "title": "Typed dimensional table as fast path (no LLM)",
+      "phase": "8",
+      "priority": 29,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Easy query ('RS-8 setbacks') hits DistrictDimensionalStandard directly, no LLM",
+        "Contract test: a typed-standard query returns without invoking the LLM",
+        "make verify-local green"
+      ],
+      "notes": "Overlaps WIRE-1.1b's storage work."
+    },
+    {
+      "id": "8.3",
+      "title": "Retrieval misalignment guard",
+      "phase": "8",
+      "priority": 30,
+      "passes": false,
+      "acceptanceCriteria": [
+        "A chunk semantically similar but topically irrelevant is filtered by cross-ref graph validity",
+        "Contract test: a misaligned chunk is excluded from verified_fact synthesis",
+        "make verify-local green"
+      ],
+      "notes": "Paper 98 hallucination-propagation risk mitigated at retrieval."
+    },
+    {
+      "id": "8.4",
+      "title": "Memory-poisoning guard (source_boundary_ok=false excluded from verified_fact)",
+      "phase": "8",
+      "priority": 31,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Chunks with source_boundary_ok=false are excluded from verified_fact synthesis",
+        "Contract test: a poisoned chunk cannot produce a verified_fact claim",
+        "make verify-local green"
+      ],
+      "notes": "Paper 98 memory-poisoning risk."
+    },
+    {
+      "id": "9.1",
+      "title": "Runtime governance layer (Paper 23)",
+      "phase": "9",
+      "priority": 32,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Admission, policy guard, execution watcher, rollback, environment profiles, audit — all implemented",
+        "ingest_jurisdiction refused in PRE_DEAL_RESEARCH profile without approval",
+        "Execution watcher interrupts on quality drift; rollback deletes bad chunks",
+        "Contract test: a governed ingestion in a restricted profile is blocked without approval",
+        "make verify-local green"
+      ],
+      "notes": "Paper 23. The agent modifies its own knowledge base — governance is non-negotiable."
+    },
+    {
+      "id": "9.2",
+      "title": "Ingestion as governed Skill = (C,π,T,R)",
+      "phase": "9",
+      "priority": 33,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Ingestion skill has applicability condition (typed predicate over ClaimLog), executable policy, termination condition, reusable interface",
+        "Termination: original claim resolvable OR escalation emitted",
+        "Contract test: the skill's C/π/T/R tuple is well-formed",
+        "make verify-local green"
+      ],
+      "notes": "Paper 18 skill formalism."
+    },
+    {
+      "id": "9.3",
+      "title": "Source discovery sub-skill (long tail: web_search + fetch_url + validate_authority)",
+      "phase": "9",
+      "priority": 34,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Given a never-ingested town, the agent finds the authoritative ordinance URL via web_search + fetch_url",
+        "validate_authority confirms .gov domain + ordinance adoption language",
+        "Contract test: a non-.gov source cannot produce origin=local_authority",
+        "Live verification: 'Bodega Bay, CA' returns a county zoning URL",
+        "make verify-local green"
+      ],
+      "notes": "Escape the Municode trap."
+    },
+    {
+      "id": "9.4",
+      "title": "validate_authority — non-.gov can never produce verified_fact",
+      "phase": "9",
+      "priority": 35,
+      "passes": false,
+      "acceptanceCriteria": [
+        "validate_authority returns a typed authority verdict",
+        "A non-authoritative source's claims are origin=unknown, confidence <= 0.5",
+        "Contract test: a blog URL cannot produce a verified_fact claim",
+        "make verify-local green"
+      ],
+      "notes": "Kleyman boundary at the ingestion edge."
+    },
+    {
+      "id": "9.5",
+      "title": "Ingestion verification gate (hit-rate < 90% rolls back)",
+      "phase": "9",
+      "priority": 36,
+      "passes": false,
+      "acceptanceCriteria": [
+        "After ingest, golden-query hit-rate is computed; < 90% triggers rollback (chunks marked stale/deleted) + PlanEscalation",
+        "Contract test: a botched ingest is detected and rolled back",
+        "make verify-local green"
+      ],
+      "notes": "Depends on 3.6 (ingestion eval)."
+    },
+    {
+      "id": "9.6",
+      "title": "Re-answer loop — ship-gate scenario on one never-seen town",
+      "phase": "9",
+      "priority": 37,
+      "passes": false,
+      "acceptanceCriteria": [
+        "End-to-end: never-ingested town → ingest → re-query → typed claim with provenance OR honest escalation",
+        "Live integration test (PLOTLOT_LIVE_TESTS=1) pins the scenario",
+        "make verify-local green"
+      ],
+      "notes": "THE ship-gate scenario."
+    },
+    {
+      "id": "9.7",
+      "title": "(v2) AutoHarness adapter synthesis for novel structures",
+      "phase": "9",
+      "priority": 38,
+      "passes": false,
+      "acceptanceCriteria": [
+        "For novel-structure sources, generic HTML fallback produces kind=assumption, confidence=low claims",
+        "AutoHarness synthesis is flagged but NOT enabled in production without a human review gate",
+        "make verify-local green"
+      ],
+      "notes": "Deferred to v2. Highest-risk, highest-reward."
+    },
+    {
+      "id": "10.1",
+      "title": "MarketParameterSet as typed claims",
+      "phase": "10",
+      "priority": 39,
+      "passes": false,
+      "acceptanceCriteria": [
+        "South FL costs are kind=assumption, origin=local_authority (CBRE source) or user_provided",
+        "RegionalCostModel hardcoded constants replaced with sourced claims",
+        "Contract test: a cost claim is never kind=verified_fact",
+        "make verify-local green"
+      ],
+      "notes": "VA-vs-FL correction made structural."
+    },
+    {
+      "id": "10.2",
+      "title": "Region + asset-class parameterization (resi vs commercial sub-tables)",
+      "phase": "10",
+      "priority": 40,
+      "passes": false,
+      "acceptanceCriteria": [
+        "MarketParameterSet has residential and commercial sub-tables",
+        "step_3/step_4 method dispatch selects the right table",
+        "Contract test: a commercial product pulls commercial costs",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "10.3",
+      "title": "Comps as evidenced claims",
+      "phase": "10",
+      "priority": 41,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Every comp carries source_url + origin (ArcGIS/County = local_authority; scraped = unknown, confidence <= 0.5)",
+        "No unevidenced comps in the ClaimLog",
+        "Contract test: a comp without source_url is rejected",
+        "make verify-local green"
+      ],
+      "notes": "Comps boundary."
+    },
+    {
+      "id": "11.1",
+      "title": "lot_split_feasibility (proof of concept; validated against golden case)",
+      "phase": "11",
+      "priority": 42,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.lot_split with created_lots, procedure_path, blocking_constraints, next_verification_step",
+        "Validated against a hand-verified golden case",
+        "Contract test: the hypothesis claim is kind=hypothesis, never verified_fact",
+        "make verify-local green"
+      ],
+      "notes": "The first 'overlooked value' skill. The pattern for the rest."
+    },
+    {
+      "id": "11.2",
+      "title": "assemblage_feasibility",
+      "phase": "11",
+      "priority": 43,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.assemblage with the same claim shape as 11.1",
+        "Contract test: kind=hypothesis + next_verification_step",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "11.3",
+      "title": "by_right_upzoning_scan",
+      "phase": "11",
+      "priority": 44,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.by_right_upside",
+        "Contract test: kind=hypothesis",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "11.4",
+      "title": "missing_middle_eligibility",
+      "phase": "11",
+      "priority": 45,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.missing_middle",
+        "Contract test: kind=hypothesis",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "11.5",
+      "title": "adaptive_reuse_eligibility",
+      "phase": "11",
+      "priority": 46,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.adaptive_reuse",
+        "Contract test: kind=hypothesis",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "11.6",
+      "title": "entitlement_upzoning",
+      "phase": "11",
+      "priority": 47,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.upzoning (highest speculation, must carry fallback by-right exit)",
+        "Contract test: kind=hypothesis + fallback_exit field",
+        "make verify-local green"
+      ],
+      "notes": "Highest speculation."
+    },
+    {
+      "id": "11.7",
+      "title": "build_to_rent_feasibility",
+      "phase": "11",
+      "priority": 48,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill produces hypothesis.btr",
+        "Contract test: kind=hypothesis",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "11.8",
+      "title": "free_land_thesis (composite meta-skill)",
+      "phase": "11",
+      "priority": 49,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Skill composes lot_split + by_right_upzoning to produce hypothesis.free_land",
+        "Contract test: the composite claim references its component hypotheses",
+        "make verify-local green"
+      ],
+      "notes": "Paper 18 meta-skill pattern."
+    },
+    {
+      "id": "12.1",
+      "title": "Report as ClaimLog projection (verified neutral / assumption amber / hypothesis distinct)",
+      "phase": "12",
+      "priority": 50,
+      "passes": false,
+      "acceptanceCriteria": [
+        "build_report(claim_log) renders sections from claims by kind",
+        "Verified facts (neutral), assumptions (amber per DESIGN.md), hypotheses (distinct treatment + next_verification_step)",
+        "Contract test: each kind renders in its treatment",
+        "make verify-local green"
+      ],
+      "notes": "The report is a pure projection of the ClaimLog."
+    },
+    {
+      "id": "12.2",
+      "title": "Report validator = Kleyman guardrails over ClaimLog",
+      "phase": "12",
+      "priority": 51,
+      "passes": false,
+      "acceptanceCriteria": [
+        "evaluate_guardrails runs over the report's ClaimLog",
+        "Fails: missing zoning as known, blurred fact/assumption, guaranteed entitlement, hidden contradiction, missing evidence_ids",
+        "Contract test: each failure mode is detected",
+        "make verify-local green"
+      ],
+      "notes": "Connects the guardrails.py island (Slice 2.3)."
+    },
+    {
+      "id": "12.3",
+      "title": "Golden cases per step (>=5 each)",
+      "phase": "12",
+      "priority": 52,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Each of Kleyman's 8 steps has >=5 golden cases (zoning lookup, max units, value, costs, financing, returns, recommendation)",
+        "make verify-local green"
+      ],
+      "notes": "rv_multifamily_dev_training: 'Golden cases should test each step.'"
+    },
+    {
+      "id": "12.4",
+      "title": "CI-enforced eval regression (make eval)",
+      "phase": "12",
+      "priority": 53,
+      "passes": false,
+      "acceptanceCriteria": [
+        "make eval runs the golden cases in CI; a regression fails the build",
+        "ci_eval_gate.py wired to the new golden set",
+        "make verify-local green"
+      ],
+      "notes": "Continuous eval."
+    },
+    {
+      "id": "13.1",
+      "title": "<AgentRunView> event consumer",
+      "phase": "13",
+      "priority": 54,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Component subscribes to /agent-runs/{id}/events and renders tool_call/tool_result/step_activated/escalation events",
+        "Contract test: events render",
+        "make verify-local green"
+      ],
+      "notes": "Single state machine."
+    },
+    {
+      "id": "13.2",
+      "title": "Step rail (Kleyman 8 steps)",
+      "phase": "13",
+      "priority": 55,
+      "passes": false,
+      "acceptanceCriteria": [
+        "AgentStagePill states map to step activation/escalation",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "13.3",
+      "title": "Claim stream rendering (verified/assumption/hypothesis treatments)",
+      "phase": "13",
+      "priority": 56,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Claims render in distinct treatments per DESIGN.md color system",
+        "Hypotheses show next_verification_step callout",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "13.4",
+      "title": "Replace 1,351-line workspace page (< 400 lines)",
+      "phase": "13",
+      "priority": 57,
+      "passes": false,
+      "acceptanceCriteria": [
+        "workspace/page.tsx < 400 lines, delegates to <AgentRunView>",
+        "AnalysisStream/ChatHistory/AgentWorkspace collapsed",
+        "make verify-local green"
+      ],
+      "notes": "One state machine, not three."
+    },
+    {
+      "id": "14.1",
+      "title": "Auth + ingestion authorization",
+      "phase": "14",
+      "priority": 58,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Anonymous users cannot trigger shared-corpus ingestion",
+        "Per-workspace ingestion quotas enforced",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "14.2",
+      "title": "Cost control + budget enforcement",
+      "phase": "14",
+      "priority": 59,
+      "passes": false,
+      "acceptanceCriteria": [
+        "An AgenticRAG loop exceeding risk_budget_cents is halted with an honest escalation",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "14.3",
+      "title": "Latency UX (async jobs)",
+      "phase": "14",
+      "priority": 60,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Ingestion > 60s returns a job ID; user gets SSE-on-complete; resumable",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "14.4",
+      "title": "Observability (structured logs, cost accounting, rollback-rate alerting)",
+      "phase": "14",
+      "priority": 61,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Structured logs, per-request cost accounting, ingestion-rollback-rate alerting",
+        "make verify-local green"
+      ],
+      "notes": "Replace MLflow-only with an ops surface."
+    },
+    {
+      "id": "14.5",
+      "title": "Data freshness ops (re-ingest scheduler, diff detection)",
+      "phase": "14",
+      "priority": 62,
+      "passes": false,
+      "acceptanceCriteria": [
+        "A municipality whose ordinance amended after last scrape surfaces as STALE automatically",
+        "Re-ingest scheduler + diff detection",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "14.6",
+      "title": "Security review (SSRF allowlist, content sanitization, sandboxing)",
+      "phase": "14",
+      "priority": 63,
+      "passes": false,
+      "acceptanceCriteria": [
+        "SSRF allowlist on fetch_url; content sanitization on ingested text; sandboxing on agent-fetched content",
+        "Security review sign-off",
+        "make verify-local green"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "14.7",
+      "title": "Market surfaces (pricing, rate limits, MCP publication, docs)",
+      "phase": "14",
+      "priority": 64,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Pricing tiers, free vs paid ingestion, API rate limits for partners, MCP server publication, docs",
+        "make verify-local green"
+      ],
+      "notes": ""
     }
   ],
-  "futurePhasesNote": "Phases 5.2-6.4, 7-14 tasks will be fleshed out with full acceptance criteria in a subsequent planning iteration as we approach them. The plan is disposable — regenerate when stale. See IMPLEMENTATION_PLAN.md for the phase outline."
+  "shipGate": {
+    "scenario": "Never-ingested small town → agent discovers source → governs ingestion → produces typed claims → runs 8 steps → emits report with evidence IDs + next-verification-steps OR escalates honestly. End-to-end, live.",
+    "plus": "continuous eval green, security review signed, ops dashboard live"
+  }
 }
