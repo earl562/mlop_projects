@@ -1,5 +1,5 @@
 {
-  "branchName": "dev",
+  "branchName": "feature/harness-wiring",
   "project": "PlotLot Agentic Zoning & Land-Acquisition Harness",
   "source": "Consolidated 2026-06-26 from prd.json + IMPLEMENTATION_PLAN.md into this single file. IMPLEMENTATION_PLAN.md is deprecated.",
   "spec": "specs/agentic-zoning-harness.md",
@@ -15,9 +15,9 @@
       "title": "Wire calculate_max_units to consume DistrictDimensionalStandard (production path)",
       "phase": "backfill",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
-        "calculate_max_units accepts a DistrictDimensionalStandard (already done in commit 04f9004 — verify still works)",
+        "calculate_max_units accepts a DistrictDimensionalStandard (already done in commit 04f9004 \u2014 verify still works)",
         "A storage/query function exists: given (municipality, district_code) it returns a stored DistrictDimensionalStandard or None",
         "lookup.py calls the storage function before LLM extraction; when a standard is available, passes it to calculate_max_units instead of report.numeric_params",
         "When given a DistrictDimensionalStandard, the resulting DensityAnalysis is labeled as derived from a verified-fact source (origin=local_authority), not LLM-extracted",
@@ -42,7 +42,7 @@
         "Contract test: _agentic_analysis on a mocked ordinance input emits at least one zoning.district Claim with origin=local_authority",
         "make verify-local green"
       ],
-      "notes": "Slice 2.1 built the Claim type but it's an island. This wires the primary producer. No ClaimLog storage yet (Phase 6) — just emit the Claims in-memory for now."
+      "notes": "Slice 2.1 built the Claim type but it's an island. This wires the primary producer. No ClaimLog storage yet (Phase 6) \u2014 just emit the Claims in-memory for now."
     },
     {
       "id": "3.2",
@@ -89,7 +89,7 @@
     },
     {
       "id": "3.6",
-      "title": "Ingestion eval — golden queries post-ingest",
+      "title": "Ingestion eval \u2014 golden queries post-ingest",
       "phase": "3",
       "priority": 7,
       "passes": false,
@@ -113,7 +113,7 @@
         "Contract test: list_tool_contracts() returns tools with all three tags populated",
         "make verify-local green"
       ],
-      "notes": "Foundation for tool consolidation. Don't migrate tools yet — just the scaffold + tags."
+      "notes": "Foundation for tool consolidation. Don't migrate tools yet \u2014 just the scaffold + tags."
     },
     {
       "id": "4.2",
@@ -153,7 +153,7 @@
         "calculate_stabilized_value, calculate_total_cost, calculate_residual_land_value, calculate_construction_loan, calculate_permanent_loan, calculate_dscr, calculate_coc, calculate_yield_on_cost, calculate_sweat_equity each registered as a tool with consumes/produces field keys",
         "Pure calculation functions stay in pipeline/ (deterministic); orchestration moves to tools",
         "Contract test: each calculator tool emits a Claim with kind=calculation + the correct produces_field_keys",
-        "run_deal_analysis still works (calls the tools internally) — parity",
+        "run_deal_analysis still works (calls the tools internally) \u2014 parity",
         "make verify-local green"
       ],
       "notes": "Big slice. The monolith becomes typed tools the planner can authorize per step."
@@ -187,7 +187,7 @@
     },
     {
       "id": "4.7",
-      "title": "Kill chat.py _execute_tool + CHAT_TOOLS — all calls through runtime",
+      "title": "Kill chat.py _execute_tool + CHAT_TOOLS \u2014 all calls through runtime",
       "phase": "4",
       "priority": 14,
       "passes": false,
@@ -221,7 +221,7 @@
       "priority": 16,
       "passes": false,
       "acceptanceCriteria": [
-        "planner_rules.py encodes the step→lane→allowed_tools mapping",
+        "planner_rules.py encodes the step\u2192lane\u2192allowed_tools mapping",
         "SpecialistLane is a capability scope (tool-authorization boundary), not a fake persona",
         "Contract test: a lane's allowed_tools does not include tools outside its step",
         "make verify-local green"
@@ -230,7 +230,7 @@
     },
     {
       "id": "5.3",
-      "title": "agent_loop.py — ReAct over active step toolset",
+      "title": "agent_loop.py \u2014 ReAct over active step toolset",
       "phase": "5",
       "priority": 17,
       "passes": false,
@@ -259,7 +259,7 @@
     },
     {
       "id": "5.5",
-      "title": "Synthesis parsing — step 8 emits recommendation + hypothesis claims",
+      "title": "Synthesis parsing \u2014 step 8 emits recommendation + hypothesis claims",
       "phase": "5",
       "priority": 19,
       "passes": false,
@@ -292,7 +292,7 @@
       "passes": false,
       "acceptanceCriteria": [
         "ClaimLog DB table: run_id, step, kind, origin, evidence_ids, freshness",
-        "Claims are append-only (no updates — corrections are new claims with kind=contradiction)",
+        "Claims are append-only (no updates \u2014 corrections are new claims with kind=contradiction)",
         "Contract test: writing a claim + reading it back preserves all fields",
         "make verify-local green"
       ],
@@ -342,7 +342,7 @@
     },
     {
       "id": "7.1",
-      "title": "api/chat.py → thin wrapper over start_agent_run (< 250 lines)",
+      "title": "api/chat.py \u2192 thin wrapper over start_agent_run (< 250 lines)",
       "phase": "7",
       "priority": 25,
       "passes": false,
@@ -440,24 +440,24 @@
       "priority": 32,
       "passes": false,
       "acceptanceCriteria": [
-        "Admission, policy guard, execution watcher, rollback, environment profiles, audit — all implemented",
+        "Admission, policy guard, execution watcher, rollback, environment profiles, audit \u2014 all implemented",
         "ingest_jurisdiction refused in PRE_DEAL_RESEARCH profile without approval",
         "Execution watcher interrupts on quality drift; rollback deletes bad chunks",
         "Contract test: a governed ingestion in a restricted profile is blocked without approval",
         "make verify-local green"
       ],
-      "notes": "Paper 23. The agent modifies its own knowledge base — governance is non-negotiable."
+      "notes": "Paper 23. The agent modifies its own knowledge base \u2014 governance is non-negotiable."
     },
     {
       "id": "9.2",
-      "title": "Ingestion as governed Skill = (C,π,T,R)",
+      "title": "Ingestion as governed Skill = (C,\u03c0,T,R)",
       "phase": "9",
       "priority": 33,
       "passes": false,
       "acceptanceCriteria": [
         "Ingestion skill has applicability condition (typed predicate over ClaimLog), executable policy, termination condition, reusable interface",
         "Termination: original claim resolvable OR escalation emitted",
-        "Contract test: the skill's C/π/T/R tuple is well-formed",
+        "Contract test: the skill's C/\u03c0/T/R tuple is well-formed",
         "make verify-local green"
       ],
       "notes": "Paper 18 skill formalism."
@@ -479,7 +479,7 @@
     },
     {
       "id": "9.4",
-      "title": "validate_authority — non-.gov can never produce verified_fact",
+      "title": "validate_authority \u2014 non-.gov can never produce verified_fact",
       "phase": "9",
       "priority": 35,
       "passes": false,
@@ -506,12 +506,12 @@
     },
     {
       "id": "9.6",
-      "title": "Re-answer loop — ship-gate scenario on one never-seen town",
+      "title": "Re-answer loop \u2014 ship-gate scenario on one never-seen town",
       "phase": "9",
       "priority": 37,
       "passes": false,
       "acceptanceCriteria": [
-        "End-to-end: never-ingested town → ingest → re-query → typed claim with provenance OR honest escalation",
+        "End-to-end: never-ingested town \u2192 ingest \u2192 re-query \u2192 typed claim with provenance OR honest escalation",
         "Live integration test (PLOTLOT_LIVE_TESTS=1) pins the scenario",
         "make verify-local green"
       ],
@@ -870,7 +870,7 @@
     }
   ],
   "shipGate": {
-    "scenario": "Never-ingested small town → agent discovers source → governs ingestion → produces typed claims → runs 8 steps → emits report with evidence IDs + next-verification-steps OR escalates honestly. End-to-end, live.",
+    "scenario": "Never-ingested small town \u2192 agent discovers source \u2192 governs ingestion \u2192 produces typed claims \u2192 runs 8 steps \u2192 emits report with evidence IDs + next-verification-steps OR escalates honestly. End-to-end, live.",
     "plus": "continuous eval green, security review signed, ops dashboard live"
   }
 }
