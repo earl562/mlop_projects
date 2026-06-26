@@ -833,3 +833,32 @@ Agent joins them: parcel label (OpenData) -> district standard (Municode).
 
 **Rescoped 8.0:** both sources in parallel across 3 counties. OpenData side
 first (immediate, no scraping). Municode side re-ingests via native scraper.
+
+=== 2026-06-26 INFILL-SCENARIO-ANALYZER (the real product use case) ===
+User: identify zoning from addresses + analyze multiple residential infill
+scenarios. Built pipeline/infill_scenarios.py: given a real South FL address,
+identify zoning (OpenData), pull verified dimensional standard, run 4 scenarios
+per lot — each a typed Claim (calculation for deterministic by-right, hypothesis
+for speculative upside, never verified_fact).
+
+**Live-verified on real residential infill lots:**
+  Fort Lauderdale RS-8, 11,760 sqft:
+    [calculation feas=Y] by_right_density    → 2 units (density), origin=local_authority
+    [hypothesis  feas=N] lot_split          → 11,760÷6,000=1 lot (needs 2 for split)
+    [hypothesis  feas=?] missing_middle_adu → ADU eligible, needs use-table check
+    [hypothesis  feas=?] assemblage         → needs adjacent ownership pull
+  Miami R15, 7,500 sqft / West Palm FWD-5, 9,753 sqft:
+    correctly fall back to hypotheses with next_verification_steps (no verified
+    standard ingested for those districts yet — honest, not fabricated).
+
+**The by-right density is a deterministic calculation claim grounded in the
+verified Sec. 47-5.31 standard (origin=local_authority). Speculative upside
+(lot_split, missing_middle, assemblage) is hypothesis with next_verification_step
+— spec acceptance #6: entitlement upside never presented as guaranteed.**
+
+**OpenData fix:** Broward _lookup_broward now passes outSR=4326 + returnGeometry
+on the property query (the MapServer returns features without geometry, so the
+spatial zoning query falls back to geocoded lat/lng). Pinned by test.
+
+**Tests:** test_opendata_zoning_live (3 counties, 10 addresses), test_infill_
+scenarios_live (4 scenarios/lot). Both live-verified. Gate green.

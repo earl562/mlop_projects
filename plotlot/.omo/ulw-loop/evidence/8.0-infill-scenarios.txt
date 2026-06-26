@@ -1,0 +1,17 @@
+tests/integration/test_infill_scenarios_live.py::test_infill_analyzer_runs_all_scenarios_per_lot 
+  1234 NW 15th St, Fort Lauderdale, FL 33311 (Fort Lauderdale/RS-8, 11,760 sqft):
+    [calculation  feas=Y] by_right_density         By-right: 2 units (density) under RS-8 in Fort Lauderdale. Origin: local_authority.
+    [hypothesis   feas=N] lot_split_feasibility    Lot-split screen: 11,760 sqft ÷ 6,000 min = 1 potential lots; min width 50.0ft OK.
+    [hypothesis   feas=?] missing_middle_adu       Missing-middle screen: ADU (accessory dwelling unit). Needs use-table confirmation.
+    [hypothesis   feas=?] assemblage_potential     Assemblage screen: needs adjacent ownership + lot-size pull.
+  123 NW 103rd St, Miami, FL 33150 (Miami/R15, 7,500 sqft):
+    [hypothesis   feas=?] by_right_density         No verified dimensional standard for Miami/R15 — by-right density undetermined.
+    [hypothesis   feas=?] lot_split_feasibility    Lot-split undetermined — no verified min-lot-area standard.
+    [hypothesis   feas=?] missing_middle_adu       Missing-middle screen: uncertain. Needs use-table confirmation.
+    [hypothesis   feas=?] assemblage_potential     Assemblage screen: needs adjacent ownership + lot-size pull.
+  224 Datura St, West Palm Beach, FL 33401 (West Palm Beach/FWD-5 (city), 9,753 sqft):
+    [hypothesis   feas=?] by_right_density         No verified dimensional standard for West Palm Beach/FWD-5 (city) — by-right density undetermined.
+    [hypothesis   feas=?] lot_split_feasibility    Lot-split undetermined — no verified min-lot-area standard.
+    [hypothesis   feas=?] missing_middle_adu       Missing-middle screen: uncertain. Needs use-table confirmation.
+    [hypothesis   feas=?] assemblage_potential     Assemblage screen: needs adjacent ownership + lot-size pull.
+tests/integration/test_infill_scenarios_live.py::test_by_right_density_is_deterministic_calculation PASSED

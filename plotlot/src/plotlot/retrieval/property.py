@@ -468,6 +468,7 @@ async def _lookup_broward(
             BROWARD_PROPERTY_URL,
             where=where,
             out_fields=BROWARD_PROPERTY_FIELDS,
+            extra_params={"outSR": "4326", "returnGeometry": "true"},
             limit=None,  # Broward MapServer errors on resultRecordCount without orderBy
         )
         if not features and city_code:
@@ -475,6 +476,7 @@ async def _lookup_broward(
                 BROWARD_PROPERTY_URL,
                 where=f"SITUS_STREET_NUMBER='{_escape_where(street_num)}' AND SITUS_STREET_NAME LIKE '%{_escape_where(street_name)}%'",
                 out_fields=BROWARD_PROPERTY_FIELDS,
+                extra_params={"outSR": "4326", "returnGeometry": "true"},
                 limit=None,
             )
         if not features:
