@@ -919,3 +919,30 @@ unthrottled, so ingestion proceeds once discovery cache refreshes.
 
 **Honest note:** the MCP would NOT have solved the 429 (server-side limit, not
 client-side). The real fix is the cached discovery + unthrottled content host.
+
+=== 2026-06-26 RELIABILITY-AUDIT (honest) ===
+User asked: do the 15 cached FL cities have reliable zoning ordinance data?
+Answer: NO. Audited all 14 cached FL cities with chunks in DB:
+
+  Fort Lauderdale: RELIABLE (9.4% pipe structure, 49 dimensional sections)
+  ALL 13 others: MANGLED (<7% pipes, 0 dimensional sections except Opa Locka
+  partial). Davie 7.0%, Unincorp Miami-Dade 5.4%, Miramar 4.6%, Miami Gardens
+  3.9%, Miami Springs 2.3%, West Palm Beach 0.9%, Boynton Beach 1.2%, etc.
+
+The existing chunks came through the Jina path (markdown, tables destroyed).
+A cached jobId does NOT mean reliable data — it means re-ingestion is POSSIBLE.
+
+**Re-ingestion attempt (native scraper, content API unthrottled):**
+- get_municode_configs() returns 34 fallback configs with zoning_node_id set,
+  BUT the fallback nodes are stale/leaf for most cities (Miramar APXAFESC = leaf
+  → 0 sections walked; Davie Ch27 = leaf with cross-ref tables, not dimensional).
+- The proper zoning-node resolution requires the discovery TOC walk, which needs
+  the rate-limited library API.
+- library.municode.com retry-after now 357s (~6min, down from 1745s) — window
+  clearing. Background refresh will fetch the full FL client list + resolve
+  zoning nodes when it clears.
+
+**Net:** Fort Lauderdale is the ONLY city with reliable ordinance data right
+now (4 verified residential districts: RS-8/RS-4.4/RS-8A/RM-15). The other
+cities need re-ingestion via the native scraper once discovery resolves their
+proper zoning nodes — blocked on the rate-limit window clearing (~6min).
