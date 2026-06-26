@@ -204,9 +204,14 @@ class Claim:
         scraped = self.metadata.get("scraped_at")
         if amended and scraped:
             try:
-                from datetime import datetime
+                from datetime import datetime, timezone
                 a = datetime.fromisoformat(str(amended))
                 s = datetime.fromisoformat(str(scraped))
+                # Normalize to offset-aware (UTC) so naive vs aware dates compare.
+                if a.tzinfo is None:
+                    a = a.replace(tzinfo=timezone.utc)
+                if s.tzinfo is None:
+                    s = s.replace(tzinfo=timezone.utc)
                 if a > s:
                     object.__setattr__(self, "freshness", ClaimFreshness.STALE)
                 else:

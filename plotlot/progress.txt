@@ -731,3 +731,34 @@ the live DB (density 8.0, source Sec. 47-5.31) and built claims: fresh claim
 Real verified-fact path × real freshness enforcement.
 
 **Next:** 3.5 (priority 6) — Backfill Fort Lauderdale evidence graph end-to-end.
+
+=== 2026-06-26 3.5 COMPLETE (ulw-loop iteration) ===
+Story 3.5: Backfill Fort Lauderdale evidence graph end-to-end. Priority 6.
+
+**Investigation:** ordinance_sections table was EMPTY (0 rows) despite 1,973 FL
+chunks ingested. The Slice 3.1 _store_ordinance_sections function exists but was
+never run for FL (chunks predated it). The structural index (path/cross_refs/
+section_type) was missing entirely.
+
+**Implemented:**
+- scripts/backfill_ordinance_sections.py: rebuilds ordinance_sections from
+  ordinance_chunks for a municipality. Derives section_type from section_title
+  (dimensional_table/schedule/list/intent/definition/procedural/general/other),
+  path from municode_node_id (segmented into a hierarchy array), cross_refs
+  from the district codes referenced in each section's chunks.
+- Ran for Fort Lauderdale: 452 sections indexed, ALL with path + cross_refs +
+  section_type populated. 22 classified dimensional_table (incl. the real
+  RS-8 Sec. 47-5.31, RS-4.4 Sec. 47-5.30, RM-15 Sec. 47-5.34).
+- domain/claims.py: fixed freshness derivation — naive vs aware datetime
+  comparison now normalizes both to UTC before comparing (was silently falling
+  to UNKNOWN when amended_date was naive and scraped_at was aware).
+- tests/integration/test_fl_evidence_graph_live.py: 5 live tests pin the FL
+  evidence graph complete (typed standards present, RS-8 setbacks return typed
+  verified values not LLM, sections have path+cross_refs, dimensional sections
+  classified, freshness computes on a real verified claim).
+
+**Live domain verification:** PLOTLOT_LIVE_TESTS=1 — query for RS-8 returns the
+typed standard (rear 15, FAR 0.75, source Sec. 47-5.31), NOT an LLM extraction.
+The verified-fact fast path works end-to-end for FL.
+
+**Next:** 3.6 (priority 7) — Ingestion eval: golden queries post-ingest.

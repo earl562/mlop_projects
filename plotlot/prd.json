@@ -86,14 +86,16 @@
       "title": "Backfill Fort Lauderdale evidence graph end-to-end",
       "phase": "3",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "For Fort Lauderdale: every residential district has a DistrictDimensionalStandard, every ingested section has path + cross_refs populated, freshness is computed",
         "Live verification: a query for RS-8 setbacks returns the typed standard (not an LLM extraction)",
         "Integration test (PLOTLOT_LIVE_TESTS=1) pins the FL evidence graph is complete",
         "make verify-local green"
       ],
-      "notes": "FL is the reference municipality for developing the agent loop against."
+      "notes": "FL is the reference municipality for developing the agent loop against.",
+      "completedAt": "2026-06-26T16:40:00Z",
+      "completionNote": "FL evidence graph complete: backfilled 452 ordinance_sections from chunks (path + cross_refs + section_type for all; 22 classified dimensional_table including Sec. 47-5.30/31/34 = RS-4.4/RS-8/RM-15). Every FL residential district has a verified typed standard (RS-8 rear 15, FAR 0.75 — from real ingested text). 5 live integration tests pass: typed standards present, RS-8 setbacks return typed (not LLM) with verified values, sections have path+cross_refs, dimensional sections classified, freshness computes on a real verified claim. Fixed: freshness derivation now normalizes naive vs aware datetimes. make verify-local green."
     },
     {
       "id": "3.6",
