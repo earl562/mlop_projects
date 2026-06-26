@@ -24,6 +24,7 @@ General + reusable only; story-specific details stay in the dated log entries.
 - **`domain/` layer convention:** frozen dataclasses with `slots=True` + `__post_init__` invariants (see `dimensional_standard.py`, `claims.py`). A frozen dataclass CANNOT be mutated even via `object.__new__`, so predicate-form invariants (e.g. `source_boundary_ok()`) exist to validate *deserialized* rows that bypassed construction — test them with a lightweight stub dataclass carrying matching attrs, not by mutating a Claim.
 - **Source boundary (Slice 2.1):** `zoning.*` / `parcel.*` claims must be `origin=local_authority` (the Rehab Valuator corpus is NOT a zoning oracle). `cost.*` / `cap_rate` / `financing.*` / `rent.*` must never be `kind=verified_fact`. Both raise `SourceBoundaryViolation` at construction. Downstream `steps.py`/`guardrails.py` build rules *over* `Claim`, not new types. The canonical namespace sets are the PUBLIC module constants `LOCAL_AUTHORITY_NAMESPACES` / `ASSUMPTION_NAMESPACES` in `claims.py` (import them — never re-declare, to avoid drift).
 - **Guardrails (Slice 2.3) vs constructor invariants:** rules 1–3 of `domain/guardrails.py` overlap the `Claim.__post_init__` invariants, but the guardrails run over a *ClaimLog* (loaded from storage / aggregated across runs / tool-fed) whose rows BYPASS construction. So the guardrails are the SET-level re-validation (report-validator foundation, spec acceptance #7). Test rule-violating log rows with a STUB dataclass (matching attrs + `namespace` property, no `__post_init__`) — a frozen `Claim` cannot be constructed in a violating state. A contradiction is an ESCALATION (`requires_human_review=True`), not an integrity failure.
+- **Type relocation across layers (Slice 2.4):** when moving shared types to a lower layer, prefer re-export-by-identity (`from lower import X`) in the old location over mass-editing N consumer files. Identity is cheaply testable (`obj is obj`) and the shim lets new code migrate incrementally. Move a type WITH its dependency closure (e.g. `EvidenceItem` pulls `EvidenceCitation`/`SourceType`), else you force an up-import cycle or a divergent re-declaration. To assert "module X doesn't import from module Y" in a test, walk the parsed AST `Import`/`ImportFrom` nodes — substring-matching the source catches docstring mentions (false positives).
 
 ---
 
@@ -315,4 +316,50 @@ with a project-root override fallback. Caught by verify-live, not theory.
   Claim + stub Claim objects and assert the violation fires with the right
   rule + field_key + requires_human_review flag. Also ran an end-to-end import
   sanity scenario (clean log → no violations; +contradiction → 1 escalation).
+- Merged dev+commit. <promise>TASK-DONE</promise>
+
+### 2026-06-26 — Slice 2.4: move shared types to domain/types.py
+- Created src/plotlot/domain/types.py as the canonical home for the 5
+  transport-agnostic shared types named in the spec — ToolContract,
+  ToolContext, PolicyDecision, EvidenceItem, ReportClaim — plus their
+  supporting dependency types that had to move with them to avoid an
+  up-import cycle: DEFAULT_ORDINANCE_LEGAL_CAVEAT, SourceType,
+  EvidenceConfidence, ToolRiskClass, EvidenceCitation,
+  EvidenceBackedReportSection. Moving a type without its deps would force
+  domain/types.py to import back from land_use (cycle) or land_use to
+  re-declare the dep (divergent-registry hazard).
+- Reduced src/plotlot/land_use/models.py to a thin service module: it now
+  RE-EXPORTS the moved types (`from plotlot.domain.types import ...`) so
+  both `from plotlot.land_use import ToolContract` and
+  `from plotlot.land_use.models import EvidenceCitation` keep working
+  unchanged across 27 consumer files. The service-specific ordinance/layer
+  query types (OrdinanceJurisdiction, OrdinanceSearchArgs,
+  OrdinanceSearchResult, LayerType, LayerCandidate, PropertyLayerQuery)
+  stay in land_use/models.py — they're land-use-service-specific and depend
+  on the shared citation/source/confidence types now living in domain.
+- Exported all moved types from domain/__init__.py.
+- KEY INVARIANT: re-export is by identity (same class object), not
+  re-definition. isinstance checks across the two namespaces stay consistent
+  — this is the divergent-registry hazard the Codebase Patterns flag.
+- EVIDENCE: 5 new contract tests in tests/unit/test_domain_types_move.py:
+  (a) the moved types live canonically in domain.types + domain pkg ns;
+  (b) land_use.models re-exports the SAME identity (assert `is`, not just
+  attrs-equal) — guards against a future regression that re-derives the
+  type in land_use; (c) the 11 moved names import from the land_use package;
+  (d) service-specific types remain in land_use.models and are NOT in
+  domain.types; (e) domain.types has zero land_use imports (no-cycle
+  invariant, checked via AST over import statements not docstring prose).
+  Existing test_land_use_tool_contracts.py still passes (8/8).
+- VERIFY-LIVE: gate-only slice (pure type relocation, no API/scraper/
+  address). The contract tests ARE the live evidence — they assert the
+  move invariants against the real imported module objects. Also ran a
+  live import sanity check confirming ToolContract etc. resolve to the
+  same object via both namespaces and still validate inputs.
+- LEARNING (Codebase Patterns): when relocating types across layers, prefer
+  re-export-by-identity in the old location over mass-editing 27 consumer
+  files. Identity is testable cheaply (`obj is obj`) and the re-export
+  shim lets new code migrate to the canonical path incrementally without
+  a big-bang rename. The AST-over-imports pattern is the robust way to
+  assert "module X doesn't import from module Y" — substring-matching the
+  source catches docstring mentions (false positives).
 - Merged dev+commit. <promise>TASK-DONE</promise>
