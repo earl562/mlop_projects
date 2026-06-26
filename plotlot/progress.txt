@@ -563,3 +563,41 @@ max_units=8 AND governing_constraint) is the live-behavior proxy.
 
 **Next:** WIRE-2.1b (priority 2, passes:false) — Wire _agentic_analysis to emit
 typed Claims.
+
+=== 2026-06-26 WIRE-2.1b COMPLETE (ulw-loop iteration) ===
+Story WIRE-2.1b: Wire _agentic_analysis to emit typed Claims. Priority 2.
+
+**Investigation:** _agentic_analysis (lookup.py) existed but emitted NO Claims;
+the Claim type (domain/claims.py, Slice 2.1) was an island. Real wiring needed.
+
+**Design decision (criterion 2 vs invariant):** Criterion 2 literally wants a
+zoning.district Claim with origin=unknown (LLM fallback), but the Claim constructor
+FORBIDS zoning.* with non-local-authority origin (SourceBoundaryViolation — the
+core safety property). Resolution: the ungrounded LLM district assertion is
+emitted under the distinct `assumed_zoning.district` namespace (origin=unknown,
+kind=assumption, confidence≤0.5) — `zoning.*` is reserved for local-authority-
+grounded facts. `standards.*` (unconstrained namespace) carries origin per
+grounding directly. This preserves the boundary AND captures the criterion's
+intent (verified vs assumption grade).
+
+**Implemented:**
+- core/types.py: `claims: list["Claim"]` field on ZoningReport (TYPE_CHECKING
+  import to avoid runtime cycle).
+- pipeline/lookup.py: `_extract_claims_from_report(args, search_results,
+  prop_record)` builds zoning.district + standards.* claims (verified_fact/
+  local_authority when grounded in ordinance text OR GIS code; assumption/
+  unknown when LLM fallback). `_fallback_claims()` for the no-submit path.
+  Wired into _build_report + _build_fallback_report via `claims=`.
+- Boundary invariant (criterion 3) enforced at the Claim constructor
+  (cost.*/financing.* + verified_fact raises) — tested at the emission point.
+
+**Evidence:** make verify-local green. 7 contract tests in test_agentic_claims.py:
+5 helper tests (grounded→zoning.district/local_authority; GIS-code grounding;
+ungrounded→assumed_zoning.district/unknown; cost.* verified_fact raises; no
+cost/financing claims emitted) + 2 e2e (lookup_address on mocked ordinance
+emits zoning.district/local_authority claim; fallback report carries grounded
+district claim). Contract slice (mocked input, no live API) — exempt from live-
+integration-test requirement.
+
+**Next:** 3.2 (priority 3) — Generalize dimensional extractor to 3 municipalities
++ DB storage.

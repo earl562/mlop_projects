@@ -6,6 +6,10 @@ domain model. Every other module imports from here.
 """
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # avoid runtime cycle; Claim is defined in plotlot.domain.claims
+    from plotlot.domain.claims import Claim
 
 
 # ---------------------------------------------------------------------------
@@ -588,6 +592,17 @@ class ZoningReport:
 
     # Neighbor/political opposition risk — qualitative heuristic assessment
     opposition_risk: "OppositionRiskAssessment | None" = None
+
+    # Typed, provenanced claims emitted by _agentic_analysis (WIRE-2.1b).
+    # Each Claim carries its kind (epistemic status) + origin (source boundary).
+    # zoning.* claims are local_authority/verified_fact (grounded in ordinance
+    # text or the GIS zone code); ungrounded LLM district assertions live under
+    # the `assumed_zoning` namespace (origin=unknown, kind=assumption) because
+    # the Claim invariant forbids zoning.* with non-local-authority origin.
+    # standards.* claims carry origin per grounding. cost.*/financing.* are
+    # never verified_fact (constructor-enforced). No ClaimLog storage yet
+    # (Phase 6) — these are in-memory for downstream consumers.
+    claims: list["Claim"] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

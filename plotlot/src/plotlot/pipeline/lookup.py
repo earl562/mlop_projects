@@ -25,6 +25,7 @@ from plotlot.core.types import (
     ZoningReport,
 )
 from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.claims import Claim, ClaimKind, ClaimOrigin
 from plotlot.observability.tracing import (
     log_dict,
     log_metrics,
@@ -1061,6 +1062,122 @@ def _extract_fallback_insights(
     return (extracted, params if has_any else None)
 
 
+def _extract_claims_from_report(
+    args: dict,
+    search_results: list | None,
+    prop_record,
+) -> list[Claim]:
+    """Emit typed, provenanced Claims for the zoning facts _agentic_analysis
+    extracted (WIRE-2.1b).
+
+    Grounding rule (criterion 2): a fact is ``verified_fact`` / ``origin=
+    local_authority`` when sourced from indexed ordinance text
+    (``search_results`` non-empty) OR the county GIS zone code
+    (``prop_record.zoning_code`` — a local-authority ArcGIS record). Otherwise
+    it is LLM-fallback: ``assumption`` / ``origin=unknown``.
+
+    Namespace/boundary rule: ``zoning.*`` is a local-authority namespace, so
+    the Claim invariant forbids ``zoning.*`` with ``origin=unknown``. An
+    ungrounded LLM district assertion therefore lives under the distinct
+    ``assumed_zoning.district`` namespace (``origin=unknown``, ``kind=
+    assumption``) — ``zoning.*`` is reserved for local-authority-grounded
+    facts. ``standards.*`` is unconstrained and carries whichever origin the
+    grounding warrants. ``cost.*`` / ``financing.*`` are never emitted here
+    (they come from the pro-forma, not the zoning LLM) and the Claim
+    constructor forbids ``cost.*`` as ``verified_fact`` regardless (criterion 3
+    holds at the emission point by construction).
+    """
+    claims: list[Claim] = []
+
+    ordinance_grounded = bool(search_results)
+    gis_code = (getattr(prop_record, "zoning_code", "") or "").strip()
+    district = (args.get("zoning_district", "") or "").strip() or gis_code
+    grounded = ordinance_grounded or bool(gis_code)
+
+    # Source URL for grounded claims (first ordinance source or empty).
+    source_url = ""
+    if search_results:
+        first = search_results[0]
+        source_url = getattr(first, "source_url", "") or getattr(first, "url", "") or ""
+
+    # zoning.district (grounded) vs assumed_zoning.district (LLM fallback).
+    if district:
+        if grounded:
+            claims.append(
+                Claim(
+                    field_key="zoning.district",
+                    value=district,
+                    kind=ClaimKind.VERIFIED_FACT,
+                    origin=ClaimOrigin.LOCAL_AUTHORITY,
+                    source_url=source_url,
+                    metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+                )
+            )
+        else:
+            # Ungrounded LLM assertion — zoning.* forbids origin=unknown, so it
+            # lives under assumed_zoning.* (assumption grade, confidence-capped).
+            claims.append(
+                Claim(
+                    field_key="assumed_zoning.district",
+                    value=district,
+                    kind=ClaimKind.ASSUMPTION,
+                    origin=ClaimOrigin.UNKNOWN,
+                    confidence=0.4,
+                    metadata={"grounded_by": "llm_fallback"},
+                )
+            )
+
+    # standards.* — numeric zoning standards. Namespace is unconstrained, so the
+    # origin tracks grounding directly (verified_fact/local_authority when
+    # grounded, assumption/unknown when LLM fallback).
+    std_specs = [
+        ("standards.setback_front_ft", "setback_front_ft"),
+        ("standards.setback_side_ft", "setback_side_ft"),
+        ("standards.setback_rear_ft", "setback_rear_ft"),
+        ("standards.max_height_ft", "max_height_ft"),
+        ("standards.max_density_units_per_acre", "max_density_units_per_acre"),
+        ("standards.min_lot_area_per_unit_sqft", "min_lot_area_per_unit_sqft"),
+        ("standards.far", "far_numeric"),
+        ("standards.max_lot_coverage_pct", "max_lot_coverage_pct"),
+        ("standards.min_lot_width_ft", "min_lot_width_ft"),
+        ("standards.parking_spaces_per_unit", "parking_spaces_per_unit"),
+    ]
+    for field_key, arg_key in std_specs:
+        val = args.get(arg_key)
+        if val is None:
+            continue
+        try:
+            num = float(val)
+            if num <= 0:
+                continue
+        except (ValueError, TypeError):
+            continue
+        if grounded:
+            claims.append(
+                Claim(
+                    field_key=field_key,
+                    value=num,
+                    kind=ClaimKind.VERIFIED_FACT,
+                    origin=ClaimOrigin.LOCAL_AUTHORITY,
+                    source_url=source_url,
+                    metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+                )
+            )
+        else:
+            claims.append(
+                Claim(
+                    field_key=field_key,
+                    value=num,
+                    kind=ClaimKind.ASSUMPTION,
+                    origin=ClaimOrigin.UNKNOWN,
+                    confidence=0.4,
+                    metadata={"grounded_by": "llm_fallback"},
+                )
+            )
+
+    return claims
+
+
 def _build_report(
     args: dict,
     address: str,
@@ -1120,6 +1237,7 @@ def _build_report(
         source_refs=source_refs,
         extraction_verification=verification,
         warnings=list(verification.warnings),
+        claims=_extract_claims_from_report(args, search_results, prop_record),
     )
 
 
@@ -1187,6 +1305,39 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
     return params if has_any else None
 
 
+def _fallback_claims(
+    zoning_district: str,
+    prop_record,
+    search_results: list | None,
+) -> list[Claim]:
+    """Emit claims for the LLM-didn't-submit fallback path.
+
+    The fallback is grounded in ordinance text (``search_results``) and/or the
+    county GIS zone code — both local-authority sources — so the district claim
+    is ``verified_fact`` / ``local_authority``. Numeric standards from the
+    fallback are string-form (recovered prose), so only the district claim is
+    emitted here; numeric standard claims come through ``_build_report``.
+    """
+    gis_code = (getattr(prop_record, "zoning_code", "") or "").strip()
+    grounded = bool(search_results) or bool(gis_code)
+    if not zoning_district or not grounded:
+        return []
+    source_url = ""
+    if search_results:
+        first = search_results[0]
+        source_url = getattr(first, "source_url", "") or getattr(first, "url", "") or ""
+    return [
+        Claim(
+            field_key="zoning.district",
+            value=zoning_district,
+            kind=ClaimKind.VERIFIED_FACT,
+            origin=ClaimOrigin.LOCAL_AUTHORITY,
+            source_url=source_url,
+            metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+        )
+    ]
+
+
 def _build_fallback_report(
     address: str,
     geo: dict,
@@ -1243,4 +1394,5 @@ def _build_fallback_report(
         sources=deduped_sources,
         confidence="low",
         source_refs=_build_source_refs(search_results),
+        claims=_fallback_claims(zoning_district, prop_record, search_results),
     )

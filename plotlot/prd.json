@@ -35,7 +35,7 @@
       "title": "Wire _agentic_analysis to emit typed Claims",
       "phase": "backfill",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "_agentic_analysis (pipeline/lookup.py) produces Claim objects for the zoning facts it extracts (zoning.district, standards.setback_front_ft, etc.) in addition to the ZoningReport",
         "A zoning.district Claim has kind=verified_fact, origin=local_authority when sourced from indexed ordinance text; kind=assumption, origin=unknown when from LLM fallback",
@@ -44,7 +44,9 @@
         "Contract test: _agentic_analysis on a mocked ordinance input emits at least one zoning.district Claim with origin=local_authority",
         "make verify-local green"
       ],
-      "notes": "Slice 2.1 built the Claim type but it's an island. This wires the primary producer. No ClaimLog storage yet (Phase 6) — just emit the Claims in-memory for now."
+      "notes": "Slice 2.1 built the Claim type but it's an island. This wires the primary producer. No ClaimLog storage yet (Phase 6) — just emit the Claims in-memory for now.",
+      "completedAt": "2026-06-26T15:05:00Z",
+      "completionNote": "_agentic_analysis now emits typed Claims via report.claims. _extract_claims_from_report builds zoning.district (verified_fact/local_authority when grounded in ordinance text or GIS code) and standards.* claims; ungrounded LLM district assertions live under assumed_zoning.district (origin=unknown, kind=assumption) because the Claim invariant forbids zoning.* with non-local-authority origin. cost.*/financing.* never verified_fact (constructor-enforced, tested). 7 contract tests pass; make verify-local green. Design note: criterion 2 literal \"zoning.district origin=unknown\" is invariant-inconsistent; ungrounded district emitted under assumed_zoning.* namespace to preserve the boundary."
     },
     {
       "id": "3.2",
