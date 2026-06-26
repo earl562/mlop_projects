@@ -72,3 +72,4 @@ frontend/tests/temp-*.spec.ts
 
 # OMX local integration hooks
 .omx/tmux-hook.json
+.ralph-archive/

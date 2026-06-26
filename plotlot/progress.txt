@@ -187,3 +187,30 @@ their required tests; a future planning-mode iteration will backfill that.
   required tests ("zoning.*+non-local-authority raises; cost.*+verified_fact
   raises") are exactly what I wrote. Good alignment with planning.
 - Merged dev+commit. <promise>COMPLETE</promise>
+
+### 2026-06-26 — Ralph skill verify-live (ralph.sh --once)
+RAN THE REAL OUTER LOOP. `ralph.sh --once` from PROJECT_ROOT:
+1. Preflight passed (AGENTS.md + IMPLEMENTATION_PLAN.md + progress.txt present).
+2. Fed PROMPT_build.md to `pi --print --no-session` (fresh context).
+3. Agent followed the skill: oriented, selected Slice 2.1 (highest-priority
+   incomplete), implemented domain/claims.py with source-boundary invariant,
+   ran gate, committed, pushed.
+4. Agent emitted <promise>COMPLETE</promise>.
+5. ralph.sh detected the tag via grep, exited 0.
+Result: Slice 2.1 landed (commits 870231a + 102beaa), gate green, 18 contract
+tests pass. The skill WORKS end-to-end with pi — not just theory.
+
+VERIFY-LIVE of the boundary invariant itself:
+- zoning.district + origin=rehabvaluator_concept → raises SourceBoundaryViolation ✅
+- cost.hard_cost_psf + kind=verified_fact → raises SourceBoundaryViolation ✅
+- zoning.district + origin=local_authority → valid (created without raising) ✅
+Design note: the iteration enforced the invariant by raising on construction,
+not via a stored `source_boundary_ok` boolean. Functionally equivalent + stronger.
+This is a Pattern-worthy deviation from the spec's literal wording — specs say
+WHAT to verify, implementation decides HOW (ghuntley acceptance-driven rule).
+
+LESSON: ralph.sh's PROMPT_FILE path was initially wrong (looked in PROJECT_ROOT,
+but prompt files live in the global skill dir). Fixed to resolve from $SCRIPT_DIR
+with a project-root override fallback. Caught by verify-live, not theory.
+
+<promise>COMPLETE</promise>
