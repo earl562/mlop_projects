@@ -811,3 +811,25 @@ dependency). Tables >90%, solved by 8.0+8.0b.
 
 **Next:** 8.0 — re-ingest Fort Lauderdale via native MunicodeScraper first
 (validate the path + table preservation on one municipality before all 27).
+
+=== 2026-06-26 8.0-RESCOPED (multi-source + multi-county) ===
+User correction: focus on more cities than Fort Lauderdale, and OpenData has
+the data we need too. Architecture doc §4.3 (Ordinance) + §4.4 (OpenData) is
+exactly the two-source model.
+
+**Actual OpenData coverage (already live, no re-scraping needed):**
+- Miami-Dade: gisweb.miamidade.gov (municipal + unincorporated zoning) — 30+ cities
+- Broward: gisweb-adapters.bcpa.net — 33 cities mapped (BROWARD_CITY_CODES)
+- Palm Beach: maps.co.palm-beach.fl.us — West Palm, Boca, Boynton, Wellington, Jupiter, etc.
+= ~60+ South FL municipalities with live zoning-label queries.
+
+**Two parallel sources, different evidence:**
+- OpenData/ArcGIS -> zoning district LABEL per parcel (origin=local_authority,
+  source_url=FeatureServer query). Fast path: "what zone is this parcel in".
+- Municode -> dimensional STANDARDS per district (setbacks/density/FAR). Detail
+  path: "what can I build in RS-8". Needs re-ingestion via native scraper.
+
+Agent joins them: parcel label (OpenData) -> district standard (Municode).
+
+**Rescoped 8.0:** both sources in parallel across 3 counties. OpenData side
+first (immediate, no scraping). Municode side re-ingests via native scraper.
