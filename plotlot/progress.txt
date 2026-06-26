@@ -976,3 +976,29 @@ ordinance structure on demand rather than one-shot chunking.
 
 **Next:** batch-ingest the 67 cities via native scraper (tables preserved);
 FTL-style table extraction where tables exist; LLM extraction for prose-format.
+
+=== 2026-06-26 RATE-LIMIT-CONSTRAINT (honest) ===
+The entire library.municode.com/api/* is ONE rate-limit bucket — Clients,
+Products, Jobs, TOC all throttle together. Got ONE successful fetch per ~hour
+(416 FL ClientIDs). Resolving a full config per city needs 3 library API calls
+(Products/clientId, Jobs/latest, TOC walk) — all 429'd after the first.
+
+**What I have cached:** 416 FL ClientIDs (from the one successful fetch).
+**What's missing per city:** jobId + productId + zoning_node_id (3 library calls
+each). At ~1 window/hour, resolving 67 cities serially = ~67+ hours.
+
+**The real unblock (pick one):**
+1. JINA_API_KEY — the codifier adapter supports a keyed Jina path (higher RPM,
+   no library API). But Jina returns markdown (tables destroyed) — only useful
+   for prose-format cities, not table-format.
+2. A Municode API key / licensed access (architecture doc §15: "use official/
+   licensed access where available") — removes the rate limit entirely.
+3. Patience: one city per hour-window, accumulate over days via a scheduled job.
+4. The content API (api.municode.com) IS unthrottled — but needs jobId+productId
+   which only the library API resolves.
+
+**Recommendation:** this is a real external constraint, not a code problem.
+The Municode MCP (story 8.0b) won't fix it (same backend). The fix is either a
+Municode API key or patient scheduled ingestion. Meanwhile: Fort Lauderdale
+(the one fully-ingested city) drives the scenario engine; OpenData covers zoning
+labels for all ~60 cities.
