@@ -117,7 +117,7 @@
       "id": "4.1",
       "title": "tools/ package scaffold with kleyman_step + field-key tags",
       "phase": "4",
-      "priority": 8,
+      "priority": 10,
       "passes": false,
       "acceptanceCriteria": [
         "Every registered ToolContract has kleyman_step, produces_field_keys, consumes_field_keys declared",
@@ -131,7 +131,7 @@
       "id": "4.2",
       "title": "Migrate location/ordinance tools to tools/ with field-key tags",
       "phase": "4",
-      "priority": 9,
+      "priority": 11,
       "passes": false,
       "acceptanceCriteria": [
         "geocode_address, lookup_property_info, search_zoning_ordinance, search_municode_live, fetch_ordinance_section, discover_open_data_layers live in tools/location/ or tools/ordinance/ with kleyman_step=2 + produces/consumes field keys",
@@ -145,7 +145,7 @@
       "id": "4.3",
       "title": "Fold pipeline/skills/registry.py into harness tool registry",
       "phase": "4",
-      "priority": 10,
+      "priority": 12,
       "passes": false,
       "acceptanceCriteria": [
         "playwright_comps / redfin_comps (comps tools) register in the single harness tool_registry with kleyman_step=3",
@@ -159,7 +159,7 @@
       "id": "4.4",
       "title": "Decompose run_deal_analysis into step-3-through-8 calculator tools",
       "phase": "4",
-      "priority": 11,
+      "priority": 13,
       "passes": false,
       "acceptanceCriteria": [
         "calculate_stabilized_value, calculate_total_cost, calculate_residual_land_value, calculate_construction_loan, calculate_permanent_loan, calculate_dscr, calculate_coc, calculate_yield_on_cost, calculate_sweat_equity each registered as a tool with consumes/produces field keys",
@@ -174,7 +174,7 @@
       "id": "4.5",
       "title": "Residential vs commercial routing as HTN method dispatch",
       "phase": "4",
-      "priority": 12,
+      "priority": 14,
       "passes": false,
       "acceptanceCriteria": [
         "step_3_stabilized_value has two methods: income_approach (precondition product.unit_count >= 5) and comp_approach (precondition <= 4)",
@@ -188,7 +188,7 @@
       "id": "4.6",
       "title": "Migrate dataset/document/export tools to tools/ with tags",
       "phase": "4",
-      "priority": 13,
+      "priority": 15,
       "passes": false,
       "acceptanceCriteria": [
         "search_properties, filter_dataset, export_dataset, generate_document, create_document, export_csv live in tools/dataset/ or tools/documents/ with kleyman_step tags",
@@ -201,7 +201,7 @@
       "id": "4.7",
       "title": "Kill chat.py _execute_tool + CHAT_TOOLS — all calls through runtime",
       "phase": "4",
-      "priority": 14,
+      "priority": 16,
       "passes": false,
       "acceptanceCriteria": [
         "api/chat.py imports no tool handlers directly; every call routes through get_default_runtime().call_tool",
@@ -216,7 +216,7 @@
       "id": "5.1",
       "title": "Build the HTN planner (harness/planner.py) using domain/steps.py",
       "phase": "5",
-      "priority": 15,
+      "priority": 17,
       "passes": false,
       "acceptanceCriteria": [
         "harness/planner.py exists and uses domain/steps.py + methodology.py to produce a plan",
@@ -230,7 +230,7 @@
       "id": "5.2",
       "title": "planner_rules.py as Kleyman dependency rules; SpecialistLane = step capability scope",
       "phase": "5",
-      "priority": 16,
+      "priority": 18,
       "passes": false,
       "acceptanceCriteria": [
         "planner_rules.py encodes the step→lane→allowed_tools mapping",
@@ -244,7 +244,7 @@
       "id": "5.3",
       "title": "agent_loop.py — ReAct over active step toolset",
       "phase": "5",
-      "priority": 17,
+      "priority": 19,
       "passes": false,
       "acceptanceCriteria": [
         "harness/agent_loop.py exists and runs a ReAct loop over the active step's allowed_tools",
@@ -259,7 +259,7 @@
       "id": "5.4",
       "title": "Tool results emit typed Claims (HandlerResult.claims)",
       "phase": "5",
-      "priority": 18,
+      "priority": 20,
       "passes": false,
       "acceptanceCriteria": [
         "HandlerResult gains a claims: tuple[Claim, ...] field",
@@ -273,7 +273,7 @@
       "id": "5.5",
       "title": "Synthesis parsing — step 8 emits recommendation + hypothesis claims",
       "phase": "5",
-      "priority": 19,
+      "priority": 21,
       "passes": false,
       "acceptanceCriteria": [
         "Step 8 LLM response parsed into recommendation.go_no_go (calc) + recommendation.entitlement_upside (hypothesis, with next_verification_step)",
@@ -287,7 +287,7 @@
       "id": "5.6",
       "title": "/agent-runs/{id}/events SSE stream",
       "phase": "5",
-      "priority": 20,
+      "priority": 22,
       "passes": false,
       "acceptanceCriteria": [
         "GET /agent-runs/{id}/events streams HarnessEvents (tool_call, tool_result, step_activated, escalation_recorded, claim_produced, run_completed)",
@@ -300,7 +300,7 @@
       "id": "6.1",
       "title": "ClaimLog table + append-only writes",
       "phase": "6",
-      "priority": 21,
+      "priority": 23,
       "passes": false,
       "acceptanceCriteria": [
         "ClaimLog DB table: run_id, step, kind, origin, evidence_ids, freshness",
@@ -314,7 +314,7 @@
       "id": "6.2",
       "title": "Conversation + AssumptionOverride tables",
       "phase": "6",
-      "priority": 22,
+      "priority": 24,
       "passes": false,
       "acceptanceCriteria": [
         "Conversation table chains AgentRuns on a workspace",
@@ -329,7 +329,7 @@
       "id": "6.3",
       "title": "ContextBroker binds to ClaimLog",
       "phase": "6",
-      "priority": 23,
+      "priority": 25,
       "passes": false,
       "acceptanceCriteria": [
         "ContextBroker builds packets from ClaimLog rows, not in-memory bags",
@@ -342,7 +342,7 @@
       "id": "6.4",
       "title": "Delete in-memory SessionStore",
       "phase": "6",
-      "priority": 24,
+      "priority": 26,
       "passes": false,
       "acceptanceCriteria": [
         "grep -r 'SessionStore' src/ returns nothing",
@@ -356,7 +356,7 @@
       "id": "7.1",
       "title": "api/chat.py → thin wrapper over start_agent_run (< 250 lines)",
       "phase": "7",
-      "priority": 25,
+      "priority": 27,
       "passes": false,
       "acceptanceCriteria": [
         "POST /chat starts an agent run and streams events",
@@ -370,7 +370,7 @@
       "id": "7.2",
       "title": "/analyze/stream wraps agent-run events",
       "phase": "7",
-      "priority": 26,
+      "priority": 28,
       "passes": false,
       "acceptanceCriteria": [
         "SSE events from /analyze/stream are the same HarnessEvents as /agent-runs/{id}/events",
@@ -383,7 +383,7 @@
       "id": "7.3",
       "title": "MCP + tools REST consistency",
       "phase": "7",
-      "priority": 27,
+      "priority": 29,
       "passes": false,
       "acceptanceCriteria": [
         "MCPAdapter.list_tools() and the chat tool surface return identical tool sets",
@@ -396,7 +396,7 @@
       "id": "8.1",
       "title": "AgenticRAG retrieval tools (search_index/open_section/follow_cross_ref/read_dimensional_table)",
       "phase": "8",
-      "priority": 28,
+      "priority": 30,
       "passes": false,
       "acceptanceCriteria": [
         "Four retrieval tools registered in the harness",
@@ -410,7 +410,7 @@
       "id": "8.2",
       "title": "Typed dimensional table as fast path (no LLM)",
       "phase": "8",
-      "priority": 29,
+      "priority": 31,
       "passes": false,
       "acceptanceCriteria": [
         "Easy query ('RS-8 setbacks') hits DistrictDimensionalStandard directly, no LLM",
@@ -423,7 +423,7 @@
       "id": "8.3",
       "title": "Retrieval misalignment guard",
       "phase": "8",
-      "priority": 30,
+      "priority": 32,
       "passes": false,
       "acceptanceCriteria": [
         "A chunk semantically similar but topically irrelevant is filtered by cross-ref graph validity",
@@ -436,7 +436,7 @@
       "id": "8.4",
       "title": "Memory-poisoning guard (source_boundary_ok=false excluded from verified_fact)",
       "phase": "8",
-      "priority": 31,
+      "priority": 33,
       "passes": false,
       "acceptanceCriteria": [
         "Chunks with source_boundary_ok=false are excluded from verified_fact synthesis",
@@ -449,7 +449,7 @@
       "id": "9.1",
       "title": "Runtime governance layer (Paper 23)",
       "phase": "9",
-      "priority": 32,
+      "priority": 34,
       "passes": false,
       "acceptanceCriteria": [
         "Admission, policy guard, execution watcher, rollback, environment profiles, audit — all implemented",
@@ -464,7 +464,7 @@
       "id": "9.2",
       "title": "Ingestion as governed Skill = (C,π,T,R)",
       "phase": "9",
-      "priority": 33,
+      "priority": 35,
       "passes": false,
       "acceptanceCriteria": [
         "Ingestion skill has applicability condition (typed predicate over ClaimLog), executable policy, termination condition, reusable interface",
@@ -478,7 +478,7 @@
       "id": "9.3",
       "title": "Source discovery sub-skill (long tail: web_search + fetch_url + validate_authority)",
       "phase": "9",
-      "priority": 34,
+      "priority": 36,
       "passes": false,
       "acceptanceCriteria": [
         "Given a never-ingested town, the agent finds the authoritative ordinance URL via web_search + fetch_url",
@@ -493,7 +493,7 @@
       "id": "9.4",
       "title": "validate_authority — non-.gov can never produce verified_fact",
       "phase": "9",
-      "priority": 35,
+      "priority": 37,
       "passes": false,
       "acceptanceCriteria": [
         "validate_authority returns a typed authority verdict",
@@ -507,7 +507,7 @@
       "id": "9.5",
       "title": "Ingestion verification gate (hit-rate < 90% rolls back)",
       "phase": "9",
-      "priority": 36,
+      "priority": 38,
       "passes": false,
       "acceptanceCriteria": [
         "After ingest, golden-query hit-rate is computed; < 90% triggers rollback (chunks marked stale/deleted) + PlanEscalation",
@@ -520,7 +520,7 @@
       "id": "9.6",
       "title": "Re-answer loop — ship-gate scenario on one never-seen town",
       "phase": "9",
-      "priority": 37,
+      "priority": 39,
       "passes": false,
       "acceptanceCriteria": [
         "End-to-end: never-ingested town → ingest → re-query → typed claim with provenance OR honest escalation",
@@ -533,7 +533,7 @@
       "id": "9.7",
       "title": "(v2) AutoHarness adapter synthesis for novel structures",
       "phase": "9",
-      "priority": 38,
+      "priority": 40,
       "passes": false,
       "acceptanceCriteria": [
         "For novel-structure sources, generic HTML fallback produces kind=assumption, confidence=low claims",
@@ -546,7 +546,7 @@
       "id": "10.1",
       "title": "MarketParameterSet as typed claims",
       "phase": "10",
-      "priority": 39,
+      "priority": 41,
       "passes": false,
       "acceptanceCriteria": [
         "South FL costs are kind=assumption, origin=local_authority (CBRE source) or user_provided",
@@ -560,7 +560,7 @@
       "id": "10.2",
       "title": "Region + asset-class parameterization (resi vs commercial sub-tables)",
       "phase": "10",
-      "priority": 40,
+      "priority": 42,
       "passes": false,
       "acceptanceCriteria": [
         "MarketParameterSet has residential and commercial sub-tables",
@@ -574,7 +574,7 @@
       "id": "10.3",
       "title": "Comps as evidenced claims",
       "phase": "10",
-      "priority": 41,
+      "priority": 43,
       "passes": false,
       "acceptanceCriteria": [
         "Every comp carries source_url + origin (ArcGIS/County = local_authority; scraped = unknown, confidence <= 0.5)",
@@ -588,7 +588,7 @@
       "id": "11.1",
       "title": "lot_split_feasibility (proof of concept; validated against golden case)",
       "phase": "11",
-      "priority": 42,
+      "priority": 44,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.lot_split with created_lots, procedure_path, blocking_constraints, next_verification_step",
@@ -602,7 +602,7 @@
       "id": "11.2",
       "title": "assemblage_feasibility",
       "phase": "11",
-      "priority": 43,
+      "priority": 45,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.assemblage with the same claim shape as 11.1",
@@ -615,7 +615,7 @@
       "id": "11.3",
       "title": "by_right_upzoning_scan",
       "phase": "11",
-      "priority": 44,
+      "priority": 46,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.by_right_upside",
@@ -628,7 +628,7 @@
       "id": "11.4",
       "title": "missing_middle_eligibility",
       "phase": "11",
-      "priority": 45,
+      "priority": 47,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.missing_middle",
@@ -641,7 +641,7 @@
       "id": "11.5",
       "title": "adaptive_reuse_eligibility",
       "phase": "11",
-      "priority": 46,
+      "priority": 48,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.adaptive_reuse",
@@ -654,7 +654,7 @@
       "id": "11.6",
       "title": "entitlement_upzoning",
       "phase": "11",
-      "priority": 47,
+      "priority": 49,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.upzoning (highest speculation, must carry fallback by-right exit)",
@@ -667,7 +667,7 @@
       "id": "11.7",
       "title": "build_to_rent_feasibility",
       "phase": "11",
-      "priority": 48,
+      "priority": 50,
       "passes": false,
       "acceptanceCriteria": [
         "Skill produces hypothesis.btr",
@@ -680,7 +680,7 @@
       "id": "11.8",
       "title": "free_land_thesis (composite meta-skill)",
       "phase": "11",
-      "priority": 49,
+      "priority": 51,
       "passes": false,
       "acceptanceCriteria": [
         "Skill composes lot_split + by_right_upzoning to produce hypothesis.free_land",
@@ -693,7 +693,7 @@
       "id": "12.1",
       "title": "Report as ClaimLog projection (verified neutral / assumption amber / hypothesis distinct)",
       "phase": "12",
-      "priority": 50,
+      "priority": 52,
       "passes": false,
       "acceptanceCriteria": [
         "build_report(claim_log) renders sections from claims by kind",
@@ -707,7 +707,7 @@
       "id": "12.2",
       "title": "Report validator = Kleyman guardrails over ClaimLog",
       "phase": "12",
-      "priority": 51,
+      "priority": 53,
       "passes": false,
       "acceptanceCriteria": [
         "evaluate_guardrails runs over the report's ClaimLog",
@@ -721,7 +721,7 @@
       "id": "12.3",
       "title": "Golden cases per step (>=5 each)",
       "phase": "12",
-      "priority": 52,
+      "priority": 54,
       "passes": false,
       "acceptanceCriteria": [
         "Each of Kleyman's 8 steps has >=5 golden cases (zoning lookup, max units, value, costs, financing, returns, recommendation)",
@@ -733,7 +733,7 @@
       "id": "12.4",
       "title": "CI-enforced eval regression (make eval)",
       "phase": "12",
-      "priority": 53,
+      "priority": 55,
       "passes": false,
       "acceptanceCriteria": [
         "make eval runs the golden cases in CI; a regression fails the build",
@@ -746,7 +746,7 @@
       "id": "13.1",
       "title": "<AgentRunView> event consumer",
       "phase": "13",
-      "priority": 54,
+      "priority": 56,
       "passes": false,
       "acceptanceCriteria": [
         "Component subscribes to /agent-runs/{id}/events and renders tool_call/tool_result/step_activated/escalation events",
@@ -759,7 +759,7 @@
       "id": "13.2",
       "title": "Step rail (Kleyman 8 steps)",
       "phase": "13",
-      "priority": 55,
+      "priority": 57,
       "passes": false,
       "acceptanceCriteria": [
         "AgentStagePill states map to step activation/escalation",
@@ -771,7 +771,7 @@
       "id": "13.3",
       "title": "Claim stream rendering (verified/assumption/hypothesis treatments)",
       "phase": "13",
-      "priority": 56,
+      "priority": 58,
       "passes": false,
       "acceptanceCriteria": [
         "Claims render in distinct treatments per DESIGN.md color system",
@@ -784,7 +784,7 @@
       "id": "13.4",
       "title": "Replace 1,351-line workspace page (< 400 lines)",
       "phase": "13",
-      "priority": 57,
+      "priority": 59,
       "passes": false,
       "acceptanceCriteria": [
         "workspace/page.tsx < 400 lines, delegates to <AgentRunView>",
@@ -797,7 +797,7 @@
       "id": "14.1",
       "title": "Auth + ingestion authorization",
       "phase": "14",
-      "priority": 58,
+      "priority": 60,
       "passes": false,
       "acceptanceCriteria": [
         "Anonymous users cannot trigger shared-corpus ingestion",
@@ -810,7 +810,7 @@
       "id": "14.2",
       "title": "Cost control + budget enforcement",
       "phase": "14",
-      "priority": 59,
+      "priority": 61,
       "passes": false,
       "acceptanceCriteria": [
         "An AgenticRAG loop exceeding risk_budget_cents is halted with an honest escalation",
@@ -822,7 +822,7 @@
       "id": "14.3",
       "title": "Latency UX (async jobs)",
       "phase": "14",
-      "priority": 60,
+      "priority": 62,
       "passes": false,
       "acceptanceCriteria": [
         "Ingestion > 60s returns a job ID; user gets SSE-on-complete; resumable",
@@ -834,7 +834,7 @@
       "id": "14.4",
       "title": "Observability (structured logs, cost accounting, rollback-rate alerting)",
       "phase": "14",
-      "priority": 61,
+      "priority": 63,
       "passes": false,
       "acceptanceCriteria": [
         "Structured logs, per-request cost accounting, ingestion-rollback-rate alerting",
@@ -846,7 +846,7 @@
       "id": "14.5",
       "title": "Data freshness ops (re-ingest scheduler, diff detection)",
       "phase": "14",
-      "priority": 62,
+      "priority": 64,
       "passes": false,
       "acceptanceCriteria": [
         "A municipality whose ordinance amended after last scrape surfaces as STALE automatically",
@@ -859,7 +859,7 @@
       "id": "14.6",
       "title": "Security review (SSRF allowlist, content sanitization, sandboxing)",
       "phase": "14",
-      "priority": 63,
+      "priority": 65,
       "passes": false,
       "acceptanceCriteria": [
         "SSRF allowlist on fetch_url; content sanitization on ingested text; sandboxing on agent-fetched content",
@@ -872,7 +872,7 @@
       "id": "14.7",
       "title": "Market surfaces (pricing, rate limits, MCP publication, docs)",
       "phase": "14",
-      "priority": 64,
+      "priority": 66,
       "passes": false,
       "acceptanceCriteria": [
         "Pricing tiers, free vs paid ingestion, API rate limits for partners, MCP server publication, docs",
@@ -884,7 +884,7 @@
       "id": "9.3b",
       "title": "Extend ingestion/chunking to preserve dimensional-table structure + table-type detection across all municipalities",
       "phase": "9",
-      "priority": 65,
+      "priority": 67,
       "passes": false,
       "acceptanceCriteria": [
         "Ingestion preserves pipe-delimited table structure in chunk_text (currently mangled for non-Fort-Lauderdale municipalities — tables flattened into prose, losing header→field mapping)",
@@ -895,6 +895,39 @@
         "make verify-local green"
       ],
       "notes": "Discovered during 3.2 corpus-driven verification: 27 municipalities have ingested chunks but only Fort Lauderdale's preserved table structure. West Palm Beach (3090 chunks), Boca Raton, Boynton Beach etc. have zoning data in prose/JSON-table formats the chunker didn't capture as parseable tables. This is the ingestion/indexing gap blocking verified-fact coverage beyond Fort Lauderdale. Blocks reliable 3.2 criterion 4 (multi-municipality live verification) and the Phase 9 governed-ingestion goal. Depends on 9.2 (ingestion as governed Skill)."
+    },
+    {
+      "id": "8.0",
+      "title": "Re-ingest all municode municipalities via native MunicodeScraper to preserve table structure",
+      "phase": "8",
+      "priority": 8,
+      "passes": false,
+      "acceptanceCriteria": [
+        "All 27 municode-sourced municipalities re-ingested via MunicodeScraper (api.municode.com, returns raw HTML per node) -> chunk_sections (_html_to_text/_table_to_text preserves tables as labeled rows), NOT the Jina codifier adapter that flattened tables to markdown prose",
+        "After re-ingestion, >=80% of dimensional-table chunks preserve structure (pipe-delimited or labeled-row format), measured per-municipality (currently <10% for most, ~9% for Fort Lauderdale)",
+        "extract_dimensional_standards_from_corpus.py returns verified rows for >=8 municipalities with all numeric fields populated (currently only Fort Lauderdale parses cleanly)",
+        "Live verification (PLOTLOT_LIVE_TESTS=1): the 3.6 golden-query eval still passes (>=90% hit-rate) on the re-ingested data + hits >=5 municipalities (currently only Fort Lauderdale)",
+        "Re-ingestion is paced (MunicodeScraper semaphore) and idempotent (upsert on municode_node_id); freshness metadata (scraped_at) populated",
+        "make verify-local green"
+      ],
+      "notes": "ROOT-CAUSE FIX. The 45,595 existing chunks were ingested via the Jina/codifier adapter (returns markdown, tables destroyed). The native MunicodeScraper (scraper.py) already returns raw HTML per node and the chunker (_table_to_text via pandas.read_html) already preserves tables as labeled rows — but this path was never used to populate the live DB. Re-running ingestion via the correct path fixes table structure for ALL municode municipalities without new chunking code. Unblocks 8.1-8.4 + multi-municipality verified-fact coverage. Depends on pacing (api.municode.com rate-limits) + the 3.6 golden-query eval as the botched-ingest gate."
+    },
+    {
+      "id": "8.0b",
+      "title": "OrdinanceToolPort (typed staged-retrieval port) + Municode MCP server adapter",
+      "phase": "8",
+      "priority": 9,
+      "passes": false,
+      "acceptanceCriteria": [
+        "OrdinanceToolPort implemented (architecture doc §4.3/§7.3): search(jurisdiction, query) -> OrdinanceSearchResult[], fetch_section(jurisdiction, section_id) -> OrdinanceSearchResult with path/citation/freshness",
+        "Staged retrieval (A-RAG arXiv 2602.03442): search_index (discover) -> open_section (read exact) -> follow_cross_ref (traverse path/cross_refs graph) -> read_dimensional_table (typed fast path, no LLM)",
+        "Tables addressable as first-class nodes: open_section on a dimensional-table section returns the parsed table structure (rows/cells with header labels), not flattened prose",
+        "Municode MCP server adapter exposes the OrdinanceToolPort over MCP (§6/§9): same port, transport adapter only. No official Municode MCP exists; this IS the Municode MCP",
+        "Contract test: follow_cross_ref resolves a section's cross_refs (the path/cross_refs from 3.5's ordinance_sections)",
+        "Contract test: read_dimensional_table on Fort Lauderdale Sec. 47-5.31 returns the RS-8 row with verified values (rear 15, FAR 0.75) — no LLM call",
+        "make verify-local green"
+      ],
+      "notes": "Architecture doc §4.3 (Ordinance Service) + §6 (adapter rule: same core port, transport only) + §9 (MCP adapter). Grounded in A-RAG (hierarchical retrieval > one-shot). The 'Municode MCP' is this port exposed over MCP — there is no official one (checked MCP registry + npm + GitHub; closest is wcurrangroome/municoder). Depends on 8.0 (correct chunks) for the table fast-path to work. Replaces single-shot hybrid_search for hard queries."
     }
   ],
   "shipGate": {

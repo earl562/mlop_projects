@@ -783,3 +783,31 @@ no drift. Every golden query returns the verified typed value (RS-8 rear 15,
 FAR 0.75, RS-4.4 side 10, RM-15 rear 15) from the live DB.
 
 **Next:** 4.1 (priority 8) — tools/ package scaffold with kleyman_step + field-key tags.
+
+=== 2026-06-26 ARCHITECTURE-STEER (user-led, research-grounded) ===
+User pushed back: (1) we never tested chunking correctness per-municipality,
+(2) this is the moment to add AgenticRAG for hierarchical text/image/table
+analysis, (3) Municode data should come via a Municode MCP.
+
+**Diagnosis (fact-based, against live DB + code):**
+- 45,595 chunks ingested via Jina codifier (markdown, tables destroyed). Even
+  Fort Lauderdale: only 9.4% of chunks have pipe structure; most munis <5%.
+  Dimensional tables missing from most chunks entirely.
+- Native MunicodeScraper (scraper.py) hits api.municode.com, returns raw HTML
+  per node (tables intact). Chunker _table_to_text (pandas.read_html) preserves
+  tables as labeled rows. BOTH EXIST + ARE CORRECT — but the live DB was never
+  populated via this path. The table problem needs re-ingestion, not new code.
+- No official Municode MCP exists (MCP registry + npm + GitHub checked). The
+  "Municode MCP" = OrdinanceToolPort (arch doc §4.3) exposed over MCP (§9).
+
+**Plan mutation:** added story 8.0 (re-ingest via native scraper) + 8.0b
+(OrdinanceToolPort + Municode MCP adapter). Re-prioritized Phase 8 ahead of
+Phase 4-7 (8.0 pri 8, 8.0b pri 9, phase 4 bumped to pri 10+). Grounded in
+A-RAG (2602.03442 hierarchical > one-shot) + SoK Agentic RAG (2603.07379)
++ arch doc §4.3/§6/§9/§15.
+
+**Deferred:** vision/multimodal for charts/images (<10% of data; vision-model
+dependency). Tables >90%, solved by 8.0+8.0b.
+
+**Next:** 8.0 — re-ingest Fort Lauderdale via native MunicodeScraper first
+(validate the path + table preservation on one municipality before all 27).
