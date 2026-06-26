@@ -669,3 +669,38 @@ the source text. The ordinance_chunks table IS the authority — query it, read
 chunk_text, confirm the value before claiming source_section_id. Hand-entered
 guesses tagged with a plausible section name are a claim-without-evidence
 failure. Added to STEERING.md.
+
+=== 2026-06-26 INGESTION-GAP-AUDIT (corpus-driven verification) ===
+Built scripts/extract_dimensional_standards_from_corpus.py to extract verified
+dimensional standards from the INGESTED ordinance corpus across all
+municipalities (Phase-9-style governed extraction). Findings:
+
+**Coverage:** 27 municipalities have ingested chunks in ordinance_chunks
+(West Palm Beach 3090, Unincorporated Miami-Dade 2666, Opa Locka 2633, etc.).
+Only Fort Lauderdale (1973 chunks) has dimensional tables that preserved
+pipe-delimited structure through chunking.
+
+**False-positive problem:** the extractor catches "dimensional-looking" tables
+in Miami Beach/Davie/Parkland/Surfside, but they are NOT dimensional tables —
+e.g. Miami Beach "RS-1 lot=30000" is a TREE/LAWN schedule (Table A: "Zoning
+District | Number of Trees Required | Maximum Lawn Area"), not a lot-size
+table. Without table-type classification, extraction produces GARBAGE labeled
+as verified. Did NOT persist these false extractions to the DB.
+
+**Root cause:** the chunking pipeline mangles table structure for non-Fort-
+Lauderdale publishers (tables flattened into prose, header→field mapping lost).
+West Palm Beach/Boca Raton/etc. use prose-format or differently-structured
+dimensional standards entirely.
+
+**Action:** added task 9.3b to prd.json — "Extend ingestion/chunking to
+preserve dimensional-table structure + table-type detection across all
+municipalities." This blocks reliable multi-municipality verified-fact
+coverage and the Phase 9 governed-ingestion goal. Fort Lauderdale remains the
+only genuinely-verified municipality until 9.3b lands.
+
+**Lesson (Codebase Patterns):** corpus-driven extraction REQUIRES table-type
+classification. A regex that matches "district code + numeric column" will
+happily extract tree schedules, fee schedules, and parking-space tables as
+"dimensional standards" — false verifications worse than no data. The
+extractor must confirm it's reading a dimensional table (header contains
+setback/lot-area/density/FAR/height/coverage) before emitting rows.

@@ -21,3 +21,12 @@ Format: one item per `- [ ]` bullet, newest at top. Remove the bullet when done.
       source_section_id. Hand-entered guesses tagged with a section name are a
       claim-without-evidence failure. Miami/Hollywood rows are STAGED until
       their corpora are ingested (Phase 9).
+
+- [ ] CRITICAL 2026-06-26: Corpus-driven extraction needs table-type
+      classification BEFORE persisting. Currently the extractor catches
+      tree/lawn/fee schedules as "dimensional standards" (Miami Beach false
+      positive: RS-1 "lot=30000" was lawn area). Only Fort Lauderdale has
+      reliably-structured dimensional tables in the corpus. Task 9.3b
+      (extend ingestion/chunking + table-type detection) blocks multi-muni
+      verified coverage. Do NOT persist extracted rows without confirming the
+      source chunk is a real dimensional table.

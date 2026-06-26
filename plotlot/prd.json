@@ -873,6 +873,22 @@
         "make verify-local green"
       ],
       "notes": ""
+    },
+    {
+      "id": "9.3b",
+      "title": "Extend ingestion/chunking to preserve dimensional-table structure + table-type detection across all municipalities",
+      "phase": "9",
+      "priority": 65,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Ingestion preserves pipe-delimited table structure in chunk_text (currently mangled for non-Fort-Lauderdale municipalities — tables flattened into prose, losing header→field mapping)",
+        "A table-type classifier tags chunks as 'dimensional_table' vs 'tree_schedule' vs 'fee_schedule' vs 'prose' so the extractor only runs on real dimensional tables (currently the extractor catches tree/lawn tables and fee schedules as false positives)",
+        "After re-ingestion, extract_dimensional_standards_from_corpus.py returns verified rows for >=8 municipalities (currently only Fort Lauderdale has clean tables; Miami Beach/Davie/Parkland/Surfside parse but with garbage values from non-dimensional tables)",
+        "Live verification (PLOTLOT_LIVE_TESTS=1): >=5 municipalities have >=3 districts each with all numeric fields populated AND values cross-checked against the source chunk_text (not false extractions from tree/fee tables)",
+        "Ingestion gap report: municipalities whose zoning code uses prose-format dimensional standards (not tables) are flagged for a prose-extractor adapter or AutoHarness synthesis",
+        "make verify-local green"
+      ],
+      "notes": "Discovered during 3.2 corpus-driven verification: 27 municipalities have ingested chunks but only Fort Lauderdale's preserved table structure. West Palm Beach (3090 chunks), Boca Raton, Boynton Beach etc. have zoning data in prose/JSON-table formats the chunker didn't capture as parseable tables. This is the ingestion/indexing gap blocking verified-fact coverage beyond Fort Lauderdale. Blocks reliable 3.2 criterion 4 (multi-municipality live verification) and the Phase 9 governed-ingestion goal. Depends on 9.2 (ingestion as governed Skill)."
     }
   ],
   "shipGate": {
