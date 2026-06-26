@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
 from sqlalchemy import (
     Column,
     DateTime,
@@ -643,6 +644,82 @@ class EvalCaseResult(Base):
     evidence_metrics_json = Column(JSON, nullable=False, default=dict)
     trajectory_metrics_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DistrictDimensionalStandardORM(Base):
+    """Typed, provenance-backed dimensional standards per zoning district.
+
+    The verified-fact source for the calculator at query time (WIRE-1.1b): a
+    district's setbacks / height / FAR / coverage / density come from a typed
+    row extracted from the ordinance's Schedule of District Regulations at
+    ingestion time, not from LLM re-parsing the table on every analysis.
+
+    Provisioned by ``init_db``→``Base.metadata.create_all``; populated by the
+    ingestion extractor (Slice 3.2 generalizes across municipalities). Natural
+    key: ``(municipality, district_code)`` — one row per (municipality, district).
+    """
+
+    __tablename__ = "district_dimensional_standards"
+    __table_args__ = (
+        UniqueConstraint(
+            "municipality",
+            "district_code",
+            name="uq_district_dimensional_standard",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    municipality: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+    district_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+
+    min_lot_area_sqft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_lot_width_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_front_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_side_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_rear_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_height_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_lot_coverage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    far: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_density_units_per_acre: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Provenance: the originating ordinance section (Slice 3.2's evidence graph).
+    source_section_id: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    source_url: Mapped[str] = mapped_column(Text, nullable=True)
+    extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=func.now()
+    )
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def to_domain(self) -> DistrictDimensionalStandard:
+        """Convert the ORM row to the frozen domain type the calculator consumes."""
+        return DistrictDimensionalStandard(
+            municipality=self.municipality,
+            county=self.county,
+            state=self.state or "",
+            district_code=self.district_code,
+            min_lot_area_sqft=self.min_lot_area_sqft,
+            min_lot_width_ft=self.min_lot_width_ft,
+            setback_front_ft=self.setback_front_ft,
+            setback_side_ft=self.setback_side_ft,
+            setback_rear_ft=self.setback_rear_ft,
+            max_height_ft=self.max_height_ft,
+            max_lot_coverage_pct=self.max_lot_coverage_pct,
+            far=self.far,
+            max_density_units_per_acre=self.max_density_units_per_acre,
+            source_section_id=self.source_section_id,
+            source_url=self.source_url or "",
+            extracted_at=self.extracted_at or func.now(),
+        )
 
 
 class CountySchema(Base):

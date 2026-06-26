@@ -15,7 +15,7 @@
       "title": "Wire calculate_max_units to consume DistrictDimensionalStandard (production path)",
       "phase": "backfill",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "calculate_max_units accepts a DistrictDimensionalStandard (already done in commit 04f9004 — verify still works)",
         "A storage/query function exists: given (municipality, district_code) it returns a stored DistrictDimensionalStandard or None",
@@ -26,7 +26,9 @@
         "Contract test: lookup.py with a standard present does not invoke the LLM extraction for zoning params; without, the LLM path runs",
         "make verify-local green"
       ],
-      "notes": "Half-done: calculator side wired (04f9004), but lookup.py never passes a typed standard. Marked passes=false to reflect reality. Merge with 3.3 (claim provenance). Start with a JSON-file fixture for Fort Lauderdale standards (simplest, testable); real DB table comes in 3.2."
+      "notes": "Half-done: calculator side wired (04f9004), but lookup.py never passes a typed standard. Marked passes=false to reflect reality. Merge with 3.3 (claim provenance). Start with a JSON-file fixture for Fort Lauderdale standards (simplest, testable); real DB table comes in 3.2.",
+      "completedAt": "2026-06-26T14:40:00Z",
+      "completionNote": "Storage/query side implemented (storage/dimensional_standards.py get_dimensional_standard + Fort Lauderdale JSON fixture), lookup.py wired to call it before LLM extraction and pass typed standard to calculate_max_units (origin=local_authority), LLM fallback retained (origin=unknown). 18 contract tests pass (8 calculator + 10 lookup). make verify-local green. Fixed: unused datetime import (ruff), test asserting on non-existent DensityAnalysis.density_verified field (asserted origin instead)."
     },
     {
       "id": "WIRE-2.1b",

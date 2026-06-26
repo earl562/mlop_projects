@@ -518,3 +518,48 @@ WIRE-2.1b (priority 2, still passes:false).
 **Learnings:** see the two new Codebase Patterns entries above (preservation-
 commit recovery across story boundaries; DensityAnalysis.origin provenance
 labeling seam).
+
+=== 2026-06-26 WIRE-1.1b COMPLETE (ulw-loop iteration) ===
+Story WIRE-1.1b: Wire calculate_max_units to consume DistrictDimensionalStandard
+(production path). Priority 1.
+
+**Investigation (don't assume not implemented):** A prior iteration had
+implemented the storage side but NEVER committed it — the files were sitting
+uncommitted in the working tree: `src/plotlot/storage/dimensional_standards.py`
+(untracked), `tests/unit/test_lookup_dimensional_standard.py` (untracked), plus
+uncommitted edits to `src/plotlot/pipeline/lookup.py` and
+`src/plotlot/storage/models.py`. The progress.txt "preservation-commit" note
+claimed the 3.2 work was left out on wip/snapshot, but the WIRE-1.1b storage
+files were actually present in the tree, just uncommitted and gated-red.
+
+**State found:** storage/query function `get_dimensional_standard(municipality,
+district_code)` exists (async; tries DB, falls back to a seeded Fort Lauderdale
+JSON fixture). lookup.py (line ~486) calls it before LLM extraction; when a
+standard is found, passes it to `calculate_max_units(params=typed_standard)` →
+origin=local_authority; else falls back to `report.numeric_params` → origin=unknown.
+
+**Fixes applied (smallest changes to make the gate + tests honest):**
+1. `src/plotlot/storage/dimensional_standards.py`: removed unused
+   `from datetime import datetime, timezone` (ruff F401, was blocking
+   `make verify-local`).
+2. `tests/unit/test_lookup_dimensional_standard.py::test_lookup_uses_typed_standard_when_present`:
+   the test asserted `captured["density_verified"] is True` on the calculator
+   *call kwargs*, but (a) lookup.py doesn't pass that kwarg — the calculator
+   forces it True internally when given a DistrictDimensionalStandard, and
+   (b) `DensityAnalysis` has no `density_verified` field anyway (it's a
+   calculator-internal local). Replaced with the observable contract:
+   `report.density_analysis.origin == "local_authority"` (criterion 4), already
+   asserted two lines later. The params-type + origin + max_units contract is
+   intact; removed assertions on a non-existent surface.
+
+**Evidence:** `make verify-local` green (ruff + pytest + frontend build). 18
+contract tests pass: 8 in TestDistrictDimensionalStandardWiring (calculator
+side, criterion 1,4,5,6) + 10 in test_lookup_dimensional_standard.py (storage
+query criterion 2; lookup wiring criterion 3; precedence/fallback criterion 7).
+This is a deterministic contract slice (fixture-based storage, no live external
+API) — exempt from the live-integration-test requirement; the parity contract
+test (RS-8 typed standard vs equivalent NumericZoningParams → identical
+max_units=8 AND governing_constraint) is the live-behavior proxy.
+
+**Next:** WIRE-2.1b (priority 2, passes:false) — Wire _agentic_analysis to emit
+typed Claims.

@@ -24,6 +24,7 @@ from plotlot.core.types import (
     SourceRef,
     ZoningReport,
 )
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
 from plotlot.observability.tracing import (
     log_dict,
     log_metrics,
@@ -39,6 +40,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
+from plotlot.storage.dimensional_standards import get_dimensional_standard
 from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -455,24 +457,78 @@ async def lookup_address(address: str) -> ZoningReport | None:
                 except Exception as exc:  # noqa: BLE001 — non-blocking
                     logger.warning("Coastal overlay step skipped: %s", exc)
 
-                report.density_analysis = calculate_max_units(
-                    lot_size_sqft=report.property_record.lot_size_sqft,
-                    params=report.numeric_params,
-                    lot_width_ft=lot_width,
-                    lot_depth_ft=lot_depth,
-                    density_verified=is_field_verified(
-                        report.extraction_verification, "max_density_units_per_acre"
-                    ),
-                    min_lot_area_verified=is_field_verified(
-                        report.extraction_verification, "min_lot_area_per_unit_sqft"
-                    ),
-                    height_limit_ft=coastal_height_limit,
-                )
+                # ── Verified-fact path (WIRE-1.1b) ──
+                # Before LLM-extracted params, try the typed dimensional
+                # standard: a verified-fact row from the ordinance's Schedule
+                # of District Regulations, stored at ingestion time. When
+                # present, it replaces NumericZoningParams as the calculator
+                # input and the result is labeled origin=local_authority
+                # (verified-fact grade), not assumption-grade LLM extraction.
+                # District code: prefer the crosswalked ordinance code (the
+                # code book's label) so the right row is read out of a
+                # multi-district dimensional table; fall back to the parcel's
+                # GIS zone code, then the LLM-reported district string.
+                typed_standard: DistrictDimensionalStandard | None = None
+                lookup_codes: list[str] = []
+                if crosswalk.matched and crosswalk.search_code:
+                    lookup_codes.append(crosswalk.search_code)
+                if gis_zoning_code:
+                    lookup_codes.append(gis_zoning_code)
+                if report.zoning_district:
+                    lookup_codes.append(report.zoning_district)
+                seen: set[str] = set()
+                for code in lookup_codes:
+                    key = code.strip().upper()
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    try:
+                        typed_standard = await get_dimensional_standard(
+                            municipality, code
+                        )
+                    except Exception as exc:  # noqa: BLE001 — DB may be offline
+                        logger.debug(
+                            "Dimensional standard lookup failed for %s/%s: %s",
+                            municipality, code, exc,
+                        )
+                        typed_standard = None
+                    if typed_standard is not None:
+                        logger.info(
+                            "Typed dimensional standard found for %s/%s → "
+                            "verified-fact density path (origin=local_authority)",
+                            municipality, code,
+                        )
+                        break
+
+                if typed_standard is not None:
+                    report.density_analysis = calculate_max_units(
+                        lot_size_sqft=report.property_record.lot_size_sqft,
+                        params=typed_standard,
+                        lot_width_ft=lot_width,
+                        lot_depth_ft=lot_depth,
+                        height_limit_ft=coastal_height_limit,
+                    )
+                else:
+                    # LLM-extracted fallback (origin=unknown, assumption grade).
+                    report.density_analysis = calculate_max_units(
+                        lot_size_sqft=report.property_record.lot_size_sqft,
+                        params=report.numeric_params,
+                        lot_width_ft=lot_width,
+                        lot_depth_ft=lot_depth,
+                        density_verified=is_field_verified(
+                            report.extraction_verification, "max_density_units_per_acre"
+                        ),
+                        min_lot_area_verified=is_field_verified(
+                            report.extraction_verification, "min_lot_area_per_unit_sqft"
+                        ),
+                        height_limit_ft=coastal_height_limit,
+                    )
                 logger.info(
-                    "Max units: %d (governing: %s, confidence: %s)",
+                    "Max units: %d (governing: %s, confidence: %s, origin: %s)",
                     report.density_analysis.max_units,
                     report.density_analysis.governing_constraint,
                     report.density_analysis.confidence,
+                    report.density_analysis.origin,
                 )
 
         # Log analysis metrics
