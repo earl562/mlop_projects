@@ -1035,3 +1035,16 @@ make verify-local green. 12 unit tests pass.
 NEXT: PHASE 2 — source authority registry (seed Miami-Dade/Broward/Palm Beach +
 City of Miami Miami21 + Palm Beach ULDC special authorities; provider priority
 resolver; source-authorities API).
+
+=== 2026-06-26 PHASE 2 COMPLETE (source authority registry) ===
+- tests/unit/test_source_authority_service.py (10 tests, TDD failing-first)
+- src/plotlot/ingestion/source_authorities/service.py: resolve_provider_priority
+  (official_html=1 > official_pdf=2 > municode=3 > ecode360=4 > amlegal=5 >
+  codepublishing=6 > municipal_codes=7 > encodeplus=8 > arcgis=9 > manual=10)
+  + best_provider
+- src/plotlot/ingestion/source_authorities/south_florida.py: seed_south_florida_
+  authorities — 3 counties (Miami-Dade/Broward/Palm Beach unincorporated as
+  county authorities), City of Miami Miami21 special authority (official_html,
+  miami21 caveat), Palm Beach ULDC special authority (official_pdf, uldc caveat)
+  + adopted-ordinances authority (separate). Every authority has legal_caveat.
+22 tests pass, gate green. NEXT: Phase 3 snapshot layer.
