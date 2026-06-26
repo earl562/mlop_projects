@@ -76,6 +76,72 @@ class OrdinanceChunk(Base):
     )
 
 
+class OrdinanceSection(Base):
+    """One row per ordinance section: the hierarchical index over chunks.
+
+    While `OrdinanceChunk` is the embedding/retrieval unit, `OrdinanceSection`
+    is the *structural* unit: a section's path (breadcrumb), its role
+    (`section_type`), and its outbound cross-references (`cross_refs`). This
+    is the substrate for Phase 8's AgenticRAG — `open_section` / `follow_cross_ref`
+    tools navigate this index, and the `dimensional_table` fast-path (Slice 8.2)
+    selects rows by `section_type='dimensional_table'`. `referenced_by` is the
+    reverse index (node_ids that cite this section); it defaults to empty and is
+    populated by the Slice 3.5 backfill that scans every section's `cross_refs`.
+
+    Natural key: (municipality, node_id) — one section per municode node, even
+    though a section fans out to many chunks. `state` is nullable so PDF-only
+    municipalities (San Diego) that lack a municode node_id can still index
+    sections once their scraper supplies a synthetic node_id (Slice 3.5).
+    """
+
+    __tablename__ = "ordinance_sections"
+    __table_args__ = (
+        UniqueConstraint(
+            "municipality",
+            "node_id",
+            name="uq_section_natural_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    municipality: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+    # municode node id; synthetic for PDF-only sources. Null only before first
+    # backfill — the natural-key constraint treats (municipality, node_id), so a
+    # null node_id still enforces one row per municipality-null group.
+    node_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+
+    heading: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    section_number: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    section_title: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # regulation | definition | schedule | dimensional_table | use_regulation
+    section_type: Mapped[str] = mapped_column(String(40), nullable=False, default="regulation")
+
+    # Hierarchical breadcrumb, root-first: ["Chapter 47", "Sec. 47-5.60"].
+    path: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    # Outbound section-number references extracted from the section text
+    # (e.g. ["47-24.3", "47-5.601"]). Drives follow_cross_ref traversal.
+    cross_refs: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    # Reverse index: node_ids whose cross_refs cite this section. Populated by
+    # the Slice 3.5 backfill; empty until then.
+    referenced_by: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+
+    # Provenance — mirrors OrdinanceChunk lineage so freshness (Slice 3.4) and
+    # source-boundary checks can resolve against the section, not just chunks.
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class IngestionCheckpoint(Base):
     """Tracks per-municipality ingestion progress for resumable batch jobs.
 

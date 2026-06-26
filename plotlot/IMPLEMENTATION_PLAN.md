@@ -26,7 +26,7 @@
 
 ## Phase 3 — Evidence engineering (the moat)
 
-- [ ] **3.1** `OrdinanceSection` model + migration — `path` tuple, `section_type`, `cross_refs`, `referenced_by`. Chunker populates path + cross_refs.
+- [x] **3.1** `OrdinanceSection` model + migration — `path` tuple, `section_type`, `cross_refs`, `referenced_by`. Chunker populates path + cross_refs.
 - [ ] **3.2** Generalize dimensional extractor to 3 municipalities (FL + 2 more). Store `DistrictDimensionalStandard` rows with `source_section_id` provenance.
 - [ ] **3.3** Wire `calculate_max_units` to read from `DistrictDimensionalStandard` (not LLM `NumericZoningParams`). Output claim `kind=calculation, origin=local_authority`.
 - [ ] **3.4** Freshness as typed claim — `amended_date > scraped_at` → `freshness=stale` blocks `verified_fact` synthesis.

@@ -28,7 +28,15 @@ class MunicodeConfig:
 
 @dataclass
 class RawSection:
-    """A raw section of ordinance text scraped from Municode."""
+    """A raw section of ordinance text scraped from Municode.
+
+    `path` is an optional explicit breadcrumb (the full ancestor heading chain,
+    root-first). When absent the chunker synthesizes a path from
+    `parent_heading` + `heading`. Slice 3.1 populates path/cross_refs at chunk
+    time so every section carries a hierarchical location + its outbound
+    references (the foundation for the `OrdinanceSection` index + AgenticRAG
+    cross-ref traversal in Phase 8).
+    """
 
     municipality: str
     county: str
@@ -37,6 +45,7 @@ class RawSection:
     parent_heading: str | None
     html_content: str
     depth: int
+    path: list[str] | None = None
 
 
 @dataclass
@@ -58,7 +67,16 @@ class TocNode:
 
 @dataclass
 class ChunkMetadata:
-    """Metadata attached to each text chunk for filtering and retrieval."""
+    """Metadata attached to each text chunk for filtering and retrieval.
+
+    `path` is the section's hierarchical breadcrumb (root-first, e.g.
+    ["Chapter 47", "Sec. 47-5.60"]); all chunks of one section share it.
+    `cross_refs` are outbound section-number references found in the section
+    text (e.g. ["47-24.3", "47-5.601"]). `section_type` classifies the section
+    (regulation | definition | schedule | dimensional_table | use_regulation).
+    These three are populated by the chunker (Slice 3.1) and feed the
+    `OrdinanceSection` index used for cross-ref traversal + freshness checks.
+    """
 
     municipality: str
     county: str
@@ -68,6 +86,9 @@ class ChunkMetadata:
     zone_codes: list[str]
     chunk_index: int
     municode_node_id: str
+    path: list[str] = field(default_factory=list)
+    cross_refs: list[str] = field(default_factory=list)
+    section_type: str = "regulation"
 
 
 @dataclass

@@ -25,6 +25,8 @@ General + reusable only; story-specific details stay in the dated log entries.
 - **Source boundary (Slice 2.1):** `zoning.*` / `parcel.*` claims must be `origin=local_authority` (the Rehab Valuator corpus is NOT a zoning oracle). `cost.*` / `cap_rate` / `financing.*` / `rent.*` must never be `kind=verified_fact`. Both raise `SourceBoundaryViolation` at construction. Downstream `steps.py`/`guardrails.py` build rules *over* `Claim`, not new types. The canonical namespace sets are the PUBLIC module constants `LOCAL_AUTHORITY_NAMESPACES` / `ASSUMPTION_NAMESPACES` in `claims.py` (import them — never re-declare, to avoid drift).
 - **Guardrails (Slice 2.3) vs constructor invariants:** rules 1–3 of `domain/guardrails.py` overlap the `Claim.__post_init__` invariants, but the guardrails run over a *ClaimLog* (loaded from storage / aggregated across runs / tool-fed) whose rows BYPASS construction. So the guardrails are the SET-level re-validation (report-validator foundation, spec acceptance #7). Test rule-violating log rows with a STUB dataclass (matching attrs + `namespace` property, no `__post_init__`) — a frozen `Claim` cannot be constructed in a violating state. A contradiction is an ESCALATION (`requires_human_review=True`), not an integrity failure.
 - **Type relocation across layers (Slice 2.4):** when moving shared types to a lower layer, prefer re-export-by-identity (`from lower import X`) in the old location over mass-editing N consumer files. Identity is cheaply testable (`obj is obj`) and the shim lets new code migrate incrementally. Move a type WITH its dependency closure (e.g. `EvidenceItem` pulls `EvidenceCitation`/`SourceType`), else you force an up-import cycle or a divergent re-declaration. To assert "module X doesn't import from module Y" in a test, walk the parsed AST `Import`/`ImportFrom` nodes — substring-matching the source catches docstring mentions (false positives).
+- **Mocking SQLAlchemy's `pg_insert` in unit tests (Slice 3.1):** the builder chain is `pg_insert(Model) -> .values(rows) -> .on_conflict_do_update(constraint=..., set_=...) -> stmt`. Use `MagicMock` for the stmt chain (it's sync), `AsyncMock` only for the session. `mock_insert.call_args[0][0]` is the MODEL; the rows are at `mock_stmt.values.call_args[0][0]`; the conflict call is at `mock_stmt.values.return_value.on_conflict_do_update.call_args` — three `.return_value` levels deep.
+- **Structural vs embedding unit (Slice 3.1):** `OrdinanceChunk` is the embedding/retrieval unit; `OrdinanceSection` is the structural unit (one row per municode node, keyed (municipality, node_id)) carrying path/section_type/cross_refs/referenced_by. A section's chunks all share its path/cross_refs/section_type. The reverse-index `referenced_by` is owned by the Slice 3.5 backfill — ingestion upserts must OMIT it from `set_` so a refresh never clobbers the backfill-built reverse index. Table is provisioned by `init_db`→`Base.metadata.create_all`; migrations are belt-and-suspenders (idempotent) for the operator-managed alembic path.
 
 ---
 
@@ -362,4 +364,63 @@ with a project-root override fallback. Caught by verify-live, not theory.
   a big-bang rename. The AST-over-imports pattern is the robust way to
   assert "module X doesn't import from module Y" — substring-matching the
   source catches docstring mentions (false positives).
+- Merged dev+commit. <promise>TASK-DONE</promise>
+
+### 2026-06-26 — Slice 3.1: OrdinanceSection model + chunker path/cross_refs/section_type
+- `OrdinanceSection` is the STRUCTURAL unit over `OrdinanceChunk` (the embedding
+  unit). One row per munique node, keyed by (municipality, node_id). It carries
+  the path breadcrumb, section_type, outbound cross_refs, and a reverse-index
+  referenced_by (default [] — populated by the Slice 3.5 backfill, NOT by
+  re-ingestion: the upsert deliberately omits referenced_by from its update set
+  so a refresh never clobbers the backfill-built reverse index).
+- Three chunker helpers added to `ingestion/chunker.py`:
+  - `_extract_cross_refs(text)` — outbound section-number refs from
+    `§`/`Sec.`/`Section` prefixes → bare `47-24.3`-style keys.
+  - `_classify_section_type(heading, title, text)` — dimensional_table |
+    schedule | definition | use_regulation | regulation (catch-all). Drives the
+    Phase 8 AgenticRAG dimensional-table fast-path (no LLM).
+  - `_build_section_path(section, sec_num, title)` — prefers an explicit
+    `RawSection.path` (full ancestor chain) else synthesizes [parent_heading,
+    sec_num]. Blanks dropped.
+- `RawSection` got an optional `path: list[str] | None` field; `ChunkMetadata`
+  got `path` (default []), `cross_refs` (default []), `section_type`
+  (default "regulation"). All three are populated once per section in
+  `chunk_sections`, so every chunk of a section shares them.
+- Ingestion now upserts sections: `_store_ordinance_sections(session, chunks,
+  config)` dedups by node_id, unions cross_refs defensively, upserts on the
+  `uq_section_natural_key` constraint. Wired into `ingest_municipality` after the
+  chunk store (logs `ingest.sections_indexed`). San Diego's PDF path
+  (`ingest_san_diego`) is NOT wired this slice — it builds TextChunks directly
+  without RawSections; Slice 3.5 backfill covers PDF-only sources via synthetic
+  node_ids. This slice is the Municode path only.
+- Migration `009_ordinance_sections.py` (idempotent CREATE TABLE IF NOT EXISTS +
+  DO $$ constraint + CREATE INDEX IF NOT EXISTS). NOTE: runtime provisions via
+  `init_db` → `Base.metadata.create_all`, so the table is auto-created on first
+  connect regardless of migration apply state; migration exists for the
+  operator-managed alembic path. Also documented a PRE-EXISTING alembic anomaly
+  (duplicate revision ids "007" x2, "008" x2; `alembic heads` reports two heads
+  both named "008") — NOT introduced by this slice, separate operator fix.
+- EVIDENCE: 12 new tests (chunker cross-refs/classifier/path-builder +
+  share-metadata; model structural columns + natural-key + ARRAY types +
+  defaults; ingest upsert dedup + conflict target + referenced_by-excluded +
+  skip-no-node-id + distinct-rows). Two pre-existing ingest tests updated:
+  execute/commit now called twice (chunks + sections). Gate green
+  (`make verify-local`).
+- VERIFY-LIVE: chunker is live-behavior (real ordinance-shaped HTML input).
+  Ran it end-to-end on a Broward §47-5.60 dimensional table + a §47-2
+  definitions section: section_type classified correctly
+  (dimensional_table/definition), path = [Chapter, Sec], cross_refs captured
+  `47-24.3` + `47-5.601`. ORM model declares all structural columns + the
+  `uq_section_natural_key` constraint. The migration itself is gate-only
+  (table auto-created via create_all; no DB in the sandbox) — its SQL is
+  idempotent and unit-asserted via the model's column/constraint declarations.
+- LEARNING (Codebase Patterns): when patching `pg_insert` (SQLAlchemy's
+  postgres dialect insert factory) in a unit test, the call chain is
+  `pg_insert(Model) -> .values(rows) -> .on_conflict_do_update(...) -> stmt`.
+  `mock_insert.call_args[0][0]` is the MODEL, not the rows; the rows are on
+  `mock_stmt.values.call_args[0][0]`, and the conflict call is on
+  `mock_stmt.values.return_value.on_conflict_do_update.call_args` — three
+  levels of `.return_value` deep, easy to mis-attribute. Use `MagicMock`
+  (not `AsyncMock`) for the stmt chain: `.execute(stmt)` is awaited, but the
+  builder chain is sync.
 - Merged dev+commit. <promise>TASK-DONE</promise>
