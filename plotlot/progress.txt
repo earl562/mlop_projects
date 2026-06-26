@@ -67,3 +67,32 @@ evidenced, sourced). This is the verified-fact path for comps, not an assumption
 - FINDING for future: Broward's sales are year-bucketed (layer 17=2026, 18=2025, 19=2024).
   A 12-month recency window may need to query multiple sibling layers for full coverage.
   Not solved in 1.2 (single-layer registration); flag for a follow-up if recency gaps appear.
+
+### 2026-06-26 — Slice 1.2 verification gap (operator-caught)
+
+OPERATOR CAUGHT A CLAIM-WITHOUT-EVIDENCE BUG. I shipped "comps path works for
+South FL" in the Slice 1.2 commit message + summary, having verified only that
+the ArcGIS endpoints exist with the right field names. I did NOT verify that
+comps actually come back, are sane, or that find_comparables produces them.
+
+Investigation after the catch found TWO real defects the registry test missed:
+1. Broward's SALE_AMOUNT is a string "$1,850,000" — safe_float handles it, OK.
+2. Broward's field names are DB-qualified (SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT);
+   Miami-Dade's are PRICE_1 / DOS_1. _find_field did EXACT matching against
+   candidate sets {SALE_AMT, PRICE} / {SALE_DATE} → 2 of 3 counties returned
+   None for price_field → find_comparables silently returns 0 comps.
+   Only Palm Beach (PRICE / SALE_DATE exact match) actually worked.
+
+## NEW SIGN (permanent — Ralph reads this every iteration):
+
+**CLAIM-WITHOUT-EVIDENCE GUARD.** A unit test passing is NOT evidence the
+feature works. "Registered" ≠ "returns data" ≠ "returns accurate data" ≠
+"the consumer (find_comparables) produces correct comps." Before any commit
+message or summary claims a feature works for a real input, the iteration MUST:
+  (a) run the feature against a REAL input (live query, real address), AND
+  (b) assert the output is non-empty AND sane (real prices, real dates, in range), AND
+  (c) write an integration test that pins (a)+(b) so it can't silently regress.
+Commit messages may only claim what the tests + live verification prove.
+"No analysis claim without evidence" (test-spec invariant) applies to me too.
+
+<promise>DECIDE:resolved — proceeding to fix field-mapping + end-to-end verify</promise>

@@ -108,16 +108,18 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
     ),
     # Palm Beach County Property Appraiser — Parcels layer 0.
     # Sale price + date ride directly on the parcel feature.
-    # Verified fields: PRICE, SALE_DATE, MONTHS_SINCE_SALE (+ SALEKEY, etc.).
+    # Verified live 2026-06-26 (field names reconciled against the actual layer schema,
+    # not the metadata listing — the listing and live schema diverge for this layer).
+    # Actual fields: PARCEL_NUMBER, PRICE, SALE_DATE, MONTHS_SINCE_SALE, ACRES,
+    # PROPERTY_USE, YEAR_ADDED, SALEKEY.
     ("FL", "palm beach"): SalesSource(
         layer_url=(
             "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services"
             "/Parcels_and_Property_Details_WebMercator/FeatureServer/0"
         ),
         fields=(
-            "PARCELNO", "PRICE", "SALE_DATE", "MONTHS_SINCE_SALE", "SALEKEY",
-            "USECODE", "LOTSQFT", "LIVUNIT", "YRBUILT",
-            "BEDROOMS", "BATHROOMS", "LANDUSE",
+            "PARCEL_NUMBER", "PRICE", "SALE_DATE", "MONTHS_SINCE_SALE", "SALEKEY",
+            "PROPERTY_USE", "ACRES", "YEAR_ADDED", "AG_USE_VAL",
         ),
         source="Palm Beach County Property Appraiser Parcels, verified 2026-06-26",
         note="Sale price + date on the parcel feature; 0-3 mi radius query.",
