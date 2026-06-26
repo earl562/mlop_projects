@@ -102,14 +102,16 @@
       "title": "Ingestion eval — golden queries post-ingest",
       "phase": "3",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "After ingest, a golden set of queries ('what is the RS-8 setback?') returns the typed row; hit-rate >= 90%",
         "Eval runs in tests/eval/ and is wired to make eval (or a documented command)",
         "A botched ingest (low hit-rate) is detectable by the eval, not shipped silently",
         "make verify-local green"
       ],
-      "notes": "This is the verification gate inside the autonomous-ingestion skill (Phase 9)."
+      "notes": "This is the verification gate inside the autonomous-ingestion skill (Phase 9).",
+      "completedAt": "2026-06-26T16:50:00Z",
+      "completionNote": "Golden-query ingestion eval gate added (tests/eval/test_ingestion_golden_queries.py). 15 golden queries (FTL RS-8/RS-4.4/RM-15 × density/setback/lot/FAR/coverage) hit-rate 100% >= 90% threshold. No silent value drift (a re-ingest that mangles verified values is detected). Wired to make eval. Criterion 1 (golden queries return typed rows >=90%), criterion 2 (tests/eval + make eval), criterion 3 (botched ingest detectable via hit-rate drop + drift check) all met. make verify-local green."
     },
     {
       "id": "4.1",

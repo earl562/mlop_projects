@@ -762,3 +762,24 @@ typed standard (rear 15, FAR 0.75, source Sec. 47-5.31), NOT an LLM extraction.
 The verified-fact fast path works end-to-end for FL.
 
 **Next:** 3.6 (priority 7) — Ingestion eval: golden queries post-ingest.
+
+=== 2026-06-26 3.6 COMPLETE (ulw-loop iteration) ===
+Story 3.6: Ingestion eval — golden queries post-ingest. Priority 7.
+
+**Implemented:**
+- tests/eval/test_ingestion_golden_queries.py: 15 golden queries (FTL RS-8,
+  RS-4.4, RM-15 × density/setback_front/setback_rear/setback_side/height/lot/
+  FAR/coverage) drawn from the VERIFIED ordinance-corpus values. Two tests:
+  (1) hit-rate >= 90% (a miss = no typed row OR missing value), (2) no silent
+  value drift (a re-ingest that mangles a verified number is detected — the
+  most dangerous regression).
+- Makefile: added `make eval` target wired to the test.
+- The "botched ingest detectable" criterion: a bad re-ingest that drops rows
+  or changes values shows up as a hit-rate drop below 90% AND/OR a drift
+  failure — never silent.
+
+**Live domain verification:** PLOTLOT_LIVE_TESTS=1 — hit-rate 100% (15/15),
+no drift. Every golden query returns the verified typed value (RS-8 rear 15,
+FAR 0.75, RS-4.4 side 10, RM-15 rear 15) from the live DB.
+
+**Next:** 4.1 (priority 8) — tools/ package scaffold with kleyman_step + field-key tags.

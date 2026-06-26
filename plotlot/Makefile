@@ -46,6 +46,9 @@ db-up:  ## Start PostgreSQL + pgvector (Docker)
 db-down:  ## Stop database
 	docker compose down
 
+eval:  ## Run ingestion golden-query eval gate (requires PLOTLOT_LIVE_TESTS=1 + seeded DB)
+	PLOTLOT_LIVE_TESTS=1 .venv/bin/python -m pytest tests/eval/test_ingestion_golden_queries.py -v
+
 clean:  ## Remove build artifacts
 	rm -rf .venv dist build *.egg-info .pytest_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
