@@ -1,0 +1,36 @@
+# Ralph Progress Log
+
+Started: 2026-06-26
+Branch: dev (monolithic Ralph — single branch, one task per iteration)
+Plan: IMPLEMENTATION_PLAN.md
+Skill: ~/.pi/agent/skills/plotlot-ralph-loop/SKILL.md (v2.0.0, verified Ralph)
+
+---
+
+## Iteration history (newest at bottom)
+
+### Pre-Ralph (manual TDD, not true Ralph — kept for continuity)
+- 2026-06-25 Slice 0.1 — branch reckoning. Froze `feature/deal-analysis-pipeline` (59 commits, 331 files preserved). Fresh `work/harness-build` from `origin/dev`. Zillow/stealth liability absent from working tree. Ralph skill installed as pi builtin. <promise>COMPLETE</promise>
+- 2026-06-25 Slice 0.2 — MLflow gate fix. conftest self-sets `MLFLOW_ALLOW_FILE_STORE`; verify script exports on 3 pytest paths; bundled 2 pre-existing tsc fixes. Merged `3d0a126`. <promise>COMPLETE</promise>
+  - LESSON: `git stash` silently reverted a conftest edit; caught only by re-running contract test without env var. AGENTS.md forbids stash for a reason. Never stash.
+  - LESSON: after `git commit --amend`, re-read the hash before cherry-pick. Cherry-picked pre-amend hash → wrong commit landed. Re-capture with `git log -1 --format=%H`.
+- 2026-06-25 Slice 0.3 — jsdom localStorage polyfill in `tests/ui/setup.ts`. Gate fully green on `dev`. Merged `3d79f69`. <promise>COMPLETE</promise>
+- 2026-06-25 Slice 1.1 — dimensional extraction spike PASSED. `src/plotlot/domain/dimensional_standard.py` + `extract_dimensional_standards()`. Verified-fact path confirmed real. Merged `4ccbf74`. <promise>COMPLETE</promise>
+  - FINDING: `dev` already has `_normalize_zone_tables()` in `ingestion/adapters/codifier.py` (commit `bc9b31c`) — it normalizes markdown tables for the LLM but does NOT extract typed rows. Slice 1.1 built on top of it; didn't duplicate. Future dimensional work (3.2) should generalize the extractor, not re-normalize.
+  - FINDING: `dev` has substantial on-thesis work the feature branch lacked: upzoning engine (`c279e5e`), RentCast comps (`394be70`), codifier table reconstruction (`bc9b31c`), anti-hallucination gating (`79883d9`). The feature branch was not the only place work happened.
+
+## Signs (operator learnings — Ralph reads these each iteration)
+
+- Never `git stash` (AGENTS.md + Slice 0.2 lesson). Use preservation commit or `git checkout -- <file>`.
+- After any `git commit --amend`, re-capture hash: `FINAL_HASH=$(git log -1 --format=%H)`.
+- Cherry-pick (not `--no-ff` merge) is the workflow to `dev`. One slice per commit.
+- `make verify-local` is the backpressure gate. Non-negotiable before push.
+- Explicit `git add <paths>` only — never `-A` (AGENTS.md).
+- Earl Perry commits, no Co-Authored-By trailers (AGENTS.md).
+- Before implementing: search codebase ("don't assume not implemented") — ghuntley's rule. `dev` has more than the feature branch did.
+- No placeholder implementations. Full implementations or BLOCKED.
+- Every iteration ends with a `<promise>` tag. No silent endings.
+
+## Open decisions (human must resolve)
+
+- **Comps scraper (Slice 1.2):** operator wants a scraper. Skill v2 + plan encode the boundary rule: scraped comps = `kind=assumption, origin=unknown`, amber, confidence ≤ 0.5, gated behind Slice 9.1 governance. DO NOT silently violate this — if scraped comps flow into `value.arv` as `verified_fact`, the boundary Slice 1.1 built is broken at the moment of creation.
