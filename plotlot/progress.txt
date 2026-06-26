@@ -130,3 +130,28 @@ Commit messages may only claim what the tests + live verification prove.
 - LESSON: live end-to-end verification caught what 4 unit tests + a registry
   test missed. The CLAIM-WITHOUT-EVIDENCE GUARD (sign above) is now proven
   load-bearing, not theoretical. Apply it every slice.
+
+### 2026-06-26 — Ralph skill v2.2: real outer loop + global skill
+
+Skill is now a GLOBAL pi skill at ~/.pi/agent/skills/plotlot-ralph-loop/ (not in
+the repo). Ships with: SKILL.md (v2.2), ralph.sh (the actual bash outer loop),
+PROMPT_build.md, PROMPT_plan.md.
+
+This fixes the architectural honesty gap: I'd been emulating Ralph inside one pi
+session (context accumulating across iterations). Real Ralph = bash outer loop
+re-invoking the agent with fresh context each iteration (ghuntley canonical form).
+ralph.sh does: preflight → archive-on-branch-change → feed PROMPT_*.md to pi
+--print --no-session → detect <promise> tags → push → loop/exit (0/1/2/3).
+
+Skill v2.2 also encodes the 3 mechanics I missed in v2.1:
+- Subagent allocation (ghuntley): main = scheduler, ONE validator subagent.
+- Acceptance-driven backpressure: planning derives required tests from acceptance
+  criteria; build can't claim passes:true without them. This is the structural
+  fix for the Slice 1.2 claim-without-evidence class.
+- specs/*.md directory (ghuntley): per-JTBD requirement specs as plan source.
+
+Repo: created specs/agentic-zoning-harness.md (first JTBD spec with acceptance
+criteria + derived required tests). IMPLEMENTATION_PLAN.md tasks should now carry
+their required tests; a future planning-mode iteration will backfill that.
+
+<promise>COMPLETE</promise>
