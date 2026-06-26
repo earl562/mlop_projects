@@ -1,0 +1,229 @@
+{
+  "branchName": "dev",
+  "project": "PlotLot Agentic Zoning & Land-Acquisition Harness",
+  "source": "IMPLEMENTATION_PLAN.md (converted to Carson prd.json format 2026-06-26)",
+  "conventions": {
+    "priority": "lower = first. Agent picks highest-priority story where passes: false.",
+    "passes": "set true ONLY when ALL acceptanceCriteria are met AND make verify-local is green.",
+    "acceptanceCriteria": "behavioral outcomes (WHAT to verify), not implementation (HOW). Each must include a connection criterion where applicable.",
+    "stop": "emit <promise>COMPLETE</promise> only when ALL stories pass. Otherwise end normally (loop continues)."
+  },
+  "userStories": [
+    {
+      "id": "WIRE-1.1b",
+      "title": "Wire calculate_max_units to consume DistrictDimensionalStandard",
+      "phase": "backfill",
+      "priority": 1,
+      "passes": false,
+      "acceptanceCriteria": [
+        "calculate_max_units accepts a DistrictDimensionalStandard (or a caller converts via .to_numeric_zoning_params()) when one is available for the parcel's district",
+        "When given a DistrictDimensionalStandard, the resulting DensityAnalysis is labeled as derived from a verified-fact source (origin=local_authority), not LLM-extracted",
+        "The existing LLM-extracted NumericZoningParams path still works as fallback when no typed standard is available",
+        "Contract test: given a DistrictDimensionalStandard for RS-8, calculate_max_units returns the same max_units as the equivalent NumericZoningParams",
+        "make verify-local green"
+      ],
+      "notes": "Slice 1.1 built the extractor + type but it's an island. This wires the consumer. lookup.py:_agentic_analysis is the call site that should prefer the typed standard when available."
+    },
+    {
+      "id": "WIRE-2.1b",
+      "title": "Wire _agentic_analysis to emit typed Claims",
+      "phase": "backfill",
+      "priority": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "_agentic_analysis (pipeline/lookup.py) produces Claim objects for the zoning facts it extracts (zoning.district, standards.setback_front_ft, etc.) in addition to the ZoningReport",
+        "A zoning.district Claim has kind=verified_fact, origin=local_authority when sourced from indexed ordinance text; kind=assumption, origin=unknown when from LLM fallback",
+        "A cost.* or financing.* Claim is never kind=verified_fact (boundary invariant holds at the emission point)",
+        "Claims are returned alongside the ZoningReport (e.g. report.claims or a parallel return) so downstream consumers can use them",
+        "Contract test: _agentic_analysis on a mocked ordinance input emits at least one zoning.district Claim with origin=local_authority",
+        "make verify-local green"
+      ],
+      "notes": "Slice 2.1 built the Claim type but it's an island. This wires the primary producer. No ClaimLog storage yet (Phase 6) — just emit the Claims in-memory for now."
+    },
+    {
+      "id": "3.2",
+      "title": "Generalize dimensional extractor to 3 municipalities",
+      "phase": "3",
+      "priority": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "extract_dimensional_standards runs on Fort Lauderdale + 2 more FL municipalities (e.g. Miami, Hollywood) and returns typed rows for each",
+        "Each row has source_section_id provenance pointing at the originating ordinance section",
+        "Live verification (PLOTLOT_LIVE_TESTS=1): integration test asserts ≥1 municipality returns rows with all numeric fields populated for ≥3 districts",
+        "make verify-local green"
+      ],
+      "notes": "Slice 1.1 proved FL works; this generalizes. Reconcile field names against live schema per Slice 1.2 lesson."
+    },
+    {
+      "id": "3.3",
+      "title": "calculate_max_units reads from DistrictDimensionalStandard (production path)",
+      "phase": "3",
+      "priority": 4,
+      "passes": false,
+      "acceptanceCriteria": [
+        "When a DistrictDimensionalStandard exists for the parcel's district, lookup.py uses it instead of LLM-extracted NumericZoningParams",
+        "The resulting standards.max_units Claim is kind=calculation, origin=local_authority (inherited from the source standard)",
+        "When no standard exists, falls back to LLM extraction with kind=calculation, origin=unknown (labeled assumption-grade)",
+        "Contract test: with a standard present, no LLM call is made for zoning params; without, the LLM path runs",
+        "make verify-local green"
+      ],
+      "notes": "Depends on WIRE-1.1b + 3.2. This is the verified-fact path replacing LLM extraction at query time."
+    },
+    {
+      "id": "3.4",
+      "title": "Freshness as typed claim",
+      "phase": "3",
+      "priority": 5,
+      "passes": false,
+      "acceptanceCriteria": [
+        "A chunk whose amended_date > scraped_at produces a freshness=stale flag on the derived Claim",
+        "A stale zoning.* Claim cannot satisfy a verified_fact prerequisite (the planner/guardrail blocks it)",
+        "Contract test: a stale chunk yields freshness=stale; a fresh chunk yields freshness=fresh",
+        "make verify-local green"
+      ],
+      "notes": "Kleyman: 'refresh before relying'. Enforced at the claim layer."
+    },
+    {
+      "id": "3.5",
+      "title": "Backfill Fort Lauderdale evidence graph end-to-end",
+      "phase": "3",
+      "priority": 6,
+      "passes": false,
+      "acceptanceCriteria": [
+        "For Fort Lauderdale: every residential district has a DistrictDimensionalStandard, every ingested section has path + cross_refs populated, freshness is computed",
+        "Live verification: a query for RS-8 setbacks returns the typed standard (not an LLM extraction)",
+        "Integration test (PLOTLOT_LIVE_TESTS=1) pins the FL evidence graph is complete",
+        "make verify-local green"
+      ],
+      "notes": "FL is the reference municipality for developing the agent loop against."
+    },
+    {
+      "id": "3.6",
+      "title": "Ingestion eval — golden queries post-ingest",
+      "phase": "3",
+      "priority": 7,
+      "passes": false,
+      "acceptanceCriteria": [
+        "After ingest, a golden set of queries ('what is the RS-8 setback?') returns the typed row; hit-rate >= 90%",
+        "Eval runs in tests/eval/ and is wired to make eval (or a documented command)",
+        "A botched ingest (low hit-rate) is detectable by the eval, not shipped silently",
+        "make verify-local green"
+      ],
+      "notes": "This is the verification gate inside the autonomous-ingestion skill (Phase 9)."
+    },
+    {
+      "id": "4.1",
+      "title": "tools/ package scaffold with kleyman_step + field-key tags",
+      "phase": "4",
+      "priority": 8,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Every registered ToolContract has kleyman_step, produces_field_keys, consumes_field_keys declared",
+        "tools/ package exists with location/ordinance/comps/underwriting/documents/ingestion subpackages (empty or migrated)",
+        "Contract test: list_tool_contracts() returns tools with all three tags populated",
+        "make verify-local green"
+      ],
+      "notes": "Foundation for tool consolidation. Don't migrate tools yet — just the scaffold + tags."
+    },
+    {
+      "id": "4.2",
+      "title": "Migrate location/ordinance tools to tools/ with field-key tags",
+      "phase": "4",
+      "priority": 9,
+      "passes": false,
+      "acceptanceCriteria": [
+        "geocode_address, lookup_property_info, search_zoning_ordinance, search_municode_live, fetch_ordinance_section, discover_open_data_layers live in tools/location/ or tools/ordinance/ with kleyman_step=2 + produces/consumes field keys",
+        "Existing behavior preserved (parity test against current harness handlers)",
+        "api/chat.py routes these through get_default_runtime().call_tool (no change to the route, just the handler location)",
+        "make verify-local green"
+      ],
+      "notes": "Mechanical move + tag annotation. Parity is the acceptance bar."
+    },
+    {
+      "id": "4.3",
+      "title": "Fold pipeline/skills/registry.py into harness tool registry",
+      "phase": "4",
+      "priority": 10,
+      "passes": false,
+      "acceptanceCriteria": [
+        "playwright_comps / redfin_comps (comps tools) register in the single harness tool_registry with kleyman_step=3",
+        "pipeline/skills/registry.py is DELETED (one registry, not two)",
+        "Contract test: get_handler() for comps tools resolves through the harness registry",
+        "make verify-local green"
+      ],
+      "notes": "Kills the second skill registry. One registry, one tool surface."
+    },
+    {
+      "id": "4.4",
+      "title": "Decompose run_deal_analysis into step-3-through-8 calculator tools",
+      "phase": "4",
+      "priority": 11,
+      "passes": false,
+      "acceptanceCriteria": [
+        "calculate_stabilized_value, calculate_total_cost, calculate_residual_land_value, calculate_construction_loan, calculate_permanent_loan, calculate_dscr, calculate_coc, calculate_yield_on_cost, calculate_sweat_equity each registered as a tool with consumes/produces field keys",
+        "Pure calculation functions stay in pipeline/ (deterministic); orchestration moves to tools",
+        "Contract test: each calculator tool emits a Claim with kind=calculation + the correct produces_field_keys",
+        "run_deal_analysis still works (calls the tools internally) — parity",
+        "make verify-local green"
+      ],
+      "notes": "Big slice. The monolith becomes typed tools the planner can authorize per step."
+    },
+    {
+      "id": "4.5",
+      "title": "Residential vs commercial routing as HTN method dispatch",
+      "phase": "4",
+      "priority": 12,
+      "passes": false,
+      "acceptanceCriteria": [
+        "step_3_stabilized_value has two methods: income_approach (precondition product.unit_count >= 5) and comp_approach (precondition <= 4)",
+        "The dispatch is typed in domain/methodology.py, not a prompt hope",
+        "Contract test: a 3-unit product routes to comp_approach; a 10-unit product routes to income_approach",
+        "make verify-local green"
+      ],
+      "notes": "Your resi/commercial divergence as a typed dispatch."
+    },
+    {
+      "id": "4.6",
+      "title": "Migrate dataset/document/export tools to tools/ with tags",
+      "phase": "4",
+      "priority": 13,
+      "passes": false,
+      "acceptanceCriteria": [
+        "search_properties, filter_dataset, export_dataset, generate_document, create_document, export_csv live in tools/dataset/ or tools/documents/ with kleyman_step tags",
+        "Parity with current behavior",
+        "make verify-local green"
+      ],
+      "notes": "Mechanical."
+    },
+    {
+      "id": "4.7",
+      "title": "Kill chat.py _execute_tool + CHAT_TOOLS — all calls through runtime",
+      "phase": "4",
+      "priority": 14,
+      "passes": false,
+      "acceptanceCriteria": [
+        "api/chat.py imports no tool handlers directly; every call routes through get_default_runtime().call_tool",
+        "CHAT_TOOLS list and _execute_* functions are DELETED",
+        "chat.py drops to under 400 lines (from 2630)",
+        "Parity: chat still resolves addresses, searches zoning, generates docs",
+        "make verify-local green"
+      ],
+      "notes": "The god-module cleanup. MCP + tools REST + chat now see one tool surface."
+    },
+    {
+      "id": "5.1",
+      "title": "Build the HTN planner (harness/planner.py) using domain/steps.py",
+      "phase": "5",
+      "priority": 15,
+      "passes": false,
+      "acceptanceCriteria": [
+        "harness/planner.py exists and uses domain/steps.py + methodology.py to produce a plan",
+        "Step 5 (residual land) is blocked when any zoning.* / parcel.* Claim is not kind=verified_fact",
+        "Contract test: given a context with zoning.district unknown, planner emits PlanEscalation and refuses step 5",
+        "make verify-local green"
+      ],
+      "notes": "The planner doesn't exist on dev yet. This builds it using the HTN spine from Slice 2.2. Connects the steps/methodology island."
+    }
+  ],
+  "futurePhasesNote": "Phases 5.2-6.4, 7-14 tasks will be fleshed out with full acceptance criteria in a subsequent planning iteration as we approach them. The plan is disposable — regenerate when stale. See IMPLEMENTATION_PLAN.md for the phase outline."
+}

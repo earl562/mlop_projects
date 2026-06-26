@@ -424,3 +424,27 @@ with a project-root override fallback. Caught by verify-live, not theory.
   (not `AsyncMock`) for the stmt chain: `.execute(stmt)` is awaited, but the
   builder chain is sync.
 - Merged dev+commit. <promise>TASK-DONE</promise>
+
+### 2026-06-26 — Planning iteration: prd.json + Carson semantics
+
+Converted IMPLEMENTATION_PLAN.md to prd.json (Carson format) with:
+- 15 stories, each with explicit acceptanceCriteria (behavioral + connection).
+- 2 backfill wiring slices (WIRE-1.1b, WIRE-2.1b) prioritized FIRST — these
+  connect the island modules (calculate_max_units ← DistrictDimensionalStandard;
+  _agentic_analysis → emit Claims) to the actual pipeline.
+- Verified: only 2 of the 5 "island" slices need backfill. The others
+  (steps/guardrails) are prerequisites for Phase 5/12 (planner/validator),
+  not disconnected code — their consumers don't exist yet by design.
+
+Simplified promise tags to Carson model (dropped TASK-DONE):
+- Normal single-story completion = end response, NO tag → loop continues.
+- <promise>COMPLETE</promise> ONLY when all stories pass → loop stops.
+- BLOCKED/DECIDE → stop.
+
+Root cause of the prior run's island problem: the plan had no connection
+criteria per task, so "done" meant "module exists + tests pass" not "module
+is wired to its consumer." The prd.json acceptanceCriteria now require
+connection (e.g. "calculate_max_units accepts DistrictDimensionalStandard").
+This is the structural fix.
+
+<promise>COMPLETE</promise>
