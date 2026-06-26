@@ -15,7 +15,7 @@
 ## Phase 1 — De-risk spikes
 
 - [x] **1.1** Dimensional-table extraction spike (Fort Lauderdale §47-5.60). PASSED: `DistrictDimensionalStandard` + `extract_dimensional_standards()` in `src/plotlot/domain/`. Verified-fact path is real. (merged `4ccbf74`)
-- [ ] **1.2** Comps scraper — see dedicated task below. **BOUNDARY RULE: scraped comps are `kind=assumption, origin=unknown`, never `verified_fact`. Rendered amber, confidence ceiling. Used only when RentCast/County APIs can't cover a market. Gated behind Slice 9.1 governance before any production use.**
+- [x] **1.2** Comps scraper — see dedicated task below. **BOUNDARY RULE: scraped comps are `kind=assumption, origin=unknown`, never `verified_fact`. Rendered amber, confidence ceiling. Used only when RentCast/County APIs can't cover a market. Gated behind Slice 9.1 governance before any production use.**
 
 ## Phase 2 — Domain foundation (the typed-claim spine)
 

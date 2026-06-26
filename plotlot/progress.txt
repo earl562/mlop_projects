@@ -50,3 +50,20 @@ Boundary rule still holds: ArcGIS county sales = origin=local_authority (legal,
 evidenced, sourced). This is the verified-fact path for comps, not an assumption.
 
 <promise>DECIDE:resolved</promise> — proceeding to investigation.
+
+### 2026-06-26 — Slice 1.2 (comps sources)
+- DECIDE resolved: RentCast not free → drop. ArcGIS county sales is the path.
+- Investigation finding (ghuntley rule: don't assume not implemented): comps.py
+  already had find_comparables(radius_miles=3.0) + _query_nearby_sales + Hub
+  discovery. The gap was the curated registry (comps_sources.py) was EMPTY.
+- Verified live (rule #11): probed ArcGIS endpoints. Found:
+  - Miami-Dade PaGISView FS/0: PRICE_1, DATEOFSALE_UTC (sale on parcel)
+  - Broward BCPA MapServer/18 (2025 Sales): SALE_AMOUNT, SALE_DATE (year-bucketed)
+  - Palm Beach Parcels FS/0: PRICE, SALE_DATE (sale on parcel)
+- Implemented: registered 3 curated SalesSource entries with verified fields.
+- Boundary intact: ArcGIS county sales = origin=local_authority (legal, evidenced).
+  No scraper built. No CAPTCHA. No RentCast dependency for South FL.
+- Merged ed34ec0. <promise>COMPLETE</promise>
+- FINDING for future: Broward's sales are year-bucketed (layer 17=2026, 18=2025, 19=2024).
+  A 12-month recency window may need to query multiple sibling layers for full coverage.
+  Not solved in 1.2 (single-layer registration); flag for a follow-up if recency gaps appear.
