@@ -62,19 +62,67 @@ def _norm_county(county: str) -> str:
 
 # (state_upper, county_normalized) -> SalesSource.
 #
-# To add a market: confirm the layer exposes arms-length sale price + date fields
-# (run ``diag_sd_data.py``), then add one entry here. Example shape:
+# Verified live 2026-06-26 (AGENTS.md rule #11: verify, don't assert).
+# These replace RentCast (not free) and the noisy generic Hub keyword discovery
+# for the three South FL counties. Each is the county property appraiser's own
+# ArcGIS layer carrying arms-length sale price + sale date.
 #
-#   ("CA", "san diego"): SalesSource(
-#       layer_url="https://<host>/arcgis/rest/services/<Sales>/FeatureServer/0",
-#       fields=("SALE_PRICE", "SALE_DATE", "LOT_SIZE", "USE_CODE", ...),
-#       source="SanGIS/SANDAG, verified YYYY-MM",
-#   ),
-#
-# San Diego is intentionally left unpopulated until a live-verified sale-price
-# source is confirmed — CA counties rarely expose arms-length prices via open
-# GIS, so the real source here may be a paid ``provider`` (see SalesProvider).
-_SALES_SOURCES: dict[tuple[str, str], SalesSource] = {}
+# To add a market: probe the county's ArcGIS server for a parcels-or-sales layer
+# with SALE_PRICE/SALE_DATE fields, then add one entry here.
+_SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
+    # Miami-Dade Property Appraiser — PaGISView parcels layer 0.
+    # Sale price + date ride directly on the parcel feature.
+    # Verified fields: PRICE_1, DATEOFSALE_UTC (+ LOT_SIZE, USE_CODE, etc.).
+    ("FL", "miami-dade"): SalesSource(
+        layer_url=(
+            "https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/ArcGIS/rest/services"
+            "/PaGISView_gdb/FeatureServer/0"
+        ),
+        fields=(
+            "FOLIO", "PRICE_1", "DATEOFSALE_UTC", "LOT_SIZE", "USE_CODE",
+            "BEDROOMS", "BATHROOMS", "LIVING_AREA", "YEAR_BUILT",
+            "ZIP_CODE", "MUNICIPALITY",
+        ),
+        source="Miami-Dade County Property Appraiser PaGISView, verified 2026-06-26",
+        note="Sale price + date on the parcel feature; 0-3 mi radius query.",
+    ),
+    # Broward County Property Appraiser (BCPA) — 2025 Sales layer (MapServer 18).
+    # Separate sales layer (year-bucketed); parcel layer 36 lacks sale price.
+    # Verified fields: SALE_AMOUNT, SALE_DATE, FOLIO_NUMBER (DB-qualified names).
+    ("FL", "broward"): SalesSource(
+        layer_url=(
+            "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
+            "/BCPA_EXTERNAL_JAN26/MapServer/18"
+        ),
+        fields=(
+            "SQLGIS02.DATALAYER.Parcel_Polygons.FOLIO",
+            "SQLGIS02.DATALAYER.Parcel_Polygons.PARCEL_TYPE",
+            "SQLGIS02.dbo.BCPA_SALES.FOLIO_NUMBER",
+            "SQLGIS02.dbo.BCPA_SALES.SALE_DATE",
+            "SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT",
+            "SQLGIS02.dbo.BCPA_SALES.SALE_VER",
+            "SQLGIS02.dbo.BCPA_SALES.SALE_YEAR",
+        ),
+        source="Broward County Property Appraiser (BCPA) 2025 Sales, verified 2026-06-26",
+        note="Year-bucketed sales layer; map to sibling years (17=2026, 19=2024) for broader recency window.",
+    ),
+    # Palm Beach County Property Appraiser — Parcels layer 0.
+    # Sale price + date ride directly on the parcel feature.
+    # Verified fields: PRICE, SALE_DATE, MONTHS_SINCE_SALE (+ SALEKEY, etc.).
+    ("FL", "palm beach"): SalesSource(
+        layer_url=(
+            "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services"
+            "/Parcels_and_Property_Details_WebMercator/FeatureServer/0"
+        ),
+        fields=(
+            "PARCELNO", "PRICE", "SALE_DATE", "MONTHS_SINCE_SALE", "SALEKEY",
+            "USECODE", "LOTSQFT", "LIVUNIT", "YRBUILT",
+            "BEDROOMS", "BATHROOMS", "LANDUSE",
+        ),
+        source="Palm Beach County Property Appraiser Parcels, verified 2026-06-26",
+        note="Sale price + date on the parcel feature; 0-3 mi radius query.",
+    ),
+}
 
 
 def register_sales_source(state: str, county: str, source: SalesSource) -> None:

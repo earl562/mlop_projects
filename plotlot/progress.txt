@@ -34,3 +34,19 @@ Skill: ~/.pi/agent/skills/plotlot-ralph-loop/SKILL.md (v2.0.0, verified Ralph)
 ## Open decisions (human must resolve)
 
 - **Comps scraper (Slice 1.2):** operator wants a scraper. Skill v2 + plan encode the boundary rule: scraped comps = `kind=assumption, origin=unknown`, amber, confidence ≤ 0.5, gated behind Slice 9.1 governance. DO NOT silently violate this — if scraped comps flow into `value.arv` as `verified_fact`, the boundary Slice 1.1 built is broken at the moment of creation.
+
+### 2026-06-26 — Slice 1.2 re-scope decision
+
+DECIDE resolved. Operator clarified:
+- RentCast is NOT free (50 req/mo free tier isn't production-viable) → drop RentCast dependency.
+- ArcGIS county sales data is the comps path forward. Legal, evidenced, no CAPTCHA.
+- Target: comps within 0-3 miles of subject.
+
+This means Slice 1.2 is NOT a Zillow/stealth scraper. It's: verify/strengthen the
+existing ArcGIS comps path in pipeline/comps.py, drop RentCast as a dependency,
+ensure 0-3 mile radius coverage for South FL counties.
+
+Boundary rule still holds: ArcGIS county sales = origin=local_authority (legal,
+evidenced, sourced). This is the verified-fact path for comps, not an assumption.
+
+<promise>DECIDE:resolved</promise> — proceeding to investigation.
