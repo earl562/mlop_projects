@@ -19,13 +19,43 @@ from plotlot.domain.dimensional_standard import (
     DistrictDimensionalStandard,
     extract_dimensional_standards,
 )
+from plotlot.domain.methodology import (
+    HtnMethod,
+    MethodDispatch,
+    dispatch,
+    methods_for,
+    select_method,
+)
+from plotlot.domain.steps import (
+    KleymanStep,
+    StepDef,
+    StepRequirement,
+    all_steps,
+    requirement_satisfied,
+    step_blocked_reasons,
+    step_can_activate,
+    step_def,
+)
 
 __all__ = [
     "Claim",
     "ClaimKind",
     "ClaimOrigin",
     "DistrictDimensionalStandard",
+    "HtnMethod",
+    "KleymanStep",
+    "MethodDispatch",
     "SourceBoundaryViolation",
+    "StepDef",
+    "StepRequirement",
+    "all_steps",
+    "dispatch",
     "extract_dimensional_standards",
+    "methods_for",
+    "requirement_satisfied",
+    "select_method",
     "source_boundary_ok",
+    "step_blocked_reasons",
+    "step_can_activate",
+    "step_def",
 ]

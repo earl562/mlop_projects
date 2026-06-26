@@ -214,3 +214,50 @@ but prompt files live in the global skill dir). Fixed to resolve from $SCRIPT_DI
 with a project-root override fallback. Caught by verify-live, not theory.
 
 <promise>COMPLETE</promise>
+
+### 2026-06-26 — Slice 2.2: Kleyman step table + HTN decomposition
+- Added src/plotlot/domain/steps.py: `KleymanStep` IntEnum (1..8),
+  `StepRequirement` (namespace + min_kind), `StepDef` (produces + requires),
+  the exhaustive step table, and the blocking rule. `step_blocked_reasons`
+  returns the namespaces whose preconditions are unsatisfied — empty tuple
+  means the step may activate. The load-bearing rule: step 5
+  (RESIDUAL_LAND_VALUE) requires `zoning` at verified_fact (spec acceptance #3),
+  enforced by code not prompt. Steps 2/4 also gate on verified zoning
+  (value derives from density derives from district).
+- Added src/plotlot/domain/methodology.py: HTN task/method defs as data —
+  `HtnMethod` (named decomposition alternative), `MethodDispatch`, `dispatch()`,
+  `select_method()`. Step 2 (as-built value) carries TWO methods specialized-
+  first: `step2.income_approach` (≥5 units, NOI/cap) and `step2.comp_approach`
+  (≤4 units, ARV × units). Residential vs commercial divergence (spec
+  acceptance #4) is a typed method dispatch keyed on `product.unit_count`,
+  not a prompt hope. Boundary: 5→income, 4→comp.
+- Exported from domain/__init__.py.
+- EVIDENCE: 15 new contract tests in tests/unit/test_steps.py pass. They pin:
+  (a) step 5 blocks when zoning missing, blocks when zoning only assumption-
+  grade, unblocks when verified; (b) requirement_satisfied honors the
+  verification ladder and rejects off-ladder kinds (calculation/contradiction
+  never satisfy a precondition on their own); (c) step 2 dispatch selects
+  income_approach at ≥5, comp_approach at ≤4, with the 4/5 boundary exact;
+  (d) dispatch is pure (same claims → same selection); (e) every step has a
+  dispatchable method. Combined with Slice 2.1's 18 tests = 33 domain tests
+  green. `make verify-local` fully green.
+- LEARNING (Codebase Patterns): the source boundary in claims.py forbids
+  constructing a `zoning.assumption` claim (zoning.* must be local_authority).
+  So the "unverified zoning blocks step 5" test can't model the bad case as a
+  zoning claim with kind=assumption — it models it as the ABSENCE of a
+  verified zoning claim. The kind ladder (hypothesis→assumption→verified_fact)
+  is the gate, and a verified_fact requirement is only satisfied by a claim
+  at or above that rung. Keep this in mind for Slice 2.3 guardrails + the
+  planner: "blocked" often means "required claim is missing", not "required
+  claim exists but is wrong grade".
+- VERIFY-LIVE: this is a gate-only slice (pure data + functions over Claim[],
+  no API/scraper/address). The contract tests ARE the live evidence — they
+  exercise the rule against real Claim objects and assert the blocking + the
+  dispatch both fire. Gate-only slices are exempt from the real-input
+  requirement per the Ralph skill (Phase 5).
+- LESSON: splitting steps.py (may-this-step-activate?) from methodology.py
+  (which-sub-task-runs?) keeps the two HTN concerns clean — Slice 5.1 planner
+  will call step_blocked_reasons() to gate activation and dispatch() to pick
+  the sub-task sequence. Don't merge them; the blocking predicate is the more
+  fundamental invariant.
+- Merged dev+commit. <promise>COMPLETE</promise>
