@@ -8,12 +8,24 @@ reasons over.
 Nothing in `domain/` imports from harness/, api/, tools/, or retrieval/.
 """
 
+from plotlot.domain.claims import (
+    Claim,
+    ClaimKind,
+    ClaimOrigin,
+    SourceBoundaryViolation,
+    source_boundary_ok,
+)
 from plotlot.domain.dimensional_standard import (
     DistrictDimensionalStandard,
     extract_dimensional_standards,
 )
 
 __all__ = [
+    "Claim",
+    "ClaimKind",
+    "ClaimOrigin",
     "DistrictDimensionalStandard",
+    "SourceBoundaryViolation",
     "extract_dimensional_standards",
+    "source_boundary_ok",
 ]

@@ -21,6 +21,8 @@ General + reusable only; story-specific details stay in the dated log entries.
 - **`safe_float` strips `$` and commas**; `_parse_sale_date` handles epoch ms. Broward's `"$1,850,000"` string and epoch-ms dates parse correctly.
 - **Live integration tests** live in `tests/integration/` and are gated by `PLOTLOT_LIVE_TESTS=1`. The deterministic gate (`make verify-local`) skips them. Run explicitly before any "feature works" claim.
 - **CLAIM-WITHOUT-EVIDENCE GUARD:** unit tests passing ≠ feature works. Before claiming a feature works for a real input, run it live + assert sane output + write an integration test pinning it. (Skill v2.1 step 6.)
+- **`domain/` layer convention:** frozen dataclasses with `slots=True` + `__post_init__` invariants (see `dimensional_standard.py`, `claims.py`). A frozen dataclass CANNOT be mutated even via `object.__new__`, so predicate-form invariants (e.g. `source_boundary_ok()`) exist to validate *deserialized* rows that bypassed construction — test them with a lightweight stub dataclass carrying matching attrs, not by mutating a Claim.
+- **Source boundary (Slice 2.1):** `zoning.*` / `parcel.*` claims must be `origin=local_authority` (the Rehab Valuator corpus is NOT a zoning oracle). `cost.*` / `cap_rate` / `financing.*` / `rent.*` must never be `kind=verified_fact`. Both raise `SourceBoundaryViolation` at construction. Downstream `steps.py`/`guardrails.py` build rules *over* `Claim`, not new types.
 
 ---
 
@@ -155,3 +157,33 @@ criteria + derived required tests). IMPLEMENTATION_PLAN.md tasks should now carr
 their required tests; a future planning-mode iteration will backfill that.
 
 <promise>COMPLETE</promise>
+
+### 2026-06-26 — Slice 2.1: typed-claim spine (domain/claims.py)
+- Added src/plotlot/domain/claims.py: `Claim` (frozen dataclass, slots),
+  `ClaimKind` (verified_fact/assumption/hypothesis/calculation/contradiction),
+  `ClaimOrigin` (local_authority/rehabvaluator_concept/user_provided/
+  derived_calc/unknown), `SourceBoundaryViolation`, `source_boundary_ok()`.
+- The constructor enforces the source boundary (Rehab Valuator corpus is
+  authoritative for concepts, NOT local facts):
+  1. zoning.* / parcel.* MUST originate from local_authority (corpus, user,
+     derived_calc, unknown all rejected).
+  2. cost.* / cap_rate / financing.* / rent.* must NEVER be verified_fact
+     (market numbers are assumptions).
+  3. kind=hypothesis requires next_verification_step (entitlement upside
+     can't be presented as guaranteed).
+  4. kind=contradiction requires metadata["contradicts"] (both sides named).
+  5. origin=unknown confidence capped ≤ 0.5 (scraped comps = amber).
+- Exported from domain/__init__.py. Transport-free: no imports from
+  harness/api/tools/retrieval.
+- EVIDENCE: 18 contract tests pass (tests/unit/test_claims.py). The two
+  spec-derived boundary tests are parametrized over all non-local-authority
+  origins and all assumption namespaces. `make verify-local` green.
+- LEARNING (Codebase Patterns): domain layer uses frozen dataclasses with
+  slots + __post_init__ invariants (see dimensional_standard.py). A frozen
+  dataclass CANNOT be mutated even via object.__new__, so the predicate form
+  `source_boundary_ok()` exists to validate deserialized rows that bypassed
+  construction — tested via a lightweight stub dataclass with matching attrs.
+- LESSON: the spec's required tests are the acceptance bar. Slice 2.1's
+  required tests ("zoning.*+non-local-authority raises; cost.*+verified_fact
+  raises") are exactly what I wrote. Good alignment with planning.
+- Merged dev+commit. <promise>COMPLETE</promise>
