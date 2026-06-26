@@ -1057,3 +1057,15 @@ resolver; source-authorities API).
   source_unchanged (reuse snapshot, idempotent); changed → source_diff_detected;
   failed → source_fetch_failed (error). 6 tests pass, gate green.
 NEXT: Phase 4 — parsing + tables (dimensional-table parser preserving headers).
+
+=== 2026-06-26 PHASE 4 COMPLETE (parsing + tables) ===
+- tests/unit/test_ordinance_table_parser.py (11 tests, TDD failing-first)
+- src/plotlot/ingestion/parsing/tables.py: ParsedTable + TableKind enum
+  (dimensional_table/use_table/parking/definition/narrative/unknown).
+  parse_html_table (preserves headers + row labels, handles <td>-only Municode
+  tables), parse_markdown_table (best-effort recovery for Jina-mangled chunks),
+  classify_table (header+content keyword classification). Tables are NOT
+  flattened — ambiguous values ("150 ft / 12 stories") preserved as strings.
+  This is the chunking-fix: header→cell association preserved + chunk_kind set.
+11 tests pass, gate green. NEXT: Phase 5 — ingestion pipeline (wire snapshot →
+parser → chunks → events → quality).
