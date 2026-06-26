@@ -10,6 +10,7 @@ import math
 import re
 
 from plotlot.core.types import ConstraintResult, DensityAnalysis, NumericZoningParams
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
 from plotlot.observability.tracing import trace
 
 SQFT_PER_ACRE = 43_560
@@ -137,7 +138,7 @@ def _reconcile_density(
 @trace(name="calculate_max_units", span_type="TOOL")
 def calculate_max_units(
     lot_size_sqft: float,
-    params: NumericZoningParams,
+    params: NumericZoningParams | DistrictDimensionalStandard,
     lot_width_ft: float | None = None,
     lot_depth_ft: float | None = None,
     *,
@@ -145,13 +146,32 @@ def calculate_max_units(
     min_lot_area_verified: bool = False,
     height_limit_ft: float | None = None,
     story_height_ft: float = RESIDENTIAL_STORY_HEIGHT_FT,
+    origin: str | None = None,
 ) -> DensityAnalysis:
     """Calculate maximum allowable dwelling units from zoning parameters.
 
-    Evaluates every applicable constraint and returns the minimum (governing).
+    ``params`` is the zoning input and may be either:
+
+    * a ``DistrictDimensionalStandard`` — the verified-fact source, a typed row
+      extracted from the ordinance's Schedule of District Regulations at
+      ingestion time. The resulting ``DensityAnalysis`` is labeled
+      ``origin="local_authority"`` (verified-fact grade, not LLM-extracted),
+      and its density / min-lot-area are treated as source-verified so the
+      verified-entitlement-governs logic activates. This is the seam (WIRE-1.1b)
+      where the typed verified-fact row replaces LLM extraction at query time.
+    * a ``NumericZoningParams`` — the legacy LLM-extracted path, the fallback
+      when no typed standard is available for the parcel's district. The result
+      is labeled ``origin="unknown"`` (assumption grade).
+
     ``density_verified`` / ``min_lot_area_verified`` let the caller pass source-
     verification status so a contradiction between the two density encodings is
-    resolved in favor of the corroborated one.
+    resolved in favor of the corroborated one. When a ``DistrictDimensionalStandard``
+    is supplied these flags are forced ``True`` (the typed row IS the authority).
+    ``origin`` overrides the inferred provenance label — used by a caller that
+    converted a typed standard via ``.to_numeric_zoning_params()`` itself to
+    preserve the ``local_authority`` labeling without re-passing the standard.
+
+    Evaluates every applicable constraint and returns the minimum (governing).
 
     ``height_limit_ft`` is an *external* height cap that overrides the zoning
     height when more restrictive — e.g. the San Diego Proposition D 30 ft coastal
@@ -159,12 +179,29 @@ def calculate_max_units(
     stories, and can lower the unit count below base zoning when the envelope
     governs.
     """
+    # Accept the typed verified-fact source directly: convert it to the
+    # calculator's input type and mark the result local_authority (WIRE-1.1b).
+    # A caller may either pass the standard here or convert it via
+    # .to_numeric_zoning_params() and pass ``origin="local_authority"``.
+    from_typed_standard = isinstance(params, DistrictDimensionalStandard)
+    if isinstance(params, DistrictDimensionalStandard):
+        params = params.to_numeric_zoning_params()
+        # The typed row is source-verified by construction; its density +
+        # min-lot-area are the authority, so the verified-entitlement-governs
+        # logic activates and a contradiction resolves in their favor.
+        density_verified = True
+        min_lot_area_verified = True
+    provenance = (
+        origin if origin is not None else ("local_authority" if from_typed_standard else "unknown")
+    )
+
     if lot_size_sqft <= 0:
         return DensityAnalysis(
             max_units=0,
             governing_constraint="no_lot_data",
             constraints=[],
             lot_size_sqft=lot_size_sqft,
+            origin=provenance,
             notes=["Lot size is zero or negative — cannot calculate."],
         )
 
@@ -272,6 +309,7 @@ def calculate_max_units(
             lot_width_ft=lot_width_ft,
             lot_depth_ft=lot_depth_ft,
             confidence="low",
+            origin=provenance,
             notes=notes,
         )
 
@@ -332,6 +370,7 @@ def calculate_max_units(
         lot_width_ft=lot_width_ft,
         lot_depth_ft=lot_depth_ft,
         confidence=confidence,
+        origin=provenance,
         notes=notes,
     )
 

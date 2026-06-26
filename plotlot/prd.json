@@ -14,7 +14,7 @@
       "title": "Wire calculate_max_units to consume DistrictDimensionalStandard",
       "phase": "backfill",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "calculate_max_units accepts a DistrictDimensionalStandard (or a caller converts via .to_numeric_zoning_params()) when one is available for the parcel's district",
         "When given a DistrictDimensionalStandard, the resulting DensityAnalysis is labeled as derived from a verified-fact source (origin=local_authority), not LLM-extracted",

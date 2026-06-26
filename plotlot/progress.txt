@@ -27,6 +27,8 @@ General + reusable only; story-specific details stay in the dated log entries.
 - **Type relocation across layers (Slice 2.4):** when moving shared types to a lower layer, prefer re-export-by-identity (`from lower import X`) in the old location over mass-editing N consumer files. Identity is cheaply testable (`obj is obj`) and the shim lets new code migrate incrementally. Move a type WITH its dependency closure (e.g. `EvidenceItem` pulls `EvidenceCitation`/`SourceType`), else you force an up-import cycle or a divergent re-declaration. To assert "module X doesn't import from module Y" in a test, walk the parsed AST `Import`/`ImportFrom` nodes — substring-matching the source catches docstring mentions (false positives).
 - **Mocking SQLAlchemy's `pg_insert` in unit tests (Slice 3.1):** the builder chain is `pg_insert(Model) -> .values(rows) -> .on_conflict_do_update(constraint=..., set_=...) -> stmt`. Use `MagicMock` for the stmt chain (it's sync), `AsyncMock` only for the session. `mock_insert.call_args[0][0]` is the MODEL; the rows are at `mock_stmt.values.call_args[0][0]`; the conflict call is at `mock_stmt.values.return_value.on_conflict_do_update.call_args` — three `.return_value` levels deep.
 - **Structural vs embedding unit (Slice 3.1):** `OrdinanceChunk` is the embedding/retrieval unit; `OrdinanceSection` is the structural unit (one row per municode node, keyed (municipality, node_id)) carrying path/section_type/cross_refs/referenced_by. A section's chunks all share its path/cross_refs/section_type. The reverse-index `referenced_by` is owned by the Slice 3.5 backfill — ingestion upserts must OMIT it from `set_` so a refresh never clobbers the backfill-built reverse index. Table is provisioned by `init_db`→`Base.metadata.create_all`; migrations are belt-and-suspenders (idempotent) for the operator-managed alembic path.
+- **Recovering a mixed/broken working tree across story boundaries (WIRE-1.1b):** when a prior iteration left uncommitted changes spanning TWO stories (the target + an incomplete neighbor), do NOT commit the lot — that ships untested scope and conflates one-story-per-commit. `git stash` is forbidden (AGENTS.md). The sanctioned recovery is the **preservation-commit pattern**: `git checkout -b wip/snapshot-...`, `git add <explicit paths>`, commit (clearly marked wip/broken, NOT for merge), `git checkout dev`, then `git checkout wip/snapshot-... -- <only the in-scope files>` to selectively restore just the target story's files. `git checkout <tree-ish> -- <path>` is a SAFE restore-from-tree (not the forbidden `git checkout .`/`git checkout -- <file>` discard form). Remove untracked neighbor artifacts (e.g. an orphan migration) with `rm <file>` (preserved on the wip branch). Verify the committed dev version of a dependency exists before relying on it (e.g. `DistrictDimensionalStandard.to_numeric_zoning_params()` was already on dev from Slice 1.1 — the WIRE-1.1b calculator wiring needed nothing new in `dimensional_standard.py`).
+- **Provenance labeling on `DensityAnalysis` (WIRE-1.1b):** `DensityAnalysis.origin` (`"local_authority"` | `"unknown"`) mirrors the `Claim` origin taxonomy and is the seam where the typed `DistrictDimensionalStandard` (verified-fact, ingestion-time) replaces LLM-extracted `NumericZoningParams` (assumption-grade). `calculate_max_units` accepts either type; passing a `DistrictDimensionalStandard` forces `density_verified=min_lot_area_verified=True` (the typed row IS the authority) AND labels the result `local_authority`. A caller that converts via `.to_numeric_zoning_params()` itself passes `origin="local_authority"` to preserve the label. Provenance propagates to ALL return paths (no_lot_data, insufficient_data, normal) — every return site sets it.
 
 ---
 
@@ -448,3 +450,71 @@ connection (e.g. "calculate_max_units accepts DistrictDimensionalStandard").
 This is the structural fix.
 
 <promise>COMPLETE</promise>
+
+### 2026-06-26 — WIRE-1.1b: wire calculate_max_units to DistrictDimensionalStandard
+
+**Story:** WIRE-1.1b (priority 1, passes:false → true). Wire the calculator
+seam so the typed verified-fact `DistrictDimensionalStandard` replaces
+LLM-extracted `NumericZoningParams` on the hot path, with provenance labeling.
+
+**Context on entry:** A prior iteration had done substantial uncommitted work
+spanning TWO stories — the WIRE-1.1b calculator wiring AND an incomplete Slice
+3.2 (extractor labeled-prose generalization + storage ORM + ingest storage
+path + migration 010). The 3.2 portion was BROKEN: `ingest.py:512` called
+`_extract_and_store_dimensional_standards` which was never defined, and it
+had NO tests (violating ship-tests-with-every-change) and no live
+verification (3.2 criteria unmet). Committing the lot would have shipped
+broken, untested, out-of-scope scope.
+
+**Recovery (preservation-commit pattern — see Codebase Patterns above):**
+- `git checkout -b wip/snapshot-2026-06-26-pre-wire`; committed ALL working-tree
+  changes there (explicit paths, marked wip/broken, NOT for merge) → `ed873ff`.
+- `git checkout dev` (clean tree), `rm` the untracked migration 010 (preserved
+  on the wip branch).
+- `git checkout wip/snapshot-2026-06-26-pre-wire -- <3 in-scope files>` to
+  selectively restore ONLY the WIRE-1.1b files: `core/types.py`,
+  `pipeline/calculator.py`, `tests/unit/test_calculator.py`.
+- Verified the dependency the calculator test needs —
+  `DistrictDimensionalStandard.to_numeric_zoning_params()` — already exists on
+  dev (committed in Slice 1.1 `4ccbf74`), so WIRE-1.1b needed nothing new in
+  `dimensional_standard.py`. Confirmed via `git show dev:...`.
+
+**Implemented (in-scope only):**
+- `core/types.py`: `DensityAnalysis.origin` field (default `"unknown"`),
+  mirroring the `Claim` origin taxonomy. The verified-fact source labels
+  `local_authority`; the legacy LLM-extracted path labels `unknown`.
+- `pipeline/calculator.py`: `calculate_max_units` now accepts
+  `NumericZoningParams | DistrictDimensionalStandard`. When passed a typed
+  standard it converts via `.to_numeric_zoning_params()`, forces
+  `density_verified=min_lot_area_verified=True` (the typed row IS the
+  authority → verified-entitlement-governs logic activates), and labels the
+  result `origin=local_authority`. A new `origin` kwarg lets a caller that
+  converted the standard itself preserve the `local_authority` label without
+  re-passing the standard (acceptance criterion 1, Path B). Provenance is set
+  on EVERY return path (no_lot_data, insufficient_data, normal).
+- `tests/unit/test_calculator.py`: 8 contract tests in
+  `TestDistrictDimensionalStandardWiring` pinning all 5 acceptance criteria
+  (accepts-typed-standard, local_authority label, NumericZoningParams
+  fallback labeled unknown, RS-8 parity, caller-converted origin override,
+  override-wins, no_lot_data carries origin, insufficient_data carries origin).
+
+**Evidence:** `make verify-local` green (ruff + pytest + frontend build). The
+8 WIRE-1.1b contract tests pass. This is a pure deterministic
+calculator-wiring slice (no external live API) — the parity contract test
+(`test_parity_standard_vs_equivalent_numeric_params`: RS-8 standard vs its
+`.to_numeric_zoning_params()` equivalent → identical `max_units=8` AND
+`governing_constraint`) IS the live-behavior evidence. Gate-only/contract
+slice — exempt from the integration-test requirement.
+
+**Scope discipline:** The Slice 3.2 work (labeled-prose extractor,
+`DistrictDimensionalStandardORM`, `store_dimensional_standards`, migration
+010) was deliberately LEFT OUT of this commit — it's incomplete (broken
+helper, no tests, no live verification) and is a separate story (3.2,
+priority 3). It is preserved on branch `wip/snapshot-2026-06-26-pre-wire`
+(commit `ed873ff`) for a future 3.2 iteration to recover the
+labeled-prose extractor + storage ORM if useful. The next iteration picks
+WIRE-2.1b (priority 2, still passes:false).
+
+**Learnings:** see the two new Codebase Patterns entries above (preservation-
+commit recovery across story boundaries; DensityAnalysis.origin provenance
+labeling seam).

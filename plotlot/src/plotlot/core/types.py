@@ -432,6 +432,15 @@ class DensityAnalysis:
     lot_depth_ft: float | None = None
     max_gla_sqft: float | None = None  # commercial: max gross leasable area
     confidence: str = "low"
+    # Provenance of the zoning params that fed this calculation.
+    # "local_authority" — params came from a typed DistrictDimensionalStandard
+    #   (a verified-fact row extracted from the ordinance's Schedule of District
+    #   Regulations at ingestion time), so the resulting count is verified-fact
+    #   grade, not LLM-extracted.
+    # "unknown" — params came from LLM extraction over retrieved ordinance text
+    #   (the legacy path); the count is assumption-grade until verified.
+    # Mirrors the Claim origin taxonomy (claims.py: ClaimOrigin).
+    origin: str = "unknown"
     notes: list[str] = field(default_factory=list)
 
 
