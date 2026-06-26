@@ -3,7 +3,24 @@
 Started: 2026-06-26
 Branch: dev (monolithic Ralph — single branch, one task per iteration)
 Plan: IMPLEMENTATION_PLAN.md
-Skill: ~/.pi/agent/skills/plotlot-ralph-loop/SKILL.md (v2.0.0, verified Ralph)
+Skill: ~/.pi/agent/skills/plotlot-ralph-loop/SKILL.md (v2.1.0, verified Ralph + PageAI/snarktank/ghuntley enhancements)
+
+---
+
+## Codebase Patterns
+
+Curated, reusable learnings consolidated from the log below (snarktank pattern).
+General + reusable only; story-specific details stay in the dated log entries.
+
+- **Never `git stash`** (AGENTS.md + Slice 0.2). Use a preservation commit or `git checkout -- <file>`.
+- **After `git commit --amend`**, re-capture the hash: `FINAL_HASH=$(git log -1 --format=%H)`. Pre-amend hashes are stale.
+- **ArcGIS layer URLs are the layer resource** (`.../FeatureServer/0`), not the query endpoint. `_query_nearby_sales` must append `/query`. Registered `SalesSource.layer_url` values do NOT end in `/query`.
+- **ArcGIS metadata listings diverge from live schemas.** Before trusting registered field names, reconcile against the live `/<layer>?f=json`. Slice 1.2 shipped `PARCELNO`/`LOTSQFT` that didn't exist on the live Palm Beach layer.
+- **`_find_field` uses substring fallback** (added Slice 1.2). DB-qualified (`SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT`) and suffixed (`PRICE_1`, `DOS_1`) names match via contains, not just exact.
+- **`_PRICE_FIELDS` includes `SALE_AMOUNT`**; **`_DATE_FIELDS` includes `DOS`, `DATEOFSALE`** (added Slice 1.2 for Broward + Miami-Dade).
+- **`safe_float` strips `$` and commas**; `_parse_sale_date` handles epoch ms. Broward's `"$1,850,000"` string and epoch-ms dates parse correctly.
+- **Live integration tests** live in `tests/integration/` and are gated by `PLOTLOT_LIVE_TESTS=1`. The deterministic gate (`make verify-local`) skips them. Run explicitly before any "feature works" claim.
+- **CLAIM-WITHOUT-EVIDENCE GUARD:** unit tests passing ≠ feature works. Before claiming a feature works for a real input, run it live + assert sane output + write an integration test pinning it. (Skill v2.1 step 6.)
 
 ---
 
@@ -96,3 +113,20 @@ Commit messages may only claim what the tests + live verification prove.
 "No analysis claim without evidence" (test-spec invariant) applies to me too.
 
 <promise>DECIDE:resolved — proceeding to fix field-mapping + end-to-end verify</promise>
+
+### 2026-06-26 — Slice 1.2 fix (claim-without-evidence gap closed)
+- Operator caught: shipped "comps work for South FL" with only registry tests,
+  no live proof. Live verification found THREE real defects the unit tests missed:
+  1. _find_field exact-match only → Miami-Dade PRICE_1 + Broward DB-qualified
+     names unresolved → 0 comps. Fix: substring fallback + new candidates.
+  2. Palm Beach registry fields didn't exist on live layer (metadata listing
+     diverged from actual schema). Fix: reconciled against live /?f=json.
+  3. _query_nearby_sales GET'd the layer resource (.../FeatureServer/0) not
+     /query → ArcGIS returned service metadata (0 features). Fix: append /query.
+- EVIDENCE: find_comparables(Palm Beach, Wellington, 3mi, 60mo) → 3 real comps
+  ($2.175M, $1.605M, $2.385M, all May 2026, 1.3-2.8mi). Pinned by live
+  integration test tests/integration/test_comps_south_fl_live.py.
+- Merged 227b815. <promise>COMPLETE</promise>
+- LESSON: live end-to-end verification caught what 4 unit tests + a registry
+  test missed. The CLAIM-WITHOUT-EVIDENCE GUARD (sign above) is now proven
+  load-bearing, not theoretical. Apply it every slice.
