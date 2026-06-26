@@ -862,3 +862,33 @@ spatial zoning query falls back to geocoded lat/lng). Pinned by test.
 
 **Tests:** test_opendata_zoning_live (3 counties, 10 addresses), test_infill_
 scenarios_live (4 scenarios/lot). Both live-verified. Gate green.
+
+=== 2026-06-26 GAP-AUDIT + RETRIEVAL-PLAN (expert-led) ===
+User gave the authoritative Broward (32) + Miami-Dade (34) municipal lists and
+said: if we don't have the data, retrieve it.
+
+**Gap audit (precise, cross-referenced):**
+- OpenData (property + zoning labels): ALREADY COVERS every city in both
+  counties. Broward: all 33 via gisweb-adapters.bcpa.net (BROWARD_CITY_CODES).
+  Miami-Dade: county-wide via gisweb.miamidade.gov. Real estate property data
+  is NOT missing — it's live for ~60 cities.
+- Municode ordinance text: 41 cities need ingestion.
+  * Broward: 20 MISSING (Coconut Creek, Cooper City, Dania Beach, Hallandale
+    Beach, Lauderdale Lakes, Lauderhill, Lazy Lake, Lighthouse Point, Margate,
+    North Lauderdale, Pembroke Park, Pembroke Pines, Plantation, Sea Ranch
+    Lakes, Southwest Ranches, Sunrise, Tamarac, West Park, Weston, Wilton
+    Manors) + 2 sparse (Hollywood, Pompano Beach)
+  * Miami-Dade: 16 MISSING + 3 sparse (Opa-locka, West Miami, Pinecrest)
+
+**Retrieval blocker:** Municode Library API (library.municode.com) is hard
+rate-limited at 429 (retry-after 1745s ~29min) on the discovery endpoint that
+returns the full FL client list. Only 2/36 missing cities have cached configs
+(Aventura, Bay Harbor Islands). The content API (api.municode.com) is a
+separate host, NOT rate-limited — so once discovery resolves job_ids, ingestion
+will proceed. Background refresh scheduled (sleeps 30min, then one fetch
+resolves all 36 cities' job_ids, caches them).
+
+**Meanwhile (productive, not blocked):** validate the infill scenario engine
+across more FTL lots + build the OpenData zoning-label inventory (real data,
+no rate-limit). The retrieval runner (scripts/retrieve_missing_ordinances.py)
+is staged to ingest all 41 cities once discovery cache is refreshed.
