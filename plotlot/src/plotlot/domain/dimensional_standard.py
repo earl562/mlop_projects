@@ -232,9 +232,7 @@ def _split_table_row(line: str) -> list[str]:
     return [c.strip() for c in stripped.split("|")]
 
 
-def _map_cells_to_fields(
-    cells: list[str], columns: dict[int, str]
-) -> dict[str, float]:
+def _map_cells_to_fields(cells: list[str], columns: dict[int, str]) -> dict[str, float]:
     """Map data cells to {canonical_field: value} using the header→field map."""
     out: dict[str, float] = {}
     for idx, field_name in columns.items():
