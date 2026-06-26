@@ -704,3 +704,30 @@ happily extract tree schedules, fee schedules, and parking-space tables as
 "dimensional standards" — false verifications worse than no data. The
 extractor must confirm it's reading a dimensional table (header contains
 setback/lot-area/density/FAR/height/coverage) before emitting rows.
+
+=== 2026-06-26 3.4 COMPLETE (ulw-loop iteration) ===
+Story 3.4: Freshness as typed claim. Priority 5.
+
+**Implemented:**
+- domain/claims.py: ClaimFreshness enum (fresh/stale/unknown) + Claim.freshness
+  field. Constructor derives freshness from metadata: if amended_date >
+  scraped_at (ISO 8601) → STALE; if scraped >= amended → FRESH; if only one or
+  neither present → UNKNOWN; malformed dates → UNKNOWN (no crash).
+- Claim.satisfies_verified_fact_prerequisite(): a verified_fact claim satisfies
+  the planner prerequisite ONLY when fresh. A stale verified_fact returns False
+  (Kleyman 'refresh before relying' — must be re-ingested or demoted). Non-
+  verified claims never satisfy regardless of freshness. This is the planner/
+  guardrail enforcement seam (the planner itself is Phase 5; the predicate is
+  the claim-layer gate the planner will call).
+- tests/unit/test_claim_freshness.py: 11 contract tests (stale/fresh/equal/
+  unknown/malformed derivation; prerequisite blocked for stale verified_fact,
+  allowed for fresh, allowed for unknown-freshness verified_fact, never for
+  assumption/hypothesis).
+
+**Live domain verification:** PLOTLOT_LIVE_TESTS=1 read verified FTL/RS-8 from
+the live DB (density 8.0, source Sec. 47-5.31) and built claims: fresh claim
+(amended 2026-01, scraped 2026-06) satisfies prereq=True; stale claim (amended
+2026-06-30, scraped 2026-06-26) satisfies prereq=False (planner blocks step 5).
+Real verified-fact path × real freshness enforcement.
+
+**Next:** 3.5 (priority 6) — Backfill Fort Lauderdale evidence graph end-to-end.

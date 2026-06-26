@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
-import sys
 from collections import defaultdict
 
 from plotlot.domain.dimensional_standard import (
@@ -82,7 +81,6 @@ async def extract_all(*, write: bool) -> None:
     await init_db()
     session = await get_session()
     rows_by_muni: dict[str, list[DistrictDimensionalStandard]] = defaultdict(list)
-    gaps: list[str] = []
     try:
         result = await session.execute(FIND_CHUNKS_SQL)
         chunks = result.all()

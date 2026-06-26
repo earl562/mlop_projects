@@ -92,6 +92,21 @@ class SourceBoundaryViolation(Exception):
     """
 
 
+class ClaimFreshness(str, Enum):
+    """Freshness of a claim's backing source vs. when it was scraped.
+
+    Kleyman: 'refresh before relying'. A claim derived from a source chunk whose
+    amended_date is newer than scraped_at is STALE — the ordinance was amended
+    after we ingested it, so the claim may no longer reflect the current law.
+    A stale verified_fact cannot satisfy a planner prerequisite (it must be
+    re-ingested or demoted to assumption).
+    """
+
+    FRESH = "fresh"  # scraped_at >= amended_date (we have the current version)
+    STALE = "stale"  # amended_date > scraped_at (ordinance amended since ingest)
+    UNKNOWN = "unknown"  # no amended_date / scraped_at available
+
+
 @dataclass(frozen=True, slots=True)
 class Claim:
     """A typed, provenanced assertion.
@@ -114,8 +129,13 @@ class Claim:
             promote/demote it. The report renders hypotheses distinctly and
             forbids presenting entitlement upside as guaranteed.
         extracted_at: ISO timestamp of extraction (for freshness, slice 3.4).
+        freshness: FRESH / STALE / UNKNOWN. STALE when the backing source's
+            amended_date > scraped_at (the ordinance was amended after we
+            ingested it). A stale verified_fact in a local-authority namespace
+            is demoted — it cannot satisfy a planner prerequisite.
         metadata: freeform bag for tool-specific provenance (layer id, query,
-            page number). Never carries truth — only breadcrumbs.
+            page number). Never carries truth — only breadcrumbs. Carries
+            amended_date / scraped_at (ISO 8601) for freshness derivation.
     """
 
     field_key: str
@@ -127,6 +147,7 @@ class Claim:
     source_url: str = ""
     next_verification_step: str = ""
     extracted_at: str = ""
+    freshness: ClaimFreshness = ClaimFreshness.UNKNOWN
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -175,11 +196,47 @@ class Claim:
                 f"confidence={self.confidence} > 0.5 — unknown-origin claims are "
                 "capped at 0.5 (scraped comps are amber, never authoritative)."
             )
+        # 6. Freshness derivation (Slice 3.4): if metadata carries amended_date
+        #    and scraped_at (ISO 8601), a source amended AFTER it was scraped is
+        #    STALE. Kleyman 'refresh before relying' — a stale verified_fact may
+        #    no longer reflect current law.
+        amended = self.metadata.get("amended_date")
+        scraped = self.metadata.get("scraped_at")
+        if amended and scraped:
+            try:
+                from datetime import datetime
+                a = datetime.fromisoformat(str(amended))
+                s = datetime.fromisoformat(str(scraped))
+                if a > s:
+                    object.__setattr__(self, "freshness", ClaimFreshness.STALE)
+                else:
+                    object.__setattr__(self, "freshness", ClaimFreshness.FRESH)
+            except (ValueError, TypeError):
+                # Malformed dates → leave freshness as passed (UNKNOWN by default).
+                pass
+        elif amended or scraped:
+            # Only one of the two present → cannot determine freshness.
+            object.__setattr__(self, "freshness", ClaimFreshness.UNKNOWN)
 
     @property
     def namespace(self) -> str:
         """The field-key prefix (before the first dot). Drives boundary rules."""
         return _namespace(self.field_key)
+
+    def satisfies_verified_fact_prerequisite(self) -> bool:
+        """Can this claim satisfy a planner prerequisite requiring verified_fact?
+
+        A verified_fact claim in a local-authority namespace satisfies the
+        prerequisite ONLY when fresh. A stale verified_fact (ordinance amended
+        since ingestion) does NOT — Kleyman 'refresh before relying' — it must
+        be re-ingested or treated as an assumption. Non-verified claims never
+        satisfy a verified_fact prerequisite regardless of freshness.
+        """
+        if self.kind is not ClaimKind.VERIFIED_FACT:
+            return False
+        if self.freshness is ClaimFreshness.STALE:
+            return False
+        return True
 
 
 def source_boundary_ok(claim: Claim) -> bool:

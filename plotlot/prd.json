@@ -70,14 +70,16 @@
       "title": "Freshness as typed claim",
       "phase": "3",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "A chunk whose amended_date > scraped_at produces a freshness=stale flag on the derived Claim",
         "A stale zoning.* Claim cannot satisfy a verified_fact prerequisite (the planner/guardrail blocks it)",
         "Contract test: a stale chunk yields freshness=stale; a fresh chunk yields freshness=fresh",
         "make verify-local green"
       ],
-      "notes": "Kleyman: 'refresh before relying'. Enforced at the claim layer."
+      "notes": "Kleyman: 'refresh before relying'. Enforced at the claim layer.",
+      "completedAt": "2026-06-26T16:00:00Z",
+      "completionNote": "Added ClaimFreshness (fresh/stale/unknown) to Claim; constructor derives freshness from metadata amended_date vs scraped_at (amended>scraped → stale). Added satisfies_verified_fact_prerequisite(): a stale verified_fact returns False (planner blocks step 5 — Kleyman refresh-before-relying). 11 contract tests pass + live domain check: fresh FTL/RS-8 verified claim satisfies prereq, stale is blocked. Criterion 2 planner/guardrail enforcement is via the predicate (the planner itself is Phase 5); the claim-layer predicate is the enforcement seam. make verify-local green."
     },
     {
       "id": "3.5",
