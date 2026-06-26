@@ -1,5 +1,6 @@
 """Shared test fixtures."""
 
+import os
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -18,9 +19,18 @@ def _disable_mlflow_tracing():
     previous_tracking_uri = mlflow.get_tracking_uri()
     mlflow.set_tracking_uri(_MLFLOW_TEST_DIR.as_uri())
     mlflow.tracing.disable()
+    # MLflow file-store is in maintenance mode in current versions; enable() in
+    # teardown raises MlflowTracingException unless this opt-in is set. The fixture
+    # is self-contained so the gate is green regardless of shell env. (slice 0.2)
+    _prior_allow = os.environ.get("MLFLOW_ALLOW_FILE_STORE")
+    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
     yield
     mlflow.tracing.enable()
     mlflow.set_tracking_uri(previous_tracking_uri)
+    if _prior_allow is None:
+        os.environ.pop("MLFLOW_ALLOW_FILE_STORE", None)
+    else:
+        os.environ["MLFLOW_ALLOW_FILE_STORE"] = _prior_allow
 
 
 @pytest.fixture(autouse=True)
