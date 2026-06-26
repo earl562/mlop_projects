@@ -754,3 +754,113 @@ class CountySchema(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — master spec §7: source authorities, snapshots, harness events
+# ---------------------------------------------------------------------------
+
+
+class JurisdictionSourceAuthorityORM(Base):
+    """A typed, provenance-backed source authority for one jurisdiction.
+
+    Master spec §5 + §7. The ingestion unit — not "a city" but a
+    (jurisdiction, scope, provider) triple. Natural key:
+    (state, county, municipality, authority_scope, provider).
+    """
+
+    __tablename__ = "jurisdiction_source_authorities"
+    __table_args__ = (
+        UniqueConstraint(
+            "state", "county", "municipality", "authority_scope", "provider",
+            name="uq_jurisdiction_source_authority_natural_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    municipality: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    jurisdiction_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    authority_scope: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    official_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    legal_caveat: Mapped[str] = mapped_column(Text, nullable=False)
+    freshness_policy: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    supplement_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    effective_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ingestion_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
+    coverage_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class OrdinanceSourceSnapshotORM(Base):
+    """One raw fetch of a source authority's content (master spec §7).
+
+    Stored BEFORE parsing (raw snapshot), content-hashed for idempotency.
+    Natural key: (source_authority_id, content_hash).
+    """
+
+    __tablename__ = "ordinance_source_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_authority_id", "content_hash",
+            name="uq_ordinance_source_snapshot_natural_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    source_authority_id: Mapped[str] = mapped_column(
+        String(120), ForeignKey("jurisdiction_source_authorities.id"), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    final_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_storage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_text_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    etag: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class HarnessEventORM(Base):
+    """Stable event envelope for ingestion + analysis runs (master spec §6).
+
+    Persisted audit trail. Queryable by run (analysis_run_id / ingestion_run_id).
+    Append-only.
+    """
+
+    __tablename__ = "harness_events"
+    __table_args__ = (
+        UniqueConstraint("id", name="uq_harness_event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    correlation_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False, default="info")
+    workspace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    project_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    site_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    analysis_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    analysis_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ingestion_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    tool_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

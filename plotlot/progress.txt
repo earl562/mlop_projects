@@ -1002,3 +1002,36 @@ The Municode MCP (story 8.0b) won't fix it (same backend). The fix is either a
 Municode API key or patient scheduled ingestion. Meanwhile: Fort Lauderdale
 (the one fully-ingested city) drives the scenario engine; OpenData covers zoning
 labels for all ~60 cities.
+
+=== 2026-06-26 PHASE 0 + PHASE 1 COMPLETE (master spec) ===
+Master spec re-plan adopted (22-section spec, spec-first/event-driven/TDD/BDD).
+
+PHASE 0 (specs, no production code):
+- docs/specs/MASTER_SPEC.md (driving spec)
+- docs/specs/south_florida_ordinance_ingestion.md (§5/§7 contract)
+- docs/specs/south_florida_ingestion_events.md (§6 event contracts: 24 ingestion
+  + 19 harness event types with required payload fields + invariants)
+- docs/specs/zoning_feasibility_harness.md (§4/§10/§11/§12 first-paid-feature)
+- docs/specs/bdd/south_florida_zoning_harness.feature (8 scenarios)
+
+PHASE 1 (DB + domain models, TDD):
+- tests/unit/test_source_authority_models.py (12 tests, written failing-first)
+- src/plotlot/ingestion/source_authorities/models.py (JurisdictionSourceAuthority
+  + Provider/JurisdictionType/AuthorityScope/OfficialStatus enums; rejects empty
+  source_url/canonical_url/source_title/legal_caveat)
+- src/plotlot/ingestion/snapshots.py (OrdinanceSourceSnapshot, deterministic
+  SHA-256 content hash, natural key (authority_id, content_hash))
+- src/plotlot/ingestion/events.py (HarnessEvent envelope: 43 event types,
+  required-payload enforcement per type, unknown-type rejection, secret redaction)
+- src/plotlot/storage/models.py: + JurisdictionSourceAuthorityORM,
+  OrdinanceSourceSnapshotORM, HarnessEventORM (ORM tables)
+- alembic/versions/010_harness_source_authority_events.py + applied to live DB:
+  3 new tables (jurisdiction_source_authorities, ordinance_source_snapshots,
+  harness_events) + extended ordinance_chunks/ordinance_sections with
+  source_authority_id/snapshot_id/chunk_kind/quality_flags/content_hash.
+
+make verify-local green. 12 unit tests pass.
+
+NEXT: PHASE 2 — source authority registry (seed Miami-Dade/Broward/Palm Beach +
+City of Miami Miami21 + Palm Beach ULDC special authorities; provider priority
+resolver; source-authorities API).
