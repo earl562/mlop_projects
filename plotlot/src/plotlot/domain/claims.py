@@ -59,7 +59,9 @@ class ClaimOrigin(str, Enum):
 # Field-key namespaces whose truth MUST come from a local authority.
 # A claim in one of these namespaces with origin != LOCAL_AUTHORITY is a
 # source-boundary violation (the Rehab Valuator corpus is not a zoning oracle).
-_LOCAL_AUTHORITY_NAMESPACES: frozenset[str] = frozenset(
+# Public so guardrails.py validates loaded/aggregated claim sets against the
+# SAME boundary the Claim constructor enforces (no drift).
+LOCAL_AUTHORITY_NAMESPACES: frozenset[str] = frozenset(
     {
         "zoning",  # zoning.district, zoning.setback_front_ft, ...
         "parcel",  # parcel.lot_area_sqft, parcel.apn, ...
@@ -69,7 +71,7 @@ _LOCAL_AUTHORITY_NAMESPACES: frozenset[str] = frozenset(
 # Field-key namespaces whose truth MUST NOT be presented as a verified fact.
 # Costs, cap rates, and financing terms are always assumptions (market-derived
 # or user-supplied) — never a verified_fact grounded in a local authority.
-_ASSUMPTION_NAMESPACES: frozenset[str] = frozenset(
+ASSUMPTION_NAMESPACES: frozenset[str] = frozenset(
     {
         "cost",  # cost.hard_per_sqft, cost.soft_per_sqft
         "cap_rate",  # cap_rate.market
@@ -132,7 +134,7 @@ class Claim:
         # 1. Local-authority namespaces (zoning.*, parcel.*) must originate
         #    from a local authority. The corpus (rehabvaluator_concept),
         #    user input, derivation, and unknown origins cannot ground them.
-        if namespace in _LOCAL_AUTHORITY_NAMESPACES and self.origin != ClaimOrigin.LOCAL_AUTHORITY:
+        if namespace in LOCAL_AUTHORITY_NAMESPACES and self.origin != ClaimOrigin.LOCAL_AUTHORITY:
             raise SourceBoundaryViolation(
                 f"field_key={self.field_key!r} is in a local-authority namespace "
                 f"({namespace!r}); origin={self.origin.value!r} cannot ground it. "
@@ -142,7 +144,7 @@ class Claim:
         # 2. Assumption namespaces (cost.*, cap_rate, financing.*, rent.*)
         #    must never be verified_fact — market numbers are not grounded in
         #    a local authority the way an ordinance is.
-        if namespace in _ASSUMPTION_NAMESPACES and self.kind == ClaimKind.VERIFIED_FACT:
+        if namespace in ASSUMPTION_NAMESPACES and self.kind == ClaimKind.VERIFIED_FACT:
             raise SourceBoundaryViolation(
                 f"field_key={self.field_key!r} is in an assumption namespace "
                 f"({namespace!r}); kind=verified_fact is forbidden — "
@@ -192,9 +194,9 @@ def source_boundary_ok(claim: Claim) -> bool:
     claim rows without re-running ``__post_init__`` side effects.
     """
     namespace = _namespace(claim.field_key)
-    if namespace in _LOCAL_AUTHORITY_NAMESPACES and claim.origin != ClaimOrigin.LOCAL_AUTHORITY:
+    if namespace in LOCAL_AUTHORITY_NAMESPACES and claim.origin != ClaimOrigin.LOCAL_AUTHORITY:
         return False
-    if namespace in _ASSUMPTION_NAMESPACES and claim.kind == ClaimKind.VERIFIED_FACT:
+    if namespace in ASSUMPTION_NAMESPACES and claim.kind == ClaimKind.VERIFIED_FACT:
         return False
     if claim.kind == ClaimKind.HYPOTHESIS and not claim.next_verification_step:
         return False

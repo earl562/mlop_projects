@@ -22,7 +22,8 @@ General + reusable only; story-specific details stay in the dated log entries.
 - **Live integration tests** live in `tests/integration/` and are gated by `PLOTLOT_LIVE_TESTS=1`. The deterministic gate (`make verify-local`) skips them. Run explicitly before any "feature works" claim.
 - **CLAIM-WITHOUT-EVIDENCE GUARD:** unit tests passing ≠ feature works. Before claiming a feature works for a real input, run it live + assert sane output + write an integration test pinning it. (Skill v2.1 step 6.)
 - **`domain/` layer convention:** frozen dataclasses with `slots=True` + `__post_init__` invariants (see `dimensional_standard.py`, `claims.py`). A frozen dataclass CANNOT be mutated even via `object.__new__`, so predicate-form invariants (e.g. `source_boundary_ok()`) exist to validate *deserialized* rows that bypassed construction — test them with a lightweight stub dataclass carrying matching attrs, not by mutating a Claim.
-- **Source boundary (Slice 2.1):** `zoning.*` / `parcel.*` claims must be `origin=local_authority` (the Rehab Valuator corpus is NOT a zoning oracle). `cost.*` / `cap_rate` / `financing.*` / `rent.*` must never be `kind=verified_fact`. Both raise `SourceBoundaryViolation` at construction. Downstream `steps.py`/`guardrails.py` build rules *over* `Claim`, not new types.
+- **Source boundary (Slice 2.1):** `zoning.*` / `parcel.*` claims must be `origin=local_authority` (the Rehab Valuator corpus is NOT a zoning oracle). `cost.*` / `cap_rate` / `financing.*` / `rent.*` must never be `kind=verified_fact`. Both raise `SourceBoundaryViolation` at construction. Downstream `steps.py`/`guardrails.py` build rules *over* `Claim`, not new types. The canonical namespace sets are the PUBLIC module constants `LOCAL_AUTHORITY_NAMESPACES` / `ASSUMPTION_NAMESPACES` in `claims.py` (import them — never re-declare, to avoid drift).
+- **Guardrails (Slice 2.3) vs constructor invariants:** rules 1–3 of `domain/guardrails.py` overlap the `Claim.__post_init__` invariants, but the guardrails run over a *ClaimLog* (loaded from storage / aggregated across runs / tool-fed) whose rows BYPASS construction. So the guardrails are the SET-level re-validation (report-validator foundation, spec acceptance #7). Test rule-violating log rows with a STUB dataclass (matching attrs + `namespace` property, no `__post_init__`) — a frozen `Claim` cannot be constructed in a violating state. A contradiction is an ESCALATION (`requires_human_review=True`), not an integrity failure.
 
 ---
 
@@ -261,3 +262,57 @@ with a project-root override fallback. Caught by verify-live, not theory.
   the sub-task sequence. Don't merge them; the blocking predicate is the more
   fundamental invariant.
 - Merged dev+commit. <promise>COMPLETE</promise>
+
+### 2026-06-26 — Slice 2.3: claim-log guardrails (the report validator foundation)
+- Added src/plotlot/domain/guardrails.py: the 5 Kleyman guardrails as pure
+  functions over `Claim[]`. `GuardrailRule` enum + `GuardrailViolation`
+  (frozen dataclass) + `evaluate_guardrails(claims) -> tuple[Violation,...]`
+  + per-rule `check_*` functions + `is_material()` + `requires_human_review()`
+  + `integrity_violations()`/`human_review_violations()` partitioners.
+- The 5 rules:
+  1. LOCAL_AUTHORITY_ORIGIN — zoning.*/parcel.* must be origin=local_authority.
+  2. ASSUMPTION_NAMESPACE — cost.*/cap_rate/financing.*/rent.* must NOT be
+     kind=verified_fact (market numbers are always assumptions).
+  3. HYPOTHESIS_VERIFICATION — kind=hypothesis needs next_verification_step
+     (entitlement upside never presented as guaranteed).
+  4. MATERIAL_EVIDENCE — material claims (verified_fact OR recommendation/
+     metrics/value namespace) must carry >=1 evidence_id.
+  5. CONTRADICTION_REVIEW — kind=contradiction surfaces for human review
+     (requires_human_review=True — escalation, NOT integrity failure).
+- KEY DESIGN: rules 1-3 overlap with the Claim constructor's __post_init__
+  invariants. The guardrails exist because a ClaimLog is loaded from storage /
+  aggregated across agent runs / fed by tools that BYPASS construction — the
+  per-claim constructor can't validate those rows. So guardrails.py is the
+  SET-level re-validation (the report validator foundation, spec acceptance #7:
+  "report fails on missing evidence_ids / blurred boundaries / hidden
+  contradictions"). The contradiction rule is intentionally NOT an integrity
+  failure — a consistent log can still need adjudication.
+- DRIFT PREVENTION: promoted claims.py's `_LOCAL_AUTHORITY_NAMESPACES` /
+  `_ASSUMPTION_NAMESPACES` to public `LOCAL_AUTHORITY_NAMESPACES` /
+  `ASSUMPTION_NAMESPACES` and imported them in guardrails.py — single source
+  of truth for the boundary (the Codebase Patterns warn about divergent
+  registries; this avoids a second copy of the namespace sets). Exported from
+  domain/__init__.py.
+- MATERIAL definition: `is_material(c)` = kind==verified_fact OR namespace in
+  {recommendation, metrics, value}. Pure assumptions (user cost, market cap
+  rate) are EXEMPT — they're already amber-rendered + provenance-tracked via
+  source_url/origin, not evidence rows. Tested explicitly.
+- EVIDENCE: 38 contract tests in tests/unit/test_domain_guardrails.py pass.
+  They pin: each rule fires on its bad case + does NOT over-fire on clean
+  claims; all namespaces in LOCAL_AUTHORITY/ASSUMPTION sets are covered;
+  is_material() classification; contradiction is escalation-not-failure;
+  evaluate_guardrails is deterministic + returns rules in stable declaration
+  order; constructible Claims pass rules 1-3 (no false positives). Combined
+  with Slices 2.1+2.2 = 71 domain tests green. `make verify-local` green.
+- LEARNING (Codebase Patterns): rules that overlap constructor invariants must
+  be tested with a STUB dataclass (matching attrs + namespace property, no
+  __post_init__), not by mutating a frozen Claim — same pattern as
+  source_boundary_ok predicate tests. A frozen Claim CANNOT be constructed in
+  a rule-violating state, so the guardrail's "log row that bypassed
+  construction" case can only be modeled by a stub.
+- VERIFY-LIVE: gate-only slice (pure functions over Claim[], no API/address).
+  Contract tests ARE the live evidence — they exercise each rule against real
+  Claim + stub Claim objects and assert the violation fires with the right
+  rule + field_key + requires_human_review flag. Also ran an end-to-end import
+  sanity scenario (clean log → no violations; +contradiction → 1 escalation).
+- Merged dev+commit. <promise>TASK-DONE</promise>

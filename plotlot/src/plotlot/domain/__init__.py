@@ -9,6 +9,8 @@ Nothing in `domain/` imports from harness/, api/, tools/, or retrieval/.
 """
 
 from plotlot.domain.claims import (
+    ASSUMPTION_NAMESPACES,
+    LOCAL_AUTHORITY_NAMESPACES,
     Claim,
     ClaimKind,
     ClaimOrigin,
@@ -18,6 +20,20 @@ from plotlot.domain.claims import (
 from plotlot.domain.dimensional_standard import (
     DistrictDimensionalStandard,
     extract_dimensional_standards,
+)
+from plotlot.domain.guardrails import (
+    GuardrailRule,
+    GuardrailViolation,
+    check_assumption_namespace,
+    check_contradiction_review,
+    check_hypothesis_verification,
+    check_local_authority_origin,
+    check_material_evidence,
+    evaluate_guardrails,
+    human_review_violations,
+    integrity_violations,
+    is_material,
+    requires_human_review,
 )
 from plotlot.domain.methodology import (
     HtnMethod,
@@ -38,10 +54,14 @@ from plotlot.domain.steps import (
 )
 
 __all__ = [
+    "ASSUMPTION_NAMESPACES",
+    "LOCAL_AUTHORITY_NAMESPACES",
     "Claim",
     "ClaimKind",
     "ClaimOrigin",
     "DistrictDimensionalStandard",
+    "GuardrailRule",
+    "GuardrailViolation",
     "HtnMethod",
     "KleymanStep",
     "MethodDispatch",
@@ -49,10 +69,20 @@ __all__ = [
     "StepDef",
     "StepRequirement",
     "all_steps",
+    "check_assumption_namespace",
+    "check_contradiction_review",
+    "check_hypothesis_verification",
+    "check_local_authority_origin",
+    "check_material_evidence",
     "dispatch",
+    "evaluate_guardrails",
     "extract_dimensional_standards",
+    "human_review_violations",
+    "integrity_violations",
+    "is_material",
     "methods_for",
     "requirement_satisfied",
+    "requires_human_review",
     "select_method",
     "source_boundary_ok",
     "step_blocked_reasons",

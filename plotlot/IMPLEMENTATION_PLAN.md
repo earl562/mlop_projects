@@ -21,7 +21,7 @@
 
 - [x] **2.1** `domain/claims.py` — `Claim`, `ClaimKind` (verified_fact/assumption/hypothesis/calculation/contradiction), `ClaimOrigin` (local_authority/rehabvaluator_concept/user_provided/derived_calc/unknown), `source_boundary_ok` invariant. Contract: `zoning.district` claim with `origin=rehabvaluator_concept` raises `SourceBoundaryViolation`. (merged, slice 2.1)
 - [x] **2.2** `domain/steps.py` + `domain/methodology.py` — `KleymanStep` enum (1–8), step→field-key-namespace table, HTN task/method defs as data. Contract: step 5 blocked when `zoning.*` not `verified_fact`. (merged, slice 2.2)
-- [ ] **2.3** `domain/guardrails.py` — 5 rules (zoning.* must be local_authority; cost.*/cap_rate/financing.* must be assumption; entitlement hypothesis needs next_verification_step; material claim needs evidence_ids; contradictions surface as requires_human_review). Pure functions over `Claim[]`.
+- [x] **2.3** `domain/guardrails.py` — 5 rules (zoning.* must be local_authority; cost.*/cap_rate/financing.* must be assumption; entitlement hypothesis needs next_verification_step; material claim needs evidence_ids; contradictions surface as requires_human_review). Pure functions over `Claim[]`. (slice 2.3)
 - [ ] **2.4** Move shared types to `domain/types.py` — `ToolContract`/`ToolContext`/`PolicyDecision`/`EvidenceItem`/`ReportClaim` from `land_use/models.py`. `land_use/` becomes thin service module. Existing `test_land_use_tool_contracts.py` must still pass.
 
 ## Phase 3 — Evidence engineering (the moat)
