@@ -946,3 +946,33 @@ A cached jobId does NOT mean reliable data — it means re-ingestion is POSSIBLE
 now (4 verified residential districts: RS-8/RS-4.4/RS-8A/RM-15). The other
 cities need re-ingestion via the native scraper once discovery resolves their
 proper zoning nodes — blocked on the rate-limit window clearing (~6min).
+
+=== 2026-06-26 DISCOVERY-UNBLOCKED + NATIVE-REINGEST-PROVEN ===
+**Jina path explained (user asked):** the codifier adapter
+(src/plotlot/ingestion/adapters/codifier.py) fetches via r.jina.ai — a proxy
+that renders pages through anti-bot walls and returns MARKDOWN. HTML <table>
+elements get flattened to prose/dropped, so the chunker's _table_to_text
+(pandas.read_html) finds no tables to parse. That's why 13 cached cities are
+MANGLED. Fort Lauderdale survived because it was ingested via the native
+MunicodeScraper (api.municode.com, returns raw HTML).
+
+**Discovery unblocked:** library.municode.com cleared (needed X-CSRF:1 header).
+Fetched 416 FL clients → 67/74 South FL cities have ClientIDs resolved. 7 not
+on Municode (Hollywood, Pembroke Pines, Pompano Beach, Weston, etc.) — use
+another codifier (American Legal / eCode360), handle via discover_codifier().
+
+**Native re-ingestion PROVEN (Davie):** discover_municode_authority_for_name
+resolves jobId+productId+zoning_node via content API (unthrottled).
+MunicodeScraper.scrape_zoning_chapter fetched 508 sections, 42 with <table>,
+1607 chunks. Tables preserved via native path.
+
+**Key finding:** municipalities structure zoning differently. Fort Lauderdale
+uses HTML dimensional tables (parseable into typed rows). Davie uses PROSE
+("70,000 sqft required", "ten-foot front setback variation") — not tables.
+The native scraper fetches both correctly; prose-format dimensional standards
+need the LLM/text-extraction path (_agentic_analysis at query time), not the
+table parser. This is the AgenticRAG use case (Phase 8): the agent reads the
+ordinance structure on demand rather than one-shot chunking.
+
+**Next:** batch-ingest the 67 cities via native scraper (tables preserved);
+FTL-style table extraction where tables exist; LLM extraction for prose-format.
