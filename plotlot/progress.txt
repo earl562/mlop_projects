@@ -1069,3 +1069,14 @@ NEXT: Phase 4 — parsing + tables (dimensional-table parser preserving headers)
   This is the chunking-fix: header→cell association preserved + chunk_kind set.
 11 tests pass, gate green. NEXT: Phase 5 — ingestion pipeline (wire snapshot →
 parser → chunks → events → quality).
+
+=== 2026-06-26 PHASE 5 COMPLETE (ingestion pipeline) ===
+- tests/unit/test_ingestion_pipeline.py (5 tests, TDD failing-first)
+- src/plotlot/ingestion/pipeline.py: run_ingestion wires Phase 3 snapshot →
+  Phase 4 table parser → IngestedChunk (links to authority+snapshot, chunk_kind
+  set) → full event sequence (fetch_completed/parser_started/parser_completed/
+  chunk_created/jurisdiction_quality_scored) → coverage quality score.
+  Idempotent on unchanged source (no duplicate chunks, source_unchanged event).
+  Tables serialized as labeled rows (header preserved, not flattened).
+5 tests pass, gate green. NEXT: Phase 6 — harness run service + zoning
+feasibility memo skill (the first paid feature).
