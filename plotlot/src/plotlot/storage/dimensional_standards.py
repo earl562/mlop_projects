@@ -202,9 +202,92 @@ async def get_dimensional_standard(
     return get_dimensional_standard_from_fixture(muni, code)
 
 
+async def store_dimensional_standards(
+    rows: list[DistrictDimensionalStandard],
+    *,
+    upsert: bool = True,
+) -> int:
+    """Persist typed dimensional standards to the DB table (Slice 3.2).
+
+    Upserts on the natural key ``(municipality, district_code)``: when a row
+    already exists it is updated in place (re-extraction refreshes values +
+    provenance); when none exists a new row is inserted. Commits in one
+    transaction. Also mirrors each row into the in-memory fixture store so the
+    verified-fact path is immediately available without a re-query.
+
+    Args:
+        rows: typed standards to persist (typically the output of
+            ``extract_dimensional_standards``).
+        upsert: when True (default) update existing rows; when False skip rows
+            whose natural key already exists (preserve existing values).
+
+    Returns:
+        The number of rows written (inserted or updated).
+    """
+    if not rows:
+        return 0
+    written = 0
+    session = await get_session()
+    try:
+        for row in rows:
+            stmt = select(DistrictDimensionalStandardORM).where(
+                DistrictDimensionalStandardORM.municipality == row.municipality,
+                DistrictDimensionalStandardORM.district_code == row.district_code,
+            )
+            existing = (await session.execute(stmt)).scalar_one_or_none()
+            if existing is not None:
+                if not upsert:
+                    continue
+                existing.county = row.county
+                existing.state = row.state
+                existing.min_lot_area_sqft = row.min_lot_area_sqft
+                existing.min_lot_width_ft = row.min_lot_width_ft
+                existing.setback_front_ft = row.setback_front_ft
+                existing.setback_side_ft = row.setback_side_ft
+                existing.setback_rear_ft = row.setback_rear_ft
+                existing.max_height_ft = row.max_height_ft
+                existing.max_lot_coverage_pct = row.max_lot_coverage_pct
+                existing.far = row.far
+                existing.max_density_units_per_acre = row.max_density_units_per_acre
+                existing.source_section_id = row.source_section_id
+                existing.source_url = row.source_url
+            else:
+                session.add(
+                    DistrictDimensionalStandardORM(
+                        municipality=row.municipality,
+                        county=row.county,
+                        state=row.state,
+                        district_code=row.district_code,
+                        min_lot_area_sqft=row.min_lot_area_sqft,
+                        min_lot_width_ft=row.min_lot_width_ft,
+                        setback_front_ft=row.setback_front_ft,
+                        setback_side_ft=row.setback_side_ft,
+                        setback_rear_ft=row.setback_rear_ft,
+                        max_height_ft=row.max_height_ft,
+                        max_lot_coverage_pct=row.max_lot_coverage_pct,
+                        far=row.far,
+                        max_density_units_per_acre=row.max_density_units_per_acre,
+                        source_section_id=row.source_section_id,
+                        source_url=row.source_url,
+                    )
+                )
+            written += 1
+            # Mirror into the fixture store so callers get an immediate
+            # verified-fact read without a re-query (and tests without a DB).
+            _fixture_store[(row.municipality, row.district_code)] = row
+        await session.commit()
+        return written
+    except SQLAlchemyError:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+
 __all__ = [
     "clear_dimensional_standard_fixtures",
     "get_dimensional_standard",
     "get_dimensional_standard_from_fixture",
     "register_dimensional_standard_fixture",
+    "store_dimensional_standards",
 ]
