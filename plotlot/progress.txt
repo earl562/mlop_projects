@@ -1048,3 +1048,12 @@ resolver; source-authorities API).
   miami21 caveat), Palm Beach ULDC special authority (official_pdf, uldc caveat)
   + adopted-ordinances authority (separate). Every authority has legal_caveat.
 22 tests pass, gate green. NEXT: Phase 3 snapshot layer.
+
+=== 2026-06-26 PHASE 3 COMPLETE (snapshot layer) ===
+- tests/unit/test_snapshots.py (6 tests, TDD failing-first)
+- src/plotlot/ingestion/snapshot_service.py: fetch_and_snapshot (injectable
+  fetcher, provider-agnostic) -> SnapshotResult(snapshot, event, changed).
+  Change detection: first fetch → source_fetch_completed; unchanged →
+  source_unchanged (reuse snapshot, idempotent); changed → source_diff_detected;
+  failed → source_fetch_failed (error). 6 tests pass, gate green.
+NEXT: Phase 4 — parsing + tables (dimensional-table parser preserving headers).
