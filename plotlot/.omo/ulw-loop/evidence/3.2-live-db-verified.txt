@@ -1,0 +1,4 @@
+tests/integration/test_dimensional_standards_live.py::test_live_db_serves_verified_south_fl_dimensional_standards PASSED [ 33%]
+tests/integration/test_dimensional_standards_live.py::test_live_db_at_least_one_municipality_has_3_districts_all_numeric PASSED [ 66%]
+tests/integration/test_dimensional_standards_live.py::test_live_db_miss_returns_none PASSED [100%]
+============================== 3 passed in 0.41s ===============================

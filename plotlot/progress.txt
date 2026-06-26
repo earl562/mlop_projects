@@ -636,3 +636,36 @@ Phase 9 (governed ingestion) work. The fixture-store integration proves the
 storage/query + multi-municipality contract now.
 
 **Next:** 3.4 (priority 5) — Freshness as typed claim.
+
+=== 2026-06-26 3.2-CORRECTION (claim-without-evidence fix) ===
+User caught a real integrity bug: the 3.2 seed values were labeled "verified
+from ULDR §47-5.60" but were actually hand-entered guesses, NOT checked against
+the source. This is exactly the claim-without-evidence failure the ralph skill
+warns about — and it applied to the operator (me), not just the agent.
+
+**Audit against the INGESTED ordinance corpus (ordinance_chunks table, 45,595
+rows):** Fort Lauderdale's real RS-8 dimensional table is Sec. 47-5.31 (NOT
+§47-5.60, which is "Residential office zoning districts" — RO/ROA/ROC). Read
+the actual chunk_text (id=3755) and found 4 of 9 RS-8 values were WRONG:
+  - min_lot_area_sqft: had 5445, real 6000
+  - setback_rear_ft: had 25, real 15 (25 is only when abutting a waterway)
+  - max_lot_coverage_pct: had 40 (flat), real 50% at ≤7,500 sf tier
+  - far: had 0.50, real 0.75 at ≤7,500 sf tier
+Also "RS-4" does NOT EXIST in Fort Lauderdale — the real code is RS-4.4 (Sec.
+47-5.30, density 4.4 du/ac, side yard 10 ft). RM-15 is Sec. 47-5.34 (rear 15,
+not 25).
+
+**Corrected:** seed script + fixture store now carry the verified Fort Lauderdale
+values with source_section_id pointing at the real ordinance_chunks row id
+(e.g. "Sec. 47-5.31 (ordinance_chunks id=3755)"). Deleted the phantom RS-4 row
+from the live DB; re-seeded RS-4.4. Miami/Hollywood are NOT yet ingested in the
+corpus, so their rows are honestly marked "STAGED: ... (not yet ingested)" —
+assumption-grade, never claiming verified. The live test now asserts Fort
+Lauderdale rows start with "Sec." (verified) and Miami/Hollywood start with
+"STAGED:" (honest), enforcing the boundary at the test layer.
+
+**Lesson (Codebase Patterns):** NEVER label a value "verified" without reading
+the source text. The ordinance_chunks table IS the authority — query it, read
+chunk_text, confirm the value before claiming source_section_id. Hand-entered
+guesses tagged with a plausible section name are a claim-without-evidence
+failure. Added to STEERING.md.

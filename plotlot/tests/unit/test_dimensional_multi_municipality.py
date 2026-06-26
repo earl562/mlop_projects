@@ -181,7 +181,7 @@ class TestIntegrationNumericFieldsPopulated:
             fully_populated = 0
             # Probe known district codes per municipality.
             district_codes = {
-                "Fort Lauderdale": ("RS-8", "RS-4", "RM-15"),
+                "Fort Lauderdale": ("RS-8", "RS-4.4", "RM-15"),
                 "Miami": ("R-1", "R-3", "R-4"),
                 "Hollywood": ("RS-5", "RM-15", "RM-25"),
             }[municipality]
