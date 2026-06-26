@@ -892,3 +892,30 @@ resolves all 36 cities' job_ids, caches them).
 across more FTL lots + build the OpenData zoning-label inventory (real data,
 no rate-limit). The retrieval runner (scripts/retrieve_missing_ordinances.py)
 is staged to ingest all 41 cities once discovery cache is refreshed.
+
+=== 2026-06-26 FTL-DIMENSIONAL-EXTRACTION (verified, from ingested corpus) ===
+Built scripts/extract_ftl_dimensional_standards.py: reads the REAL pipe-delimited
+dimensional-table chunks already in ordinance_chunks for Fort Lauderdale (no
+re-scraping — the data was there, just not parsed into typed rows). Extracted
+and seeded 4 verified FTL residential districts:
+  RS-8:  density 8.0, lot 6000, front 25, rear 15, FAR 0.75 (Sec. 47-5.31)
+  RS-4.4: density 4.4, lot 10000, front 25, rear 15 (Sec. 47-5.30)
+  RS-8A: density 8.0, lot 6000, front 25, rear 25 (Sec. 47-5.31)
+  RM-15: density 15, lot 5000, front 25, rear 15, FAR 0.75 (Sec. 47-5.34)
+Values match the manual verification from earlier. Deleted 8 misparsed
+non-residential rows (PRD/ABA/SLA/etc. — coverage % read as density due to
+different table layouts; kept only residential RS-/RM- where parsing is correct).
+
+**Scenario engine now produces real by-right CALCULATIONS for RS-8/RS-4.4/RS-8A/
+RM-15 lots** (was RS-8 only). RM-10/RO/CF fall back to hypotheses (their
+chunks are empty — table content lost at ingestion; needs re-ingest via native
+scraper for those districts).
+
+**Municode API status:** library.municode.com (discovery) rate-limited 429
+(retry-after ~25min); api.municode.com (content) NOT throttled. Background
+refresh scheduled to fetch the full FL client list when the window clears,
+which resolves jobIds for the 24 undiscovered cities. The content host is
+unthrottled, so ingestion proceeds once discovery cache refreshes.
+
+**Honest note:** the MCP would NOT have solved the 429 (server-side limit, not
+client-side). The real fix is the cached discovery + unthrottled content host.
