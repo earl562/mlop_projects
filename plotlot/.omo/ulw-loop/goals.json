@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "createdAt": "2026-06-26T14:34:53.209Z",
+  "updatedAt": "2026-06-26T14:37:06.551Z",
+  "briefPath": ".omo/ulw-loop/brief.md",
+  "goalsPath": ".omo/ulw-loop/goals.json",
+  "ledgerPath": ".omo/ulw-loop/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-spec-specs-agentic-zoning-harness-md",
+      "title": "Spec: `specs/agentic-zoning-harness.md` (8 behavioral acceptance crit...",
+      "objective": "Spec: `specs/agentic-zoning-harness.md` (8 behavioral acceptance criteria + 6 required tests).",
+      "status": "in_progress",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "Live ship-gate spec 1 and 8: PLOTLOT_LIVE_TESTS=1 runs the never-ingested small-town e2e test; agent discovers source, ingests, produces typed zoning.* claims origin=local_authority plus source_url, runs 8 steps, emits report with evidence_ids OR escalates honestly. Channel CLI pytest. Binary pass test passes and asserts a zoning claim with local_authority origin and non-empty source_url or honest escalation.",
+          "userModel": "happy",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C001-shipgate.txt",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "Boundary invariants spec 2 enforced in code: a zoning.* claim with origin other than local_authority (e.g. rehabvaluator_concept) raises a validation error, and a cost.* claim with kind=verified_fact raises. Channel CLI pytest -k boundary. Binary pass: both negative assertions raise and message names the violated boundary.",
+          "userModel": "edge",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C002-boundary.txt",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "Regression gate spec 3,4,5,7: (a) planner refuses step 5 when required zoning.*/parcel.* claim not kind=verified_fact; (b) step 3 routes income approach for >=5 units vs comp approach for <=4 units via typed dispatch; (c) every comp carries source_url+origin (scraped=unknown confidence<=0.5); (d) report validator fails on missing evidence_ids or blurred boundaries. Channel CLI pytest -k 'planner or step3 or comps or report_validator'. Binary pass: all four sub-assertions pass.",
+          "userModel": "regression",
+          "expectedEvidence": ".omo/ulw-loop/evidence/G001-C003-regression.txt",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 1,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:37:06.551Z",
+      "startedAt": "2026-06-26T14:37:06.551Z"
+    },
+    {
+      "id": "G002-task-decomposition-prd-json-63-stori",
+      "title": "Task decomposition: `prd.json` (63 stories, phases 1-14, each with ac...",
+      "objective": "Task decomposition: `prd.json` (63 stories, phases 1-14, each with acceptanceCriteria + passes flag).",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Task decomposition: `prd.json` (63 stories, phases 1-14, each with acceptance...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 2.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Task decomposition: `prd.json` (63 stories, phases 1-14, each with acceptance....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Task decomposition: `prd.json` (63 stories, phases 1-14, each with acceptance....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G003-operational-rules-agents-md-never-gi",
+      "title": "Operational rules: `AGENTS.md` (never `git add -A`; explicit paths on...",
+      "objective": "Operational rules: `AGENTS.md` (never `git add -A`; explicit paths only; Earl Perry commits; never assert from training data; ship tests with every change).",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Operational rules: `AGENTS.md` (never `git add -A`; explicit paths only; Earl...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 3.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Operational rules: `AGENTS.md` (never `git add -A`; explicit paths only; Earl....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Operational rules: `AGENTS.md` (never `git add -A`; explicit paths only; Earl....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G004-backpressure-gate-make-verify-local",
+      "title": "Backpressure gate: `make verify-local` (ruff + pytest + frontend lint...",
+      "objective": "Backpressure gate: `make verify-local` (ruff + pytest + frontend lint/tsc/build). MUST be green before any checkpoint.",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Backpressure gate: `make verify-local` (ruff + pytest + frontend lint/tsc/bui...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 4.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Backpressure gate: `make verify-local` (ruff + pytest + frontend lint/tsc/bui....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Backpressure gate: `make verify-local` (ruff + pytest + frontend lint/tsc/bui....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G005-progress-log-progress-txt-append-onl",
+      "title": "Progress log: `progress.txt` (append-only; `## Codebase Patterns` cur...",
+      "objective": "Progress log: `progress.txt` (append-only; `## Codebase Patterns` curated at top).",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Progress log: `progress.txt` (append-only; `## Codebase Patterns` curated at...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 5.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Progress log: `progress.txt` (append-only; `## Codebase Patterns` curated at....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Progress log: `progress.txt` (append-only; `## Codebase Patterns` curated at....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G006-verified-fact-vs-assumption-boundary",
+      "title": "Verified-fact vs assumption boundary enforced in CODE, not prompts: a...",
+      "objective": "Verified-fact vs assumption boundary enforced in CODE, not prompts: a `zoning.*`",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Verified-fact vs assumption boundary enforced in CODE, not prompts: a `zoning.*`",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 6.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Verified-fact vs assumption boundary enforced in CODE, not prompts: a `zoning.*`.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Verified-fact vs assumption boundary enforced in CODE, not prompts: a `zoning.*`.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G007-kleyman-8-step-ordering-enforced-ste",
+      "title": "Kleyman 8-step ordering enforced: step 5 (residual land value) blocke...",
+      "objective": "Kleyman 8-step ordering enforced: step 5 (residual land value) blocked unless",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Kleyman 8-step ordering enforced: step 5 (residual land value) blocked unless",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 7.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Kleyman 8-step ordering enforced: step 5 (residual land value) blocked unless.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Kleyman 8-step ordering enforced: step 5 (residual land value) blocked unless.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G008-residential-vs-commercial-step-3-rou",
+      "title": "Residential vs commercial: step 3 routes income approach (≥5 units) v...",
+      "objective": "Residential vs commercial: step 3 routes income approach (≥5 units) vs comp",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Residential vs commercial: step 3 routes income approach (≥5 units) vs comp",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 8.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Residential vs commercial: step 3 routes income approach (≥5 units) vs comp.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Residential vs commercial: step 3 routes income approach (≥5 units) vs comp.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G009-comps-evidenced-every-comp-carries-s",
+      "title": "Comps evidenced: every comp carries source_url + origin; scraped = un...",
+      "objective": "Comps evidenced: every comp carries source_url + origin; scraped = unknown,",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Comps evidenced: every comp carries source_url + origin; scraped = unknown,",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 9.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Comps evidenced: every comp carries source_url + origin; scraped = unknown,.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Comps evidenced: every comp carries source_url + origin; scraped = unknown,.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G010-opportunity-skills-emit-kind-hypothe",
+      "title": "Opportunity skills emit kind=hypothesis with next_verification_step;...",
+      "objective": "Opportunity skills emit kind=hypothesis with next_verification_step; never",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Opportunity skills emit kind=hypothesis with next_verification_step; never",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 10.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Opportunity skills emit kind=hypothesis with next_verification_step; never.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Opportunity skills emit kind=hypothesis with next_verification_step; never.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G011-report-is-a-claimlog-projection-vali",
+      "title": "Report is a ClaimLog projection; validator fails on missing evidence_...",
+      "objective": "Report is a ClaimLog projection; validator fails on missing evidence_ids,",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Report is a ClaimLog projection; validator fails on missing evidence_ids,",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 11.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Report is a ClaimLog projection; validator fails on missing evidence_ids,.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Report is a ClaimLog projection; validator fails on missing evidence_ids,.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    },
+    {
+      "id": "G012-rehab-valuator-corpus-is-authoritati",
+      "title": "Rehab Valuator corpus is authoritative for CONCEPTS only (origin=",
+      "objective": "Rehab Valuator corpus is authoritative for CONCEPTS only (origin=",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Rehab Valuator corpus is authoritative for CONCEPTS only (origin=",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 12.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Rehab Valuator corpus is authoritative for CONCEPTS only (origin=.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Rehab Valuator corpus is authoritative for CONCEPTS only (origin=.",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-06-26T14:34:53.209Z",
+      "updatedAt": "2026-06-26T14:34:53.209Z"
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/ledger.jsonl as the audit trail.",
+  "activeGoalId": "G001-spec-specs-agentic-zoning-harness-md"
+}

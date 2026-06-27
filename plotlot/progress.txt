@@ -1080,3 +1080,36 @@ parser → chunks → events → quality).
   Tables serialized as labeled rows (header preserved, not flattened).
 5 tests pass, gate green. NEXT: Phase 6 — harness run service + zoning
 feasibility memo skill (the first paid feature).
+
+=== 2026-06-27 REVIEW-FEEDBACK-FIXES (P0 priority) ===
+Implemented the critical P0 fixes from review feedback on feature/harness-wiring.
+
+FIXES SHIPPED:
+1. ORM alignment: added source_authority_id, snapshot_id, chunk_kind, quality_flags,
+   table_row_key, source_page to OrdinanceChunk ORM; source_authority_id, snapshot_id,
+   content_hash, parser_version, quality_flags to OrdinanceSection ORM (matching migration 010).
+2. verification_status on DistrictDimensionalStandard: VerificationStatus enum
+   (verified/staged/unverified) + is_verified_fact_source() predicate. STAGED rows
+   CANNOT produce verified_fact/local_authority claims. FTL rows marked verified;
+   Miami/Hollywood marked staged. Live DB updated.
+3. allow_fixture_fallback=False: get_dimensional_standard(..., allow_fixture_fallback=False)
+   forces live DB reads; fixture fallback only when enabled. All live/golden tests
+   now use allow_fixture_fallback=False.
+4. Event persistence: event_store.py (persist_event, persist_events, list_events_by_*
+   with recursive redaction).
+5. Snapshot persistence: snapshot_store.py (persist_snapshot, get_latest_snapshot
+   with REAL IDs, not content_hash[:16]).
+6. Source authority persistence: persistence.py (upsert_source_authority,
+   list_source_authorities, seed_and_persist_south_florida_authorities).
+
+FUNCTIONAL PROOF (no mock theater):
+- 13 integration tests pass against live PostgreSQL (schema roundtrip: authority
+  upsert/idempotent, snapshot persist+latest, event persist+query+redaction,
+  ordinance_chunk column write/read)
+- 6 dimensional standards DB tests pass (verified FTL with fixture fallback off,
+  staged Miami/Hollywood not verified, miss returns None, verified produces
+  real NumericZoningParams)
+- 4/4 smoke scripts pass (source authority roundtrip, snapshot change detection,
+  dimensional standard lookup, event store)
+- Golden queries use allow_fixture_fallback=False
+- Gate green

@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard, VerificationStatus
 from sqlalchemy import (
     Column,
     DateTime,
@@ -66,6 +66,14 @@ class OrdinanceChunk(Base):
 
     # State/region field (B6) — supports multi-state expansion (FL, NC, etc.)
     state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+
+    # Phase 1 master-spec §7 columns (migration 010) — source authority + snapshot linkage.
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    chunk_kind: Mapped[str | None] = mapped_column(String(40), nullable=True, default="narrative")
+    quality_flags: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
+    table_row_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -132,6 +140,13 @@ class OrdinanceSection(Base):
     # source-boundary checks can resolve against the section, not just chunks.
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Phase 1 master-spec §7 columns (migration 010)
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    quality_flags: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
 
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -691,6 +706,11 @@ class DistrictDimensionalStandardORM(Base):
         DateTime(timezone=True), nullable=True, default=func.now()
     )
 
+    # Verification status (Slice 3.2 review): only VERIFIED rows produce
+    # verified_fact/local_authority claims. STAGED rows are assumption-grade.
+    verification_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="unverified", index=True)
+
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -719,6 +739,7 @@ class DistrictDimensionalStandardORM(Base):
             source_section_id=self.source_section_id,
             source_url=self.source_url or "",
             extracted_at=self.extracted_at or func.now(),
+            verification_status=VerificationStatus(self.verification_status or "unverified"),
         )
 
 

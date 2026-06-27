@@ -69,7 +69,7 @@ async def test_golden_queries_hit_rate_above_threshold():
     hits = 0
     misses: list[str] = []
     for municipality, district_code, field, expected in GOLDEN_QUERIES:
-        got = await get_dimensional_standard(municipality, district_code)
+        got = await get_dimensional_standard(municipality, district_code, allow_fixture_fallback=False)
         if got is None:
             misses.append(f"{municipality}/{district_code}: no typed row (MISS)")
             continue
@@ -101,7 +101,7 @@ async def test_golden_queries_no_silent_value_drift():
     verified number — the most dangerous regression. Every hit must match."""
     wrong_values: list[str] = []
     for municipality, district_code, field, expected in GOLDEN_QUERIES:
-        got = await get_dimensional_standard(municipality, district_code)
+        got = await get_dimensional_standard(municipality, district_code, allow_fixture_fallback=False)
         if got is None:
             continue  # miss handled by the hit-rate test
         actual = getattr(got, field, None)

@@ -1,0 +1,4 @@
+tests/eval/test_ingestion_golden_queries.py::test_golden_queries_hit_rate_above_threshold FAILED [ 50%]
+tests/eval/test_ingestion_golden_queries.py::test_golden_queries_no_silent_value_drift PASSED [100%]
+FAILED tests/eval/test_ingestion_golden_queries.py::test_golden_queries_hit_rate_above_threshold
+========================= 1 failed, 1 passed in 1.16s ==========================

@@ -227,6 +227,8 @@ def get_dimensional_standard_from_fixture(
 async def get_dimensional_standard(
     municipality: str,
     district_code: str,
+    *,
+    allow_fixture_fallback: bool = True,
 ) -> DistrictDimensionalStandard | None:
     """Look up a typed dimensional standard for (municipality, district_code).
 
@@ -280,7 +282,9 @@ async def get_dimensional_standard(
         )
 
     # ── Fallback: in-memory fixture (tests/offline dev / pre-extraction) ──
-    return get_dimensional_standard_from_fixture(muni, code)
+    if allow_fixture_fallback:
+        return get_dimensional_standard_from_fixture(muni, code)
+    return None
 
 
 async def store_dimensional_standards(
@@ -350,6 +354,7 @@ async def store_dimensional_standards(
                         max_density_units_per_acre=row.max_density_units_per_acre,
                         source_section_id=row.source_section_id,
                         source_url=row.source_url,
+                        verification_status=row.verification_status.value,
                     )
                 )
             written += 1

@@ -52,3 +52,17 @@ eval:  ## Run ingestion golden-query eval gate (requires PLOTLOT_LIVE_TESTS=1 + 
 clean:  ## Remove build artifacts
 	rm -rf .venv dist build *.egg-info .pytest_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
+
+smoke-source-authority:  ## Smoke: source authority persistence roundtrip
+	uv run python scripts/smoke/smoke_source_authority_roundtrip.py
+
+smoke-snapshot:  ## Smoke: snapshot change detection + persistence
+	uv run python scripts/smoke/smoke_snapshot_change_detection.py
+
+smoke-dimensional-standard:  ## Smoke: dimensional standard live DB lookup
+	uv run python scripts/smoke/smoke_dimensional_standard_lookup.py
+
+smoke-events:  ## Smoke: event persistence + query + redaction
+	uv run python scripts/smoke/smoke_harness_event_store.py
+
+smoke-functional: smoke-source-authority smoke-snapshot smoke-dimensional-standard smoke-events  ## All smoke tests

@@ -52,6 +52,7 @@ async def analyze_residential_infill(
     lot_width_ft: float | None = None,
     lot_depth_ft: float | None = None,
     source_url: str = "",
+    allow_fixture_fallback: bool = True,
 ) -> list[InfillScenarioResult]:
     """Run multiple development scenarios against a real infill lot.
 
@@ -64,7 +65,8 @@ async def analyze_residential_infill(
     speculative) and provenance (origin + source_url).
     """
     results: list[InfillScenarioResult] = []
-    standard = await get_dimensional_standard(municipality, district_code)
+    standard = await get_dimensional_standard(municipality, district_code,
+                                               allow_fixture_fallback=allow_fixture_fallback)
 
     # Scenario 1: by-right density (the deterministic Kleyman step).
     results.append(

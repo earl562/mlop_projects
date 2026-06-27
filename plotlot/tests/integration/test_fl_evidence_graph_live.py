@@ -36,7 +36,7 @@ async def test_fl_residential_districts_have_typed_standards():
     """Criterion 1: every FL residential district (RS-8, RS-4.4, RM-15) has a
     DistrictDimensionalStandard in the live DB with verified values."""
     for district_code, expected_density in [("RS-8", 8.0), ("RS-4.4", 4.4), ("RM-15", 15.0)]:
-        got = await get_dimensional_standard("Fort Lauderdale", district_code)
+        got = await get_dimensional_standard("Fort Lauderdale", district_code, allow_fixture_fallback=False)
         assert got is not None, f"FL/{district_code}: no typed standard in live DB"
         assert got.max_density_units_per_acre == pytest.approx(expected_density)
         # Provenance: verified against the ingested ordinance corpus.
@@ -50,7 +50,7 @@ async def test_rs8_setbacks_query_returns_typed_standard_not_llm():
     """Criterion 2: a query for RS-8 setbacks returns the typed standard with
     the verified rear setback (15 ft, from Sec. 47-5.31), not an LLM extraction.
     This is the verified-fact fast path the calculator consumes."""
-    got = await get_dimensional_standard("Fort Lauderdale", "RS-8")
+    got = await get_dimensional_standard("Fort Lauderdale", "RS-8", allow_fixture_fallback=False)
     assert got is not None
     assert isinstance(got, DistrictDimensionalStandard)
     # Verified values from Sec. 47-5.31 (ordinance_chunks id=3755).
@@ -126,7 +126,7 @@ async def test_freshness_computed_on_fl_dimensional_claim():
     from datetime import datetime, timezone
     from plotlot.domain.claims import Claim, ClaimFreshness, ClaimKind, ClaimOrigin
 
-    got = await get_dimensional_standard("Fort Lauderdale", "RS-8")
+    got = await get_dimensional_standard("Fort Lauderdale", "RS-8", allow_fixture_fallback=False)
     assert got is not None
     # Build a claim with fresh freshness (scraped today, amended earlier).
     now_iso = datetime.now(timezone.utc).isoformat()

@@ -7,6 +7,11 @@ NumericZoningParams at query time.
 This is the verified-fact path: a district's setbacks/height/FAR/coverage/density
 come from a typed row with provenance, not from an LLM re-parsing the table
 on every analysis.
+
+Slice 3.2 (review feedback): added VerificationStatus enum. Only VERIFIED rows
+may be used as local_authority/verified-fact calculator input. STAGED rows
+(assumption-grade, not yet cross-checked against ingested ordinance text) must
+NOT become verified facts. The calculator + storage layer enforce this at read.
 """
 
 from __future__ import annotations
@@ -14,8 +19,24 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 
 from plotlot.core.types import NumericZoningParams
+
+
+class VerificationStatus(str, Enum):
+    """Whether a DistrictDimensionalStandard has been verified against the
+    ingested ordinance corpus (ordinance_chunks. source text).
+
+    Only VERIFIED rows may serve as local_authority/verified-fact calculator
+    input. STAGED rows are assumption-grade (hand-entered or auto-extracted
+    without cross-checking) and must never produce verified_fact claims.
+    UNVERIFIED is the default for rows from new ingestion runs before QC.
+    """
+
+    VERIFIED = "verified"      # cross-checked against ingested source text — production-ready
+    STAGED = "staged"           # assumption-grade, pending QC — never becomes verified_fact
+    UNVERIFIED = "unverified"   # from a fresh ingestion run, not yet QC'd
 
 # District code: 1-4 uppercase letters, optional hyphen/digits/suffix.
 # Matches RS-1, RM-15, T6-80, RMM-25, B-2, etc.
@@ -81,6 +102,7 @@ class DistrictDimensionalStandard:
     max_density_units_per_acre: float | None = None
     source_section_id: str = ""
     source_url: str = ""
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
     extracted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_numeric_zoning_params(self) -> NumericZoningParams:
@@ -108,6 +130,16 @@ class DistrictDimensionalStandard:
             return 43560.0 / self.max_density_units_per_acre
         return self.min_lot_area_sqft
 
+    def is_verified_fact_source(self) -> bool:
+        """Can this standard serve as a verified-fact calculator input?
+
+        Only VERIFIED rows may produce local_authority/verified_fact claims.
+        STAGED rows are assumption-grade (hand-entered, not cross-checked
+        against ingested source text); UNVERIFIED rows are from a fresh
+        ingestion run that hasn't been QC'd — neither may become verified facts.
+        """
+        return self.verification_status == VerificationStatus.VERIFIED
+
 
 def extract_dimensional_standards(
     table_text: str,
@@ -117,6 +149,7 @@ def extract_dimensional_standards(
     state: str,
     source_section_id: str,
     source_url: str,
+    verification_status: "VerificationStatus | None" = None,
 ) -> list[DistrictDimensionalStandard]:
     """Extract typed DistrictDimensionalStandard rows from a markdown table.
 
@@ -158,6 +191,7 @@ def extract_dimensional_standards(
                 max_density_units_per_acre=values.get("max_density_units_per_acre"),
                 source_section_id=source_section_id,
                 source_url=source_url,
+                verification_status=verification_status or VerificationStatus.UNVERIFIED,
             )
         )
     return rows

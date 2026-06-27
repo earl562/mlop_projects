@@ -63,7 +63,7 @@ async def test_live_db_serves_verified_south_fl_dimensional_standards():
     """The live district_dimensional_standards table returns the verified rows
     for all 3 South FL municipalities with real density values."""
     for municipality, district_code, expected_density in SOUTH_FL_PROBES:
-        got = await get_dimensional_standard(municipality, district_code)
+        got = await get_dimensional_standard(municipality, district_code, allow_fixture_fallback=False)
         assert got is not None, f"live DB miss for {municipality}/{district_code}"
         assert isinstance(got, DistrictDimensionalStandard)
         assert got.municipality == municipality
@@ -104,7 +104,7 @@ async def test_live_db_at_least_one_municipality_has_3_districts_all_numeric():
         }[municipality]
         fully_populated = 0
         for code in district_codes:
-            got = await get_dimensional_standard(municipality, code)
+            got = await get_dimensional_standard(municipality, code, allow_fixture_fallback=False)
             if got is None:
                 continue
             if all(getattr(got, f) is not None for f in NUMERIC_FIELDS):
@@ -119,5 +119,5 @@ async def test_live_db_at_least_one_municipality_has_3_districts_all_numeric():
 async def test_live_db_miss_returns_none():
     """A (municipality, district_code) not in the table returns None — the
     contract that lets lookup.py fall through to LLM extraction."""
-    got = await get_dimensional_standard("Nonexistent Town", "ZZ-999")
+    got = await get_dimensional_standard("Nonexistent Town", "ZZ-999", allow_fixture_fallback=False)
     assert got is None

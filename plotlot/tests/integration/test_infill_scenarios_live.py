@@ -97,7 +97,7 @@ async def test_by_right_density_is_deterministic_calculation():
     pr = await lookup_property(address, county, lat=geo["lat"], lng=geo["lng"])
     results = await analyze_residential_infill(
         address=address, municipality=municipality, district_code=pr.zoning_code,
-        lot_size_sqft=pr.lot_size_sqft, source_url="test",
+        lot_size_sqft=pr.lot_size_sqft, source_url="test", allow_fixture_fallback=False,
     )
     by_right = next(r for r in results if r.scenario == "by_right_density")
     # Fort Lauderdale has verified standards → calculation, not hypothesis.
