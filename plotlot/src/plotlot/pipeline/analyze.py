@@ -102,46 +102,10 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
     county = report.county or ""
     cost_model = get_cost_model(state, county)
 
-    # Comparable sales (land + exit/ADV comps) — non-blocking network call.
-    if report.property_record and report.property_record.lat:
-        try:
-            report.comp_analysis = await asyncio.wait_for(
-                find_comparables(report.property_record, state=state),
-                timeout=30,
-            )
-        except Exception as exc:  # noqa: BLE001 — comps are advisory, never fatal
-            logger.warning("Deep comps lookup failed for %s: %s", address[:60], exc)
+    apn = report.property_record.folio if report.property_record else ""
 
-    # Residual pro forma + sensitivity + entitlement (deterministic, no network).
-    # Use a registered itemized fee schedule when one exists so the residual's
-    # impact fee matches the entitlement's (else the coarse regional aggregate).
-    from plotlot.pipeline.fee_schedule import get_fee_schedule
-
-    fee_schedule = get_fee_schedule(report.state, report.county)
-    # Only let a schedule drive the residual when it covers ALL per-unit fees. A
-    # partial schedule (e.g. SD city DIFs only) is itemized for display but must not
-    # lower the residual below the conservative coarse all-in (RTCIP/school/utility
-    # are separate) — else the max land price is optimistically overstated.
-    fee_override = (
-        fee_schedule.total_per_unit
-        if (fee_schedule and fee_schedule.is_itemized and fee_schedule.covers_all_fees)
-        else None
-    )
-    try:
-        from plotlot.pipeline.sensitivity import build_sensitivity_table
-
-        report.pro_forma = calculate_land_pro_forma(
-            density=density,
-            comps=report.comp_analysis,
-            cost_model=cost_model,
-            impact_fees_per_unit=fee_override,
-        )
-        report.sensitivity = build_sensitivity_table(
-            density=density, comps=report.comp_analysis, cost_model=cost_model
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Deep pro forma failed for %s: %s", address[:60], exc)
-
+    # Entitlement is deterministic (no network) and feeds the timeline-risk task,
+    # so compute it before launching the concurrent augmentations below.
     try:
         from plotlot.pipeline.entitlement import assess_entitlement
 
@@ -149,64 +113,35 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Deep entitlement failed for %s: %s", address[:60], exc)
 
-    lot_sqft = report.property_record.lot_size_sqft if report.property_record else 0.0
-    if report.pro_forma is not None:
-        report.warnings = list(report.warnings or []) + check_residual_plausibility(
-            density, lot_sqft, report.pro_forma
-        )
+    # ── Concurrent network augmentations ──
+    # These were the dominant latency cost when run serially (~25s). They are
+    # mutually independent (each writes a different report field), so run them
+    # together — wall time collapses to the slowest one. Each is individually
+    # bounded and self-contained; one failure never blocks the others.
+    async def _aug_comps() -> None:
+        if report.property_record and report.property_record.lat:
+            report.comp_analysis = await asyncio.wait_for(
+                find_comparables(report.property_record, state=state), timeout=20
+            )
 
-    # Site risk — FEMA flood zone + NWI wetlands (non-blocking network call).
-    if report.lat and report.lng:
-        try:
+    async def _aug_site_risk() -> None:
+        if report.lat and report.lng:
             from plotlot.pipeline.site_risk import fetch_site_risk
 
             report.site_risk = await asyncio.wait_for(
-                fetch_site_risk(report.lat, report.lng), timeout=15
+                fetch_site_risk(report.lat, report.lng), timeout=12
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Deep site risk failed for %s: %s", address[:60], exc)
 
-    # California state-program upside (ADU / SB9 / Density Bonus) — additive,
-    # base stays firm; SB9 gated on the flood/wetland hazards we just fetched.
-    if state.upper() == "CA" and density.max_units > 0:
-        try:
-            from plotlot.pipeline.density_bonus import compute_density_uplift
-
-            sr = report.site_risk
-            report.density_uplift = compute_density_uplift(
-                density.max_units,
-                state=state,
-                property_type=(
-                    report.numeric_params.property_type or "" if report.numeric_params else ""
-                ),
-                base_is_provisional=bool(
-                    report.extraction_verification
-                    and report.extraction_verification.offer_is_provisional
-                ),
-                in_flood_hazard=bool(sr and sr.flood_zone and sr.flood_zone.in_sfha),
-                has_wetlands=bool(sr and sr.has_wetlands),
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Deep density uplift failed for %s: %s", address[:60], exc)
-
-    # Development-activity signals — does the city permit system show this parcel
-    # already in active development? Keeps the agent from pitching an entitled,
-    # developer-owned site as raw land. Non-blocking; APN-keyed (address queries
-    # on the permit layer return wrong cross-street results).
-    apn = report.property_record.folio if report.property_record else ""
-    if apn and county:
-        try:
+    async def _aug_permits() -> None:
+        if apn and county:
             from plotlot.pipeline.permits import fetch_development_signals
 
             report.development_signals = await asyncio.wait_for(
-                fetch_development_signals(apn, county), timeout=15
+                fetch_development_signals(apn, county), timeout=12
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Deep development signals failed for %s: %s", address[:60], exc)
 
-    # Entitlement timeline risk — real CEQAnet filings + permit check (CA).
-    if report.entitlement:
-        try:
+    async def _aug_timeline() -> None:
+        if report.entitlement:
             import re as _re
 
             from plotlot.pipeline.entitlement_timeline import assess_timeline_risk
@@ -227,31 +162,93 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
                     parcel_zip=_zip_m.group(1) if _zip_m else "",
                     owner=report.property_record.owner if report.property_record else "",
                 ),
-                timeout=25,
+                timeout=18,
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Deep timeline risk failed for %s: %s", address[:60], exc)
 
-    # Neighbor / political opposition risk — qualitative LLM-based assessment.
+    _aug_names = ("comps", "site risk", "permits", "timeline risk")
+    _aug_results = await asyncio.gather(
+        _aug_comps(),
+        _aug_site_risk(),
+        _aug_permits(),
+        _aug_timeline(),
+        return_exceptions=True,
+    )
+    for _name, _res in zip(_aug_names, _aug_results):
+        if isinstance(_res, Exception):
+            logger.warning("Deep %s failed for %s: %s", _name, address[:60], _res)
+
+    # Opposition risk — DETERMINISTIC only (instant, no I/O). The qualitative LLM
+    # enrichment is intentionally OFF the critical path (it was ~10–25s on the slow
+    # narrator); it runs lazily/on-demand via assess_opposition_risk(). The
+    # deterministic risk level is the trustworthy signal and still grounds the chat.
     try:
-        from plotlot.pipeline.opposition_risk import assess_opposition_risk
+        from plotlot.pipeline.opposition_risk import assess_opposition_risk_basic
 
-        density = report.density_analysis
-        max_units = density.max_units if density else None
-        report.opposition_risk = await asyncio.wait_for(
-            assess_opposition_risk(
-                address=report.formatted_address or report.address,
-                municipality=report.municipality,
-                county=report.county,
-                state=report.state,
-                max_units=max_units,
-                zoning_district=report.zoning_district,
-                lat=report.lat,
-                lng=report.lng,
-            ),
-            timeout=25,
+        report.opposition_risk = assess_opposition_risk_basic(
+            max_units=density.max_units,
+            zoning_district=report.zoning_district,
+            municipality=report.municipality,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Deep opposition risk failed for %s: %s", address[:60], exc)
+
+    # ── Deterministic finalizers (depend on the concurrent results) ──
+    # Residual pro forma + sensitivity. Use a registered itemized fee schedule
+    # when one exists so the residual's impact fee matches the entitlement's
+    # (else the coarse regional aggregate). Only let a schedule drive the residual
+    # when it covers ALL per-unit fees — a partial schedule (e.g. SD city DIFs)
+    # is itemized for display but must not lower the residual below the
+    # conservative coarse all-in, else the max land price is overstated.
+    from plotlot.pipeline.fee_schedule import get_fee_schedule
+
+    fee_schedule = get_fee_schedule(report.state, report.county)
+    fee_override = (
+        fee_schedule.total_per_unit
+        if (fee_schedule and fee_schedule.is_itemized and fee_schedule.covers_all_fees)
+        else None
+    )
+    try:
+        from plotlot.pipeline.sensitivity import build_sensitivity_table
+
+        report.pro_forma = calculate_land_pro_forma(
+            density=density,
+            comps=report.comp_analysis,
+            cost_model=cost_model,
+            impact_fees_per_unit=fee_override,
+        )
+        report.sensitivity = build_sensitivity_table(
+            density=density, comps=report.comp_analysis, cost_model=cost_model
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Deep pro forma failed for %s: %s", address[:60], exc)
+
+    lot_sqft = report.property_record.lot_size_sqft if report.property_record else 0.0
+    if report.pro_forma is not None:
+        report.warnings = list(report.warnings or []) + check_residual_plausibility(
+            density, lot_sqft, report.pro_forma
+        )
+
+    # California state-program upside (ADU / SB9 / Density Bonus) — additive,
+    # base stays firm; SB9 gated on the flood/wetland hazards fetched above.
+    if state.upper() == "CA" and density.max_units > 0:
+        try:
+            from plotlot.pipeline.density_bonus import compute_density_uplift
+
+            sr = report.site_risk
+            report.density_uplift = compute_density_uplift(
+                density.max_units,
+                state=state,
+                property_type=(
+                    report.numeric_params.property_type or "" if report.numeric_params else ""
+                ),
+                base_is_provisional=bool(
+                    report.extraction_verification
+                    and report.extraction_verification.offer_is_provisional
+                ),
+                in_flood_hazard=bool(sr and sr.flood_zone and sr.flood_zone.in_sfha),
+                has_wetlands=bool(sr and sr.has_wetlands),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Deep density uplift failed for %s: %s", address[:60], exc)
 
     return report

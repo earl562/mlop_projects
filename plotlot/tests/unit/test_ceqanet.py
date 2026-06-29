@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from plotlot.core.types import CEQADocument
+from plotlot.pipeline import ceqanet
 from plotlot.pipeline.ceqanet import (
     _address_tokens,
     _dms_to_decimal,
@@ -16,6 +17,15 @@ from plotlot.pipeline.ceqanet import (
     fetch_ceqa_documents,
     match_ceqa_documents,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_ceqa_cache():
+    """The per-city CSV cache is module-global — clear it so fetch tests are
+    independent of order (otherwise a cached city short-circuits the next test)."""
+    ceqanet._CSV_CACHE.clear()
+    yield
+    ceqanet._CSV_CACHE.clear()
 
 # A compact CSV using the real CEQAnet column names (parser reads by header).
 # Per RFC 4180, the literal " in the DMS coordinate is escaped by doubling it,

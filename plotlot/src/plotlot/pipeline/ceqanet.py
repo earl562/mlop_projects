@@ -27,6 +27,7 @@ import csv
 import io
 import logging
 import re
+import time
 from dataclasses import replace
 from difflib import SequenceMatcher
 from math import asin, cos, radians, sin, sqrt
@@ -38,6 +39,12 @@ from plotlot.core.types import CEQADocument
 logger = logging.getLogger(__name__)
 
 _CEQANET_SEARCH_URL = "https://ceqanet.lci.ca.gov/Search"
+
+# A city's CSV is identical for every parcel in it and changes slowly, so cache
+# the decoded TEXT (not parsed objects — the matcher mutates those in place) and
+# re-parse fresh per call. This turns the ~7s download into a one-off per city.
+_CSV_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
+_CSV_CACHE_TTL_S = 6 * 3600.0  # 6 hours
 
 # Matching thresholds (metres / similarity ratio). Conservative by design.
 STRONG_RADIUS_M = 150.0
@@ -195,22 +202,31 @@ async def fetch_ceqa_documents(
     """
     if not county or not city:
         return []
-    params = {"County": county, "City": city, "OutputFormat": "CSV"}
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(_CEQANET_SEARCH_URL, params=params)
-            resp.raise_for_status()
-    except Exception as exc:
-        logger.warning("CEQAnet query failed for %s, %s: %s", city, county, exc)
-        return []
 
-    if "csv" not in resp.headers.get("content-type", "").lower():
-        # Over the 10k CSV cap → CEQAnet returns the HTML results page instead.
-        logger.info("CEQAnet returned non-CSV (likely >10k results) for %s, %s", city, county)
-        return []
+    key = (county.lower().strip(), city.lower().strip())
+    cached = _CSV_CACHE.get(key)
+    if cached and (time.monotonic() - cached[0]) < _CSV_CACHE_TTL_S:
+        text = cached[1]
+    else:
+        params = {"County": county, "City": city, "OutputFormat": "CSV"}
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                resp = await client.get(_CEQANET_SEARCH_URL, params=params)
+                resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("CEQAnet query failed for %s, %s: %s", city, county, exc)
+            return []
+
+        if "csv" not in resp.headers.get("content-type", "").lower():
+            # Over the 10k CSV cap → CEQAnet returns the HTML results page instead.
+            logger.info("CEQAnet returned non-CSV (likely >10k results) for %s, %s", city, county)
+            return []
+
+        text = _decode_csv(resp.content)
+        _CSV_CACHE[key] = (time.monotonic(), text)
 
     try:
-        return _parse_ceqa_csv(_decode_csv(resp.content))
+        return _parse_ceqa_csv(text)
     except Exception as exc:  # malformed CSV — degrade, do not raise
         logger.warning("CEQAnet CSV parse failed for %s, %s: %s", city, county, exc)
         return []

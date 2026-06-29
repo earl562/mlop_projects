@@ -13,6 +13,7 @@ not predictions to act on without verification.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -20,6 +21,11 @@ import re
 from plotlot.core.types import OppositionRiskAssessment
 
 logger = logging.getLogger(__name__)
+
+# The qualitative LLM enrichment is best-effort; the deterministic risk level is
+# the real signal. Time-box the LLM work so opposition never dominates the
+# analysis latency (it was the slowest augmentation on the slow narrator).
+_LLM_ENRICH_TIMEOUT_S = 10.0
 
 # ---------------------------------------------------------------------------
 # Deterministic risk rules
@@ -206,6 +212,32 @@ def _heuristic_risk_level(max_units: int, flags: list[str], sf_zone: bool) -> st
 # ---------------------------------------------------------------------------
 
 
+def assess_opposition_risk_basic(
+    max_units: int | None,
+    zoning_district: str,
+    municipality: str,
+) -> OppositionRiskAssessment:
+    """Deterministic opposition risk — instant, no I/O.
+
+    This is the trustworthy signal (density delta + single-family-zone conflict)
+    and is what runs on the analysis critical path. The qualitative LLM
+    enrichment lives in ``assess_opposition_risk`` and is run lazily/on-demand,
+    off the path — so a property analysis never blocks on the slow narrator.
+    """
+    sf_zone = bool(
+        zoning_district and zoning_district.upper().startswith(("R-1", "RS", "R1", "RE", "RA"))
+    )
+    desc, det_flags = _density_delta_description(max_units, zoning_district, municipality)
+    return OppositionRiskAssessment(
+        risk_level=_heuristic_risk_level(max_units or 0, det_flags, sf_zone),
+        flags=list(det_flags),
+        density_delta_description=desc,
+        assessment=desc,
+        data_sources=["Heuristic rules (density delta, zone type)"],
+        confidence="low",
+    )
+
+
 async def assess_opposition_risk(
     address: str,
     municipality: str,
@@ -216,56 +248,63 @@ async def assess_opposition_risk(
     lat: float | None = None,
     lng: float | None = None,
 ) -> OppositionRiskAssessment:
-    """Assess neighbor/political opposition risk for a parcel.
+    """Full opposition risk = deterministic base + best-effort LLM enrichment.
 
-    All calls degrade gracefully. The result is labeled as LOW confidence
-    because this is inherently a qualitative assessment.
+    NOT on the property-analysis critical path (see ``assess_opposition_risk_basic``
+    for that). Call this lazily/on-demand when the user wants the qualitative
+    write-up + possible controversy leads. The LLM work is still time-boxed and
+    degrades to the deterministic base on the slow narrator.
     """
-    sf_zone = bool(
-        zoning_district and zoning_district.upper().startswith(("R-1", "RS", "R1", "RE", "RA"))
-    )
+    base = assess_opposition_risk_basic(max_units, zoning_district, municipality)
+    all_flags = list(base.flags)
 
-    desc, det_flags = _density_delta_description(max_units, zoning_district, municipality)
+    # The two LLM calls are independent — run them concurrently, time-boxed.
+    async def _controversies() -> list[str]:
+        try:
+            return await _suggest_possible_controversies(municipality)
+        except Exception as exc:
+            logger.debug("Controversy suggestion failed: %s", exc)
+            return []
 
-    all_flags = list(det_flags)
+    async def _assessment() -> str:
+        if not (max_units and max_units > 0):
+            return ""
+        try:
+            return await _llm_opposition_assessment(
+                address, municipality, county, max_units, zoning_district
+            )
+        except Exception as exc:
+            logger.debug("LLM opposition assessment failed: %s", exc)
+            return ""
+
+    controversies: list[str] = []
+    assessment_text = ""
+    try:
+        controversies, assessment_text = await asyncio.wait_for(
+            asyncio.gather(_controversies(), _assessment()),
+            timeout=_LLM_ENRICH_TIMEOUT_S,
+        )
+    except Exception as exc:
+        logger.debug("Opposition LLM enrichment skipped: %s", type(exc).__name__)
 
     # Unverified LLM-suggested controversy leads — surfaced but NOT scored.
-    try:
-        controversies = await _suggest_possible_controversies(municipality)
-    except Exception as exc:
-        logger.debug("Controversy suggestion failed: %s", exc)
-        controversies = []
     if controversies:
         all_flags.append(
             f"Possible controversies in {municipality} to verify "
             f"(LLM-suggested, unverified): {'; '.join(controversies[:3])}"
         )
 
-    # LLM qualitative assessment (runs with reasonable timeout)
-    assessment_text = ""
-    if max_units and max_units > 0:
-        try:
-            assessment_text = await _llm_opposition_assessment(
-                address, municipality, county, max_units, zoning_district
-            )
-        except Exception as exc:
-            logger.debug("LLM opposition assessment failed: %s", exc)
-
-    # Risk level is driven by DETERMINISTIC factors only (density, zone type) —
-    # unverified controversy leads are surfaced but never raise the score.
-    risk_level = _heuristic_risk_level(max_units or 0, det_flags, sf_zone)
-
-    data_sources = ["Heuristic rules (density delta, zone type)"]
+    data_sources = list(base.data_sources)
     if controversies:
         data_sources.append("LLM-suggested controversy leads (unverified)")
     if assessment_text:
         data_sources.append("LLM-based qualitative analysis (low confidence)")
 
     return OppositionRiskAssessment(
-        risk_level=risk_level,
+        risk_level=base.risk_level,
         flags=all_flags,
-        density_delta_description=desc,
-        assessment=assessment_text or desc,
+        density_delta_description=base.density_delta_description,
+        assessment=assessment_text or base.density_delta_description,
         data_sources=data_sources,
         confidence="low",
     )

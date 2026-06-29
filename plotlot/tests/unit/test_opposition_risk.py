@@ -11,7 +11,20 @@ from plotlot.pipeline.opposition_risk import (
     _density_delta_description,
     _heuristic_risk_level,
     assess_opposition_risk,
+    assess_opposition_risk_basic,
 )
+
+
+def test_assess_opposition_risk_basic_is_deterministic():
+    # The critical-path version: synchronous, no I/O, no LLM enrichment.
+    r = assess_opposition_risk_basic(
+        max_units=24, zoning_district="R-1", municipality="Tiburon"
+    )
+    assert r.risk_level == "high"
+    assert any("single-family" in f.lower() for f in r.flags)
+    assert r.confidence == "low"
+    # No LLM data source on the basic path.
+    assert all("LLM" not in s for s in r.data_sources)
 
 
 # ---------------------------------------------------------------------------

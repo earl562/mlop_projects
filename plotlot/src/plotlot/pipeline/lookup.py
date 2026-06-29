@@ -43,7 +43,11 @@ from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
 
-MAX_ANALYSIS_TURNS = 6
+# Each turn is one slow LLM call; the agentic loop is the dominant latency in the
+# chat-grounding path. Initial retrieval already front-loads the ordinance chunks,
+# so the model typically has enough to submit in ≤4 turns; capping here bounds the
+# worst case (it falls back to heuristic extraction if it never submits).
+MAX_ANALYSIS_TURNS = 4
 PIPELINE_VERSION = "v2.2"
 
 # Pipeline result cache — 30min TTL (Care Access: 86% cost reduction with caching)
