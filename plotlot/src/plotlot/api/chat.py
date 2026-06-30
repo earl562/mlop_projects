@@ -346,6 +346,17 @@ EVERY follow-up about that property directly from those numbers. Do NOT re-run a
 hypothetical, do NOT say "I don't have your assumptions" — the residual, comps,
 fees, risk, and entitlement are already computed and in front of you.
 
+ABSOLUTE RULE — when an ACTIVE GROUNDED ANALYSIS block is present you are FORBIDDEN
+from producing any "hypothetical", "illustrative", "example", "typical", or
+"estimated range" figure for units, land value, residual, fees, or entitlement
+timeline: those numbers are in the block — quote them verbatim. If a specific field
+is null/absent in the block, say in one sentence that it is "not available for this
+parcel" and STOP — never substitute a generic range, a benchmark, or an invented
+line item (there is NO "police impact fee" in San Diego). PROVISIONAL is NOT
+"blocked" or "cannot be generated": present the real grounded number and simply
+label it provisional. Telling the user a value "cannot be generated" while it sits
+in the block, or filling the gap with a made-up number, is a critical failure.
+
 Never invent an alternative ordinance reading (e.g. a different "sq ft per unit")
 to manufacture a conflict — the verified driver the tool returns IS the answer.
 San Diego is already fully ingested; never suggest "ingesting the ordinance" or
@@ -2443,7 +2454,9 @@ def _build_residual_answer(payload: dict | None, message: str = "") -> str | Non
     units = ((payload or {}).get("by_right") or {}).get("max_units")
     adv_source = (val.get("adv_source") or "").strip()
     lines = ["**Most you can pay (residual land value)" + (f" — {addr}" if addr else "") + "**", ""]
-    lines.append(f"- **Max land price: {residual_money}**" + (f" across {units} units" if units else ""))
+    lines.append(
+        f"- **Max land price: {residual_money}**" + (f" across {units} units" if units else "")
+    )
     if val.get("residual_formula"):
         lines.append(f"- Cost stack: {val['residual_formula']}")
     if val.get("hard_cost_basis"):
@@ -2491,7 +2504,10 @@ def _build_sensitivity_answer(payload: dict | None) -> str | None:
     base = _fmt_money(sens.get("base_max_land_price"))
     base_constr = _fmt_money(sens.get("base_construction_psf"))
     base_adv = _fmt_money(sens.get("base_adv_per_unit"))
-    lines = ["**Sensitivity — max land price under stress" + (f" — {addr}" if addr else "") + "**", ""]
+    lines = [
+        "**Sensitivity — max land price under stress" + (f" — {addr}" if addr else "") + "**",
+        "",
+    ]
     if base:
         basis = []
         if base_constr:
@@ -2505,7 +2521,10 @@ def _build_sensitivity_answer(payload: dict | None) -> str | None:
     lines.append("")
     for s in scenarios:
         lines.append(f"- {s}")
-    lines += ["", "These are the grounded stress cells — I won't invent cost or price ranges beyond them."]
+    lines += [
+        "",
+        "These are the grounded stress cells — I won't invent cost or price ranges beyond them.",
+    ]
     return "\n".join(lines)
 
 
@@ -2535,7 +2554,10 @@ def _build_upside_answer(payload: dict | None, message: str = "") -> str | None:
         )
 
     if programs:
-        lines += ["", "Applicable programs (the only ones evaluated for this parcel — I won't invent others):"]
+        lines += [
+            "",
+            "Applicable programs (the only ones evaluated for this parcel — I won't invent others):",
+        ]
         for p in programs:
             add = p.get("additional_units")
             pot = p.get("potential_units")
@@ -2564,6 +2586,109 @@ def _build_upside_answer(payload: dict | None, message: str = "") -> str | None:
             f"not among the programs applicable to{zone_note}.",
         ]
     return "\n".join(lines)
+
+
+# "By-right, CUP, or rezone? how long?" — the entitlement path + timeline range +
+# parcel-confirmed CEQA are grounded (entitlement.path, entitlement_timeline_risk);
+# the narrator invented a 6–12mo by-right timeline (grounded is 2–6mo) and freelanced
+# the path. Echo the grounded path + range + drivers + CEQA instead.
+_TIMELINE_QUERY_RE = re.compile(
+    r"\b(?:"
+    r"timeline|how\s+long|how\s+many\s+months|when\s+can\s+i\s+(?:build|start|develop)|"
+    r"by[-\s]?right\b|conditional\s+use|\bcup\b|rezon|entitle|"
+    r"permit(?:ting)?\s+(?:time|timeline|long)|approval\s+time|"
+    r"ceqa|environmental\s+review|\beir\b|\bmnd\b|\bnod\b|\bnoe\b"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_timeline_query(message: str) -> bool:
+    """True for an entitlement-path / timeline / CEQA question."""
+    return bool(_TIMELINE_QUERY_RE.search(message or ""))
+
+
+def _build_timeline_answer(payload: dict | None) -> str | None:
+    """Deterministic answer to 'by-right, CUP, or rezone? how long?'.
+
+    Reproduces the grounded entitlement path + timeline range + drivers + any
+    parcel-CONFIRMED CEQA filings (strong matches), labeling candidate filings as
+    verify-only. The narrator otherwise invented the path and a wrong timeline (it
+    said by-right is 6–12mo; the grounded range is 2–6mo). Returns ``None`` when no
+    entitlement/timeline was grounded."""
+    p = payload or {}
+    ent = p.get("entitlement") or {}
+    etr = p.get("entitlement_timeline_risk") or {}
+    path = (ent.get("path") or "").strip()
+    if not path and not etr:
+        return None
+    addr = p.get("address") or ""
+    path_label = {
+        "by_right": "By-right — no discretionary approval / public hearing required",
+        "conditional_use": "Conditional Use Permit (CUP) — requires a public hearing",
+        "rezoning": "Rezoning — a legislative act (multiple hearings, uncertain outcome)",
+        "unknown": "Undetermined from the retrieved ordinance",
+    }.get(path, path or "Undetermined")
+    lines = ["**Entitlement path & timeline" + (f" — {addr}" if addr else "") + "**", ""]
+    lines.append(f"- **Path: {path_label}**")
+    lo, hi = etr.get("est_months_min"), etr.get("est_months_max")
+    if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and hi > 0:
+        lines.append(
+            f"- **Estimated timeline: {lo:g}–{hi:g} months** "
+            f"(risk {etr.get('risk_level', 'n/a')}, confidence {etr.get('confidence', 'low')})"
+        )
+    elif ent.get("est_timeline_months"):
+        lines.append(f"- Estimated timeline: ~{ent['est_timeline_months']:g} months")
+    for d in etr.get("key_drivers") or []:
+        lines.append(f"  - {d}")
+    if etr.get("active_permits_exist"):
+        lines.append("  - Active permits already on the parcel — some approvals may be in process.")
+    for d in etr.get("ceqa_strong_matches") or []:
+        sch = f"SCH {d.get('sch')}" if d.get("sch") else ""
+        lines.append(f"  - CEQA confirmed on this parcel: {d.get('type')} {sch} — {d.get('url')}")
+    cands = etr.get("ceqa_candidates") or []
+    if cands:
+        lines.append(
+            f"  - {len(cands)} possible nearby CEQA filing(s) exist but are NOT confirmed on "
+            "this parcel — verify before relying on them; they do not affect the timeline."
+        )
+    return "\n".join(lines)
+
+
+def _build_grounded_deal_answer(payload: dict | None, message: str) -> str | None:
+    """Composite deterministic answer for a COMPOUND or decision deal question.
+
+    Single-intent questions are handled by the dedicated echoes; this is the
+    catch-all so a multi-part deal question ("what's the valuation AND the fees?",
+    "most I can pay and still make margins?") gets the grounded numbers verbatim
+    instead of the weak narrator freelancing them. Assembles only the field echoes
+    the message actually touches; returns ``None`` if none of them are grounded."""
+    msg = message or ""
+    parts: list[str] = []
+
+    def _add(answer: str | None) -> None:
+        if answer:
+            parts.append(answer)
+
+    if _COMPS_QUERY_RE.search(msg) or re.search(
+        r"\b(?:valuation|valu(?:e|ed)|worth|land\s+value)\b", msg, re.I
+    ):
+        _add(_build_comps_answer(payload))
+    if _is_residual_query(msg):
+        _add(_build_residual_answer(payload, msg))
+    # Broader than _FEE_QUERY_RE (bare "fees") — safe here, already a grounded deal Q.
+    if _FEE_QUERY_RE.search(msg) or re.search(r"\bfees?\b", msg, re.I):
+        _add(_build_fees_answer(payload))
+    if _is_timeline_query(msg):
+        _add(_build_timeline_answer(payload))
+    if _UPSIDE_QUERY_RE.search(msg):
+        _add(_build_upside_answer(payload, msg))
+    if _is_sensitivity_query(msg):
+        _add(_build_sensitivity_answer(payload))
+
+    if not parts:
+        return None
+    return "\n\n---\n\n".join(parts)
 
 
 def _get_tools_for_turn(
@@ -4361,6 +4486,44 @@ async def chat(request: ChatRequest, http_request: Request):
                     if len(memory) > MAX_MEMORY_MESSAGES:
                         del memory[:-MAX_MEMORY_MESSAGES]
                     yield _sse_event("done", {"full_content": upside_answer})
+                    return
+
+            # Deterministic entitlement-path / timeline echo. The grounded path +
+            # range + parcel-confirmed CEQA are authoritative; the narrator invented a
+            # 6–12mo by-right timeline (grounded is 2–6mo) and freelanced the path.
+            if (
+                active_analysis
+                and _is_timeline_query(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                timeline_answer = _build_timeline_answer(active_analysis)
+                if timeline_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_timeline", "args": {}})
+                    yield _sse_event("token", {"content": timeline_answer})
+                    memory.append({"role": "assistant", "content": timeline_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": timeline_answer})
+                    return
+
+            # Composite deterministic deal answer — the catch-all for a COMPOUND or
+            # decision deal question that no single echo above fully handled ("valuation
+            # AND fees?", "most I can pay and still make margins?"). Assemble the grounded
+            # field answers the message touches so the numbers come from the payload, not
+            # the narrator. Only fires for a grounded deal question about the analyzed parcel.
+            if (
+                active_analysis
+                and _needs_grounded_analysis(request.message)
+                and _echo_address_matches(request.message, active_analysis)
+            ):
+                deal_answer = _build_grounded_deal_answer(active_analysis, request.message)
+                if deal_answer:
+                    yield _sse_event("tool_use", {"tool": "verified_deal_facts", "args": {}})
+                    yield _sse_event("token", {"content": deal_answer})
+                    memory.append({"role": "assistant", "content": deal_answer})
+                    if len(memory) > MAX_MEMORY_MESSAGES:
+                        del memory[:-MAX_MEMORY_MESSAGES]
+                    yield _sse_event("done", {"full_content": deal_answer})
                     return
 
             # Token budget check — prevent runaway cost

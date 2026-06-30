@@ -785,6 +785,45 @@ def test_residual_answer_pencil_verdict_when_over_and_under():
     assert "$580,000" in under  # room = 980,000 − 400,000
 
 
+def test_timeline_answer_echoes_grounded_path_and_range():
+    """The timeline echo reproduces the grounded entitlement path + range instead of the
+    narrator's invented by-right timeline (it said 6–12mo; grounded by-right is 2–6mo)."""
+    from plotlot.api.chat import _build_timeline_answer, _is_timeline_query
+    from plotlot.core.types import EntitlementTimelineRisk
+
+    assert _is_timeline_query("By-right, CUP, or do I have to rezone? How long?")
+
+    report = _hueneme_report()
+    report.entitlement_timeline_risk = EntitlementTimelineRisk(
+        est_months_min=2.0,
+        est_months_max=6.0,
+        risk_level="low",
+        confidence="medium",
+        active_permits_exist=True,
+    )
+    answer = _build_timeline_answer(_format_grounded_analysis(report))
+    assert answer is not None
+    assert "By-right" in answer
+    assert "2–6 months" in answer
+    assert "6–12" not in answer  # never the freelanced range
+
+
+def test_grounded_deal_answer_assembles_compound_question():
+    """A COMPOUND deal question gets a deterministic multi-field answer (valuation +
+    fees) instead of the narrator freelancing — including a bare 'fees' phrasing."""
+    from plotlot.api.chat import _build_grounded_deal_answer
+
+    payload = _format_grounded_analysis(_hueneme_report())
+    out = _build_grounded_deal_answer(
+        payload, "what is the valuation of this lot and what are San Diego fees?"
+    )
+    assert out is not None
+    assert "---" in out  # two field echoes assembled into one answer
+    assert "fee" in out.lower()
+    # A non-deal question is left to the model.
+    assert _build_grounded_deal_answer(payload, "what's the topography here?") is None
+
+
 def test_sensitivity_answer_echoes_grounded_grid_never_invents():
     """Turn 10 regression: the narrator re-derived sensitivity cells and contradicted
     the grounded grid. The echo reproduces the exact grounded scenarios, including the
