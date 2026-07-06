@@ -83,7 +83,10 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             "units, comps, residual offer, impact fees, site/coastal risk, entitlement "
             "path, and CA density upside. The grounded engine the agent must cite."
         ),
-        risk_class=ToolRiskClass.READ_ONLY,
+        # Not READ_ONLY: one call runs a ~minute pipeline of live geocode/GIS
+        # queries plus the LLM extraction loop, so untrusted default-context
+        # callers (REST/MCP) must stay fail-closed behind the budget gate.
+        risk_class=ToolRiskClass.EXPENSIVE_READ,
         input_schema={
             "type": "object",
             "properties": {"address": {"type": "string", "minLength": 3}},
@@ -98,6 +101,7 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             },
             "required": ["status"],
         },
+        budget_cents=25,
     ),
     "calculate": ToolContract(
         name="calculate",

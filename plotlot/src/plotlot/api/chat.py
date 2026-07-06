@@ -4116,6 +4116,79 @@ async def _execute_export_dataset(session_id: str, args: dict) -> str:
         return json.dumps({"status": "error", "message": f"Failed to export dataset: {str(e)}"})
 
 
+# Chat tools that execute through HarnessRuntime.call_tool (policy + evidence +
+# events + one shared implementation with REST/MCP). This must cover EVERY chat
+# tool: a name missing here silently falls back to the bespoke _execute_tool
+# path below, which has no governance — the guard test in
+# test_chat_runtime_routing.py enforces full coverage.
+_RUNTIME_ROUTED_TOOLS = frozenset(
+    {
+        "geocode_address",
+        "lookup_property_info",
+        "search_zoning_ordinance",
+        "search_municode_live",
+        "discover_open_data_layers",
+        "generate_document",
+        "analyze_property",
+        "calculate",
+        "analyze_upzoning",
+        "screen_properties",
+        "web_search",
+        "search_properties",
+        "filter_dataset",
+        "get_dataset_info",
+        "export_dataset",
+        "create_spreadsheet",
+        "create_document",
+    }
+)
+
+
+def _cached_grounded_analysis(session_id: str, address: str) -> dict | None:
+    """Session-cached grounded payload covering ``address``, or None.
+
+    Reusing it skips the ~minute analyze pipeline on repeat calls — including
+    the model re-issuing analyze_property right after forced grounding already
+    ran it this turn.
+    """
+    if not session_id:
+        return None
+    cached = _sessions.get_analysis(session_id)
+    if _analysis_covers_address(cached, address):
+        return cached
+    return None
+
+
+def _mirror_grounded_analysis_to_session(session_id: str, payload: Any) -> None:
+    """Persist a runtime-produced grounded analysis into the chat session.
+
+    The harness handler is session-free by design, so chat owns this mirroring:
+    set_analysis keeps every follow-up turn answering from these exact numbers
+    (the active-analysis context and the deterministic echoes read it), and
+    set_property_context keeps doc-gen/panel defaults on the same parcel.
+    """
+    if not session_id or not isinstance(payload, dict):
+        return
+    if payload.get("status") != "success":
+        return
+    _sessions.set_analysis(session_id, payload)
+    if not (payload.get("municipality") or payload.get("county")):
+        return
+    _sessions.set_property_context(
+        session_id,
+        {
+            "address": payload.get("address", ""),
+            "municipality": payload.get("municipality", ""),
+            "county": payload.get("county", ""),
+            "state": payload.get("state", ""),
+            "zoning_code": payload.get("zoning_code", ""),
+            "zoning_description": payload.get("zoning_description", ""),
+            "lot_size_sqft": payload.get("lot_size_sqft"),
+            "owner": payload.get("owner", ""),
+        },
+    )
+
+
 async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
     """Route a tool call to the appropriate handler."""
     if name == "geocode_address":
@@ -4708,15 +4781,8 @@ async def chat(request: ChatRequest, http_request: Request):
                             if expected in context.approved_approval_ids:
                                 fn_args["approval_id"] = expected
 
-                        # Route core tools through the shared harness runtime.
-                        if fn_name in {
-                            "geocode_address",
-                            "lookup_property_info",
-                            "search_zoning_ordinance",
-                            "search_municode_live",
-                            "discover_open_data_layers",
-                            "generate_document",
-                        }:
+                        # Route chat tools through the shared harness runtime.
+                        if fn_name in _RUNTIME_ROUTED_TOOLS:
                             # For generate_document: inject accumulated session evidence IDs
                             # when the agent didn't pass any (common case in chat-only flow).
                             if fn_name == "generate_document" and not fn_args.get("evidence_ids"):
@@ -4724,51 +4790,65 @@ async def chat(request: ChatRequest, http_request: Request):
                                 if accumulated:
                                     fn_args = {**fn_args, "evidence_ids": accumulated}
 
-                            runtime = get_default_runtime()
-                            tool_result = await runtime.call_tool(
-                                tool_name=fn_name,
-                                tool_args=fn_args,
-                                context=context,
-                                approval_id=fn_args.get("approval_id"),
+                            cached_analysis = (
+                                _cached_grounded_analysis(
+                                    session_id, str(fn_args.get("address") or "")
+                                )
+                                if fn_name == "analyze_property"
+                                else None
                             )
-                            # Preserve chat session behaviors.
-                            if fn_name == "geocode_address" and tool_result.result:
-                                geocode = tool_result.result.get("result")
-                                if isinstance(geocode, dict) and session_id:
-                                    _sessions.set_geocode(session_id, geocode)
-                            if fn_name == "lookup_property_info" and tool_result.result:
-                                prop = tool_result.result.get("result")
-                                if isinstance(prop, dict) and session_id:
-                                    _sessions.set_property_context(
-                                        session_id,
-                                        {
-                                            "address": prop.get("address", ""),
-                                            "municipality": prop.get("municipality", ""),
-                                            "county": prop.get("county", ""),
-                                            "zoning_code": prop.get("zoning_code", ""),
-                                            "ordinance_district_code": prop.get(
-                                                "ordinance_district_code", ""
-                                            ),
-                                            "zoning_description": prop.get(
-                                                "zoning_description", ""
-                                            ),
-                                            "lot_size_sqft": prop.get("lot_size_sqft"),
-                                            "owner": prop.get("owner", ""),
-                                        },
+                            if cached_analysis is not None:
+                                result = json.dumps(cached_analysis)
+                            else:
+                                runtime = get_default_runtime()
+                                tool_result = await runtime.call_tool(
+                                    tool_name=fn_name,
+                                    tool_args=fn_args,
+                                    context=context,
+                                    approval_id=fn_args.get("approval_id"),
+                                )
+                                # Preserve chat session behaviors.
+                                if fn_name == "geocode_address" and tool_result.result:
+                                    geocode = tool_result.result.get("result")
+                                    if isinstance(geocode, dict) and session_id:
+                                        _sessions.set_geocode(session_id, geocode)
+                                if fn_name == "lookup_property_info" and tool_result.result:
+                                    prop = tool_result.result.get("result")
+                                    if isinstance(prop, dict) and session_id:
+                                        _sessions.set_property_context(
+                                            session_id,
+                                            {
+                                                "address": prop.get("address", ""),
+                                                "municipality": prop.get("municipality", ""),
+                                                "county": prop.get("county", ""),
+                                                "zoning_code": prop.get("zoning_code", ""),
+                                                "ordinance_district_code": prop.get(
+                                                    "ordinance_district_code", ""
+                                                ),
+                                                "zoning_description": prop.get(
+                                                    "zoning_description", ""
+                                                ),
+                                                "lot_size_sqft": prop.get("lot_size_sqft"),
+                                                "owner": prop.get("owner", ""),
+                                            },
+                                        )
+                                if fn_name == "analyze_property":
+                                    _mirror_grounded_analysis_to_session(
+                                        session_id, tool_result.result
                                     )
-                            # Accumulate evidence IDs from every tool that returns them,
-                            # so generate_document can reference the full research chain.
-                            if tool_result.result and session_id:
-                                evidence_list = tool_result.result.get("evidence") or []
-                                if isinstance(evidence_list, list):
-                                    new_ids = [
-                                        ev["id"]
-                                        for ev in evidence_list
-                                        if isinstance(ev, dict) and ev.get("id")
-                                    ]
-                                    if new_ids:
-                                        _sessions.add_evidence_ids(session_id, new_ids)
-                            result = json.dumps(tool_result.result or {})
+                                # Accumulate evidence IDs from every tool that returns them,
+                                # so generate_document can reference the full research chain.
+                                if tool_result.result and session_id:
+                                    evidence_list = tool_result.result.get("evidence") or []
+                                    if isinstance(evidence_list, list):
+                                        new_ids = [
+                                            ev["id"]
+                                            for ev in evidence_list
+                                            if isinstance(ev, dict) and ev.get("id")
+                                        ]
+                                        if new_ids:
+                                            _sessions.add_evidence_ids(session_id, new_ids)
+                                result = json.dumps(tool_result.result or {})
                         else:
                             result = await _execute_tool(fn_name, fn_args, session_id=session_id)
                         yield _sse_event(

@@ -1,8 +1,9 @@
 """Default harness runtime wiring.
 
-This is the shared execution seam for REST tool routes and the MCP adapter.
-Chat currently uses bespoke tool execution; the long-term goal is to route chat
-through this runtime too.
+This is the shared execution seam for REST tool routes, the MCP adapter, and
+chat (api/chat.py routes every tool in _RUNTIME_ROUTED_TOOLS through here).
+Handlers are session-free: chat-side session mirroring happens in the chat
+routing layer, not in handlers.
 """
 
 from __future__ import annotations
@@ -1140,6 +1141,210 @@ async def _handle_gmail_send_draft(args: dict[str, Any], context: ToolContext) -
     }
 
 
+# Cap batch size so one tool call can't kick off an unbounded analysis fan-out.
+_MAX_SCREEN_ADDRESSES = 20
+
+
+def _round_or_none(value: float | None, ndigits: int = 0) -> float | None:
+    if value is None:
+        return None
+    return round(value, ndigits)
+
+
+async def _handle_analyze_property(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    """Run the full deterministic deal pipeline and return the grounded payload.
+
+    Pure core of the chat `analyze_property` tool: no session cache reads or
+    writes here — transport adapters own session state (chat's routing layer
+    mirrors this payload into its SessionStore so grounding persists across
+    turns). The payload must stay byte-compatible with chat's grounded-analysis
+    dict: the deterministic echo builders and the active-analysis context all
+    read this exact shape.
+    """
+
+    # Deferred so the api→harness module-load order stays acyclic; the grounded
+    # payload formatter is chat-owned so every transport cites identical numbers.
+    from plotlot.api.chat import _format_grounded_analysis
+    from plotlot.pipeline.analyze import analyze_property_deep
+
+    address = str(args.get("address") or "")
+    if not address.strip():
+        return {"status": "error", "message": "An address is required."}
+
+    try:
+        report = await analyze_property_deep(address)
+    except Exception as e:
+        return {"status": "error", "message": f"Analysis failed: {str(e)[:200]}"}
+    if report is None:
+        return {"status": "not_found", "message": f"Could not geocode or analyze: {address}"}
+    return _format_grounded_analysis(report)
+
+
+async def _handle_calculate(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    """Evaluate an arithmetic expression deterministically (no LLM mental math)."""
+
+    from plotlot.pipeline.safe_calc import CalcError, safe_calculate
+
+    expression = str(args.get("expression") or "")
+    try:
+        result = safe_calculate(expression)
+    except CalcError as exc:
+        return {
+            "status": "error",
+            "expression": expression,
+            "message": (
+                f"Could not evaluate '{expression}': {exc}. Pass arithmetic only "
+                "(numbers and + - * / // % ** and parentheses)."
+            ),
+        }
+    # Render an int cleanly when the result is whole (units, dollars).
+    value: float | int = int(result) if result == int(result) else round(result, 4)
+    return {"status": "success", "expression": expression, "result": value}
+
+
+async def _handle_analyze_upzoning(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    """Deterministic entitlement value-creation (subdivision/upzoning) analysis.
+
+    All math is deterministic; the per-lot value is a caller input, never
+    fabricated.
+    """
+
+    from plotlot.pipeline.upzoning import analyze_upzoning
+
+    def _num(key: str) -> float | None:
+        v = args.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        return None
+
+    def _int(key: str) -> int | None:
+        v = args.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            return int(v)
+        return None
+
+    lot_sqft = _num("lot_sqft")
+    if not lot_sqft or lot_sqft <= 0:
+        return {
+            "status": "error",
+            "message": "A positive lot_sqft is required for upzoning analysis.",
+        }
+
+    a = analyze_upzoning(
+        lot_sqft=lot_sqft,
+        value_per_lot=_num("value_per_lot"),
+        purchase_price=_num("purchase_price") or 0.0,
+        entitlement_soft_costs=_num("entitlement_soft_costs") or 0.0,
+        baseline_yield=_int("baseline_yield"),
+        upzoned_yield=_int("upzoned_yield"),
+        baseline_min_lot_area_sqft=_num("baseline_min_lot_area_sqft"),
+        upzoned_min_lot_area_sqft=_num("upzoned_min_lot_area_sqft"),
+        yield_basis=str(args.get("yield_basis") or "buildable lots"),
+        value_source="comps" if args.get("value_source") == "comps" else "override",
+    )
+
+    def _scenario(s) -> dict[str, Any] | None:
+        if s is None:
+            return None
+        return {
+            "name": s.name,
+            "yield_count": s.yield_count,
+            "yield_basis": s.yield_basis,
+            "value_per_yield": round(s.value_per_yield),
+            "gross_value": round(s.gross_value),
+            "instant_equity": round(s.instant_equity),
+            "formula": s.formula,
+        }
+
+    return {
+        "status": "success",
+        "all_in_basis": round(a.all_in_basis),
+        "value_source": a.value_source,
+        "baseline": _scenario(a.baseline),
+        "upzoned": _scenario(a.upzoned),
+        "value_uplift": round(a.value_uplift),
+        "equity_created": round(a.equity_created),
+        "cost_per_yield": round(a.cost_per_yield),
+        "exit_options": a.exit_options,
+        "notes": a.notes,
+        "warnings": a.warnings,
+        "grounding_note": (
+            "Cite these EXACT figures. Equity = (upzoned lots × per-lot value) − all-in "
+            "basis. If value_source is 'missing', tell the user a per-lot value is needed "
+            "and do NOT estimate the equity yourself."
+        ),
+    }
+
+
+async def _handle_screen_properties(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    """Batch-screen addresses against a buy box, ranked by the residual offer.
+
+    Reuses the deterministic screening pipeline so rankings come from verified
+    units + the residual offer — never the model's guess about which parcel is
+    best.
+    """
+
+    from plotlot.pipeline.analyze import analyze_property_full
+    from plotlot.pipeline.screening import BuyBox, screen_addresses
+
+    raw = args.get("addresses") or []
+    addresses = [a.strip() for a in raw if isinstance(a, str) and a.strip()][:_MAX_SCREEN_ADDRESSES]
+    if not addresses:
+        return {"status": "error", "message": "Provide a list of addresses to screen."}
+
+    buy_box = BuyBox(
+        states=args.get("states") or [],
+        counties=args.get("counties") or [],
+        zoning_prefixes=args.get("zoning_prefixes") or [],
+        min_lot_sqft=args.get("min_lot_sqft"),
+        max_lot_sqft=args.get("max_lot_sqft"),
+        min_units=args.get("min_units"),
+        min_residual=args.get("min_residual"),
+        exclude_high_flood_risk=bool(args.get("exclude_high_flood_risk", False)),
+        require_verified=bool(args.get("require_verified", False)),
+        max_results=int(args.get("max_results", 25)),
+    )
+
+    async def _analyze(addr: str):
+        return await analyze_property_full(addr, with_comps=False)
+
+    try:
+        batch = await screen_addresses(
+            addresses, buy_box, _analyze, concurrency=4, per_item_timeout=90.0
+        )
+    except Exception as e:
+        return {"status": "error", "message": f"Screening failed: {str(e)[:200]}"}
+
+    def _row(r) -> dict[str, Any]:
+        return {
+            "address": r.address,
+            "max_units": r.max_units,
+            "max_land_price": _round_or_none(r.max_land_price),
+            "zoning": r.zoning_district,
+            "county": r.county,
+            "state": r.state,
+            "offer_is_provisional": r.offer_is_provisional,
+        }
+
+    return {
+        "status": "success",
+        "screened": batch.total,
+        "qualified_count": batch.qualified_count,
+        # Already ranked best-first (highest residual offer) by the pipeline.
+        "qualified": [_row(r) for r in batch.qualified],
+        "rejected_count": len(batch.rejected),
+        "rejected_sample": [
+            {"address": r.address, "reasons": r.reasons} for r in batch.rejected[:5]
+        ],
+        "error_count": len(batch.errors),
+        "grounding_note": (
+            "Rankings come from the deterministic residual offer on verified units. "
+            "Cite only these results. Deals marked offer_is_provisional have an "
+            "unverified unit count — flag them as provisional, not firm."
+        ),
+    }
+
+
 def build_default_runtime() -> HarnessRuntime:
     policy = HarnessPolicyEngine(
         policy=ToolPolicy(
@@ -1168,6 +1373,10 @@ def build_default_runtime() -> HarnessRuntime:
     runtime.register("create_document", _handle_create_document)
     runtime.register("export_dataset", _handle_export_dataset)
     runtime.register("gmail_send_draft", _handle_gmail_send_draft)
+    runtime.register("analyze_property", _handle_analyze_property)
+    runtime.register("calculate", _handle_calculate)
+    runtime.register("analyze_upzoning", _handle_analyze_upzoning)
+    runtime.register("screen_properties", _handle_screen_properties)
     return runtime
 
 
