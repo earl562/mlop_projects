@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 # so the model typically has enough to submit in ≤4 turns; capping here bounds the
 # worst case (it falls back to heuristic extraction if it never submits).
 MAX_ANALYSIS_TURNS = 4
+
+# Standards topics every extraction needs — pre-fetched deterministically so the
+# agentic loop doesn't spend turns (and provider token budget) searching for them.
+_PREFETCH_TOPICS = (
+    "setbacks front side rear",
+    "height stories maximum",
+    "density dwelling units lot area minimum",
+    "permitted uses allowed conditional",
+)
 PIPELINE_VERSION = "v2.2"
 
 # Pipeline result cache — 30min TTL (Care Access: 86% cost reduction with caching)
@@ -516,7 +525,7 @@ async def _agentic_analysis(
     ordinance_code: str = "",
 ) -> ZoningReport:
     """LLM analysis with tool access for additional searches."""
-    from plotlot.retrieval.llm import call_llm
+    from plotlot.retrieval.llm import call_llm_fast
 
     # Build context message with all collected data
     context_msg = _build_context_message(
@@ -661,19 +670,97 @@ async def _agentic_analysis(
         },
     ]
 
+    all_sources = _format_sources(search_results)
+
+    # On the final turn the model structurally cannot search again: submit_report
+    # is the only tool offered. Deterministic containment, not prompt hope — some
+    # models (llama-4-scout) otherwise spend every turn searching, never submit,
+    # and the whole analysis falls through to the no-density fallback report.
+    submit_tool_only = [t for t in tools if t["function"]["name"] == "submit_report"]
+
+    # The full conversation is resent on every turn, so duplicate ordinance
+    # chunks compound across turns — enough to blow a fast provider's
+    # tokens-per-minute ceiling by turn 3. Track what the model has already
+    # seen and only send fresh sections back from agent searches.
+    def _chunk_key(r) -> tuple[str, str, str]:
+        return (r.section or "", r.section_title or "", (r.chunk_text or "")[:120])
+
+    sent_chunks = {_chunk_key(r) for r in search_results}
+
+    # Deterministic topic pre-fetches: agentic models request the same standards
+    # searches on every run (setbacks/height/density/uses), burning LLM turns and
+    # provider token budget to discover what we already know they need. Fetch the
+    # topics up front in parallel, deduped against the initial chunks, so the
+    # model can submit in one or two turns.
+    prefetch_zone = ordinance_code or (getattr(prop_record, "zoning_code", "") or "")
+    prefetched: list = []
+    if prefetch_zone:
+
+        async def _prefetch_topic(topic: str) -> list:
+            session = await get_session()
+            try:
+                return await hybrid_search(
+                    session,
+                    municipality=municipality,
+                    zone_code=f"{prefetch_zone} {topic}",
+                    limit=8,
+                )
+            except Exception as exc:  # noqa: BLE001 — prefetch is best-effort
+                logger.warning("Prefetch '%s' failed: %s", topic, exc)
+                return []
+            finally:
+                await session.close()
+
+        topic_results = await asyncio.gather(*(_prefetch_topic(t) for t in _PREFETCH_TOPICS))
+        for results_ in topic_results:
+            for r in results_:
+                key = _chunk_key(r)
+                if key not in sent_chunks and len(prefetched) < 16:
+                    sent_chunks.add(key)
+                    prefetched.append(r)
+        if prefetched:
+            all_sources.extend(_format_sources(prefetched))
+            extra_parts = ["\n## Additional Ordinance Sections (targeted standards)\n"]
+            for i, r in enumerate(prefetched, 1):
+                extra_parts.append(f"### Extra {i}: {r.section} — {r.section_title}")
+                if r.zone_codes:
+                    extra_parts.append(f"Zone codes: {', '.join(r.zone_codes)}")
+                extra_parts.append(f"{(r.chunk_text or '')[:800]}\n")
+            context_msg = context_msg + "\n".join(extra_parts)
+            logger.info("Prefetched %d targeted ordinance chunks", len(prefetched))
+
     messages = [
         {"role": "system", "content": _analysis_system_prompt()},
         {"role": "user", "content": context_msg},
     ]
 
-    all_sources = _format_sources(search_results)
+    # With the standards pre-fetched the model already has everything it needs;
+    # two turns bound both latency and the fast provider's per-minute tokens.
+    turns_budget = 2 if prefetched else MAX_ANALYSIS_TURNS
 
-    for turn in range(MAX_ANALYSIS_TURNS):
-        logger.info("Analysis turn %d/%d", turn + 1, MAX_ANALYSIS_TURNS)
+    for turn in range(turns_budget):
+        logger.info("Analysis turn %d/%d", turn + 1, turns_budget)
+
+        final_turn = turn == turns_budget - 1
+        if final_turn:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "This is your FINAL turn — no more searches are available. "
+                        "Call submit_report NOW with your findings from the retrieved "
+                        "text. For any field not explicitly stated in the retrieved "
+                        "chunks, set null (numeric) or empty string (text) — do NOT "
+                        "fill values from general knowledge."
+                    ),
+                }
+            )
 
         with start_span(name=f"llm_turn_{turn + 1}", span_type="CHAT_MODEL") as span:
             span.set_inputs({"turn": turn + 1, "message_count": len(messages)})
-            response = await call_llm(messages, tools=tools)
+            response = await call_llm_fast(
+                messages, tools=submit_tool_only if final_turn else tools
+            )
             if not response:
                 span.set_outputs({"error": "empty_response"})
                 logger.error("LLM returned empty on turn %d", turn + 1)
@@ -752,7 +839,10 @@ async def _agentic_analysis(
 
                     all_sources.extend(_format_sources(extra_results))
 
-                    if extra_results:
+                    fresh = [r for r in extra_results if _chunk_key(r) not in sent_chunks][:6]
+                    sent_chunks.update(_chunk_key(r) for r in fresh)
+
+                    if fresh:
                         chunks = [
                             {
                                 "section": r.section,
@@ -760,9 +850,20 @@ async def _agentic_analysis(
                                 "zone_codes": r.zone_codes,
                                 "text": r.chunk_text[:800],
                             }
-                            for r in extra_results
+                            for r in fresh
                         ]
                         tool_result = json.dumps({"status": "success", "chunks": chunks})
+                    elif extra_results:
+                        tool_result = json.dumps(
+                            {
+                                "status": "no_new_results",
+                                "note": (
+                                    "All matching sections are already in your context "
+                                    "above. Do not repeat this search — use the text you "
+                                    "have or call submit_report."
+                                ),
+                            }
+                        )
                     else:
                         tool_result = json.dumps({"status": "no_results"})
 
@@ -859,7 +960,11 @@ def _build_context_message(
             parts.append(f"### Chunk {i}: {r.section} — {r.section_title}")
             if r.zone_codes:
                 parts.append(f"Zone codes: {', '.join(r.zone_codes)}")
-            parts.append(f"{r.chunk_text}\n")
+            # Same 800-char cap as every other chunk payload: full-text chunks
+            # made the single extraction request exceed fast-provider token
+            # ceilings on their own; the targeted standards ride in the
+            # pre-fetched sections regardless.
+            parts.append(f"{(r.chunk_text or '')[:800]}\n")
     else:
         parts.append("## Zoning Ordinance: No matching sections found\n")
 

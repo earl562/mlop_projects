@@ -119,6 +119,15 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # Fast extraction: route the parcel-extraction agentic loop (pipeline/lookup.py)
+    # Groq-FIRST instead of the mainline NIM 49B reasoning model, whose ~10-15s
+    # per turn makes a cold lookup_address ~35-55s — past Render's proxy timeout,
+    # which is also what starves chat of grounding. The mainline stays as the
+    # fallback when Groq is unusable. Requires GROQ_API_KEY.
+    fast_extraction_enabled: bool = Field(
+        default=False,
+        validation_alias="PLOTLOT_FAST_EXTRACTION",
+    )
 
     # Jina.ai search
     jina_api_key: str = ""

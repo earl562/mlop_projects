@@ -244,7 +244,12 @@ def _get_openai_model() -> str:
 
 
 def _get_groq_token() -> str:
-    if not getattr(settings, "groq_enabled_non_mainline", False):
+    # Groq is enabled by either use-case: the non-mainline fallback or the
+    # Groq-first fast-extraction path.
+    if not (
+        getattr(settings, "groq_enabled_non_mainline", False)
+        or getattr(settings, "fast_extraction_enabled", False)
+    ):
         return ""
     return getattr(settings, "groq_api_key", "")
 
@@ -315,6 +320,10 @@ def _get_groq_client() -> AsyncOpenAI:
         "api_key": _get_groq_token(),
         "base_url": settings.groq_base_url,
         "timeout": OPENAI_TIMEOUT_SECONDS,
+        # No SDK-internal retries: free-tier 429s carry tens-of-seconds
+        # retry-after sleeps that silently block the pipeline. Groq is always
+        # backed by a fallback provider, so fail fast instead of waiting.
+        "max_retries": 0,
     }
     return AsyncOpenAI(**kwargs)
 
@@ -615,7 +624,16 @@ async def _call_groq(
                     "content": content,
                     "tool_calls": tool_calls,
                 }
-            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+            except RateLimitError as exc:
+                # Free-tier TPM 429s reset on a ~minute window; short backoffs
+                # rarely help and blocking the caller is worse than falling
+                # back to the primary provider immediately.
+                logger.warning(
+                    "%s rate limited; failing fast to fallback (%s)", provider_name, exc
+                )
+                span.set_outputs({"error": "rate_limited", "retries": retries_used})
+                return None
+            except (APITimeoutError, APIConnectionError) as exc:
                 retries_used += 1
                 delay = BASE_DELAY * (2**attempt)
                 logger.warning(
@@ -710,6 +728,45 @@ async def call_llm(
 ) -> dict | None:
     """Call the LLM with tool definitions and return the response."""
     clean_messages = _clean_messages_for_api(messages)
+    return await _call_llm_with_fallback(
+        clean_messages,
+        tools=tools,
+        max_completion_tokens=4000,
+        temperature=0.1,
+        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        groq_provider_name=f"Groq/{_get_groq_model()}",
+    )
+
+
+@trace(name="call_llm_fast", span_type="CHAT_MODEL")
+async def call_llm_fast(
+    messages: list[dict],
+    tools: list[dict] | None = None,
+) -> dict | None:
+    """Latency-critical variant of call_llm: try Groq FIRST, then the primary.
+
+    Used by the parcel-extraction agentic loop, where the mainline reasoning
+    model's per-turn latency dominates a cold lookup_address and can starve
+    chat of grounding entirely (proxy timeout → the narrator freelances).
+    Opt-in via PLOTLOT_FAST_EXTRACTION; without the flag this is exactly
+    call_llm, and when Groq is unusable it degrades to the standard primary
+    path — never to nothing.
+    """
+    if not getattr(settings, "fast_extraction_enabled", False):
+        return await call_llm(messages, tools)
+
+    clean_messages = _clean_messages_for_api(messages)
+    result = await _call_groq(
+        clean_messages,
+        tools=tools,
+        max_completion_tokens=4000,
+        temperature=0.1,
+        provider_name=f"Groq/{_get_groq_model()}",
+    )
+    if _usable_response(result):
+        return result
+
+    logger.warning("Fast extraction: Groq unusable; falling back to the primary provider")
     return await _call_llm_with_fallback(
         clean_messages,
         tools=tools,
