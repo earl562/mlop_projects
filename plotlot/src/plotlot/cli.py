@@ -95,20 +95,33 @@ def _init_mlflow() -> None:
 
 
 def main() -> None:
-    """Run a property lookup: plotlot <address>"""
+    """PlotLot CLI entry point.
+
+    Dispatches harness subcommands (tools/analyze/screen/help) to the harness
+    CLI; anything else is treated as a bare address for the legacy
+    `plotlot <address>` zoning lookup, preserving backward compatibility.
+    """
+    from plotlot import harness_cli
+
+    argv = sys.argv[1:]
+    if argv and argv[0] in harness_cli.KNOWN_COMMANDS:
+        # Governed verbs carry their own logging needs; keep this path light.
+        sys.exit(harness_cli.dispatch(argv))
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     _init_mlflow()
 
-    if len(sys.argv) < 2:
-        print("Usage: plotlot <address>")
+    if not argv:
+        print("Usage: plotlot <address>   (or: plotlot help  for harness commands)")
         print('  Example: plotlot "7940 Plantation Blvd, Miramar, FL"')
         print('  Example: plotlot "171 NE 209th Ter, Miami, FL 33179"')
+        print("  Harness: plotlot tools list | plotlot analyze <addr> | plotlot screen ...")
         sys.exit(1)
 
-    address = " ".join(sys.argv[1:])
+    address = " ".join(argv)
     asyncio.run(_property_lookup(address))
 
 
