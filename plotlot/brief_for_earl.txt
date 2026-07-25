@@ -1,0 +1,38 @@
+PlotLot Update — Deal-Watcher Direction & the CLI
+
+1. DEAL-WATCHER AGENT (scoped, not yet built)
+   PlotLot scans a target market for land sitting unsold for a long time and
+   flags it: "sat 26 months, asking $450k, our analysis says it pencils at up
+   to $519k for 7 by-right units." The gap between time-on-market and our
+   verified residual value is the edge. This is deal sourcing, not monitoring
+   saved deals. Sequenced behind the demo.
+
+2. DATA SOURCING — no Zillow/Redfin scraping, deliberately
+   We evaluated stealth-scraping (SeleniumBase / browser-use / CAPTCHA bypass)
+   and passed. Reasons: (a) it breaks our core promise that every number is
+   cited to a real source; (b) "public scraping is fully legal" is oversimplified
+   — ToS breach is a separate track, CAPTCHA bypass raises CFAA/DMCA exposure,
+   and Zillow data is MLS-licensed so we couldn't legally redistribute it anyway;
+   (c) fragile anti-bot arms race feeding stale data into six-figure calls;
+   (d) poison pill for future MLS partnerships and funding due diligence.
+   On RentCast: it has more than we use today (days-on-market, price history,
+   status), but its vacant-land coverage is genuinely thin. The legitimate path
+   to Zillow-class coverage is a licensed MLS feed (RESO/IDX aggregators — incl.
+   Bridge, Zillow's own licensed data) plus ATTOM/CoreLogic, behind one swappable
+   provider seam so RentCast is a free v0 and the licensed feed drops in later.
+
+3. PLOTLOT CLI — BUILT, tested, committed
+   `plotlot tools list / tools call / analyze / screen` now run on the command
+   line, all routed through the SAME harness runtime as REST and MCP — identical
+   policy, budget, evidence, and audit. This is the token-cheap way for external
+   harnesses (Claude Code, GPT agents) to use PlotLot: they shell out to
+   `plotlot ... --json` on demand instead of an MCP client preloading all 25 tool
+   schemas every session. No ungoverned side door — reads run, expensive reads are
+   budget-gated, external writes need approval. Verified end-to-end, 12 new tests,
+   60 green, committed to Phat (948d8c9). Legacy `plotlot <address>` still works.
+
+OPEN ITEMS
+   - Next interop piece: `plotlot mcp serve` (stdio MCP server). End goal is both
+     CLI and MCP.
+   - Nothing is deployed — last night's commits are local on Phat. Need you to
+     confirm which branch Render actually deploys before this reaches production.

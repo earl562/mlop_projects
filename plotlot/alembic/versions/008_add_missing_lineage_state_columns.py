@@ -1,8 +1,13 @@
 """Add missing lineage and state columns to ordinance_chunks.
 
-Revision ID: 008
-Revises: 007
+Revision ID: 008_lineage
+Revises: 007_phase6
 Create Date: 2026-05-14
+
+NOTE: revision id renamed from "008" to "008_lineage" (and down_revision from
+"007" to "007_phase6") to resolve a duplicate-id collision with
+008_add_harness_artifact_connector_eval_tables. This keeps the phase6 branch
+(connector -> phase6 -> lineage) distinct from the harness branch.
 
 Migration 005 was defined but skipped in the applied revision chain due to
 a merge-head branch anomaly (88d5f65b958d). The ordinance_chunks table is
@@ -16,8 +21,8 @@ from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "008"
-down_revision: Union[str, None] = "007"
+revision: str = "008_lineage"
+down_revision: Union[str, None] = "007_phase6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

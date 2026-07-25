@@ -1,8 +1,13 @@
 """Phase 6 schema changes.
 
-Revision ID: 007
-Revises: 006
+Revision ID: 007_phase6
+Revises: d3e4f5a6b7c8
 Create Date: 2026-05-08
+
+NOTE: revision id renamed from "007" to "007_phase6" to resolve a duplicate-id
+collision with 007_add_harness_core_tables (both were "007"), which left the
+Alembic graph unusable and forced the app onto create_all. See the merge
+revision 009_merge_harness_phase6.
 
 1. report_cache: drop old unique index on address_normalized,
    add analysis_type column (default 'residential'),
@@ -19,7 +24,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "007"
+revision: str = "007_phase6"
 down_revision: Union[str, None] = "d3e4f5a6b7c8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
