@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
+import plotlot.domain.issued_support_registry as issued_support_registry
 from plotlot.domain.issued_support_registry import (
     IssuedSupportRegistryDocument,
     VerifiedIssuedSupportRegistry,
@@ -192,7 +193,31 @@ def test_registry_must_be_verified_again_after_serialization() -> None:
     serialized = json.dumps(issued_registry_payload())
     registry = parse_issued_support_registry(serialized)
 
-    assert isinstance(registry, VerifiedIssuedSupportRegistry)
+    assert registry is not None
+
+
+def test_registry_factory_credentials_are_not_module_exports() -> None:
+    assert not hasattr(issued_support_registry, "_FACTORY_TOKEN")
+    assert not hasattr(issued_support_registry, "_VerifiedIssuedSupportReceipt")
+    assert not hasattr(issued_support_registry, "_build_verified_registry_boundary")
+    with pytest.raises(TypeError):
+        getattr(issued_support_registry, "VerifiedIssuedSupportRegistry")()
+
+
+def test_unregistered_instance_of_verified_runtime_type_fails_closed() -> None:
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    unregistered = object.__new__(type(registry))
+
+    result = evaluate_opportunity_decision(
+        parse_opportunity_decision_input(json.dumps(decision_payload())),
+        receipt_registry=cast(VerifiedIssuedSupportRegistry, unregistered),
+        evaluated_at=EVALUATED_AT,
+    )
+
+    assert result.status == "blocked"
+    assert result.recommendation == "abstain"
+    assert result.verified_ceiling_cents is None
+    assert result.blocker_codes == ("support-registry-unverified",)
 
 
 def test_opportunity_body_cannot_substitute_a_registry() -> None:

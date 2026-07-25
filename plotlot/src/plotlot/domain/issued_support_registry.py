@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Literal, cast
+from collections.abc import Callable
+from typing import Literal, Protocol, TypeGuard, cast
+from weakref import WeakKeyDictionary
 
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
@@ -85,56 +87,82 @@ class IssuedSupportRegistryDocument(ContractModel):
         return self
 
 
-@dataclass(frozen=True, slots=True)
-class _VerifiedIssuedSupportReceipt:
-    receipt_id: str
-    county: County
-    municipality_lane: MunicipalityLane
-    workflow: Workflow
-    fact_family: FactFamily
-    source_id: str
-    evidence_sha256: str
-    issuer_id: str
-    key_version: str
-    issued_at: datetime
-    expires_at: datetime
-    revoked_at: datetime | None
+class VerifiedIssuedSupportRegistry(Protocol):
+    pass
 
 
-_FACTORY_TOKEN = object()
+def _build_verified_registry_boundary() -> tuple[
+    Callable[[str], VerifiedIssuedSupportRegistry],
+    Callable[[object], TypeGuard[VerifiedIssuedSupportRegistry]],
+    Callable[..., ReceiptFailure | None],
+]:
+    @dataclass(frozen=True, slots=True)
+    class VerifiedReceipt:
+        receipt_id: str
+        county: County
+        municipality_lane: MunicipalityLane
+        workflow: Workflow
+        fact_family: FactFamily
+        source_id: str
+        evidence_sha256: str
+        issuer_id: str
+        key_version: str
+        issued_at: datetime
+        expires_at: datetime
+        revoked_at: datetime | None
 
+    class Registry:
+        __slots__ = ("__weakref__",)
 
-class VerifiedIssuedSupportRegistry:
-    __slots__ = ("__receipts_by_id",)
-    __receipts_by_id: MappingProxyType[str, _VerifiedIssuedSupportReceipt]
+        def __setattr__(self, name: str, value: object) -> None:
+            raise AttributeError("verified registry is immutable")
 
-    def __init__(
-        self,
-        factory_token: object,
-        receipts: tuple[_VerifiedIssuedSupportReceipt, ...],
-    ) -> None:
-        if factory_token is not _FACTORY_TOKEN:
-            raise TypeError("verified registries can only be created by the parser")
-        object.__setattr__(
-            self,
-            "_VerifiedIssuedSupportRegistry__receipts_by_id",
-            MappingProxyType({receipt.receipt_id: receipt for receipt in receipts}),
+        def __copy__(self) -> Registry:
+            raise TypeError("verified registry cannot be copied")
+
+        def __deepcopy__(self, memo: object) -> Registry:
+            raise TypeError("verified registry cannot be copied")
+
+        def __reduce__(self) -> str | tuple[object, ...]:
+            raise TypeError("verified registry cannot be serialized")
+
+    states: WeakKeyDictionary[Registry, MappingProxyType[str, VerifiedReceipt]] = (
+        WeakKeyDictionary()
+    )
+
+    def parse(raw: str) -> VerifiedIssuedSupportRegistry:
+        document = cast(
+            IssuedSupportRegistryDocument,
+            IssuedSupportRegistryDocument.model_validate_json(raw),
         )
+        receipts = tuple(
+            VerifiedReceipt(
+                receipt_id=receipt.receipt_id,
+                county=receipt.county,
+                municipality_lane=receipt.municipality_lane,
+                workflow=receipt.workflow,
+                fact_family=receipt.fact_family,
+                source_id=receipt.source_id,
+                evidence_sha256=receipt.evidence_sha256,
+                issuer_id=receipt.issuer_id,
+                key_version=receipt.key_version,
+                issued_at=receipt.issued_at,
+                expires_at=receipt.expires_at,
+                revoked_at=receipt.revoked_at,
+            )
+            for receipt in document.receipts
+        )
+        registry = Registry()
+        states[registry] = MappingProxyType({receipt.receipt_id: receipt for receipt in receipts})
+        return cast(VerifiedIssuedSupportRegistry, registry)
 
-    def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError("verified registry is immutable")
-
-    def __copy__(self) -> VerifiedIssuedSupportRegistry:
-        raise TypeError("verified registry cannot be copied")
-
-    def __deepcopy__(self, memo: object) -> VerifiedIssuedSupportRegistry:
-        raise TypeError("verified registry cannot be copied")
-
-    def __reduce__(self) -> str | tuple[object, ...]:
-        raise TypeError("verified registry cannot be serialized")
+    def is_verified(value: object) -> TypeGuard[VerifiedIssuedSupportRegistry]:
+        if type(value) is not Registry:
+            return False
+        return cast(Registry, value) in states
 
     def verify(
-        self,
+        registry: object,
         *,
         receipt_id: str,
         county: County,
@@ -145,7 +173,9 @@ class VerifiedIssuedSupportRegistry:
     ) -> ReceiptFailure | None:
         if evaluated_at.utcoffset() is None:
             raise ValueError("evaluated_at requires a UTC offset")
-        issued = self.__receipts_by_id.get(receipt_id)
+        if not is_verified(registry):
+            return "registry-unverified"
+        issued = states[cast(Registry, registry)].get(receipt_id)
         if issued is None:
             return "unissued"
         if (
@@ -163,27 +193,12 @@ class VerifiedIssuedSupportRegistry:
             return "not-yet-issued"
         return None
 
+    return parse, is_verified, verify
 
-def parse_issued_support_registry(raw: str) -> VerifiedIssuedSupportRegistry:
-    document = cast(
-        IssuedSupportRegistryDocument,
-        IssuedSupportRegistryDocument.model_validate_json(raw),
-    )
-    receipts = tuple(
-        _VerifiedIssuedSupportReceipt(
-            receipt_id=receipt.receipt_id,
-            county=receipt.county,
-            municipality_lane=receipt.municipality_lane,
-            workflow=receipt.workflow,
-            fact_family=receipt.fact_family,
-            source_id=receipt.source_id,
-            evidence_sha256=receipt.evidence_sha256,
-            issuer_id=receipt.issuer_id,
-            key_version=receipt.key_version,
-            issued_at=receipt.issued_at,
-            expires_at=receipt.expires_at,
-            revoked_at=receipt.revoked_at,
-        )
-        for receipt in document.receipts
-    )
-    return VerifiedIssuedSupportRegistry(_FACTORY_TOKEN, receipts)
+
+(
+    parse_issued_support_registry,
+    is_verified_issued_support_registry,
+    verify_issued_support_receipt,
+) = _build_verified_registry_boundary()
+del _build_verified_registry_boundary

@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from plotlot.domain.issued_support_registry import VerifiedIssuedSupportRegistry
+from plotlot.domain.issued_support_registry import (
+    VerifiedIssuedSupportRegistry,
+    verify_issued_support_receipt,
+)
 from plotlot.domain.opportunity_contract_models import (
     OpportunityDecisionInput,
     OpportunityDecisionProjection,
@@ -29,20 +32,17 @@ def evaluate_opportunity_decision(
         for name, status in statuses
         if status in {"ambiguous", "stale", "conflict"}
     )
-    support_failures = (
-        tuple(
-            receipt_registry.verify(
-                receipt_id=receipt.evidence_receipt_id,
-                county=decision_input.support.county,
-                municipality_lane=decision_input.support.municipality_lane,
-                workflow=receipt.workflow,
-                fact_family=receipt.fact_family,
-                evaluated_at=evaluated_at,
-            )
-            for receipt in decision_input.support.coordinate_receipts
+    support_failures = tuple(
+        verify_issued_support_receipt(
+            receipt_registry,
+            receipt_id=receipt.evidence_receipt_id,
+            county=decision_input.support.county,
+            municipality_lane=decision_input.support.municipality_lane,
+            workflow=receipt.workflow,
+            fact_family=receipt.fact_family,
+            evaluated_at=evaluated_at,
         )
-        if isinstance(receipt_registry, VerifiedIssuedSupportRegistry)
-        else ("registry-unverified",) * len(decision_input.support.coordinate_receipts)
+        for receipt in decision_input.support.coordinate_receipts
     )
     support_blockers = tuple(
         (
