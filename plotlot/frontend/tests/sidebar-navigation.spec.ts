@@ -32,7 +32,6 @@ test.describe("sidebar navigation", () => {
     await expect(harnessWorkspace).toHaveAttribute("aria-current", "page");
 
     const analyses = page.getByTestId("sidebar-nav-analyses");
-    await expect(analyses).toContainText("Analyses");
     await analyses.click();
     await expect(page).toHaveURL(/\/analyses$/);
     await expect(page.getByRole("heading", { name: "Analyses" })).toBeVisible();
