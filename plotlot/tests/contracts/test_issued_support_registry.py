@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from copy import copy, deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
+from weakref import WeakKeyDictionary
 
 import pytest
 from pydantic import ValidationError
@@ -43,20 +45,25 @@ def test_blocks_coordinate_shaped_but_unissued_64f_forgery() -> None:
 
 
 @pytest.mark.parametrize(
-    ("change", "expected"),
+    ("state", "evaluated_at", "expected"),
     [
-        ({"revokedAt": "2026-07-24T00:00:00Z"}, "support-receipt-revoked"),
-        ({"expiresAt": "2026-07-24T00:00:00Z"}, "support-receipt-expired"),
-        ({"issuedAt": "2026-07-26T00:00:00Z"}, "support-receipt-not-yet-issued"),
+        ("revoked", EVALUATED_AT, "support-receipt-revoked"),
+        ("expired", datetime(2027, 7, 2, tzinfo=UTC), "support-receipt-expired"),
+        ("future", datetime(2026, 6, 30, tzinfo=UTC), "support-receipt-not-yet-issued"),
     ],
 )
-def test_blocks_inactive_issued_receipts(change: dict[str, str], expected: str) -> None:
+def test_blocks_inactive_issued_receipts(state: str, evaluated_at: datetime, expected: str) -> None:
     registry_payload = issued_registry_payload()
-    registry_payload["receipts"][0].update(change)
+    if state == "revoked":
+        registry_payload["registryId"] = "plotlot-public-test-registry-revoked-2026-07-24"
+        registry_payload["auditSha256"] = (
+            "251c8b36f80a7d2ca792868900a75c8589334914a4257f36c69a392f1f271098"
+        )
+        registry_payload["receipts"][0]["revokedAt"] = "2026-07-24T00:00:00Z"
     result = evaluate_opportunity_decision(
         parse_opportunity_decision_input(json.dumps(decision_payload())),
         receipt_registry=parse_issued_support_registry(json.dumps(registry_payload)),
-        evaluated_at=EVALUATED_AT,
+        evaluated_at=evaluated_at,
     )
 
     assert result.status == "blocked"
@@ -189,13 +196,6 @@ def test_input_alias_mutation_does_not_change_verified_registry() -> None:
     assert result.status == "released"
 
 
-def test_registry_must_be_verified_again_after_serialization() -> None:
-    serialized = json.dumps(issued_registry_payload())
-    registry = parse_issued_support_registry(serialized)
-
-    assert registry is not None
-
-
 def test_registry_factory_credentials_are_not_module_exports() -> None:
     assert not hasattr(issued_support_registry, "_FACTORY_TOKEN")
     assert not hasattr(issued_support_registry, "_VerifiedIssuedSupportReceipt")
@@ -211,6 +211,55 @@ def test_unregistered_instance_of_verified_runtime_type_fails_closed() -> None:
     result = evaluate_opportunity_decision(
         parse_opportunity_decision_input(json.dumps(decision_payload())),
         receipt_registry=cast(VerifiedIssuedSupportRegistry, unregistered),
+        evaluated_at=EVALUATED_AT,
+    )
+
+    assert result.status == "blocked"
+    assert result.recommendation == "abstain"
+    assert result.verified_ceiling_cents is None
+    assert result.blocker_codes == ("support-registry-unverified",)
+
+
+def test_closure_membership_state_copy_cannot_authorize_a_forged_handle() -> None:
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    forged = object.__new__(type(registry))
+    weak_registries = [
+        cell.cell_contents
+        for cell in (getattr(parse_issued_support_registry, "__closure__", None) or ())
+        if isinstance(cell.cell_contents, WeakKeyDictionary)
+    ]
+    if weak_registries:
+        states = weak_registries[0]
+        states[forged] = states[registry]
+
+    result = evaluate_opportunity_decision(
+        parse_opportunity_decision_input(json.dumps(decision_payload())),
+        receipt_registry=cast(VerifiedIssuedSupportRegistry, forged),
+        evaluated_at=EVALUATED_AT,
+    )
+
+    assert result.status == "blocked"
+    assert result.recommendation == "abstain"
+    assert result.verified_ceiling_cents is None
+    assert result.blocker_codes == ("support-registry-unverified",)
+
+
+def test_content_relabel_with_copied_audit_digest_fails_closed() -> None:
+    payload = decision_payload()
+    forged_id = "opportunity-selected-forged-receipt"
+    payload["support"]["coordinateReceipts"][0]["evidenceReceiptId"] = forged_id
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    receipts = getattr(registry, "receipts")
+    forged_receipts = (replace(receipts[0], receipt_id=forged_id), *receipts[1:])
+    forged = object.__new__(type(registry))
+    object.__setattr__(forged, "schema_version", getattr(registry, "schema_version"))
+    object.__setattr__(forged, "registry_id", getattr(registry, "registry_id"))
+    object.__setattr__(forged, "audit_sha256", getattr(registry, "audit_sha256"))
+    object.__setattr__(forged, "receipts", forged_receipts)
+
+    result = evaluate_opportunity_decision(
+        parse_opportunity_decision_input(json.dumps(payload)),
+        receipt_registry=cast(VerifiedIssuedSupportRegistry, forged),
         evaluated_at=EVALUATED_AT,
     )
 
