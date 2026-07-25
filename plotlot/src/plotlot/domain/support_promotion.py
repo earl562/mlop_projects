@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from plotlot.domain.issued_support_registry import IssuedSupportRegistry
+from plotlot.domain.issued_support_registry import VerifiedIssuedSupportRegistry
 from plotlot.domain.support_ledger import (
     County,
     SupportLedgerEntry,
@@ -14,7 +14,7 @@ def apply_support_promotion(
     ledger: tuple[SupportLedgerEntry, ...],
     request: SupportPromotionRequest,
     *,
-    receipt_registry: IssuedSupportRegistry,
+    receipt_registry: VerifiedIssuedSupportRegistry,
     evaluated_at: datetime,
     enabled_counties: tuple[County, ...] = ("miami-dade",),
 ) -> tuple[SupportLedgerEntry, ...]:
@@ -28,6 +28,8 @@ def apply_support_promotion(
         raise ValueError("duplicate evidence receipt")
     if request.county not in enabled_counties:
         raise ValueError("county is not enabled for support promotion")
+    if not isinstance(receipt_registry, VerifiedIssuedSupportRegistry):
+        raise ValueError("support registry is unverified")
     failures = {
         receipt_registry.verify(
             receipt_id=receipt_id,

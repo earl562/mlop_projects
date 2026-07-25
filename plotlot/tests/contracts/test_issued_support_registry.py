@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+from copy import copy, deepcopy
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
 
-from plotlot.domain.issued_support_registry import parse_issued_support_registry
+from plotlot.domain.issued_support_registry import (
+    IssuedSupportRegistryDocument,
+    VerifiedIssuedSupportRegistry,
+    parse_issued_support_registry,
+)
 from plotlot.domain.opportunity_contract import (
     evaluate_opportunity_decision,
     parse_opportunity_decision_input,
@@ -102,47 +108,39 @@ def test_rejects_duplicate_registry_entries(field: str) -> None:
 @pytest.mark.parametrize(
     "field",
     [
-        "receipt_id",
-        "municipality_lane",
-        "workflow",
-        "fact_family",
-        "source_id",
-        "evidence_sha256",
-        "issuer_id",
-        "key_version",
-        "issued_at",
-        "expires_at",
-        "revoked_at",
-        "schema_version",
+        "receipts",
+        "_canonical_receipts",
+        "_VerifiedIssuedSupportRegistry__receipts_by_id",
+        "__dict__",
     ],
 )
-def test_parsed_registry_receipt_fields_are_frozen(field: str) -> None:
+def test_verified_registry_is_opaque_and_slot_sealed(field: str) -> None:
     registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
 
-    with pytest.raises(ValidationError, match="frozen"):
-        setattr(registry.receipts[0], field, "attacker")
+    with pytest.raises(AttributeError):
+        setattr(registry, field, "attacker")
 
 
-def test_registry_collection_is_immutable_and_copy_does_not_mutate_original() -> None:
+def test_verified_registry_blocks_copy_update_and_serialization_apis() -> None:
     registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
-    copied_receipt = registry.receipts[0].model_copy(
-        update={"receipt_id": "opportunity-chosen-receipt"}
-    )
-    copied = registry.model_copy(update={"receipts": (copied_receipt,)})
 
-    assert len(registry.receipts) == 10
-    assert registry.receipts[0].receipt_id != copied.receipts[0].receipt_id
-    with pytest.raises(ValidationError, match="frozen"):
-        registry.receipts = ()
+    assert not hasattr(registry, "model_copy")
+    assert not hasattr(registry, "model_dump")
+    with pytest.raises(TypeError):
+        copy(registry)
+    with pytest.raises(TypeError):
+        deepcopy(registry)
+    with pytest.raises(TypeError):
+        json.dumps(registry)
 
 
-def test_copy_update_cannot_replace_the_canonical_trust_snapshot() -> None:
+def test_document_copy_update_cannot_substitute_for_verified_registry() -> None:
     payload = decision_payload()
     for receipt in payload["support"]["coordinateReceipts"]:
         receipt["evidenceReceiptId"] = (
             f"support:miami-dade:miami:{receipt['workflow']}:{receipt['factFamily']}:{'f' * 64}"
         )
-    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    document = IssuedSupportRegistryDocument.model_validate(issued_registry_payload())
     copied_receipts = tuple(
         issued.model_copy(
             update={
@@ -155,18 +153,51 @@ def test_copy_update_cannot_replace_the_canonical_trust_snapshot() -> None:
             }
         )
         for issued, requested in zip(
-            registry.receipts,
+            document.receipts,
             payload["support"]["coordinateReceipts"],
             strict=True,
         )
     )
-    copied_registry = registry.model_copy(update={"receipts": copied_receipts})
+    copied_document = document.model_copy(
+        update={
+            "receipts": copied_receipts,
+            "_canonical_receipts": copied_receipts,
+        }
+    )
 
     result = evaluate_opportunity_decision(
         parse_opportunity_decision_input(json.dumps(payload)),
-        receipt_registry=copied_registry,
+        receipt_registry=cast(VerifiedIssuedSupportRegistry, copied_document),
         evaluated_at=EVALUATED_AT,
     )
     assert result.status == "blocked"
     assert result.verified_ceiling_cents is None
-    assert result.blocker_codes == ("support-receipt-unissued",)
+    assert result.blocker_codes == ("support-registry-unverified",)
+
+
+def test_input_alias_mutation_does_not_change_verified_registry() -> None:
+    registry_payload = issued_registry_payload()
+    registry = parse_issued_support_registry(json.dumps(registry_payload))
+    registry_payload["receipts"].clear()
+
+    result = evaluate_opportunity_decision(
+        parse_opportunity_decision_input(json.dumps(decision_payload())),
+        receipt_registry=registry,
+        evaluated_at=EVALUATED_AT,
+    )
+    assert result.status == "released"
+
+
+def test_registry_must_be_verified_again_after_serialization() -> None:
+    serialized = json.dumps(issued_registry_payload())
+    registry = parse_issued_support_registry(serialized)
+
+    assert isinstance(registry, VerifiedIssuedSupportRegistry)
+
+
+def test_opportunity_body_cannot_substitute_a_registry() -> None:
+    payload = decision_payload()
+    payload["issuedSupportRegistry"] = issued_registry_payload()
+
+    with pytest.raises(ValidationError):
+        parse_opportunity_decision_input(json.dumps(payload))

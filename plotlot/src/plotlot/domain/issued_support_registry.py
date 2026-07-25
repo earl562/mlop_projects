@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 from typing import Literal, cast
 
-from pydantic import Field, PrivateAttr, model_validator
+from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from plotlot.domain.support_coordinate import (
@@ -15,10 +17,17 @@ from plotlot.domain.support_coordinate import (
     Workflow,
 )
 
-ReceiptFailure = Literal["unissued", "rebound", "revoked", "expired", "not-yet-issued"]
+ReceiptFailure = Literal[
+    "unissued",
+    "rebound",
+    "revoked",
+    "expired",
+    "not-yet-issued",
+    "registry-unverified",
+]
 
 
-class IssuedSupportReceipt(ContractModel):
+class IssuedSupportReceiptDocument(ContractModel):
     schema_version: Literal["IssuedSupportReceiptV1"]
     receipt_id: str = Field(min_length=1)
     county: County
@@ -34,7 +43,7 @@ class IssuedSupportReceipt(ContractModel):
     revoked_at: datetime | None
 
     @model_validator(mode="after")
-    def validate_issuance(self) -> IssuedSupportReceipt:
+    def validate_issuance(self) -> IssuedSupportReceiptDocument:
         if LANE_COUNTIES[self.municipality_lane] != self.county:
             raise PydanticCustomError(
                 "lane_county_mismatch", "receipt lane does not belong to county"
@@ -49,16 +58,12 @@ class IssuedSupportReceipt(ContractModel):
         return self
 
 
-class IssuedSupportRegistry(ContractModel):
+class IssuedSupportRegistryDocument(ContractModel):
     schema_version: Literal["IssuedSupportRegistryV1"]
-    receipts: tuple[IssuedSupportReceipt, ...]
-    _canonical_receipts: tuple[IssuedSupportReceipt, ...] = PrivateAttr(default=())
-
-    def model_post_init(self, context: object, /) -> None:
-        self._canonical_receipts = self.receipts
+    receipts: tuple[IssuedSupportReceiptDocument, ...]
 
     @model_validator(mode="after")
-    def reject_duplicates(self) -> IssuedSupportRegistry:
+    def reject_duplicates(self) -> IssuedSupportRegistryDocument:
         receipt_ids = [receipt.receipt_id for receipt in self.receipts]
         coordinates = [
             (
@@ -79,6 +84,55 @@ class IssuedSupportRegistry(ContractModel):
             )
         return self
 
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedIssuedSupportReceipt:
+    receipt_id: str
+    county: County
+    municipality_lane: MunicipalityLane
+    workflow: Workflow
+    fact_family: FactFamily
+    source_id: str
+    evidence_sha256: str
+    issuer_id: str
+    key_version: str
+    issued_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+
+
+_FACTORY_TOKEN = object()
+
+
+class VerifiedIssuedSupportRegistry:
+    __slots__ = ("__receipts_by_id",)
+    __receipts_by_id: MappingProxyType[str, _VerifiedIssuedSupportReceipt]
+
+    def __init__(
+        self,
+        factory_token: object,
+        receipts: tuple[_VerifiedIssuedSupportReceipt, ...],
+    ) -> None:
+        if factory_token is not _FACTORY_TOKEN:
+            raise TypeError("verified registries can only be created by the parser")
+        object.__setattr__(
+            self,
+            "_VerifiedIssuedSupportRegistry__receipts_by_id",
+            MappingProxyType({receipt.receipt_id: receipt for receipt in receipts}),
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("verified registry is immutable")
+
+    def __copy__(self) -> VerifiedIssuedSupportRegistry:
+        raise TypeError("verified registry cannot be copied")
+
+    def __deepcopy__(self, memo: object) -> VerifiedIssuedSupportRegistry:
+        raise TypeError("verified registry cannot be copied")
+
+    def __reduce__(self) -> str | tuple[object, ...]:
+        raise TypeError("verified registry cannot be serialized")
+
     def verify(
         self,
         *,
@@ -91,10 +145,7 @@ class IssuedSupportRegistry(ContractModel):
     ) -> ReceiptFailure | None:
         if evaluated_at.utcoffset() is None:
             raise ValueError("evaluated_at requires a UTC offset")
-        issued = next(
-            (receipt for receipt in self._canonical_receipts if receipt.receipt_id == receipt_id),
-            None,
-        )
+        issued = self.__receipts_by_id.get(receipt_id)
         if issued is None:
             return "unissued"
         if (
@@ -113,8 +164,26 @@ class IssuedSupportRegistry(ContractModel):
         return None
 
 
-def parse_issued_support_registry(raw: str) -> IssuedSupportRegistry:
-    return cast(
-        IssuedSupportRegistry,
-        IssuedSupportRegistry.model_validate_json(raw),
+def parse_issued_support_registry(raw: str) -> VerifiedIssuedSupportRegistry:
+    document = cast(
+        IssuedSupportRegistryDocument,
+        IssuedSupportRegistryDocument.model_validate_json(raw),
     )
+    receipts = tuple(
+        _VerifiedIssuedSupportReceipt(
+            receipt_id=receipt.receipt_id,
+            county=receipt.county,
+            municipality_lane=receipt.municipality_lane,
+            workflow=receipt.workflow,
+            fact_family=receipt.fact_family,
+            source_id=receipt.source_id,
+            evidence_sha256=receipt.evidence_sha256,
+            issuer_id=receipt.issuer_id,
+            key_version=receipt.key_version,
+            issued_at=receipt.issued_at,
+            expires_at=receipt.expires_at,
+            revoked_at=receipt.revoked_at,
+        )
+        for receipt in document.receipts
+    )
+    return VerifiedIssuedSupportRegistry(_FACTORY_TOKEN, receipts)

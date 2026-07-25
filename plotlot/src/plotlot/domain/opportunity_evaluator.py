@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from plotlot.domain.issued_support_registry import IssuedSupportRegistry
+from plotlot.domain.issued_support_registry import VerifiedIssuedSupportRegistry
 from plotlot.domain.opportunity_contract_models import (
     OpportunityDecisionInput,
     OpportunityDecisionProjection,
@@ -14,7 +14,7 @@ from plotlot.domain.support_ledger import WORKFLOW_FACT_FAMILIES
 def evaluate_opportunity_decision(
     decision_input: OpportunityDecisionInput,
     *,
-    receipt_registry: IssuedSupportRegistry,
+    receipt_registry: VerifiedIssuedSupportRegistry,
     evaluated_at: datetime,
 ) -> OpportunityDecisionProjection:
     statuses = (
@@ -29,19 +29,27 @@ def evaluate_opportunity_decision(
         for name, status in statuses
         if status in {"ambiguous", "stale", "conflict"}
     )
-    support_failures = tuple(
-        receipt_registry.verify(
-            receipt_id=receipt.evidence_receipt_id,
-            county=decision_input.support.county,
-            municipality_lane=decision_input.support.municipality_lane,
-            workflow=receipt.workflow,
-            fact_family=receipt.fact_family,
-            evaluated_at=evaluated_at,
+    support_failures = (
+        tuple(
+            receipt_registry.verify(
+                receipt_id=receipt.evidence_receipt_id,
+                county=decision_input.support.county,
+                municipality_lane=decision_input.support.municipality_lane,
+                workflow=receipt.workflow,
+                fact_family=receipt.fact_family,
+                evaluated_at=evaluated_at,
+            )
+            for receipt in decision_input.support.coordinate_receipts
         )
-        for receipt in decision_input.support.coordinate_receipts
+        if isinstance(receipt_registry, VerifiedIssuedSupportRegistry)
+        else ("registry-unverified",) * len(decision_input.support.coordinate_receipts)
     )
     support_blockers = tuple(
-        f"support-receipt-{failure}"
+        (
+            "support-registry-unverified"
+            if failure == "registry-unverified"
+            else f"support-receipt-{failure}"
+        )
         for failure in dict.fromkeys(support_failures)
         if failure is not None
     )
