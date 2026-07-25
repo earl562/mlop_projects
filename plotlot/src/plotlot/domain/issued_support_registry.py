@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, cast
 
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 from pydantic_core import PydanticCustomError
 
 from plotlot.domain.support_coordinate import (
@@ -52,6 +52,10 @@ class IssuedSupportReceipt(ContractModel):
 class IssuedSupportRegistry(ContractModel):
     schema_version: Literal["IssuedSupportRegistryV1"]
     receipts: tuple[IssuedSupportReceipt, ...]
+    _canonical_receipts: tuple[IssuedSupportReceipt, ...] = PrivateAttr(default=())
+
+    def model_post_init(self, context: object, /) -> None:
+        self._canonical_receipts = self.receipts
 
     @model_validator(mode="after")
     def reject_duplicates(self) -> IssuedSupportRegistry:
@@ -88,7 +92,7 @@ class IssuedSupportRegistry(ContractModel):
         if evaluated_at.utcoffset() is None:
             raise ValueError("evaluated_at requires a UTC offset")
         issued = next(
-            (receipt for receipt in self.receipts if receipt.receipt_id == receipt_id),
+            (receipt for receipt in self._canonical_receipts if receipt.receipt_id == receipt_id),
             None,
         )
         if issued is None:

@@ -97,3 +97,76 @@ def test_rejects_duplicate_registry_entries(field: str) -> None:
 
     with pytest.raises(ValidationError):
         parse_issued_support_registry(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "receipt_id",
+        "municipality_lane",
+        "workflow",
+        "fact_family",
+        "source_id",
+        "evidence_sha256",
+        "issuer_id",
+        "key_version",
+        "issued_at",
+        "expires_at",
+        "revoked_at",
+        "schema_version",
+    ],
+)
+def test_parsed_registry_receipt_fields_are_frozen(field: str) -> None:
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+
+    with pytest.raises(ValidationError, match="frozen"):
+        setattr(registry.receipts[0], field, "attacker")
+
+
+def test_registry_collection_is_immutable_and_copy_does_not_mutate_original() -> None:
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    copied_receipt = registry.receipts[0].model_copy(
+        update={"receipt_id": "opportunity-chosen-receipt"}
+    )
+    copied = registry.model_copy(update={"receipts": (copied_receipt,)})
+
+    assert len(registry.receipts) == 10
+    assert registry.receipts[0].receipt_id != copied.receipts[0].receipt_id
+    with pytest.raises(ValidationError, match="frozen"):
+        registry.receipts = ()
+
+
+def test_copy_update_cannot_replace_the_canonical_trust_snapshot() -> None:
+    payload = decision_payload()
+    for receipt in payload["support"]["coordinateReceipts"]:
+        receipt["evidenceReceiptId"] = (
+            f"support:miami-dade:miami:{receipt['workflow']}:{receipt['factFamily']}:{'f' * 64}"
+        )
+    registry = parse_issued_support_registry(json.dumps(issued_registry_payload()))
+    copied_receipts = tuple(
+        issued.model_copy(
+            update={
+                "receipt_id": requested["evidenceReceiptId"],
+                "source_id": "attacker-source",
+                "evidence_sha256": "f" * 64,
+                "issuer_id": "attacker",
+                "key_version": "attacker-v1",
+                "revoked_at": None,
+            }
+        )
+        for issued, requested in zip(
+            registry.receipts,
+            payload["support"]["coordinateReceipts"],
+            strict=True,
+        )
+    )
+    copied_registry = registry.model_copy(update={"receipts": copied_receipts})
+
+    result = evaluate_opportunity_decision(
+        parse_opportunity_decision_input(json.dumps(payload)),
+        receipt_registry=copied_registry,
+        evaluated_at=EVALUATED_AT,
+    )
+    assert result.status == "blocked"
+    assert result.verified_ceiling_cents is None
+    assert result.blocker_codes == ("support-receipt-unissued",)
