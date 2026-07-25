@@ -53,20 +53,22 @@ test.describe("Canonical no-db smoke", () => {
     await expect(page.getByTestId("lookup-suggestions")).toHaveCount(0);
   });
 
-  test("lookup gate and pipeline start work without db-backed assertions", async ({ page }) => {
+  test("lookup gate handles a terminal backend response without a database", async ({ page }) => {
     await gotoHome(page);
     await stubAnalyzeStream(page, {
       statuses: [
         { step: "geocoding", message: "Resolving address...", complete: false },
       ],
+      error: {
+        detail: "Recorded no-database response",
+        error_type: "backend_unavailable",
+      },
     });
 
     await runLookupFlow(page, "7940 Plantation Blvd, Miramar, FL 33023");
 
-    await expect(page.getByTestId("pipeline-stepper")).toBeVisible();
-    await expect(page.getByTestId("pipeline-step-geocoding")).toBeVisible();
-    await expect(page.getByTestId("pipeline-step-current")).toContainText(
-      "Geocoding",
-    );
+    await expect(page.getByTestId("report-error")).toBeVisible();
+    await expect(page.getByText(/analysis backend is temporarily offline/i)).toBeVisible();
+    await expect(page.getByTestId("report-retry-button")).toBeVisible();
   });
 });

@@ -32,14 +32,25 @@ async function parseHealthResponse(
 
   const body = (await health.json()) as Record<string, unknown>;
   const status = typeof body.status === "string" ? body.status : "unknown";
+  const checks =
+    typeof body.checks === "object" && body.checks !== null
+      ? (body.checks as Record<string, unknown>)
+      : {};
+  const database = checks.database;
+  const databaseHealthy =
+    database === "ok" ||
+    (typeof database === "object" &&
+      database !== null &&
+      (database as Record<string, unknown>).status === "ok");
+  const healthy = status === "healthy" && databaseHealthy;
   return {
     status,
-    healthy: status === "healthy",
+    healthy,
     reachable: true,
     reason:
-      status === "healthy"
-        ? "Backend healthy"
-        : `Backend preflight expected healthy but got ${status}`,
+      healthy
+        ? "Backend and database healthy"
+        : `Backend preflight expected status=healthy and checks.database=ok but got status=${status}, database=${JSON.stringify(database)}`,
     body,
   };
 }
@@ -47,6 +58,17 @@ async function parseHealthResponse(
 export async function getBackendPreflight(
   request?: APIRequestContext,
 ): Promise<BackendPreflight> {
+  if (process.env.PLOTLOT_QUALITY_MUTATION === "unhealthy-db") {
+    return {
+      status: "unhealthy",
+      healthy: false,
+      reachable: true,
+      reason:
+        "Backend preflight expected status=healthy and checks.database=ok but got status=unhealthy, database=\"error\"",
+      body: { status: "unhealthy", checks: { database: "error" } },
+    };
+  }
+
   try {
     if (request) {
       const health = await request.get(HEALTH_URL, { timeout: 5_000 });
@@ -73,9 +95,9 @@ export async function requireHealthyBackend(
   const preflight = await getBackendPreflight(request);
   if (preflight.healthy) return preflight;
 
-  if (process.env.CI) {
+  if (process.env.CI || process.env.PLOTLOT_RELEASE_GATE === "1") {
     throw new Error(
-      `${preflight.reason}. CI db-backed lane must fail instead of silently downgrading.`,
+      `${preflight.reason}. Release db-backed lane must fail instead of silently downgrading.`,
     );
   }
 
@@ -136,6 +158,7 @@ export async function runLookupFlow(
     }));
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    await input.fill("");
     await input.fill(address);
     await page.waitForTimeout(150);
     if (

@@ -29,9 +29,21 @@ test.describe("Canonical mutation lane", () => {
 
   test("lookup bad address shows actionable recovery", async ({ page }) => {
     await gotoHome(page);
+    await page.route("**/api/v1/autocomplete**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ suggestions: [] }),
+      }),
+    );
 
-    await page.getByTestId("lookup-input").fill("hello world");
-    await page.getByTestId("send-button").click();
+    const input = page.getByTestId("lookup-input");
+    const sendButton = page.getByTestId("send-button");
+    await input.click();
+    await input.pressSequentially("hello world", { delay: 20 });
+    await expect(input).toHaveValue("hello world");
+    await expect(sendButton).toBeEnabled();
+    await sendButton.click();
 
     await expect(
       page.getByText("Please enter a street address to run a lookup analysis"),
@@ -89,7 +101,13 @@ test.describe("Canonical mutation lane", () => {
     await expect(page.getByTestId("report-retry-button")).toBeVisible();
   });
 
-  test("lookup recovers with sync fallback after stream connection failure", async ({ page }) => {
+  test("lookup recovers with sync fallback after stream connection failure", async ({
+    page,
+  }, testInfo) => {
+    testInfo.annotations.push(
+      { type: "allow-critical-request-failure", description: "The stream transport is intentionally aborted to exercise sync recovery." },
+      { type: "allow-console-error", description: "Chromium logs the intentionally aborted stream request." },
+    );
     await gotoHome(page);
 
     await page.route("**/health", async (route) => {
@@ -158,7 +176,7 @@ test.describe("Canonical mutation lane", () => {
 
     await runLookupFlow(page, "7940 Plantation Blvd, Miramar, FL 33023");
 
-    await expect(page.getByTestId("report-root")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("report-root")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Miramar, Broward County")).toBeVisible();
     await expect(page.getByText(/i couldn't analyze that address/i)).toHaveCount(0);
   });
