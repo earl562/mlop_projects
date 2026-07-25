@@ -14,7 +14,9 @@ test.describe("sidebar navigation", () => {
     const analyses = page.getByTestId("sidebar-nav-analyses");
     await analyses.click();
     await expect(page).toHaveURL(/\/analyses$/);
-    await expect(page.getByRole("heading", { name: "Analyses" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Shared harness run" }),
+    ).toBeVisible();
     await expect(analyses).toHaveAttribute("aria-current", "page");
 
     const siteFinder = page.getByTestId("sidebar-nav-site-finder");

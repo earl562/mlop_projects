@@ -1,7 +1,7 @@
 """Add harness artifact, connector, and eval tables.
 
-Revision ID: 008
-Revises: 007
+Revision ID: 008b
+Revises: 007b
 Create Date: 2026-04-30
 """
 
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision: str = "008"
-down_revision: Union[str, None] = "007"
+revision: str = "008b"
+down_revision: Union[str, None] = "007b"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

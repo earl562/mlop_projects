@@ -174,7 +174,7 @@ _STEPS: tuple[StepDef, ...] = (
     ),
     StepDef(
         step=KleymanStep.CONSTRUCTION_FINANCING,
-        produces=("financing.construction"),
+        produces=("financing.construction",),
         requires=(
             StepRequirement("value", ClaimKind.ASSUMPTION),
             StepRequirement("cost", ClaimKind.ASSUMPTION),

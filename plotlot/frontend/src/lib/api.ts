@@ -264,6 +264,90 @@ export interface McpToolContract {
   budget_cents: number;
 }
 
+export type HarnessSourceMode = "fixture" | "live" | "mock" | "mixed";
+
+export interface HarnessClaimData {
+  claim_id: string;
+  claim_type: string;
+  claim_text: string;
+  confidence: number;
+  source_mode: HarnessSourceMode;
+}
+
+export interface HarnessEvidenceData {
+  evidence_id: string;
+  source_type: string;
+  source_name: string;
+  source_identifier: string;
+  municipality?: string | null;
+  county?: string | null;
+  freshness_status: string;
+  applicability: string;
+}
+
+export interface HarnessCalculationData {
+  calculation_id: string;
+  calculation_type: string;
+  formula_version: string;
+}
+
+export interface HarnessRunEventData {
+  event_id: string;
+  type: string;
+  source: string;
+  status?: string;
+}
+
+export interface HarnessPipelineStageData {
+  key: string;
+  title: string;
+  status: string;
+  summary: string;
+  artifact_keys: string[];
+}
+
+export interface HarnessRunResultData {
+  run_id: string;
+  analysis_run_id?: string | null;
+  workspace_id?: string | null;
+  project_id?: string | null;
+  site_id?: string | null;
+  analysis_id?: string | null;
+  analysis_type: string;
+  status: string;
+  events_url: string;
+  report_id: string;
+  evidence_ids: string[];
+  verification_status: string;
+  source_mode: HarnessSourceMode;
+  preliminary: boolean;
+  claims: HarnessClaimData[];
+  evidence_items: HarnessEvidenceData[];
+  calculations: HarnessCalculationData[];
+  events: HarnessRunEventData[];
+  artifacts: Record<string, unknown>;
+  pipeline_stages: HarnessPipelineStageData[];
+}
+
+export interface HarnessRunVerificationData {
+  verification_id: string;
+  run_id: string;
+  report_id: string;
+  status: string;
+  checks: Record<string, string>;
+  missing_evidence: string[];
+  stale_evidence: string[];
+  unsupported_claims: string[];
+  mock_or_fixture_blockers: string[];
+}
+
+export interface HarnessRunRequest {
+  address: string;
+  analysisType?: string;
+  sourceMode?: HarnessSourceMode;
+  assumptions?: Record<string, number | string | boolean>;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const STREAM_TIMEOUT_MS = 120_000;
 const FIRST_EVENT_TIMEOUT_MS = 15_000;
@@ -272,6 +356,22 @@ const BACKEND_UNAVAILABLE_DETAIL =
   "Analysis is temporarily unavailable because the data backend is offline. Please try again shortly.";
 const STREAM_TIMEOUT_DETAIL =
   "Request timed out after 2 minutes. The server may be starting up — try again.";
+
+function dispatchSseEvent(
+  eventType: string,
+  eventData: string,
+  onEvent: (eventType: string, parsed: unknown) => void,
+): boolean {
+  if (!eventType || !eventData) return false;
+
+  try {
+    const parsed: unknown = JSON.parse(eventData);
+    onEvent(eventType, parsed);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
@@ -424,6 +524,28 @@ export async function streamAnalysis(
       let receivedFirstEvent = false;
       let receivedTerminalEvent = false;
 
+      const handleEvent = (type: string, parsed: unknown): void => {
+        receivedFirstEvent = true;
+        if (type === "status") {
+          onStatus(parsed as PipelineStatus);
+        } else if (type === "result") {
+          receivedTerminalEvent = true;
+          onResult(parsed as ZoningReportData);
+        } else if (type === "thinking") {
+          onThinking?.(parsed as ThinkingEvent);
+        } else if (type === "suggestions") {
+          const payload = parsed as { suggestions?: string[] };
+          onSuggestions?.(payload.suggestions || []);
+        } else if (type === "error") {
+          const payload = parsed as { detail?: string; error_type?: string };
+          receivedTerminalEvent = true;
+          onError({
+            detail: payload.detail || "Unknown error",
+            errorType: (payload.error_type || "unknown") as AnalysisErrorType,
+          });
+        }
+      };
+
       while (true) {
         const readResult = receivedFirstEvent
           ? reader.read()
@@ -446,33 +568,19 @@ export async function streamAnalysis(
           } else if (line.startsWith("data: ")) {
             eventData = line.slice(6).trim();
           } else if (line === "" && eventType && eventData) {
-            try {
-              const parsed = JSON.parse(eventData);
-              receivedFirstEvent = true;
-              if (eventType === "status") {
-                onStatus(parsed as PipelineStatus);
-              } else if (eventType === "result") {
-                receivedTerminalEvent = true;
-                onResult(parsed as ZoningReportData);
-              } else if (eventType === "thinking") {
-                onThinking?.(parsed as ThinkingEvent);
-              } else if (eventType === "suggestions") {
-                onSuggestions?.(parsed.suggestions || []);
-              } else if (eventType === "error") {
-                receivedTerminalEvent = true;
-                onError({
-                  detail: parsed.detail || "Unknown error",
-                  errorType: (parsed.error_type || "unknown") as AnalysisErrorType,
-                });
-              }
-            } catch {
-              // Skip malformed events
-            }
+            dispatchSseEvent(eventType, eventData, handleEvent);
             eventType = "";
             eventData = "";
           }
         }
       }
+
+      if (buffer.startsWith("event: ")) {
+        eventType = buffer.slice(7).trim();
+      } else if (buffer.startsWith("data: ")) {
+        eventData = buffer.slice(6).trim();
+      }
+      dispatchSseEvent(eventType, eventData, handleEvent);
 
       if (!receivedTerminalEvent) {
         const recoveredError = await recoverFromStreamFailure(
@@ -552,6 +660,67 @@ export async function analyzeAddress(address: string): Promise<ZoningReportData>
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+export async function runHarnessAnalysis(
+  request: HarnessRunRequest,
+): Promise<HarnessRunResultData> {
+  const response = await fetch(`${API_BASE}/api/v1/deal-analysis/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      address: request.address,
+      analysisType: request.analysisType ?? "acquisition_memo",
+      sourceMode: request.sourceMode ?? "fixture",
+      assumptions: request.assumptions ?? {},
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Harness run failed" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+
+  return response.json();
+}
+
+export async function getHarnessRun(runId: string): Promise<HarnessRunResultData> {
+  const response = await fetch(`${API_BASE}/api/v1/harness/runs/${encodeURIComponent(runId)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Harness run not found" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function getHarnessRunEvents(
+  runId: string,
+): Promise<{ run_id: string; events: HarnessRunEventData[] }> {
+  const response = await fetch(
+    `${API_BASE}/api/v1/harness/runs/${encodeURIComponent(runId)}/events`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Harness events not found" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
+}
+
+export async function getHarnessRunVerification(
+  runId: string,
+): Promise<HarnessRunVerificationData> {
+  const response = await fetch(
+    `${API_BASE}/api/v1/harness/runs/${encodeURIComponent(runId)}/verification`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Harness verification not found" }));
+    throw new Error(extractErrorMessage(err, response.status));
+  }
+  return response.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +829,39 @@ export async function streamChat(
   let eventType = "";
   let eventData = "";
 
+  const handleEvent = (type: string, parsed: unknown): void => {
+    if (type === "session") {
+      const payload = parsed as { session_id?: string };
+      if (payload.session_id) onSession?.(payload.session_id);
+    } else if (type === "token") {
+      const payload = parsed as { content?: string };
+      onToken(payload.content || "");
+    } else if (type === "thinking") {
+      onThinking?.(parsed as ThinkingEvent);
+    } else if (type === "tool_use") {
+      onToolUse?.(parsed as ToolUseEvent);
+    } else if (type === "tool_result") {
+      const payload = parsed as ToolResultEvent;
+      onToolResult?.({
+        tool: payload.tool,
+        status: payload.status,
+        message: payload.message,
+      });
+    } else if (type === "agent_task") {
+      onTask?.(parsed as AgentTaskEvent);
+    } else if (type === "browser_action") {
+      onBrowserAction?.(parsed as BrowserActionEvent);
+    } else if (type === "reasoning") {
+      onReasoning?.(parsed as ReasoningEvent);
+    } else if (type === "done") {
+      const payload = parsed as { full_content?: string };
+      onDone(payload.full_content || "");
+    } else if (type === "error") {
+      const payload = parsed as { detail?: string };
+      onError(payload.detail || "Unknown error");
+    }
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -674,41 +876,19 @@ export async function streamChat(
       } else if (line.startsWith("data: ")) {
         eventData = line.slice(6).trim();
       } else if (line === "" && eventType && eventData) {
-        try {
-          const parsed = JSON.parse(eventData);
-          if (eventType === "session") {
-            onSession?.(parsed.session_id);
-          } else if (eventType === "token") {
-            onToken(parsed.content);
-          } else if (eventType === "thinking") {
-            onThinking?.(parsed as ThinkingEvent);
-          } else if (eventType === "tool_use") {
-            onToolUse?.(parsed as ToolUseEvent);
-          } else if (eventType === "tool_result") {
-            onToolResult?.({
-              tool: parsed.tool,
-              status: parsed.status,
-              message: parsed.message,
-            } as ToolResultEvent);
-          } else if (eventType === "agent_task") {
-            onTask?.(parsed as AgentTaskEvent);
-          } else if (eventType === "browser_action") {
-            onBrowserAction?.(parsed as BrowserActionEvent);
-          } else if (eventType === "reasoning") {
-            onReasoning?.(parsed as ReasoningEvent);
-          } else if (eventType === "done") {
-            onDone(parsed.full_content);
-          } else if (eventType === "error") {
-            onError(parsed.detail || "Unknown error");
-          }
-        } catch {
-          // Skip malformed events
-        }
+        dispatchSseEvent(eventType, eventData, handleEvent);
         eventType = "";
         eventData = "";
       }
     }
   }
+
+  if (buffer.startsWith("event: ")) {
+    eventType = buffer.slice(7).trim();
+  } else if (buffer.startsWith("data: ")) {
+    eventData = buffer.slice(6).trim();
+  }
+  dispatchSseEvent(eventType, eventData, handleEvent);
 }
 
 // ---------------------------------------------------------------------------

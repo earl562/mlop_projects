@@ -46,6 +46,10 @@ class RegionalCostModel:
     adv_per_unit_default: float
     avg_unit_size_sqft: float = 1000.0
     impact_fee_per_unit: float = 25_000.0
+    monthly_rent_per_unit_default: float | None = None
+    vacancy_pct_default: float | None = None
+    operating_expense_pct_default: float | None = None
+    cap_rate_default: float | None = None
     source: str = "regional_default"
 
 
@@ -58,6 +62,10 @@ NATIONAL_DEFAULT = RegionalCostModel(
     adv_per_unit_default=400_000.0,
     avg_unit_size_sqft=1000.0,
     impact_fee_per_unit=25_000.0,
+    monthly_rent_per_unit_default=None,
+    vacancy_pct_default=None,
+    operating_expense_pct_default=None,
+    cap_rate_default=None,
     source="national_default",
 )
 
@@ -72,6 +80,10 @@ _MARKETS: dict[str, RegionalCostModel] = {
         adv_per_unit_default=450_000.0,
         avg_unit_size_sqft=1000.0,
         impact_fee_per_unit=25_000.0,
+        monthly_rent_per_unit_default=2250.0,
+        vacancy_pct_default=0.05,
+        operating_expense_pct_default=0.35,
+        cap_rate_default=0.06,
         source="market:south_florida",
     ),
     "bay_area": RegionalCostModel(

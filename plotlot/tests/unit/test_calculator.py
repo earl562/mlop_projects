@@ -1,7 +1,7 @@
 """Tests for the max-allowable-units calculator."""
 
 from plotlot.core.types import NumericZoningParams
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard, VerificationStatus
 from plotlot.pipeline.calculator import (
     _effective_stories,
     _reconcile_density,
@@ -659,6 +659,7 @@ class TestDistrictDimensionalStandardWiring:
             "max_density_units_per_acre": 8.0,
             "source_section_id": "sandbox_rs8_dim_table",
             "source_url": "https://example.gov/zoning/rs8",
+            "verification_status": VerificationStatus.VERIFIED,
         }
         base.update(overrides)
         return DistrictDimensionalStandard(**base)

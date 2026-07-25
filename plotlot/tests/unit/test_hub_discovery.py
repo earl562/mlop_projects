@@ -106,11 +106,11 @@ class TestDiscoverDatasets:
         ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("plotlot.property.hub_discovery.httpx.AsyncClient", return_value=ctx):
-            parcels, zoning = await discover_datasets(25.93, -80.24, "Miami-Dade", "FL")
+            parcels, zoning = await discover_datasets(25.93, -80.24, "Example", "TX")
 
             assert parcels is not None
             assert parcels.dataset_type == "parcels"
-            assert parcels.county == "Miami-Dade"
+            assert parcels.county == "Example"
 
     async def test_discover_returns_none_on_no_results(self):
         """Hub returns empty → (None, None)."""

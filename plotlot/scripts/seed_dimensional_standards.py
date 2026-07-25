@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import asyncio
 
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import (
+    DistrictDimensionalStandard,
+    VerificationStatus,
+)
 from plotlot.storage.db import init_db
 from plotlot.storage.dimensional_standards import store_dimensional_standards
 
@@ -46,6 +49,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=8.0,
         source_section_id="Sec. 47-5.31 (ordinance_chunks id=3755)",
         source_url="https://www.fortlauderdale.gov/uldr",
+        verification_status=VerificationStatus.VERIFIED,
     ),
     # Source: Sec. 47-5.30, ordinance_chunks.id=3752. NOTE: the real district
     # code is RS-4.4, NOT RS-4 (no RS-4 district exists in Fort Lauderdale).
@@ -59,6 +63,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=4.4,
         source_section_id="Sec. 47-5.30 (ordinance_chunks id=3752)",
         source_url="https://www.fortlauderdale.gov/uldr",
+        verification_status=VerificationStatus.VERIFIED,
     ),
     # Source: Sec. 47-5.34, ordinance_chunks.id=3764. Density 15 du/net ac,
     # min lot 5,000 sf, height 35 ft, width 50 ft, front 25 ft, side 5 ft,
@@ -71,6 +76,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=15.0,
         source_section_id="Sec. 47-5.34 (ordinance_chunks id=3764)",
         source_url="https://www.fortlauderdale.gov/uldr",
+        verification_status=VerificationStatus.VERIFIED,
     ),
     # ── Miami (Miami-Dade County) — NOT YET verified against ingested text ──
     # Miami-Dade ordinance corpus is not yet ingested in ordinance_chunks.
@@ -85,6 +91,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=5.8,
         source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested — assumption-grade)",
         source_url="https://www.miamidade.gov/library/codes/chapter33",
+        verification_status=VerificationStatus.STAGED,
     ),
     DistrictDimensionalStandard(
         municipality="Miami", county="Miami-Dade", state="FL",
@@ -94,6 +101,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=17.4,
         source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested — assumption-grade)",
         source_url="https://www.miamidade.gov/library/codes/chapter33",
+        verification_status=VerificationStatus.STAGED,
     ),
     DistrictDimensionalStandard(
         municipality="Miami", county="Miami-Dade", state="FL",
@@ -103,6 +111,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=43.5,
         source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested — assumption-grade)",
         source_url="https://www.miamidade.gov/library/codes/chapter33",
+        verification_status=VerificationStatus.STAGED,
     ),
     # ── Hollywood (Broward County) — NOT YET verified against ingested text ──
     DistrictDimensionalStandard(
@@ -113,6 +122,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=5.0,
         source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested — assumption-grade)",
         source_url="https://www.hollywoodfl.gov/uldr",
+        verification_status=VerificationStatus.STAGED,
     ),
     DistrictDimensionalStandard(
         municipality="Hollywood", county="Broward", state="FL",
@@ -122,6 +132,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=15.0,
         source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested — assumption-grade)",
         source_url="https://www.hollywoodfl.gov/uldr",
+        verification_status=VerificationStatus.STAGED,
     ),
     DistrictDimensionalStandard(
         municipality="Hollywood", county="Broward", state="FL",
@@ -131,6 +142,7 @@ ROWS: list[DistrictDimensionalStandard] = [
         max_density_units_per_acre=25.0,
         source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested — assumption-grade)",
         source_url="https://www.hollywoodfl.gov/uldr",
+        verification_status=VerificationStatus.STAGED,
     ),
 ]
 
@@ -138,7 +150,8 @@ ROWS: list[DistrictDimensionalStandard] = [
 async def main() -> None:
     await init_db()
     n = await store_dimensional_standards(ROWS)
-    print(f"Seeded {n} verified South FL dimensional standards to the live DB.")
+    print(f"Seeded {n} South FL dimensional standards to the live DB.")
+    print("Verification grades: 3 verified, 6 staged.")
     print("Municipalities: Fort Lauderdale, Miami, Hollywood (3 municipalities, 3 districts each).")
 
 

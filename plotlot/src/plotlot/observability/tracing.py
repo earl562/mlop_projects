@@ -26,6 +26,25 @@ from contextlib import contextmanager
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+SpanAttribute = str | int | float | bool
+
+try:
+    from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+    _OTEL_TRACER = _otel_trace.get_tracer("plotlot")
+    _HAS_OTEL = True
+except ImportError:
+    _OTEL_TRACER = None
+    _HAS_OTEL = False
+    Resource = None  # type: ignore[assignment]
+    TracerProvider = None  # type: ignore[assignment]
+    BatchSpanProcessor = None  # type: ignore[assignment]
+    ConsoleSpanExporter = None  # type: ignore[assignment]
+
+_OTEL_CONFIGURED = False
 
 try:
     import mlflow as _mlflow
@@ -106,6 +125,35 @@ def start_span(name: str = "span", **kwargs):
     except Exception as exc:
         logger.warning("MLflow start_span unavailable; disabling tracing: %s", exc)
         _MLFLOW_ENABLED = False
+        yield _NoOpSpan()
+        return
+
+    try:
+        yield span
+    finally:
+        span_cm.__exit__(*sys.exc_info())
+
+
+@contextmanager
+def start_otel_span(
+    name: str,
+    attributes: dict[str, SpanAttribute | None] | None = None,
+):
+    if not (_HAS_OTEL and _OTEL_TRACER is not None):
+        yield _NoOpSpan()
+        return
+
+    cleaned_attributes = (
+        {key: value for key, value in attributes.items() if value is not None}
+        if attributes
+        else None
+    )
+    span_cm = None
+    try:
+        span_cm = _OTEL_TRACER.start_as_current_span(name, attributes=cleaned_attributes)
+        span = span_cm.__enter__()
+    except Exception as exc:
+        logger.debug("OpenTelemetry span unavailable: %s", exc)
         yield _NoOpSpan()
         return
 
@@ -260,6 +308,38 @@ def configure_mlflow(
         return False
 
 
+def configure_otel(
+    service_name: str,
+    service_version: str,
+    *,
+    console_exporter: bool = False,
+) -> bool:
+    global _OTEL_CONFIGURED, _OTEL_TRACER
+    if not _HAS_OTEL:
+        return False
+    if _OTEL_CONFIGURED:
+        return True
+
+    try:
+        provider = TracerProvider(
+            resource=Resource.create(
+                {
+                    "service.name": service_name,
+                    "service.version": service_version,
+                }
+            )
+        )
+        if console_exporter:
+            provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        _otel_trace.set_tracer_provider(provider)
+        _OTEL_TRACER = _otel_trace.get_tracer(service_name)
+        _OTEL_CONFIGURED = True
+        return True
+    except Exception as exc:
+        logger.warning("OpenTelemetry configuration unavailable: %s", exc)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # No-op span for when MLflow is absent
 # ---------------------------------------------------------------------------
@@ -272,4 +352,7 @@ class _NoOpSpan:
         pass
 
     def set_outputs(self, outputs: dict) -> None:
+        pass
+
+    def set_attribute(self, key: str, value: SpanAttribute) -> None:
         pass

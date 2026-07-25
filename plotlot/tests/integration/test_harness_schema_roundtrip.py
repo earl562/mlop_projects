@@ -21,6 +21,8 @@ from plotlot.ingestion.source_authorities.persistence import (
 from plotlot.storage.db import get_session, init_db
 from sqlalchemy import text
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True)
 async def _init():

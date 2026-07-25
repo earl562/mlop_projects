@@ -120,7 +120,7 @@ _REDACTED_KEYS = {"token", "api_key", "password", "secret", "authorization", "oa
 def _resolve_type(type_value: Any) -> str:
     """Accept an enum or a string; reject unknown types."""
     if isinstance(type_value, (IngestionEventType, HarnessEventType)):
-        return type_value.value
+        return str(type_value.value)
     if isinstance(type_value, str):
         if type_value in {t.value for t in IngestionEventType} or type_value in {t.value for t in HarnessEventType}:
             return type_value

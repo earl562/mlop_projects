@@ -28,7 +28,9 @@ test.describe("Canonical cross-mode lane", () => {
 
     await page.getByTestId("lookup-input").fill("7940 Plantation Blvd, Miramar, FL 33023");
     await page.getByTestId("send-button").click();
-    await expect(page.getByTestId("pipeline-stepper")).toBeVisible();
+    await expect(
+      page.getByTestId("pipeline-stepper").or(page.getByTestId("report-root")),
+    ).toBeVisible();
 
     await switchToAgent(page);
     await expect(page.getByTestId("deal-type-selector")).toHaveCount(0);

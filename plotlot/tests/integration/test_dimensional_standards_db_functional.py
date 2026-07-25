@@ -11,6 +11,8 @@ from plotlot.domain.dimensional_standard import VerificationStatus
 from plotlot.storage.dimensional_standards import get_dimensional_standard
 from plotlot.storage.db import init_db
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True)
 async def _init():

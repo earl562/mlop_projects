@@ -20,8 +20,17 @@ import sqlalchemy as sa  # noqa: E402
 from sqlalchemy.dialects.postgresql import JSONB  # noqa: E402
 
 
+def _execute_statements(script: str) -> None:
+    for statement in script.split(";"):
+        if statement.strip():
+            op.execute(statement)
+
+
 def upgrade() -> None:
-    op.execute("""
+    op.execute(
+        "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
+    )
+    _execute_statements("""
     CREATE TABLE IF NOT EXISTS jurisdiction_source_authorities (
         id VARCHAR(120) PRIMARY KEY,
         state VARCHAR(2) NOT NULL,
@@ -48,7 +57,7 @@ def upgrade() -> None:
         updated_at TIMESTAMPTZ DEFAULT now()
     );
     """)
-    op.execute("""
+    _execute_statements("""
     CREATE UNIQUE INDEX IF NOT EXISTS uq_jurisdiction_source_authority_natural_key
         ON jurisdiction_source_authorities (state, county, municipality, authority_scope, provider);
     CREATE INDEX IF NOT EXISTS ix_jsa_state ON jurisdiction_source_authorities (state);
@@ -74,7 +83,7 @@ def upgrade() -> None:
         metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
     );
     """)
-    op.execute("""
+    _execute_statements("""
     CREATE UNIQUE INDEX IF NOT EXISTS uq_ordinance_source_snapshot_natural_key
         ON ordinance_source_snapshots (source_authority_id, content_hash);
     CREATE INDEX IF NOT EXISTS ix_oss_source_authority ON ordinance_source_snapshots (source_authority_id);
@@ -97,7 +106,7 @@ def upgrade() -> None:
         payload JSONB NOT NULL DEFAULT '{}'::jsonb
     );
     """)
-    op.execute("""
+    _execute_statements("""
     CREATE INDEX IF NOT EXISTS ix_he_type ON harness_events (type);
     CREATE INDEX IF NOT EXISTS ix_he_timestamp ON harness_events (timestamp);
     CREATE INDEX IF NOT EXISTS ix_he_analysis_run ON harness_events (analysis_run_id);
@@ -125,7 +134,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("""
+    _execute_statements("""
     DROP TABLE IF EXISTS harness_events;
     DROP TABLE IF EXISTS ordinance_source_snapshots;
     DROP TABLE IF EXISTS jurisdiction_source_authorities;

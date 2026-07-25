@@ -1,5 +1,4 @@
 """PlotLot configuration — all external service credentials and settings."""
-
 from urllib.parse import parse_qs, urlparse, urlunparse
 
 from pydantic import Field, model_validator
@@ -120,11 +119,11 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-    # Jina.ai search
     jina_api_key: str = ""
+    exa_api_key: str = ""
+    browser_comp_runner_command: str = ""
+    browser_comp_runner_timeout_seconds: float = 45.0
 
-    # RentCast — keyed comparable-sales API (fallback comps where no open GIS
-    # sales layer exists, e.g. San Diego). Free tier ~50 req/mo.
     rentcast_api_key: str = ""
 
     # Sentry
@@ -145,6 +144,7 @@ class Settings(BaseSettings):
             "openai_api_key",
             "openai_access_token",
             "jina_api_key",
+            "exa_api_key",
             "rentcast_api_key",
             "stripe_secret_key",
             "stripe_webhook_secret",
@@ -161,6 +161,8 @@ class Settings(BaseSettings):
             "openai_oauth_token_url",
             "openai_oauth_redirect_uri",
             "openai_oauth_scope",
+            "exa_api_key",
+            "browser_comp_runner_command",
             "connector_encryption_key",
         ):
             val = getattr(self, field)
@@ -205,6 +207,10 @@ class Settings(BaseSettings):
     # falls back to local SQLite for development.
     mlflow_tracking_uri: str = "sqlite:///mlruns/mlflow.db"
     mlflow_experiment_name: str = "plotlot-rag"
+
+    otel_service_name: str = "plotlot"
+    otel_service_version: str = "2.0.0"
+    otel_console_exporter: bool = False
 
     # GCP / Firestore
     gcp_project_id: str = ""

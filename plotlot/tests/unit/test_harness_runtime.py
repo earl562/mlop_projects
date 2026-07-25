@@ -110,6 +110,9 @@ async def test_search_municode_live_returns_indexed_content_for_san_diego():
     assert result["status"] == "success"
     assert result["results"]
     assert result["source"] == "indexed"
+    assert result["authority_source_type"] == "indexed_ordinance"
+    assert result["authority_confidence"] == "indexed_official_reference"
+    assert result["requires_official_verification"] is True
     assert "indexed" in result["message"].lower()
 
 

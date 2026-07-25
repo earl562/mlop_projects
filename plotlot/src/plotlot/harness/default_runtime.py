@@ -12,8 +12,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from plotlot.harness.contracts import CountyName
 from plotlot.harness.policy import HarnessPolicyEngine
+from plotlot.harness.ordinance_lookup import (
+    IndexedZoningSearchArgs,
+    execute_indexed_zoning_search,
+)
 from plotlot.harness.runtime import HarnessRuntime
+from plotlot.harness.fixture_site_data import (
+    fixture_property_record,
+    fixture_site_profile_for_address,
+    is_known_fixture_address,
+)
 from plotlot.land_use.models import (
     EvidenceConfidence,
     EvidenceBackedReportSection,
@@ -56,12 +66,23 @@ async def _handle_geocode_address(args: dict[str, Any], context: ToolContext) ->
     from plotlot.land_use.citations import geocode_citation
 
     address = str(args.get("address", "")).strip()
-    try:
-        result = await geocode_address(address)
-    except Exception as e:
-        return {"status": "error", "message": f"Geocoding failed: {type(e).__name__}: {e}"}
-    if not result:
-        return {"status": "not_found", "result": {}}
+    if _is_fixture_address(address):
+        profile = fixture_site_profile_for_address(address)
+        result = {
+            "address": profile.address,
+            "municipality": profile.municipality,
+            "county": profile.county,
+            "state": profile.state,
+            "lat": profile.lat,
+            "lng": profile.lng,
+        }
+    else:
+        try:
+            result = await geocode_address(address)
+        except Exception as e:
+            return {"status": "error", "message": f"Geocoding failed: {type(e).__name__}: {e}"}
+        if not result:
+            return {"status": "not_found", "result": {}}
 
     ev_id = _ev_id()
     citation = geocode_citation(
@@ -97,6 +118,8 @@ async def _handle_lookup_property_info(
 ) -> dict[str, Any]:
     from plotlot.retrieval.property import lookup_property
     from plotlot.land_use.citations import county_record_citation
+    from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
+    from plotlot.harness.south_florida_gis import resolve_site_boundary_context
 
     address = str(args.get("address", "")).strip()
     county = str(args.get("county", "")).strip()
@@ -106,12 +129,21 @@ async def _handle_lookup_property_info(
     if lat is None or lng is None:
         return {"status": "error", "message": "lat and lng are required"}
 
-    try:
-        record = await lookup_property(address, county, lat=float(lat), lng=float(lng), state=state)
-    except Exception as e:
-        return {"status": "error", "message": f"Property lookup failed: {type(e).__name__}: {e}"}
-    if not record:
-        return {"status": "not_found", "result": {}}
+    if _is_fixture_address(address):
+        record = fixture_property_record(fixture_site_profile_for_address(address))
+    else:
+        try:
+            record = await lookup_property(
+                address,
+                county,
+                lat=float(lat),
+                lng=float(lng),
+                state=state,
+            )
+        except Exception as e:
+            return {"status": "error", "message": f"Property lookup failed: {type(e).__name__}: {e}"}
+        if not record:
+            return {"status": "not_found", "result": {}}
 
     property_payload: dict[str, Any] = {
         "folio": record.folio,
@@ -121,14 +153,54 @@ async def _handle_lookup_property_info(
         "owner": record.owner,
         "zoning_code": record.zoning_code,
         "zoning_description": record.zoning_description,
+        "land_use_code": record.land_use_code,
+        "land_use_description": record.land_use_description,
         "lot_size_sqft": record.lot_size_sqft,
         "lot_dimensions": record.lot_dimensions,
+        "bedrooms": record.bedrooms,
         "year_built": record.year_built,
         "assessed_value": record.assessed_value,
+        "living_area_sqft": record.living_area_sqft,
+        "living_units": record.living_units,
         "lat": record.lat,
         "lng": record.lng,
+        "last_sale_price": record.last_sale_price,
+        "last_sale_date": record.last_sale_date,
+        "parcel_geometry": record.parcel_geometry,
         "zoning_layer_url": record.zoning_layer_url,
     }
+    muni = record.municipality or address
+    crosswalk = crosswalk_zoning_code(
+        record.zoning_code,
+        state=state,
+        county=record.county,
+        municipality=record.municipality,
+    )
+    if crosswalk.matched:
+        property_payload["ordinance_district_code"] = crosswalk.search_code
+    site_county = record.county.strip() if isinstance(record.county, str) else ""
+    if site_county in {"Miami-Dade", "Broward"}:
+        property_payload["gis_site_context"] = resolve_site_boundary_context(
+            county=CountyName(site_county),
+            municipality=record.municipality,
+        )
+    zoning_query = (
+        f"{crosswalk.search_code} setbacks density height"
+        if record.zoning_code
+        else f"{muni} zoning setbacks density height allowed uses"
+    )
+    if crosswalk.matched:
+        property_payload["next_step"] = (
+            f"The GIS layer labels this parcel '{record.zoning_code}', but the adopted "
+            f"ordinance uses '{crosswalk.search_code}' for that district. Now call "
+            f"search_zoning_ordinance with municipality='{muni}' and query='{zoning_query}' "
+            f"— search under '{crosswalk.search_code}', not '{record.zoning_code}'."
+        )
+    else:
+        property_payload["next_step"] = (
+            f"Now call search_zoning_ordinance with municipality='{muni}' "
+            f"and query='{zoning_query}' to get the zoning regulations for this property"
+        )
     result: dict[str, Any] = {
         "status": "success",
         "result": property_payload,
@@ -170,71 +242,14 @@ async def _handle_search_zoning_ordinance(
     This produces evidence items so downstream reports can reference `evidence_id`s
     rather than uncited prose.
     """
-
-    from plotlot.retrieval.search import hybrid_search
-    from plotlot.storage.db import get_session
-    from plotlot.land_use.citations import ordinance_citation
-
-    municipality = str(args.get("municipality", "")).strip()
-    query = str(args.get("query", "")).strip()
-
-    session = await get_session()
-    try:
-        results = await hybrid_search(session, municipality, query, limit=8)
-
-        out: list[dict[str, Any]] = []
-        evidence: list[dict[str, Any]] = []
-
-        for r in results:
-            ev_id = _ev_id()
-            source_url = getattr(r, "source_url", None)
-            municode_node_id = getattr(r, "municode_node_id", None)
-            if not source_url and municode_node_id:
-                source_url = f"https://api.municode.com/codescontent?nodeId={municode_node_id}"
-
-            citation = ordinance_citation(
-                title=(r.section_title or r.section or "Ordinance section"),
-                url=source_url,
-                jurisdiction=municipality,
-                path=[p for p in [getattr(r, "chapter", None), r.section] if p],
-                raw_text_for_hash=f"{municipality}:{r.section}:{r.section_title}:{r.chunk_text[:300]}",
-            )
-            out.append(
-                {
-                    "section": r.section,
-                    "title": r.section_title,
-                    "zone_codes": r.zone_codes,
-                    "text": r.chunk_text,
-                    "evidence_id": ev_id,
-                    "citation": citation.model_dump(mode="json"),
-                }
-            )
-            evidence_item = EvidenceItem(
-                id=ev_id,
-                workspace_id=context.workspace_id,
-                project_id=_project_id(context),
-                site_id=context.site_id,
-                analysis_id=context.analysis_id,
-                analysis_run_id=context.analysis_run_id,
-                tool_run_id=context.tool_run_id,
-                claim_key="ordinance.chunk",
-                payload={
-                    "municipality": municipality,
-                    "query": query,
-                    "section": r.section,
-                    "section_title": r.section_title,
-                    "chunk_text": r.chunk_text,
-                },
-                source_type=SourceType.ORDINANCE,
-                tool_name="search_zoning_ordinance",
-                confidence=EvidenceConfidence.MEDIUM,
-                citation=citation,
-            )
-            evidence.append(evidence_item.model_dump(mode="json"))
-
-        return {"status": "success", "results": out, "evidence": evidence}
-    finally:
-        await session.close()
+    search_args = IndexedZoningSearchArgs(
+        municipality=str(args.get("municipality", "")).strip(),
+        query=str(args.get("query", "")).strip(),
+        limit=int(args.get("limit", 8) or 8),
+        zone_code_boost=str(args.get("zone_code_boost") or "").strip() or None,
+        known_zoning_code=str(args.get("known_zoning_code") or "").strip() or None,
+    )
+    return await execute_indexed_zoning_search(search_args, context=context)
 
 
 async def _handle_search_ordinances(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -426,6 +441,29 @@ def _is_pdf_scraped(municipality: str) -> bool:
     return municipality.strip().lower() in pdf_registered_municipalities()
 
 
+def _ordinance_authority_metadata(
+    *,
+    municipality: str,
+    state: str,
+    source_type: str,
+    resolution: str,
+    confidence: str,
+    is_live: bool,
+    is_official: bool,
+) -> dict[str, Any]:
+    jurisdiction = ", ".join(
+        part for part in (municipality.strip(), state.strip().upper()) if part
+    )
+    return {
+        "authority_source_type": source_type,
+        "authority_resolution": resolution,
+        "authority_confidence": confidence,
+        "authority_is_live": is_live,
+        "authority_is_official": is_official,
+        "authority_jurisdiction": jurisdiction,
+    }
+
+
 async def _indexed_ordinance_fallback(
     args: dict[str, Any], context: ToolContext, municipality: str
 ) -> dict[str, Any]:
@@ -441,6 +479,18 @@ async def _indexed_ordinance_fallback(
     indexed = await _handle_search_ordinances({**args, "municipality": municipality}, context)
     if indexed.get("results"):
         indexed["source"] = "indexed"
+        indexed.update(
+            _ordinance_authority_metadata(
+                municipality=municipality,
+                state=str(args.get("state") or ""),
+                source_type="indexed_ordinance",
+                resolution="indexed_fallback",
+                confidence="indexed_official_reference",
+                is_live=False,
+                is_official=True,
+            )
+        )
+        indexed["requires_official_verification"] = True
         indexed["message"] = (
             f"{municipality} is not on Municode; returning indexed ordinance sections "
             "from the local PlotLot database."
@@ -462,6 +512,7 @@ async def _handle_search_municode_live(
     args: dict[str, Any], context: ToolContext
 ) -> dict[str, Any]:
     from plotlot.land_use.ordinances.service import search_municode_live
+    from plotlot.land_use.ordinances.live_rules import extract_live_municode_rules
     from plotlot.ingestion.discovery import (
         discover_municode_authority_for_name,
         get_municode_configs,
@@ -479,8 +530,10 @@ async def _handle_search_municode_live(
     state = str(args.get("state") or "").strip().upper()
     configs = await get_municode_configs()
     config = resolve_municode_config(configs, municipality, state=state)
+    used_discovered_config = False
     if config is None and state:
         config = await discover_municode_authority_for_name(municipality, state)
+        used_discovered_config = config is not None
     if config is None:
         # Not on Municode at all — fall back to the local index so the agent gets
         # real ordinance text (any indexed non-Municode city) instead of nothing.
@@ -501,6 +554,12 @@ async def _handle_search_municode_live(
             query=query,
             limit=int(args.get("limit", 8) or 8),
         )
+    )
+    known_zoning_code = str(args.get("known_zoning_code") or "").strip()
+    live_rules = await extract_live_municode_rules(
+        municipality=config.municipality,
+        state=state,
+        zoning_code=known_zoning_code,
     )
 
     evidence: list[dict[str, Any]] = []
@@ -531,11 +590,32 @@ async def _handle_search_municode_live(
         )
         evidence.append(evidence_item.model_dump(mode="json"))
 
-    return {"status": "success", "results": out, "evidence": evidence}
+    resolution = "municode_discovered_config" if used_discovered_config else "municode_cached_config"
+    payload: dict[str, Any] = {
+        "status": "success",
+        "results": out,
+        "evidence": evidence,
+        **_ordinance_authority_metadata(
+            municipality=config.municipality,
+            state=state,
+            source_type="municode_live_search",
+            resolution=resolution,
+            confidence="official_live_search",
+            is_live=True,
+            is_official=True,
+        ),
+    }
+    if live_rules is not None:
+        payload["rules"] = live_rules
+        payload["requires_official_verification"] = bool(
+            live_rules.get("requires_official_verification")
+        )
+        payload["fallback_source"] = "municode_live_table"
+    return payload
 
 
 async def _handle_discover_municode_authorities(
-    args: dict[str, Any], context: ToolContext
+    args: dict[str, Any], _context: ToolContext
 ) -> dict[str, Any]:
     from plotlot.ingestion.discovery import (
         discover_county_authorities,
@@ -591,7 +671,7 @@ async def _handle_discover_municode_authorities(
 
 
 async def _handle_discover_code_authorities(
-    args: dict[str, Any], context: ToolContext
+    args: dict[str, Any], _context: ToolContext
 ) -> dict[str, Any]:
     from plotlot.land_use.code_providers import discover_code_authorities
 
@@ -629,7 +709,7 @@ async def _handle_discover_code_authorities(
 
 
 async def _handle_search_code_authority_live(
-    args: dict[str, Any], context: ToolContext
+    args: dict[str, Any], _context: ToolContext
 ) -> dict[str, Any]:
     from plotlot.land_use.code_providers import search_openlegalcodes
 
@@ -723,7 +803,9 @@ async def _handle_discover_open_data_layers(
     return {"status": "success", "results": out, "evidence": evidence}
 
 
-async def _handle_generate_document(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def _handle_generate_document(
+    args: dict[str, Any], _context: ToolContext
+) -> dict[str, Any]:
     """Generate an internal evidence-backed report artifact.
 
     This does not perform external writes; it returns artifact payloads for the
@@ -861,51 +943,16 @@ async def _handle_draft_email(args: dict[str, Any], context: ToolContext) -> dic
 
 
 async def _handle_web_search(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-    """Search the web through the configured Jina connector."""
-
-    import httpx
-
     from plotlot.config import settings
+    from plotlot.harness.web_lookup import WebSearchProvider, execute_web_search, web_search_payload
 
     query = str(args.get("query", "") or "").strip()
-    if not query:
-        return {"status": "error", "results": [], "message": "query is required"}
-    if not settings.jina_api_key:
-        return {
-            "status": "not_configured",
-            "results": [],
-            "message": "Web search connector is not configured (JINA_API_KEY not set)",
-        }
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                f"https://s.jina.ai/{query}",
-                headers={
-                    "Authorization": f"Bearer {settings.jina_api_key}",
-                    "Accept": "application/json",
-                    "X-Retain-Images": "none",
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-    except Exception as exc:
-        return {
-            "status": "error",
-            "results": [],
-            "message": f"Web search failed: {type(exc).__name__}: {exc}",
-        }
-
-    results = [
-        {
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "description": str(item.get("description", ""))[:300],
-            "content": str(item.get("content", ""))[:500],
-        }
-        for item in data.get("data", [])[:5]
-    ]
-    return {"status": "success", "results": results}
+    result = await execute_web_search(
+        query,
+        provider=WebSearchProvider.EXA,
+        exa_api_key=settings.exa_api_key,
+    )
+    return web_search_payload(result, query=query, context=context)
 
 
 async def _handle_search_properties(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -1019,7 +1066,9 @@ async def _handle_filter_dataset(args: dict[str, Any], context: ToolContext) -> 
     }
 
 
-async def _handle_get_dataset_info(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def _handle_get_dataset_info(
+    _args: dict[str, Any], context: ToolContext
+) -> dict[str, Any]:
     """Return metadata for the in-memory dataset for this run."""
 
     from plotlot.retrieval.bulk_search import compute_dataset_stats
@@ -1042,7 +1091,9 @@ async def _handle_get_dataset_info(args: dict[str, Any], context: ToolContext) -
     }
 
 
-async def _handle_create_spreadsheet(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def _handle_create_spreadsheet(
+    args: dict[str, Any], _context: ToolContext
+) -> dict[str, Any]:
     """Create a Google Sheet after policy approval has already been validated."""
 
     from plotlot.retrieval.google_workspace import create_spreadsheet
@@ -1067,7 +1118,7 @@ async def _handle_create_spreadsheet(args: dict[str, Any], context: ToolContext)
     }
 
 
-async def _handle_create_document(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def _handle_create_document(args: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
     """Create a Google Doc after policy approval has already been validated."""
 
     from plotlot.retrieval.google_workspace import create_document
@@ -1124,7 +1175,7 @@ async def _handle_export_dataset(args: dict[str, Any], context: ToolContext) -> 
     }
 
 
-async def _handle_gmail_send_draft(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def _handle_gmail_send_draft(args: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
     """Approval-gated seam for Gmail draft sending.
 
     The policy gate guarantees this handler is reached only with a DB-validated
@@ -1179,3 +1230,7 @@ def get_default_runtime() -> HarnessRuntime:
     if _DEFAULT_RUNTIME is None:
         _DEFAULT_RUNTIME = build_default_runtime()
     return _DEFAULT_RUNTIME
+
+
+def _is_fixture_address(address: str) -> bool:
+    return is_known_fixture_address(address)

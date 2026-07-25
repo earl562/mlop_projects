@@ -16,7 +16,7 @@ from plotlot.property.universal import UniversalProvider
 
 VALIDATION_CASES = [
     {
-        "address": "18901 NW 27th Ave, Miami Gardens, FL",
+        "address": "19501 NW 27th Ave, Miami Gardens, FL",
         "county": "Miami-Dade",
         "state": "FL",
         "lat": 25.9530,

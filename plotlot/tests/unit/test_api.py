@@ -586,6 +586,8 @@ async def test_chat_with_tool_use(client):
     }
     # Second call: LLM gives final answer after receiving tool results
     final_response = {"content": "The setback requirements are 25ft front...", "tool_calls": []}
+    fake_session = AsyncMock()
+    fake_session.close = AsyncMock()
 
     with (
         patch(
@@ -593,7 +595,12 @@ async def test_chat_with_tool_use(client):
             new_callable=AsyncMock,
             side_effect=[tool_response, final_response],
         ),
-        patch("plotlot.api.chat.hybrid_search", new_callable=AsyncMock, return_value=[]),
+        patch("plotlot.harness.ordinance_lookup.get_session", AsyncMock(return_value=fake_session)),
+        patch(
+            "plotlot.harness.ordinance_lookup.hybrid_search",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         resp = await client.post(
             "/api/v1/chat",

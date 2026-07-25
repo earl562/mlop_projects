@@ -62,6 +62,11 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
         ranked.sort(key=lambda item: item[0], reverse=True)
 
         results: list[OrdinanceSearchResult] = []
+        citation_jurisdiction = (
+            f"{config.municipality}, {config.state}"
+            if config.municipality and config.state
+            else args.jurisdiction.label()
+        )
         for _, node in ranked[: args.limit]:
             heading = node.heading or ""
             parent = node.parent_heading or ""
@@ -75,7 +80,7 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
             citation = ordinance_citation(
                 title=heading or "Ordinance section",
                 url=url,
-                jurisdiction=args.jurisdiction.label(),
+                jurisdiction=citation_jurisdiction,
                 path=[p for p in [parent, heading] if p],
                 raw_text_for_hash=f"{config.municipality}:{node.node_id}:{heading}:{snippet}",
             )

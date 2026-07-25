@@ -20,25 +20,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from plotlot.api.auth import get_current_user
-from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
-from plotlot.api.chat import router as chat_router
-from plotlot.api.approvals import router as approvals_router
-from plotlot.api.workspaces import router as workspaces_router
-from plotlot.api.analyses import router as analyses_router
-from plotlot.api.tools import router as tools_router
-from plotlot.api.evidence import router as evidence_router
-from plotlot.api.mcp import router as mcp_router
-from plotlot.api.geometry import router as geometry_router
 from plotlot.api.middleware import rate_limiter
-from plotlot.api.ordinance import router as ordinance_router
-from plotlot.api.portfolio import router as portfolio_router
-from plotlot.api.render import router as render_router
-from plotlot.api.routes import router
-from plotlot.api.screening import router as screening_router
+from plotlot.api.auth import get_current_user
+from plotlot.api.router_registry import register_routers
 from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
-from plotlot.observability.tracing import configure_mlflow
+from plotlot.observability.tracing import configure_mlflow, configure_otel
 from plotlot.oauth.openai_auth import has_saved_tokens
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.storage.db import get_session, init_db
@@ -58,7 +45,7 @@ _runtime_health: _RuntimeHealth = {
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Initialize DB on startup, cleanup on shutdown."""
     setup_logging(json_format=settings.log_json, level=settings.log_level)
     _runtime_health["startup_mode"] = "healthy"
@@ -77,6 +64,16 @@ async def lifespan(app: FastAPI):
             logger.info("Sentry error tracking enabled")
         except Exception as e:
             logger.warning("Sentry init failed: %s", e)
+
+    if configure_otel(
+        settings.otel_service_name,
+        settings.otel_service_version,
+        console_exporter=settings.otel_console_exporter,
+    ):
+        logger.info("OpenTelemetry tracing enabled for service %s", settings.otel_service_name)
+    else:
+        logger.warning("OpenTelemetry tracing unavailable — spans will no-op")
+        _runtime_health["startup_warnings"].append("otel_unavailable")
 
     # Initialize MLflow tracing
     if configure_mlflow(settings.mlflow_tracking_uri, settings.mlflow_experiment_name):
@@ -196,25 +193,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
-app.include_router(billing_router)
-app.include_router(chat_router)
-app.include_router(approvals_router)
-app.include_router(workspaces_router)
-app.include_router(analyses_router)
-app.include_router(tools_router)
-app.include_router(evidence_router)
-app.include_router(mcp_router)
-app.include_router(portfolio_router)
-app.include_router(geometry_router)
-app.include_router(ordinance_router)
-app.include_router(render_router)
-app.include_router(screening_router)
-
-# Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)
-from plotlot.api.documents import router as documents_router  # noqa: E402
-
-app.include_router(documents_router)
+register_routers(app)
 
 
 # ---------------------------------------------------------------------------

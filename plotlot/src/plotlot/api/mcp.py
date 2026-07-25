@@ -14,6 +14,8 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from plotlot.harness.full_harness_mcp import FullHarnessMCPAdapter, FullHarnessMCPToolCallRequest
+from plotlot.harness.full_harness_registry import RegistryLookupError, get_tool_spec
 from plotlot.harness.default_runtime import get_default_runtime
 from plotlot.harness.mcp_adapter import MCPAdapter
 from plotlot.harness.tool_registry import tool_risk_class
@@ -64,14 +66,16 @@ async def _validated_approved_ids(*, approval_ids: set[str], workspace_id: str) 
 
 @router.get("/tools/list")
 async def tools_list() -> list[dict[str, Any]]:
-    adapter = MCPAdapter(get_default_runtime())
-    return adapter.list_tools()
+    legacy_tools = MCPAdapter(get_default_runtime()).list_tools()
+    harness_tools = FullHarnessMCPAdapter().list_tools()
+    merged: dict[str, dict[str, Any]] = {}
+    for tool in [*legacy_tools, *harness_tools]:
+        merged[str(tool["name"])] = tool
+    return list(merged.values())
 
 
 @router.post("/tools/call")
 async def tools_call(body: MCPCallRequest) -> dict[str, Any]:
-    adapter = MCPAdapter(get_default_runtime())
-
     claimed = set(body.context.approved_approval_ids or set())
     risk_class = tool_risk_class(body.name)
     validated = claimed
@@ -84,6 +88,32 @@ async def tools_call(body: MCPCallRequest) -> dict[str, Any]:
             update={"context": body.context.model_copy(update={"approved_approval_ids": validated})}
         )
 
+    if _is_full_harness_tool(body.name):
+        result = await FullHarnessMCPAdapter().call_tool_async(
+            FullHarnessMCPToolCallRequest(
+                tool_name=body.name,
+                arguments=body.arguments,
+                context=body.context,
+                approval_id=body.approval_id,
+            )
+        )
+        public_status = {
+            "completed": "ok",
+            "approval_required": "pending_approval",
+            "denied": "blocked",
+        }.get(result.status.value, result.status.value)
+        return {
+            "tool_name": result.tool_name,
+            "status": public_status,
+            "decision": result.policy_decision.model_dump(mode="json"),
+            "result": result.payload,
+            "message": result.error.message if result.error is not None else None,
+            "events": [event.model_dump(mode="json") for event in result.events],
+            "source_mode": result.source_mode.value,
+            "ok": result.ok,
+        }
+
+    adapter = MCPAdapter(get_default_runtime())
     result = await adapter.call_tool(
         name=body.name,
         arguments=body.arguments,
@@ -132,3 +162,11 @@ async def tools_call(body: MCPCallRequest) -> dict[str, Any]:
         "result": result.result,
         "message": result.message,
     }
+
+
+def _is_full_harness_tool(tool_name: str) -> bool:
+    try:
+        get_tool_spec(tool_name)
+    except RegistryLookupError:
+        return False
+    return True

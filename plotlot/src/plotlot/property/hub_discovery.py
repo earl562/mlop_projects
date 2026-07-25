@@ -173,6 +173,74 @@ _COUNTY_URL_PATTERNS: list[str] = [
     "https://{county}county.gov/arcgis/rest/services",
 ]
 
+_KNOWN_COUNTY_LAYERS: dict[tuple[str, str, str], tuple[str, int]] = {
+    (
+        "miamidade",
+        "fl",
+        "parcels",
+    ): (
+        "https://gis.miamidade.gov/arcgis/rest/services/MD_Communications/MapServer",
+        1,
+    ),
+    (
+        "miamidade",
+        "fl",
+        "zoning",
+    ): (
+        "https://gisweb.miamidade.gov/arcgis/rest/services/"
+        "LandManagement/MD_Zoning/MapServer",
+        2,
+    ),
+    (
+        "broward",
+        "fl",
+        "parcels",
+    ): (
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer",
+        16,
+    ),
+    (
+        "broward",
+        "fl",
+        "zoning",
+    ): (
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer",
+        9,
+    ),
+    (
+        "palmbeach",
+        "fl",
+        "parcels",
+    ): (
+        "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services/"
+        "Parcels_and_Property_Details_WebMercator/FeatureServer",
+        0,
+    ),
+    (
+        "palmbeach",
+        "fl",
+        "zoning",
+    ): (
+        "https://maps.co.palm-beach.fl.us/arcgis/rest/services/"
+        "OpenData/Planning_Open_Data/MapServer",
+        9,
+    ),
+}
+
+
+def known_county_layer_identity(
+    county: str,
+    state: str,
+    dataset_type: str,
+) -> tuple[str, int] | None:
+    key = (
+        county.lower().replace("-", "").replace(" ", ""),
+        state.lower().strip(),
+        dataset_type,
+    )
+    return _KNOWN_COUNTY_LAYERS.get(key)
+
+
 # Sub-area indicators: district/neighborhood datasets cover only a small slice
 # of the county and will fail spatial queries for addresses outside that area.
 _SUB_AREA_PENALTY_KEYWORDS = {
@@ -237,6 +305,16 @@ async def _discover_pair(
     """Run the three-stage discovery cascade for both parcels and zoning."""
 
     async def find(dataset_type: str) -> DatasetInfo | None:
+        if known_county_layer_identity(county, state, dataset_type) is not None:
+            return await _known_county_dataset(
+                lat,
+                lng,
+                county,
+                state,
+                dataset_type=dataset_type,
+                validate_coverage=validate_coverage,
+            )
+
         # Stage 1: ArcGIS Hub
         result = await _search_hub(
             lat,
@@ -274,6 +352,38 @@ async def _discover_pair(
     parcels = await find("parcels")
     zoning = await find("zoning")
     return parcels, zoning
+
+
+async def _known_county_dataset(
+    lat: float,
+    lng: float,
+    county: str,
+    state: str,
+    *,
+    dataset_type: str,
+    validate_coverage: bool,
+) -> DatasetInfo | None:
+    known = known_county_layer_identity(county, state, dataset_type)
+    if known is None:
+        return None
+    service_url, layer_id = known
+    fields, discovered_layer_id = await _fetch_layer_fields(f"{service_url}/{layer_id}")
+    if not fields or discovered_layer_id != layer_id:
+        return None
+    candidate = DatasetInfo(
+        dataset_id=f"{service_url}/{layer_id}",
+        name=f"{county} {dataset_type}",
+        url=service_url,
+        layer_id=layer_id,
+        dataset_type=dataset_type,
+        county=county,
+        state=state,
+        fields=fields,
+        discovered_at=datetime.now(timezone.utc),
+    )
+    if validate_coverage and not await _has_coverage(candidate, lat, lng):
+        return None
+    return candidate
 
 
 async def _search_hub(
@@ -480,7 +590,7 @@ async def _fetch_layer_fields(base_url: str) -> tuple[list[str], int]:
         logger.debug("Failed to fetch layer metadata: %s", layer_url)
         return [], 0
 
-    fields = [f.get("name", "") for f in data.get("fields", [])]
+    fields = [f.get("name", "") for f in (data.get("fields") or [])]
     return fields, layer_id
 
 
@@ -657,7 +767,7 @@ async def _probe_arcgis_server(
                 if not layer_data:
                     continue
 
-                fields = [f.get("name", "") for f in layer_data.get("fields", [])]
+                fields = [f.get("name", "") for f in (layer_data.get("fields") or [])]
                 if not fields:
                     continue
 

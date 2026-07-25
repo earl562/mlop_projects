@@ -36,6 +36,7 @@ async def test_mcp_tools_list_includes_core_tools(client):
     data = resp.json()
     names = {t["name"] for t in data}
     assert "geocode_address" in names
+    assert "search_municode" in names
     assert "discover_open_data_layers" in names
     assert "discover_municode_authorities" in names
     assert "discover_code_authorities" in names
@@ -80,6 +81,70 @@ async def test_mcp_tools_call_geocode(client):
     assert data["status"] == "ok"
     assert data["result"]["status"] == "success"
     assert data["result"]["result"]["municipality"] == "Example"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_call_routes_full_harness_search_municode(client):
+    resp = await client.post(
+        "/api/v1/mcp/tools/call",
+        json={
+            "name": "search_municode",
+            "arguments": {"jurisdiction": "miami", "query": "parking"},
+            "context": {
+                "workspace_id": "ws_test",
+                "actor_user_id": "anonymous",
+                "run_id": "run_mcp_harness_1",
+                "project_id": "prj_test",
+                "risk_budget_cents": 0,
+                "live_network_allowed": False,
+                "approved_approval_ids": [],
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["status"] == "ok"
+    assert data["source_mode"] == "fixture"
+    assert data["result"]["results"][0]["section_id"] == "municode_miami_parking_fixture"
+    assert [event["type"] for event in data["events"]] == [
+        "tool.requested",
+        "tool.policy_checked",
+        "tool.started",
+        "tool.completed",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_call_full_harness_export_report_requires_approval(client):
+    resp = await client.post(
+        "/api/v1/mcp/tools/call",
+        json={
+            "name": "export_report",
+            "arguments": {"report_id": "report_fixture"},
+            "context": {
+                "workspace_id": "ws_test",
+                "actor_user_id": "anonymous",
+                "run_id": "run_mcp_harness_export",
+                "project_id": "prj_test",
+                "risk_budget_cents": 0,
+                "live_network_allowed": False,
+                "approved_approval_ids": [],
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["status"] == "pending_approval"
+    assert data["decision"]["approval_required"] is True
+    assert [event["type"] for event in data["events"]] == [
+        "tool.requested",
+        "tool.policy_checked",
+        "tool.approval_required",
+    ]
 
 
 @pytest.mark.asyncio

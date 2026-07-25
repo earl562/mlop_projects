@@ -1,8 +1,6 @@
-"""Regression tests for PlotLot MLflow tracing helpers."""
-
 from unittest.mock import MagicMock, patch
 
-from plotlot.observability.tracing import configure_mlflow, start_run, trace
+from plotlot.observability.tracing import configure_mlflow, configure_otel, start_run, trace
 
 
 def test_configure_mlflow_fails_open_when_tracking_backend_raises():
@@ -89,3 +87,32 @@ def test_trace_decorator_fails_open_when_mlflow_wrapper_raises():
             return "ok"
 
         assert traced_function() == "ok"
+
+
+def test_configure_otel_returns_false_when_opentelemetry_is_unavailable():
+    with patch("plotlot.observability.tracing._HAS_OTEL", False):
+        assert configure_otel("plotlot", "2.0.0") is False
+
+
+def test_configure_otel_sets_provider_and_console_exporter_when_enabled():
+    mock_trace = MagicMock()
+    mock_provider = MagicMock()
+    mock_resource = MagicMock()
+    mock_processor = MagicMock()
+    mock_exporter = MagicMock()
+
+    with (
+        patch("plotlot.observability.tracing._HAS_OTEL", True),
+        patch("plotlot.observability.tracing._OTEL_CONFIGURED", False),
+        patch("plotlot.observability.tracing._otel_trace", mock_trace),
+        patch("plotlot.observability.tracing.TracerProvider", return_value=mock_provider),
+        patch("plotlot.observability.tracing.Resource.create", return_value=mock_resource),
+        patch("plotlot.observability.tracing.BatchSpanProcessor", return_value=mock_processor),
+        patch("plotlot.observability.tracing.ConsoleSpanExporter", return_value=mock_exporter),
+    ):
+        result = configure_otel("plotlot-api", "2.0.0", console_exporter=True)
+
+    assert result is True
+    mock_trace.set_tracer_provider.assert_called_once_with(mock_provider)
+    mock_trace.get_tracer.assert_called_once_with("plotlot-api")
+    mock_provider.add_span_processor.assert_called_once_with(mock_processor)

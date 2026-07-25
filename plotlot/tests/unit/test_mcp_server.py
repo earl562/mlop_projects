@@ -545,12 +545,19 @@ async def test_get_comparable_sales_success():
     comp_result = _FakeCompAnalysis()
 
     with patch("plotlot.mcp.server.find_comparables", AsyncMock(return_value=comp_result)):
-        result = await get_comparable_sales(37.5, -122.0, county="San Mateo", state="CA")
+        result = await get_comparable_sales(
+            37.5,
+            -122.0,
+            county="San Mateo",
+            state="CA",
+            radius_miles=5.0,
+        )
 
     assert result["lat"] == 37.5
     assert result["lng"] == -122.0
     assert result["state"] == "CA"
     assert result["county"] == "San Mateo"
+    assert result["radius_miles"] == 5.0
     assert result["median_price_per_acre"] == 120000.0
     assert result["estimated_land_value"] == 480000.0
     assert result["comparable_count"] == 0

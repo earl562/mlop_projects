@@ -13,8 +13,9 @@ transport adapters (REST/chat/MCP) thin wrappers over the same harness runtime.
 
 from plotlot.harness.context import ContextBroker, ContextPacket
 from plotlot.harness.events import HarnessEvent
+from plotlot.harness.full_harness_mcp import FullHarnessMCPAdapter, FullHarnessMCPToolCallRequest
 from plotlot.harness.mcp_adapter import MCPAdapter
-from plotlot.harness.policy import HarnessPolicyEngine
+from plotlot.harness.policy import HarnessPolicyEngine, HarnessPolicyRequest
 from plotlot.harness.runtime import HarnessRuntime, ToolCallResult
 from plotlot.harness.tool_registry import get_tool_contract, list_tool_contracts
 
@@ -22,8 +23,11 @@ __all__ = [
     "ContextBroker",
     "ContextPacket",
     "HarnessPolicyEngine",
+    "HarnessPolicyRequest",
     "HarnessEvent",
     "HarnessRuntime",
+    "FullHarnessMCPAdapter",
+    "FullHarnessMCPToolCallRequest",
     "MCPAdapter",
     "ToolCallResult",
     "get_tool_contract",

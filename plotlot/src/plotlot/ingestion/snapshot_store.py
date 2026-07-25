@@ -16,24 +16,35 @@ from plotlot.storage.models import OrdinanceSourceSnapshotORM
 
 
 async def persist_snapshot(snapshot: OrdinanceSourceSnapshot) -> OrdinanceSourceSnapshotORM:
-    """Persist a snapshot to the DB. Returns the ORM row with real ID."""
-    orm = OrdinanceSourceSnapshotORM(
-        id=f"snap_{uuid.uuid4().hex[:12]}",
-        source_authority_id=snapshot.source_authority_id,
-        source_url=snapshot.source_url,
-        final_url=snapshot.final_url,
-        http_status=snapshot.http_status,
-        content_type=snapshot.content_type,
-        content_hash=snapshot.content_hash,
-        raw_storage_url=snapshot.raw_storage_url,
-        raw_text_excerpt=snapshot.raw_text_excerpt[:500] if snapshot.raw_text_excerpt else None,
-        etag=snapshot.etag,
-        last_modified=snapshot.last_modified,
-        source_version=snapshot.source_version,
-        metadata_json=snapshot.metadata_json,
-    )
+    """Persist a snapshot to the DB. Idempotent: same (authority_id, content_hash)
+    returns existing row; different content creates a new row via natural key upsert."""
     session = await get_session()
     try:
+        # Check for existing snapshot with same natural key.
+        existing = (await session.execute(
+            select(OrdinanceSourceSnapshotORM).where(
+                OrdinanceSourceSnapshotORM.source_authority_id == snapshot.source_authority_id,
+                OrdinanceSourceSnapshotORM.content_hash == snapshot.content_hash,
+            )
+        )).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
+        orm = OrdinanceSourceSnapshotORM(
+            id=f"snap_{uuid.uuid4().hex[:12]}",
+            source_authority_id=snapshot.source_authority_id,
+            source_url=snapshot.source_url,
+            final_url=snapshot.final_url,
+            http_status=snapshot.http_status,
+            content_type=snapshot.content_type,
+            content_hash=snapshot.content_hash,
+            raw_storage_url=snapshot.raw_storage_url,
+            raw_text_excerpt=snapshot.raw_text_excerpt[:500] if snapshot.raw_text_excerpt else None,
+            etag=snapshot.etag,
+            last_modified=snapshot.last_modified,
+            source_version=snapshot.source_version,
+            metadata_json=snapshot.metadata_json,
+        )
         session.add(orm)
         await session.commit()
         return orm

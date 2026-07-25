@@ -119,10 +119,14 @@ export async function runLookupFlow(
   const sendButton = page.getByTestId("send-button");
 
   // In some environments the page can hydrate after the first fill, wiping the input value.
-  // Retry until the controlled value "sticks" before attempting to submit.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     await input.fill(address);
-    if ((await input.inputValue().catch(() => "")) === address) break;
+    if (
+      (await input.inputValue().catch(() => "")) === address &&
+      (await sendButton.isEnabled().catch(() => false))
+    ) {
+      break;
+    }
     await page.waitForTimeout(150);
   }
 

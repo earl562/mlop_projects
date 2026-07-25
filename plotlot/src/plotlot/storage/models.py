@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -738,7 +738,7 @@ class DistrictDimensionalStandardORM(Base):
             max_density_units_per_acre=self.max_density_units_per_acre,
             source_section_id=self.source_section_id,
             source_url=self.source_url or "",
-            extracted_at=self.extracted_at or func.now(),
+            extracted_at=self.extracted_at or datetime.now(timezone.utc),
             verification_status=VerificationStatus(self.verification_status or "unverified"),
         )
 

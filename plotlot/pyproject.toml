@@ -28,6 +28,7 @@ dependencies = [
     "pyyaml>=6.0",
     "openpyxl>=3.1",
     "openai>=2.31.0",
+    "opentelemetry-api>=1.39.1",
     "aiosmtplib>=3.0",
     "email-validator>=2.0",
     "pypdf>=6.12.2",
@@ -53,12 +54,14 @@ eval = [
 ]
 
 [project.scripts]
-plotlot = "plotlot.cli:main"
+plotlot = "plotlot.cli_harness:entrypoint"
 plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
 plotlot-api = "plotlot.api.main:run"
 plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
-plotlot-mcp = "plotlot.mcp.server:run"
+plotlot-mcp = "plotlot.mcp.harness_server:run"
+plotlot-harness-mcp = "plotlot.mcp.harness_server:run"
+plotlot-legacy-mcp = "plotlot.mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]

@@ -11,6 +11,10 @@ class TestGetCostModel:
         cm = get_cost_model("FL", "Miami-Dade")
         assert cm.market == "South Florida"
         assert cm.construction_cost_psf == 225.0
+        assert cm.monthly_rent_per_unit_default == 2250.0
+        assert cm.vacancy_pct_default == 0.05
+        assert cm.operating_expense_pct_default == 0.35
+        assert cm.cap_rate_default == 0.06
 
     def test_bay_area(self):
         cm = get_cost_model("CA", "Santa Clara")
@@ -46,6 +50,7 @@ class TestGetCostModel:
         cm = get_cost_model("TX", "Travis")
         assert cm is NATIONAL_DEFAULT
         assert cm.construction_cost_psf == 200.0
+        assert cm.monthly_rent_per_unit_default is None
 
     def test_empty_inputs_return_national(self):
         assert get_cost_model("", "") is NATIONAL_DEFAULT

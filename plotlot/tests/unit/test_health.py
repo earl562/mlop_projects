@@ -60,11 +60,19 @@ class TestHealthEndpoint:
 
     async def test_health_degraded_on_db_failure(self):
         """Health returns degraded when DB is unreachable."""
-        from plotlot.api.main import _runtime_health, health
+        from plotlot.api.main import _runtime_health, health, settings
 
         _runtime_health["startup_mode"] = "degraded"
         _runtime_health["startup_warnings"] = ["database_unavailable"]
-        with patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")):
+        with (
+            patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")),
+            patch.object(
+                settings,
+                "database_url",
+                "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot",
+            ),
+            patch.object(settings, "database_require_ssl", False),
+        ):
             result = await health()
 
         assert result["status"] == "degraded"

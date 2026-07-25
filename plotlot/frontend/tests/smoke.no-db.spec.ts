@@ -53,20 +53,50 @@ test.describe("Canonical no-db smoke", () => {
     await expect(page.getByTestId("lookup-suggestions")).toHaveCount(0);
   });
 
-  test("lookup gate and pipeline start work without db-backed assertions", async ({ page }) => {
+  test("lookup stream completes without db-backed assertions", async ({ page }) => {
     await gotoHome(page);
     await stubAnalyzeStream(page, {
       statuses: [
-        { step: "geocoding", message: "Resolving address...", complete: false },
+        { step: "geocoding", message: "Address resolved", complete: true },
       ],
+      result: {
+        address: "7940 Plantation Blvd, Miramar, FL 33023",
+        formatted_address: "7940 Plantation Blvd, Miramar, FL 33023",
+        municipality: "Miramar",
+        county: "Broward",
+        lat: 26.025,
+        lng: -80.251,
+        zoning_district: "RS5",
+        zoning_description: "Single Family Residential",
+        allowed_uses: ["Single-family residential"],
+        conditional_uses: [],
+        prohibited_uses: [],
+        setbacks: { front: "25 ft", side: "7.5 ft", rear: "20 ft" },
+        max_height: "35 ft",
+        max_density: "8 du/ac",
+        floor_area_ratio: "0.5",
+        lot_coverage: "40%",
+        min_lot_size: "5,000 sqft",
+        parking_requirements: "2 spaces per dwelling unit",
+        property_record: null,
+        numeric_params: null,
+        density_analysis: null,
+        comp_analysis: null,
+        pro_forma: null,
+        site_risk: null,
+        summary: "Completed no-database smoke analysis.",
+        sources: [],
+        confidence: "high",
+        source_refs: [],
+        confidence_warning: null,
+        suggested_next_steps: [],
+      },
     });
 
     await runLookupFlow(page, "7940 Plantation Blvd, Miramar, FL 33023");
 
-    await expect(page.getByTestId("pipeline-stepper")).toBeVisible();
-    await expect(page.getByTestId("pipeline-step-geocoding")).toBeVisible();
-    await expect(page.getByTestId("pipeline-step-current")).toContainText(
-      "Geocoding",
-    );
+    await expect(page.getByTestId("report-root")).toBeVisible();
+    await expect(page.getByText("Miramar, Broward County")).toBeVisible();
+    await expect(page.getByTestId("report-error")).toHaveCount(0);
   });
 });

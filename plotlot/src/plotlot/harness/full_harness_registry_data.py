@@ -1,0 +1,320 @@
+from __future__ import annotations
+
+from plotlot.harness.contracts import (
+    AgentRoleSpec,
+    JsonObject,
+    PolicyPermission,
+    SkillSpec,
+    SourceLane,
+    ToolSpec,
+)
+
+
+def schema(properties: JsonObject | None = None) -> JsonObject:
+    return {"type": "object", "properties": properties or {}}
+
+
+def tool(
+    name: str,
+    lane: SourceLane | None,
+    *,
+    fixture_name: str | None = None,
+    permission: PolicyPermission = PolicyPermission.ALLOW,
+) -> ToolSpec:
+    return ToolSpec(
+        name=name,
+        description=f"PlotLot harness tool: {name}",
+        input_schema=schema(),
+        output_schema=schema({"status": {"type": "string"}}),
+        permission=permission,
+        source_lane=lane,
+        evidence_behavior="records_evidence_or_calculation_when_material",
+        deterministic=True,
+        fixture_name=fixture_name,
+    )
+
+
+def skill(
+    name: str,
+    tools: list[str],
+    lanes: list[SourceLane],
+    evidence: list[str],
+    calculations: list[str],
+    report_template: str,
+) -> SkillSpec:
+    return SkillSpec(
+        name=name,
+        description=f"PlotLot full harness skill: {name}",
+        version="0.1.0",
+        required_inputs=["workspace_id", "project_id"],
+        allowed_tools=tools,
+        allowed_source_lanes=lanes,
+        required_evidence_types=evidence,
+        required_calculations=calculations,
+        output_schema=schema({"report_id": {"type": "string"}}),
+        verifier_profile=f"{name}_verifier",
+        report_template=report_template,
+    )
+
+
+TOOLS = [
+    tool("run_deal_analysis", None),
+    tool("geocode_address", SourceLane.PARCEL_PROPERTY),
+    tool("lookup_property_info", SourceLane.PARCEL_PROPERTY),
+    tool("search_zoning_ordinance", SourceLane.ORDINANCE_CODE),
+    tool("search_municode_live", SourceLane.ORDINANCE_CODE),
+    tool("discover_open_data_layers", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("search_south_florida_gis", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("get_gis_source_metadata", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("find_comparables", SourceLane.MARKET_COMPS),
+    tool("load_rental_market_evidence", SourceLane.COST_ASSUMPTIONS),
+    tool("load_underwriting_market_profile", SourceLane.COST_ASSUMPTIONS),
+    tool(
+        "query_gis_feature_service",
+        SourceLane.SOUTH_FLORIDA_GIS,
+        fixture_name="miami_dade_zoning_feature_fixture.json",
+    ),
+    tool("classify_gis_applicability", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("resolve_site_boundary_context", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("validate_gis_claim", SourceLane.SOUTH_FLORIDA_GIS),
+    tool("capture_public_listing_comps", SourceLane.MARKET_COMPS),
+    tool("search_municode", SourceLane.ORDINANCE_CODE),
+    tool("get_municode_section", SourceLane.ORDINANCE_CODE),
+    tool("extract_ordinance_rules", SourceLane.ORDINANCE_CODE),
+    tool("web_search", None),
+    tool("fetch_web_contents", None),
+    tool("compute_feasibility", None),
+    tool("run_noi_valuation", None),
+    tool("run_pro_forma", None),
+    tool("run_residual_land_value", None),
+    tool("run_brrrr_refinance_analysis", None),
+    tool("run_sensitivity_analysis", None),
+    tool("create_construction_budget", None),
+    tool("generate_document", None),
+    tool("search_properties", None),
+    tool("filter_dataset", None),
+    tool("get_dataset_info", None),
+    tool("create_spreadsheet", None, permission=PolicyPermission.ASK),
+    tool("create_document", None, permission=PolicyPermission.ASK),
+    tool("export_dataset", None, permission=PolicyPermission.ASK),
+    tool("discover_rehabvaluator_video_sections", SourceLane.TRAINING_VIDEO),
+    tool("fetch_video_metadata", SourceLane.TRAINING_VIDEO),
+    tool("discover_video_captions", SourceLane.TRAINING_VIDEO),
+    tool("segment_transcript", SourceLane.TRAINING_VIDEO),
+    tool("extract_training_concepts", SourceLane.TRAINING_VIDEO),
+    tool("map_concepts_to_workflow_templates", SourceLane.TRAINING_VIDEO),
+    tool("verify_report", None),
+    tool("generate_acquisition_memo", None),
+    tool("generate_lender_package", None),
+    tool("export_report", None, permission=PolicyPermission.ASK),
+    tool("transcribe_user_media", SourceLane.TRAINING_VIDEO, permission=PolicyPermission.ASK),
+    tool("download_protected_media", SourceLane.TRAINING_VIDEO, permission=PolicyPermission.DENY),
+]
+
+
+SKILLS = [
+    skill(
+        "zoning_research",
+        ["search_south_florida_gis", "query_gis_feature_service", "search_municode"],
+        [SourceLane.SOUTH_FLORIDA_GIS, SourceLane.ORDINANCE_CODE],
+        ["ordinance_text", "gis_layer", "arcgis_feature"],
+        [],
+        "zoning_research_memo",
+    ),
+    skill(
+        "site_feasibility",
+        ["compute_feasibility"],
+        [SourceLane.SOUTH_FLORIDA_GIS],
+        ["gis_layer"],
+        ["density_study"],
+        "zoning_memo",
+    ),
+    skill(
+        "comparable_comping",
+        [
+            "lookup_property_info",
+            "find_comparables",
+            "capture_public_listing_comps",
+            "web_search",
+            "fetch_web_contents",
+            "resolve_site_boundary_context",
+            "classify_gis_applicability",
+            "validate_gis_claim",
+        ],
+        [SourceLane.PARCEL_PROPERTY, SourceLane.MARKET_COMPS, SourceLane.SOUTH_FLORIDA_GIS],
+        ["parcel_record", "property_appraiser_record", "market_comp", "web_page"],
+        [],
+        "comparable_comping_summary",
+    ),
+    skill(
+        "development_underwriting",
+        [
+            "find_comparables",
+            "capture_public_listing_comps",
+            "run_pro_forma",
+            "run_residual_land_value",
+        ],
+        [SourceLane.MARKET_COMPS, SourceLane.COST_ASSUMPTIONS],
+        ["county_record", "user_assumption"],
+        ["pro_forma", "residual_land_value"],
+        "underwriting_summary",
+    ),
+    skill(
+        "acquisition_memo",
+        [
+            "find_comparables",
+            "capture_public_listing_comps",
+            "generate_acquisition_memo",
+            "verify_report",
+        ],
+        [SourceLane.SOUTH_FLORIDA_GIS, SourceLane.ORDINANCE_CODE, SourceLane.MARKET_COMPS],
+        ["gis_layer", "ordinance_text", "county_record"],
+        ["residual_land_value"],
+        "acquisition_memo",
+    ),
+    skill(
+        "lender_package",
+        ["generate_lender_package", "verify_report"],
+        [SourceLane.SOUTH_FLORIDA_GIS],
+        ["gis_layer", "user_assumption"],
+        ["pro_forma"],
+        "lender_package",
+    ),
+    skill(
+        "claim_verification",
+        ["validate_gis_claim", "verify_report"],
+        [SourceLane.SOUTH_FLORIDA_GIS, SourceLane.ORDINANCE_CODE],
+        ["gis_layer", "ordinance_text"],
+        [],
+        "verification_checklist",
+    ),
+    skill(
+        "construction_budget",
+        ["create_construction_budget"],
+        [SourceLane.COST_ASSUMPTIONS],
+        ["user_assumption"],
+        ["construction_budget"],
+        "construction_budget_report",
+    ),
+    skill(
+        "training_ingestion",
+        [
+            "discover_rehabvaluator_video_sections",
+            "fetch_video_metadata",
+            "discover_video_captions",
+            "segment_transcript",
+            "extract_training_concepts",
+        ],
+        [SourceLane.TRAINING_VIDEO],
+        ["video_source", "caption_track", "transcript_segment", "training_concept"],
+        [],
+        "training_workflow_report",
+    ),
+    skill(
+        "rehabvaluator_training_extraction",
+        ["extract_training_concepts", "map_concepts_to_workflow_templates"],
+        [SourceLane.TRAINING_VIDEO],
+        ["transcript_segment", "training_concept"],
+        [],
+        "training_workflow_report",
+    ),
+]
+
+
+AGENT_ROLES = [
+    AgentRoleSpec(
+        name="manager_agent",
+        description="Routes work and selects skills.",
+        allowed_tools=[],
+        allowed_source_lanes=[],
+        prohibited_tools=[],
+    ),
+    AgentRoleSpec(
+        name="zoning_researcher",
+        description="Researches zoning with cited sources.",
+        allowed_tools=["search_municode", "get_municode_section", "extract_ordinance_rules"],
+        allowed_source_lanes=[SourceLane.ORDINANCE_CODE],
+        prohibited_tools=["run_pro_forma"],
+    ),
+    AgentRoleSpec(
+        name="gis_analyst",
+        description="Queries and classifies South Florida GIS evidence.",
+        allowed_tools=[
+            "search_south_florida_gis",
+            "query_gis_feature_service",
+            "classify_gis_applicability",
+            "validate_gis_claim",
+        ],
+        allowed_source_lanes=[SourceLane.SOUTH_FLORIDA_GIS],
+        prohibited_tools=["run_pro_forma"],
+    ),
+    AgentRoleSpec(
+        name="training_ingestion_analyst",
+        description="Discovers public training sources and extracts workflow concepts.",
+        allowed_tools=[
+            "discover_rehabvaluator_video_sections",
+            "fetch_video_metadata",
+            "discover_video_captions",
+            "segment_transcript",
+            "extract_training_concepts",
+        ],
+        allowed_source_lanes=[SourceLane.TRAINING_VIDEO],
+        prohibited_tools=["generate_lender_package"],
+    ),
+    AgentRoleSpec(
+        name="comping_analyst",
+        description=(
+            "Collects public sold-listing candidates and reconciles them against parcel, "
+            "county, and GIS context before underwriting uses them."
+        ),
+        allowed_tools=[
+            "lookup_property_info",
+            "find_comparables",
+            "capture_public_listing_comps",
+            "web_search",
+            "fetch_web_contents",
+            "resolve_site_boundary_context",
+            "classify_gis_applicability",
+            "validate_gis_claim",
+        ],
+        allowed_source_lanes=[
+            SourceLane.PARCEL_PROPERTY,
+            SourceLane.MARKET_COMPS,
+            SourceLane.SOUTH_FLORIDA_GIS,
+        ],
+        prohibited_tools=[
+            "run_pro_forma",
+            "run_residual_land_value",
+            "generate_acquisition_memo",
+            "generate_lender_package",
+            "export_report",
+        ],
+    ),
+    AgentRoleSpec(
+        name="development_underwriter",
+        description="Runs deterministic underwriting calculators.",
+        allowed_tools=[
+            "compute_feasibility",
+            "find_comparables",
+            "capture_public_listing_comps",
+            "load_rental_market_evidence",
+            "load_underwriting_market_profile",
+            "run_noi_valuation",
+            "run_pro_forma",
+            "run_residual_land_value",
+            "run_brrrr_refinance_analysis",
+            "run_sensitivity_analysis",
+            "create_construction_budget",
+        ],
+        allowed_source_lanes=[SourceLane.COST_ASSUMPTIONS],
+        prohibited_tools=[],
+    ),
+    AgentRoleSpec(
+        name="verifier_critic",
+        description="Verifies claims, math, and source support.",
+        allowed_tools=["validate_gis_claim", "verify_report"],
+        allowed_source_lanes=[SourceLane.SOUTH_FLORIDA_GIS, SourceLane.ORDINANCE_CODE],
+        prohibited_tools=[],
+        finalization_allowed=True,
+    ),
+]
