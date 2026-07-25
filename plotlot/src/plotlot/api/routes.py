@@ -20,7 +20,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
-from plotlot.pipeline.lookup import _agentic_analysis, PIPELINE_VERSION
+from plotlot.pipeline.lookup import _agentic_analysis, GENERIC_ZONING_QUERY, PIPELINE_VERSION
 from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
 from plotlot.observability.prompts import log_prompt_to_run
 from plotlot.storage.db import get_session
@@ -274,13 +274,58 @@ async def analyze_stream(request: AnalyzeRequest):
                 },
             )
             search_query = (
-                prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+                prop_record.zoning_code
+                if prop_record and prop_record.zoning_code
+                else GENERIC_ZONING_QUERY
             )
             session = await get_session()
             try:
                 search_results = await hybrid_search(session, municipality, search_query, limit=15)
             finally:
                 await session.close()
+
+            # ACP: on-demand ingestion when municipality has no indexed data
+            if not search_results:
+                from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": f"No data found for {municipality} — ingesting now…",
+                    },
+                )
+                async for progress in run_on_demand_ingestion(
+                    IngestRequest(
+                        municipality=municipality,
+                        state=state,
+                        county=county,
+                        trigger="search_miss",
+                    )
+                ):
+                    yield _sse_event("ingestion_progress", progress.model_dump())
+
+                # Re-run search after ingestion (may still be empty if ingestion failed)
+                session = await get_session()
+                try:
+                    search_results = await hybrid_search(
+                        session, municipality, search_query, limit=15
+                    )
+                finally:
+                    await session.close()
+
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "ingestion",
+                        "message": (
+                            f"Ingestion complete — found {len(search_results)} sections"
+                            if search_results
+                            else "Ingestion complete — proceeding with limited data"
+                        ),
+                        "complete": True,
+                    },
+                )
 
             yield _sse_event(
                 "status",
@@ -427,17 +472,65 @@ async def analyze_stream(request: AnalyzeRequest):
                 lot_width, lot_depth = parse_lot_dimensions(
                     report.property_record.lot_dimensions or "",
                 )
+                from plotlot.pipeline.extraction_verify import is_field_verified
+
+                # Coastal height overlay (San Diego Prop D) — a 30 ft cap generally
+                # west of I-5 that limits stories and can pull units below base
+                # zoning. Deterministic point-in-polygon; only a *confirmed* hit
+                # feeds the cap into the calculator. Best-effort: a failure leaves
+                # the firm number intact and surfaces a verify-warning instead.
+                coastal_height_limit: float | None = None
+                if "coastal_overlay" not in request.skip_steps:
+                    try:
+                        from plotlot.pipeline.coastal_overlay import fetch_coastal_height_overlay
+
+                        c_lat = report.property_record.lat or lat
+                        c_lng = report.property_record.lng or lng
+                        if c_lat is not None and c_lng is not None:
+                            coastal = await asyncio.wait_for(
+                                fetch_coastal_height_overlay(
+                                    c_lat,
+                                    c_lng,
+                                    city=municipality,
+                                    county=county,
+                                    state=state,
+                                ),
+                                timeout=12,
+                            )
+                            if coastal.status != "not_applicable":
+                                report.coastal_overlay = coastal
+                            if coastal.applies and coastal.height_limit_ft:
+                                coastal_height_limit = coastal.height_limit_ft
+                                report.warnings.append(coastal.note)
+                            elif coastal.status == "unverified":
+                                report.warnings.append(coastal.note)
+                    except Exception as exc:  # noqa: BLE001 — non-blocking
+                        logger.warning("Coastal overlay step skipped: %s", exc)
+
                 report.density_analysis = calculate_max_units(
                     lot_size_sqft=report.property_record.lot_size_sqft,
                     params=report.numeric_params,
                     lot_width_ft=lot_width,
                     lot_depth_ft=lot_depth,
+                    density_verified=is_field_verified(
+                        report.extraction_verification, "max_density_units_per_acre"
+                    ),
+                    min_lot_area_verified=is_field_verified(
+                        report.extraction_verification, "min_lot_area_per_unit_sqft"
+                    ),
+                    height_limit_ft=coastal_height_limit,
                 )
+                calc_msg = (
+                    f"Max units: {report.density_analysis.max_units} "
+                    f"({report.density_analysis.governing_constraint})"
+                )
+                if coastal_height_limit:
+                    calc_msg += f" · Prop D {coastal_height_limit:g} ft coastal height cap applied"
                 yield _sse_event(
                     "status",
                     {
                         "step": "calculation",
-                        "message": f"Max units: {report.density_analysis.max_units} ({report.density_analysis.governing_constraint})",
+                        "message": calc_msg,
                         "complete": True,
                     },
                 )
@@ -512,11 +605,36 @@ async def analyze_stream(request: AnalyzeRequest):
                     },
                 )
                 try:
+                    from plotlot.pipeline.cost_model import get_cost_model
                     from plotlot.pipeline.proforma import calculate_land_pro_forma
+                    from plotlot.pipeline.sensitivity import build_sensitivity_table
 
+                    cost_model = get_cost_model(state, county)
                     report.pro_forma = calculate_land_pro_forma(
                         density=report.density_analysis,
                         comps=report.comp_analysis,
+                        cost_model=cost_model,
+                    )
+                    report.sensitivity = build_sensitivity_table(
+                        density=report.density_analysis,
+                        comps=report.comp_analysis,
+                        cost_model=cost_model,
+                    )
+                    # Entitlement path, timeline + impact fees ("what it takes to build").
+                    from plotlot.pipeline.entitlement import assess_entitlement
+
+                    report.entitlement = assess_entitlement(report)
+                    # Deterministic plausibility guardrail — flags implausible or
+                    # uncorroborated inputs so a confident dollar figure is never
+                    # printed on top of a hallucinated unit count (San Diego).
+                    from plotlot.pipeline.guardrails import check_residual_plausibility
+
+                    lot_sqft_for_check = (
+                        report.property_record.lot_size_sqft if report.property_record else 0.0
+                    )
+                    # Preserve extraction-verification warnings; append residual ones.
+                    report.warnings = list(report.warnings or []) + check_residual_plausibility(
+                        report.density_analysis, lot_sqft_for_check, report.pro_forma
                     )
                     pf_msg = (
                         f"Max offer: ${report.pro_forma.max_land_price:,.0f}"
@@ -587,6 +705,51 @@ async def analyze_stream(request: AnalyzeRequest):
                     "status",
                     {"step": "site_risk", "message": "Skipped", "complete": True},
                 )
+
+            # CA state-program upside (ADU/SB9/Density Bonus) — deterministic,
+            # additive (base stays firm), with SB9 eligibility gated on site
+            # hazards we already computed. Runs last so site_risk is available.
+            if (
+                state.upper() == "CA"
+                and report.density_analysis
+                and report.density_analysis.max_units > 0
+            ):
+                from plotlot.pipeline.density_bonus import compute_density_uplift
+
+                sr = report.site_risk
+                report.density_uplift = compute_density_uplift(
+                    report.density_analysis.max_units,
+                    state=state,
+                    property_type=(
+                        report.numeric_params.property_type or "" if report.numeric_params else ""
+                    ),
+                    base_is_provisional=bool(
+                        report.extraction_verification
+                        and report.extraction_verification.offer_is_provisional
+                    ),
+                    in_flood_hazard=bool(sr and sr.flood_zone and sr.flood_zone.in_sfha),
+                    has_wetlands=bool(sr and sr.has_wetlands),
+                )
+
+                # Optional LLM local-override layer — proposes city-specific
+                # programs that exceed the state baseline, each only applied if a
+                # deterministic check corroborates it against the ordinance text.
+                # Best-effort: any failure leaves the deterministic uplift intact.
+                try:
+                    from plotlot.pipeline.local_overrides import get_local_overrides
+
+                    await asyncio.wait_for(
+                        get_local_overrides(
+                            report.density_uplift,
+                            municipality,
+                            report.zoning_district,
+                            search_results,
+                            section=report.source_refs[0].section if report.source_refs else "",
+                        ),
+                        timeout=20,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Local-override step skipped: %s", exc)
 
             # Final result
             report_dict = asdict(report)

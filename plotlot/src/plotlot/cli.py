@@ -467,7 +467,7 @@ def ingest_main() -> None:
 
         key = args[0]
         try:
-            count = asyncio.run(ingest_municipality(key))
+            count = asyncio.run(ingest_municipality(key, state=state_filter))
         except NvidiaCreditsExhaustedError as e:
             _print_credits_exhausted(str(e))
             sys.exit(2)

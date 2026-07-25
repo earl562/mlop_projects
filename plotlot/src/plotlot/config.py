@@ -65,6 +65,9 @@ class Settings(BaseSettings):
         self.database_url = url
         return self
 
+    # Debug mode — enables /debug/* endpoints (off by default in production)
+    debug_mode: bool = False
+
     # Auth (opt-in — app works without auth configured)
     auth_enabled: bool = False
     # Clerk JWT verification (RS256 via JWKS)
@@ -120,6 +123,10 @@ class Settings(BaseSettings):
     # Jina.ai search
     jina_api_key: str = ""
 
+    # RentCast — keyed comparable-sales API (fallback comps where no open GIS
+    # sales layer exists, e.g. San Diego). Free tier ~50 req/mo.
+    rentcast_api_key: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 
@@ -138,6 +145,7 @@ class Settings(BaseSettings):
             "openai_api_key",
             "openai_access_token",
             "jina_api_key",
+            "rentcast_api_key",
             "stripe_secret_key",
             "stripe_webhook_secret",
             "clerk_jwks_url",
@@ -204,7 +212,7 @@ class Settings(BaseSettings):
 
     # ArcGIS Hub
     arcgis_hub_api_url: str = "https://hub.arcgis.com/api/v3/datasets"
-    hub_discovery_timeout: float = 10.0
+    hub_discovery_timeout: float = 20.0
     hub_cache_ttl_hours: int = 168  # 7 days
 
     # Logging

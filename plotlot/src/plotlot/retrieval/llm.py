@@ -19,6 +19,7 @@ Auth:
 import asyncio
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -342,6 +343,57 @@ def _message_to_tool_calls(message) -> list[dict]:
     return tool_calls
 
 
+# Some NIM/Llama models occasionally emit a tool call as TEXT in the content —
+# `<tool_call>{"name": ..., "arguments": {...}}</tool_call>` — instead of a
+# structured tool_call. The agent loop then sees no tool_calls and streams the raw
+# JSON to the user (the tool never runs). This recovers those blobs.
+_TEXT_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
+
+
+def _recover_text_tool_calls(content: str) -> tuple[list[dict], str]:
+    """Parse text-emitted ``<tool_call>`` blobs into structured tool_calls.
+
+    Returns ``(tool_calls, cleaned_content)``. Only successfully-parsed blobs are
+    stripped from the content; an unparseable blob is left in place rather than
+    silently swallowed. ``([], content)`` when there is nothing to recover.
+    """
+    if not content or "<tool_call>" not in content:
+        return [], content
+
+    recovered: list[dict] = []
+    spans: list[tuple[int, int]] = []
+    for i, match in enumerate(_TEXT_TOOL_CALL_RE.finditer(content)):
+        try:
+            payload = json.loads(match.group(1))
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        name = payload.get("name")
+        if not name:
+            continue
+        # Tolerate both OpenAI-style "arguments" and "parameters".
+        args = payload.get("arguments", payload.get("parameters", {}))
+        if not isinstance(args, str):
+            args = json.dumps(args or {})
+        recovered.append(
+            {
+                "id": f"call_recovered_{i}",
+                "type": "function",
+                "function": {"name": name, "arguments": args},
+            }
+        )
+        spans.append(match.span())
+
+    if not recovered:
+        return [], content
+
+    cleaned = content
+    for start, end in reversed(spans):
+        cleaned = cleaned[:start] + cleaned[end:]
+    return recovered, cleaned.strip()
+
+
 def _log_usage(provider_slug: str, usage) -> tuple[int, int]:
     prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
     completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
@@ -416,6 +468,12 @@ async def _call_openai(
                     message = response.choices[0].message
                     tool_calls = _message_to_tool_calls(message)
                     content = _sanitize_primary_content(message.content)
+                    if not tool_calls:
+                        # Recover a tool call the model printed as text instead of
+                        # returning structurally (else it leaks raw JSON to the user).
+                        recovered, content = _recover_text_tool_calls(content)
+                        if recovered:
+                            tool_calls = recovered
                     prompt_tokens, completion_tokens = _log_usage(
                         "nvidia" if _using_nvidia_mainline() else "openai",
                         response.usage,
@@ -535,11 +593,16 @@ async def _call_groq(
                 response = await client.chat.completions.create(**kwargs)
                 message = response.choices[0].message
                 tool_calls = _message_to_tool_calls(message)
+                content = message.content or ""
+                if not tool_calls:
+                    recovered, content = _recover_text_tool_calls(content)
+                    if recovered:
+                        tool_calls = recovered
                 prompt_tokens, completion_tokens = _log_usage("groq", response.usage)
 
                 span.set_outputs(
                     {
-                        "has_content": bool(message.content),
+                        "has_content": bool(content),
                         "has_tool_calls": bool(tool_calls),
                         "retries": retries_used,
                         "prompt_tokens": prompt_tokens,
@@ -549,7 +612,7 @@ async def _call_groq(
 
                 breaker.record_success()
                 return {
-                    "content": message.content or "",
+                    "content": content,
                     "tool_calls": tool_calls,
                 }
             except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
@@ -771,8 +834,13 @@ def _clean_messages_for_api(messages: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 DIRECT_SYSTEM_PROMPT = """\
-You are a zoning analysis expert for South Florida real estate. You analyze municipal zoning \
-ordinance text and extract structured zoning information for a given property address.
+You are a zoning analyst. You extract structured zoning information from retrieved municipal \
+ordinance text for any US municipality.
+
+GROUNDING RULE: Every value you extract MUST be explicitly stated in the retrieved chunks. \
+If a value is not found in the text, use empty string "" or empty array []. \
+Do NOT use your training knowledge to fill gaps — wrong numbers cause real financial harm. \
+Null/empty is always correct when the text does not state the value.
 
 Given the zoning ordinance chunks retrieved for a municipality, extract and return a JSON object \
 with the following fields. Use empty string "" for fields you cannot determine from the provided text. \

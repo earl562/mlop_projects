@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -16,6 +17,68 @@ from plotlot.config import settings
 from plotlot.property.models import DatasetInfo
 
 logger = logging.getLogger(__name__)
+
+# Map 2-letter state abbreviations → full lowercase names for Hub metadata matching.
+# Dataset metadata typically contains "Nevada" or "Clark County, Nevada", not "NV".
+_STATE_FULL_NAMES: dict[str, str] = {
+    "al": "alabama",
+    "ak": "alaska",
+    "az": "arizona",
+    "ar": "arkansas",
+    "ca": "california",
+    "co": "colorado",
+    "ct": "connecticut",
+    "de": "delaware",
+    "fl": "florida",
+    "ga": "georgia",
+    "hi": "hawaii",
+    "id": "idaho",
+    "il": "illinois",
+    "in": "indiana",
+    "ia": "iowa",
+    "ks": "kansas",
+    "ky": "kentucky",
+    "la": "louisiana",
+    "me": "maine",
+    "md": "maryland",
+    "ma": "massachusetts",
+    "mi": "michigan",
+    "mn": "minnesota",
+    "ms": "mississippi",
+    "mo": "missouri",
+    "mt": "montana",
+    "ne": "nebraska",
+    "nv": "nevada",
+    "nh": "new hampshire",
+    "nj": "new jersey",
+    "nm": "new mexico",
+    "ny": "new york",
+    "nc": "north carolina",
+    "nd": "north dakota",
+    "oh": "ohio",
+    "ok": "oklahoma",
+    "or": "oregon",
+    "pa": "pennsylvania",
+    "ri": "rhode island",
+    "sc": "south carolina",
+    "sd": "south dakota",
+    "tn": "tennessee",
+    "tx": "texas",
+    "ut": "utah",
+    "vt": "vermont",
+    "va": "virginia",
+    "wa": "washington",
+    "wv": "west virginia",
+    "wi": "wisconsin",
+    "wy": "wyoming",
+    "dc": "district of columbia",
+}
+
+
+def _expand_state(state: str) -> str:
+    """Return the full state name for a 2-letter abbreviation, or the original."""
+    return _STATE_FULL_NAMES.get(state.lower().strip(), state.lower().strip())
+
 
 # Keywords used to score dataset relevance
 _PARCEL_FIELD_KEYWORDS = {
@@ -44,6 +107,72 @@ _ZONING_FIELD_KEYWORDS = {
 _PARCEL_NAME_KEYWORDS = {"parcel", "property", "appraiser", "tax", "cadastral"}
 _ZONING_NAME_KEYWORDS = {"zoning", "zone", "land use", "landuse", "planning"}
 
+# ---------------------------------------------------------------------------
+# Option 2 — State-level ArcGIS REST servers
+#
+# These are authoritative state/regional ArcGIS servers that host comprehensive
+# county parcel data.  They are NOT on ArcGIS Hub so the Hub search won't find
+# them.  The server URL is the root of the REST services tree (no trailing /).
+# Only add entries that have been live-tested and confirmed to contain parcel
+# data.  Keep the list small and accurate rather than large and flaky.
+# ---------------------------------------------------------------------------
+_STATE_SERVERS: dict[str, list[str]] = {
+    "nc": ["https://services.nconemap.gov/secure/rest/services"],  # NC1Map statewide parcels
+    "fl": ["https://ca.dep.state.fl.us/arcgis/rest/services"],  # FL DEP (county parcels)
+    "wa": ["https://gismaps.kingcounty.gov/arcgis/rest/services"],  # King County WA
+    "pa": ["https://gis.penndot.gov/arcgis/rest/services"],  # PA DOT
+}
+
+# Service-folder keywords that suggest parcel or zoning data.
+# Used when crawling an ArcGIS server tree to skip irrelevant folders.
+_RELEVANT_FOLDER_KEYWORDS = {
+    "parcel",
+    "property",
+    "assessor",
+    "appraisal",
+    "cadastral",
+    "zoning",
+    "planning",
+    "landuse",
+    "land_use",
+    "land use",
+}
+
+# ---------------------------------------------------------------------------
+# Option 3 — County ArcGIS server URL pattern templates
+#
+# {county} = lowercase county name slug (spaces removed, e.g. "losangeles")
+# {state}  = lowercase 2-letter state abbreviation (e.g. "ca")
+#
+# Patterns are tried in order; first one that returns a valid ArcGIS response
+# wins.  Derived from live survey of major-metro county GIS portals.
+# ---------------------------------------------------------------------------
+_COUNTY_URL_PATTERNS: list[str] = [
+    # county+state in subdomain  (Clark County NV → clarkcountynv.gov)
+    "https://gis.{county}county{state}.gov/arcgis/rest/services",
+    "https://maps.{county}county{state}.gov/arcgis/rest/services",
+    # county only in subdomain
+    "https://gis.{county}county.gov/arcgis/rest/services",
+    "https://maps.{county}county.gov/arcgis/rest/services",
+    "https://gismaps.{county}county.gov/arcgis/rest/services",  # King County WA
+    "https://arcgis.{county}county.gov/arcgis/rest/services",
+    # bare county name  (Maricopa AZ → gis.maricopa.gov)
+    "https://gis.{county}.gov/arcgis/rest/services",
+    "https://maps.{county}.gov/arcgis/rest/services",
+    "https://gis.{county}{state}.gov/arcgis/rest/services",  # variant
+    # co.county.state.us  (common midwest/rural pattern)
+    "https://gis.co.{county}.{state}.us/arcgis/rest/services",
+    "https://maps.co.{county}.{state}.us/arcgis/rest/services",
+    # .net TLD (some counties)
+    "https://gis.{county}county.net/arcgis/rest/services",
+    "https://gis.{county}.net/arcgis/rest/services",
+    # ArcGIS Online org  (county self-hosted on AGOL)
+    "https://{county}county.maps.arcgis.com/arcgis/rest/services",
+    "https://{county}{state}.maps.arcgis.com/arcgis/rest/services",
+    # county.gov at root  (no gis. prefix)
+    "https://{county}county.gov/arcgis/rest/services",
+]
+
 # Sub-area indicators: district/neighborhood datasets cover only a small slice
 # of the county and will fail spatial queries for addresses outside that area.
 _SUB_AREA_PENALTY_KEYWORDS = {
@@ -69,7 +198,12 @@ async def discover_datasets(
     validate_coverage: bool = True,
     place_hint: str | None = None,
 ) -> tuple[DatasetInfo | None, DatasetInfo | None]:
-    """Discover parcel + zoning datasets for a county via ArcGIS Hub.
+    """Discover parcel + zoning datasets for a county.
+
+    Discovery cascade (stops at the first source that returns a result):
+      1. ArcGIS Hub   — public global index (covers most well-published counties)
+      2. State servers — authoritative state-level ArcGIS REST servers (Option 2)
+      3. URL patterns  — probes common county GIS server URL templates (Option 3)
 
     Args:
         lat: Latitude of the target location.
@@ -80,24 +214,65 @@ async def discover_datasets(
     Returns:
         Tuple of (parcels_dataset, zoning_dataset). Either may be None.
     """
-    parcels = await _search_hub(
+    parcels, zoning = await _discover_pair(
         lat,
         lng,
         county,
         state,
-        dataset_type="parcels",
         validate_coverage=validate_coverage,
         place_hint=place_hint,
     )
-    zoning = await _search_hub(
-        lat,
-        lng,
-        county,
-        state,
-        dataset_type="zoning",
-        validate_coverage=validate_coverage,
-        place_hint=place_hint,
-    )
+    return parcels, zoning
+
+
+async def _discover_pair(
+    lat: float,
+    lng: float,
+    county: str,
+    state: str,
+    *,
+    validate_coverage: bool = True,
+    place_hint: str | None = None,
+) -> tuple[DatasetInfo | None, DatasetInfo | None]:
+    """Run the three-stage discovery cascade for both parcels and zoning."""
+
+    async def find(dataset_type: str) -> DatasetInfo | None:
+        # Stage 1: ArcGIS Hub
+        result = await _search_hub(
+            lat,
+            lng,
+            county,
+            state,
+            dataset_type=dataset_type,
+            validate_coverage=validate_coverage,
+            place_hint=place_hint,
+        )
+        if result:
+            return result
+
+        # Stage 2: State-level ArcGIS servers (Option 2)
+        result = await _search_state_servers(
+            lat,
+            lng,
+            county,
+            state,
+            dataset_type=dataset_type,
+        )
+        if result:
+            return result
+
+        # Stage 3: County URL pattern probing (Option 3)
+        result = await _probe_county_url_patterns(
+            lat,
+            lng,
+            county,
+            state,
+            dataset_type=dataset_type,
+        )
+        return result
+
+    parcels = await find("parcels")
+    zoning = await find("zoning")
     return parcels, zoning
 
 
@@ -112,11 +287,14 @@ async def _search_hub(
     place_hint: str | None = None,
 ) -> DatasetInfo | None:
     """Search Hub for a specific dataset type and return the best match."""
+    # Use full state name in Hub search queries — abbreviations like "NV" are
+    # less reliably indexed than "Nevada" in ArcGIS Hub metadata.
+    state_full = _expand_state(state) if len(state.strip()) == 2 else state
     place = f" {place_hint}" if place_hint else ""
     if dataset_type == "parcels":
-        search_term = f"property parcels {county} {state}{place}"
+        search_term = f"property parcels {county} {state_full}{place}"
     else:
-        search_term = f"zoning {county} {state}{place}"
+        search_term = f"zoning {county} {state_full}{place}"
 
     # Hub v3 API does not support filter[bbox]. Use filter[tags] for relevance
     # and rely on the search query + dataset scoring for spatial matching.
@@ -354,6 +532,8 @@ def _score_dataset(
     jurisdiction_lower = jurisdiction_text.lower()
     county_lower = county.lower().strip()
     state_lower = state.lower().strip()
+    # Also check the full state name so "NV" matches metadata containing "nevada"
+    state_full_lower = _expand_state(state_lower)
     place_lower = (place_hint or "").lower().strip()
 
     if county_lower and f"{county_lower} county" in jurisdiction_lower:
@@ -362,7 +542,9 @@ def _score_dataset(
         score += 5.0
     if place_lower and place_lower in jurisdiction_lower:
         score += 4.0
-    if state_lower and state_lower in jurisdiction_lower:
+    if state_lower and (
+        state_lower in jurisdiction_lower or state_full_lower in jurisdiction_lower
+    ):
         score += 1.0
 
     # Sub-area penalty — any hit disqualifies the dataset vs. county-wide ones.
@@ -396,3 +578,235 @@ def _score_dataset(
                 score += 2.0
 
     return score
+
+
+# ---------------------------------------------------------------------------
+# Option 2 — State-level ArcGIS server probing
+# ---------------------------------------------------------------------------
+
+
+async def _probe_arcgis_server(
+    base_url: str,
+    county: str,
+    state: str,
+    dataset_type: str,
+    lat: float,
+    lng: float,
+    *,
+    timeout: float = 10.0,
+) -> DatasetInfo | None:
+    """Crawl an ArcGIS REST services tree and return the best matching dataset.
+
+    Strategy:
+    1. Fetch the root ``/rest/services`` JSON to get the folder list.
+    2. Skip folders whose names contain none of ``_RELEVANT_FOLDER_KEYWORDS``.
+    3. For each relevant folder, fetch its services list.
+    4. For each MapServer/FeatureServer, fetch layer metadata.
+    5. Score with ``_score_dataset()`` and validate coverage.
+    """
+    from datetime import datetime, timezone
+
+    async def _get_json(url: str, params: dict | None = None) -> dict[str, Any] | None:
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(url, params={"f": "json", **(params or {})})
+                resp.raise_for_status()
+                result: dict[str, Any] = resp.json()
+                return result
+        except Exception:
+            logger.debug("ArcGIS probe failed: %s", url)
+            return None
+
+    root = await _get_json(base_url)
+    if not root:
+        return None
+
+    # Gather folders to probe (root services + relevant sub-folders)
+    folders_to_check: list[str] = [""]  # "" → root
+    for folder in root.get("folders", []):
+        folder_lower = folder.lower()
+        if any(kw in folder_lower for kw in _RELEVANT_FOLDER_KEYWORDS):
+            folders_to_check.append(folder)
+
+    best_score = -1.0
+    best_candidate: DatasetInfo | None = None
+
+    for folder in folders_to_check:
+        folder_url = f"{base_url}/{folder}" if folder else base_url
+        folder_data = await _get_json(folder_url)
+        if not folder_data:
+            continue
+
+        for svc in folder_data.get("services", []):
+            svc_type = svc.get("type", "")
+            if svc_type not in ("MapServer", "FeatureServer"):
+                continue
+
+            svc_name = svc.get("name", "")
+            # svc_name may be "FolderName/ServiceName"
+            svc_url = f"{base_url}/{svc_name}/{svc_type}"
+
+            svc_data = await _get_json(svc_url)
+            if not svc_data:
+                continue
+
+            for layer in svc_data.get("layers", []):
+                layer_id = layer.get("id", 0)
+                layer_url = f"{svc_url}/{layer_id}"
+                layer_data = await _get_json(layer_url)
+                if not layer_data:
+                    continue
+
+                fields = [f.get("name", "") for f in layer_data.get("fields", [])]
+                if not fields:
+                    continue
+
+                layer_name = layer_data.get("name", svc_name)
+                jurisdiction_text = f"{svc_name} {layer_name} {county} {state}"
+
+                score = _score_dataset(
+                    fields,
+                    layer_name,
+                    dataset_type,
+                    layer_url,
+                    jurisdiction_text=jurisdiction_text,
+                    county=county,
+                    state=state,
+                )
+                if score <= best_score:
+                    continue
+
+                candidate = DatasetInfo(
+                    dataset_id=layer_url,
+                    name=f"{svc_name}/{layer_name}",
+                    url=svc_url,
+                    layer_id=layer_id,
+                    dataset_type=dataset_type,
+                    county=county,
+                    state=state,
+                    fields=fields,
+                    discovered_at=datetime.now(timezone.utc),
+                )
+                if await _has_coverage(candidate, lat, lng):
+                    best_score = score
+                    best_candidate = candidate
+                    logger.debug(
+                        "ArcGIS probe candidate: %s score=%.2f",
+                        candidate.name,
+                        score,
+                    )
+
+    if best_candidate:
+        logger.info(
+            "ArcGIS probe found %s dataset for %s, %s: %s (score=%.2f)",
+            dataset_type,
+            county,
+            state,
+            best_candidate.name,
+            best_score,
+        )
+    return best_candidate
+
+
+async def _search_state_servers(
+    lat: float,
+    lng: float,
+    county: str,
+    state: str,
+    *,
+    dataset_type: str,
+) -> DatasetInfo | None:
+    """Option 2: probe known state-level ArcGIS REST servers.
+
+    Looks up ``_STATE_SERVERS[state.lower()]`` and calls ``_probe_arcgis_server``
+    on each server URL.  Returns the first successful result.
+    """
+    state_key = state.lower().strip()
+    # Accept both "nv" and "nevada" as keys
+    servers = _STATE_SERVERS.get(state_key) or _STATE_SERVERS.get(
+        state_key[:2] if len(state_key) > 2 else state_key
+    )
+    if not servers:
+        return None
+
+    logger.info(
+        "Trying %d state server(s) for %s, %s (%s)",
+        len(servers),
+        county,
+        state,
+        dataset_type,
+    )
+    for server_url in servers:
+        result = await _probe_arcgis_server(server_url, county, state, dataset_type, lat, lng)
+        if result:
+            return result
+
+    return None
+
+
+async def _probe_county_url_patterns(
+    lat: float,
+    lng: float,
+    county: str,
+    state: str,
+    *,
+    dataset_type: str,
+) -> DatasetInfo | None:
+    """Option 3: probe common county ArcGIS server URL templates.
+
+    Generates candidate URLs from ``_COUNTY_URL_PATTERNS`` using the county/state
+    slug, fires a HEAD request concurrently to filter live servers, then calls
+    ``_probe_arcgis_server`` on each live server in score order.
+    """
+    import asyncio
+    import re
+
+    county_slug = re.sub(r"[^a-z0-9]", "", county.lower())
+    state_slug = state.lower().strip()
+    if len(state_slug) > 2:
+        # Convert full state name to 2-letter for URL patterns
+        for abbr, full in _STATE_FULL_NAMES.items():
+            if full == state_slug:
+                state_slug = abbr
+                break
+
+    candidate_urls = [
+        pat.format(county=county_slug, state=state_slug) for pat in _COUNTY_URL_PATTERNS
+    ]
+
+    # Quick HEAD probe — skip URLs that don't return 200 at the root
+    async def _is_live(url: str) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url, params={"f": "json"})
+                return resp.status_code < 400
+        except Exception:
+            return False
+
+    logger.info(
+        "Probing %d URL patterns for %s, %s (%s)",
+        len(candidate_urls),
+        county,
+        state,
+        dataset_type,
+    )
+    live_flags = await asyncio.gather(*[_is_live(url) for url in candidate_urls])
+    live_urls = [url for url, alive in zip(candidate_urls, live_flags) if alive]
+
+    if not live_urls:
+        logger.info("No live county GIS servers found for %s, %s", county, state)
+        return None
+
+    logger.info(
+        "%d live server(s) found for %s, %s: %s",
+        len(live_urls),
+        county,
+        state,
+        live_urls[:3],
+    )
+    for server_url in live_urls:
+        result = await _probe_arcgis_server(server_url, county, state, dataset_type, lat, lng)
+        if result:
+            return result
+
+    return None

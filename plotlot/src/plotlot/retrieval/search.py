@@ -14,6 +14,19 @@ logger = logging.getLogger(__name__)
 # RRF constant — controls how much top ranks dominate
 RRF_K = 60
 
+# Municipality match predicate. The ordinance key (ingested city) and the
+# parcel/geocode municipality can differ: the parcel layer / Geocodio returns
+# composite CDP names like "Belvedere Tiburon" while ordinances were ingested
+# under the incorporated city "Tiburon". Match in BOTH directions —
+#   1. stored key contains the requested name  (existing behavior), OR
+#   2. the requested name contains the stored key  ("Belvedere Tiburon" ⊃ "Tiburon").
+# Additive: never removes a match the one-directional filter would have made.
+# char_length guard avoids a too-short stored key matching unrelated requests.
+_MUNI_WHERE = (
+    "(municipality ILIKE :municipality "
+    "OR (char_length(municipality) >= 4 AND :municipality_raw ILIKE '%' || municipality || '%'))"
+)
+
 
 async def hybrid_search(
     session: AsyncSession,
@@ -106,7 +119,7 @@ async def _hybrid_rrf(
                    chapter, municode_node_id, source_url,
                    ROW_NUMBER() OVER (ORDER BY embedding <=> CAST(:embedding AS vector)) AS vrank
             FROM ordinance_chunks
-            WHERE municipality ILIKE :municipality
+            WHERE {_MUNI_WHERE}
               AND embedding IS NOT NULL
             ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :pool
@@ -116,7 +129,7 @@ async def _hybrid_rrf(
                    chapter, municode_node_id, source_url,
                    ROW_NUMBER() OVER (ORDER BY ts_rank(search_vector, plainto_tsquery(:query)) DESC) AS krank
             FROM ordinance_chunks
-            WHERE municipality ILIKE :municipality
+            WHERE {_MUNI_WHERE}
               AND (search_vector @@ plainto_tsquery(:query)
                    OR :zone_code = ANY(zone_codes))
             ORDER BY ts_rank(search_vector, plainto_tsquery(:query)) DESC
@@ -151,6 +164,7 @@ async def _hybrid_rrf(
 
     params: dict = {
         "municipality": f"%{municipality}%",
+        "municipality_raw": municipality,
         "zone_code": zone_code,
         "query": zone_code,
         "embedding": embedding_str,
@@ -188,12 +202,12 @@ async def _keyword_only(
     limit: int,
 ) -> list[SearchResult]:
     """Keyword-only fallback when embedding is unavailable."""
-    query = text("""
+    query = text(f"""
         SELECT id, section, section_title, zone_codes, chunk_text, municipality,
                chapter, municode_node_id, source_url,
                ts_rank(search_vector, plainto_tsquery(:query)) AS rank
         FROM ordinance_chunks
-        WHERE municipality ILIKE :municipality
+        WHERE {_MUNI_WHERE}
           AND (search_vector @@ plainto_tsquery(:query)
                OR :zone_code = ANY(zone_codes))
         ORDER BY rank DESC
@@ -204,6 +218,7 @@ async def _keyword_only(
         query,
         {
             "municipality": f"%{municipality}%",
+            "municipality_raw": municipality,
             "zone_code": zone_code,
             "query": zone_code,
             "limit": limit,

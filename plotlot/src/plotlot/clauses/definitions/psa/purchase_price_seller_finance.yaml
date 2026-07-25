@@ -6,7 +6,7 @@ deal_types: [seller_finance]
 order_weight: 300
 is_required: true
 group_id: psa_financing
-condition_expr: "context.financing_type == 'seller_carryback'"
+condition_expr: "context.financing_type in ['seller_carryback', 'seller_finance', '']"
 source: "SubTo Purchase Contract Sections 1.5, 1.14, 3.4"
 formatting:
   heading_level: 2
@@ -25,3 +25,5 @@ content_template: |
   Maturity Date: {{ context.maturity_date or '[MATURITY DATE]' }}
 
   Monthly Payment will be made to: Directly to Seller.
+
+  Note: In {{ state_code or '[STATE]' }}, owner-financed sales are commonly documented as a "{{ contract_term or 'installment land contract' }}"; the parties will use the instrument appropriate to the structure above.

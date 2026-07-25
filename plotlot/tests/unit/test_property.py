@@ -1,9 +1,10 @@
 """Tests for multi-county property lookup via ArcGIS REST APIs."""
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from plotlot.core.types import PropertyRecord
+from plotlot.property.california import CaliforniaProvider
 from plotlot.retrieval.property import (
     BROWARD_CITY_CODES,
     _extract_city_hint,
@@ -447,3 +448,102 @@ class TestLookupProperty:
         assert result is not None
         assert result.zoning_code == "RU-1"
         assert result.zoning_description == "Single Family Residential"
+
+
+class TestCaliforniaCountyRouting:
+    """Regression: CA counties without a dedicated registration must reach the
+    CaliforniaProvider (statewide parcel layer), not the generic UniversalProvider.
+
+    Marin (Sausalito / Tiburon) reported "not found" in production because
+    get_provider("marin") routed it to UniversalProvider — which misses Bay Area
+    parcels — even though 416 Richardson St (APN 065-234-10) exists in the CA
+    statewide parcel layer. Ingesting Marin's ordinances does not create a parcel
+    provider; routing does.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unregistered_ca_county_routes_to_california_provider(self):
+        sentinel = PropertyRecord(
+            folio="065-234-10",
+            address="416 RICHARDSON ST",
+            county="Marin",
+            lot_size_sqft=765.0,
+        )
+        with (
+            patch.object(
+                CaliforniaProvider, "lookup", new_callable=AsyncMock, return_value=sentinel
+            ) as mock_ca,
+            patch("plotlot.property.registry.get_provider") as mock_get_provider,
+        ):
+            result = await lookup_property(
+                "416 Richardson St, Sausalito, CA",
+                county="Marin",
+                lat=37.8500,
+                lng=-122.4823,
+                state="CA",
+            )
+
+        assert result is sentinel
+        mock_ca.assert_awaited_once()
+        # Must NOT fall through to the generic registry/UniversalProvider path.
+        mock_get_provider.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_registered_ca_county_still_uses_registry(self):
+        """San Diego is registered, so it keeps using the registry path."""
+        sentinel = PropertyRecord(folio="X", address="1233 Hueneme St", county="San Diego")
+        mock_provider = AsyncMock()
+        mock_provider.lookup = AsyncMock(return_value=sentinel)
+        with patch(
+            "plotlot.property.registry.get_provider", return_value=mock_provider
+        ) as mock_get_provider:
+            result = await lookup_property(
+                "1233 Hueneme St, San Diego, CA",
+                county="San Diego",
+                lat=32.7574,
+                lng=-117.2042,
+                state="CA",
+            )
+
+        mock_get_provider.assert_called_once_with("San Diego")
+        assert result is sentinel
+
+    @pytest.mark.asyncio
+    async def test_non_ca_county_does_not_route_to_california(self):
+        """A non-CA unregistered county keeps the generic registry path."""
+        mock_provider = AsyncMock()
+        mock_provider.lookup = AsyncMock(return_value=None)
+        with (
+            patch(
+                "plotlot.property.registry.get_provider", return_value=mock_provider
+            ) as mock_get_provider,
+            patch.object(CaliforniaProvider, "lookup", new_callable=AsyncMock) as mock_ca,
+        ):
+            result = await lookup_property(
+                "100 Congress Ave, Austin, TX",
+                county="Travis",
+                lat=30.2672,
+                lng=-97.7431,
+                state="TX",
+            )
+
+        mock_get_provider.assert_called_once_with("Travis")
+        mock_ca.assert_not_awaited()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_ca_routing_requires_state(self):
+        """Without state, county alone can't be known as CA — registry path is used.
+        All real callers pass state from the geocoder, so this documents the contract."""
+        mock_provider = AsyncMock()
+        mock_provider.lookup = AsyncMock(return_value=None)
+        with (
+            patch(
+                "plotlot.property.registry.get_provider", return_value=mock_provider
+            ) as mock_get_provider,
+            patch.object(CaliforniaProvider, "lookup", new_callable=AsyncMock) as mock_ca,
+        ):
+            await lookup_property("416 Richardson St", county="Marin", lat=37.85, lng=-122.48)
+
+        mock_get_provider.assert_called_once_with("Marin")
+        mock_ca.assert_not_awaited()

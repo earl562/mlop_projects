@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard, VerificationStatus
 from sqlalchemy import (
     Column,
     DateTime,
@@ -18,7 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -65,6 +66,87 @@ class OrdinanceChunk(Base):
 
     # State/region field (B6) — supports multi-state expansion (FL, NC, etc.)
     state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+
+    # Phase 1 master-spec §7 columns (migration 010) — source authority + snapshot linkage.
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    chunk_kind: Mapped[str | None] = mapped_column(String(40), nullable=True, default="narrative")
+    quality_flags: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
+    table_row_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class OrdinanceSection(Base):
+    """One row per ordinance section: the hierarchical index over chunks.
+
+    While `OrdinanceChunk` is the embedding/retrieval unit, `OrdinanceSection`
+    is the *structural* unit: a section's path (breadcrumb), its role
+    (`section_type`), and its outbound cross-references (`cross_refs`). This
+    is the substrate for Phase 8's AgenticRAG — `open_section` / `follow_cross_ref`
+    tools navigate this index, and the `dimensional_table` fast-path (Slice 8.2)
+    selects rows by `section_type='dimensional_table'`. `referenced_by` is the
+    reverse index (node_ids that cite this section); it defaults to empty and is
+    populated by the Slice 3.5 backfill that scans every section's `cross_refs`.
+
+    Natural key: (municipality, node_id) — one section per municode node, even
+    though a section fans out to many chunks. `state` is nullable so PDF-only
+    municipalities (San Diego) that lack a municode node_id can still index
+    sections once their scraper supplies a synthetic node_id (Slice 3.5).
+    """
+
+    __tablename__ = "ordinance_sections"
+    __table_args__ = (
+        UniqueConstraint(
+            "municipality",
+            "node_id",
+            name="uq_section_natural_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    municipality: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+    # municode node id; synthetic for PDF-only sources. Null only before first
+    # backfill — the natural-key constraint treats (municipality, node_id), so a
+    # null node_id still enforces one row per municipality-null group.
+    node_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+
+    heading: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    section_number: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    section_title: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # regulation | definition | schedule | dimensional_table | use_regulation
+    section_type: Mapped[str] = mapped_column(String(40), nullable=False, default="regulation")
+
+    # Hierarchical breadcrumb, root-first: ["Chapter 47", "Sec. 47-5.60"].
+    path: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    # Outbound section-number references extracted from the section text
+    # (e.g. ["47-24.3", "47-5.601"]). Drives follow_cross_ref traversal.
+    cross_refs: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    # Reverse index: node_ids whose cross_refs cite this section. Populated by
+    # the Slice 3.5 backfill; empty until then.
+    referenced_by: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+
+    # Provenance — mirrors OrdinanceChunk lineage so freshness (Slice 3.4) and
+    # source-boundary checks can resolve against the section, not just chunks.
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Phase 1 master-spec §7 columns (migration 010)
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    quality_flags: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
 
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -577,3 +659,229 @@ class EvalCaseResult(Base):
     evidence_metrics_json = Column(JSON, nullable=False, default=dict)
     trajectory_metrics_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class DistrictDimensionalStandardORM(Base):
+    """Typed, provenance-backed dimensional standards per zoning district.
+
+    The verified-fact source for the calculator at query time (WIRE-1.1b): a
+    district's setbacks / height / FAR / coverage / density come from a typed
+    row extracted from the ordinance's Schedule of District Regulations at
+    ingestion time, not from LLM re-parsing the table on every analysis.
+
+    Provisioned by ``init_db``→``Base.metadata.create_all``; populated by the
+    ingestion extractor (Slice 3.2 generalizes across municipalities). Natural
+    key: ``(municipality, district_code)`` — one row per (municipality, district).
+    """
+
+    __tablename__ = "district_dimensional_standards"
+    __table_args__ = (
+        UniqueConstraint(
+            "municipality",
+            "district_code",
+            name="uq_district_dimensional_standard",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    municipality: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, default="FL")
+    district_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+
+    min_lot_area_sqft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_lot_width_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_front_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_side_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    setback_rear_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_height_ft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_lot_coverage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    far: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_density_units_per_acre: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Provenance: the originating ordinance section (Slice 3.2's evidence graph).
+    source_section_id: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    source_url: Mapped[str] = mapped_column(Text, nullable=True)
+    extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=func.now()
+    )
+
+    # Verification status (Slice 3.2 review): only VERIFIED rows produce
+    # verified_fact/local_authority claims. STAGED rows are assumption-grade.
+    verification_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="unverified", index=True)
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def to_domain(self) -> DistrictDimensionalStandard:
+        """Convert the ORM row to the frozen domain type the calculator consumes."""
+        return DistrictDimensionalStandard(
+            municipality=self.municipality,
+            county=self.county,
+            state=self.state or "",
+            district_code=self.district_code,
+            min_lot_area_sqft=self.min_lot_area_sqft,
+            min_lot_width_ft=self.min_lot_width_ft,
+            setback_front_ft=self.setback_front_ft,
+            setback_side_ft=self.setback_side_ft,
+            setback_rear_ft=self.setback_rear_ft,
+            max_height_ft=self.max_height_ft,
+            max_lot_coverage_pct=self.max_lot_coverage_pct,
+            far=self.far,
+            max_density_units_per_acre=self.max_density_units_per_acre,
+            source_section_id=self.source_section_id,
+            source_url=self.source_url or "",
+            extracted_at=self.extracted_at or func.now(),
+            verification_status=VerificationStatus(self.verification_status or "unverified"),
+        )
+
+
+class CountySchema(Base):
+    """Discovered ArcGIS dataset schemas and field mappings for any US county.
+
+    Single source of truth for dynamic county property/zoning lookup.
+    Replaces Firestore cache — county_key is the primary key (e.g. "san diego").
+    TTL enforced in application code (default 7 days / 168 hours).
+    """
+
+    __tablename__ = "county_schemas"
+
+    county_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+
+    # Serialised DatasetInfo objects (nullable — may not have zoning layer)
+    parcels_dataset: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    zoning_dataset: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Serialised FieldMapping (nullable — generated on first lookup)
+    field_mapping: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    ttl_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=168)
+    last_verified: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — master spec §7: source authorities, snapshots, harness events
+# ---------------------------------------------------------------------------
+
+
+class JurisdictionSourceAuthorityORM(Base):
+    """A typed, provenance-backed source authority for one jurisdiction.
+
+    Master spec §5 + §7. The ingestion unit — not "a city" but a
+    (jurisdiction, scope, provider) triple. Natural key:
+    (state, county, municipality, authority_scope, provider).
+    """
+
+    __tablename__ = "jurisdiction_source_authorities"
+    __table_args__ = (
+        UniqueConstraint(
+            "state", "county", "municipality", "authority_scope", "provider",
+            name="uq_jurisdiction_source_authority_natural_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    municipality: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    jurisdiction_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    authority_scope: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    official_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    legal_caveat: Mapped[str] = mapped_column(Text, nullable=False)
+    freshness_policy: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    supplement_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    effective_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ingestion_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
+    coverage_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class OrdinanceSourceSnapshotORM(Base):
+    """One raw fetch of a source authority's content (master spec §7).
+
+    Stored BEFORE parsing (raw snapshot), content-hashed for idempotency.
+    Natural key: (source_authority_id, content_hash).
+    """
+
+    __tablename__ = "ordinance_source_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_authority_id", "content_hash",
+            name="uq_ordinance_source_snapshot_natural_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    source_authority_id: Mapped[str] = mapped_column(
+        String(120), ForeignKey("jurisdiction_source_authorities.id"), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    final_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_storage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_text_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    etag: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class HarnessEventORM(Base):
+    """Stable event envelope for ingestion + analysis runs (master spec §6).
+
+    Persisted audit trail. Queryable by run (analysis_run_id / ingestion_run_id).
+    Append-only.
+    """
+
+    __tablename__ = "harness_events"
+    __table_args__ = (
+        UniqueConstraint("id", name="uq_harness_event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    correlation_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False, default="info")
+    workspace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    project_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    site_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    analysis_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    analysis_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ingestion_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_authority_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    tool_run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

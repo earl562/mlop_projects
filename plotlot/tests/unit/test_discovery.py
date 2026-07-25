@@ -20,6 +20,7 @@ from plotlot.ingestion.discovery import (
     get_municode_configs,
     normalize_county_key,
     resolve_municode_config,
+    zoning_rank,
 )
 
 
@@ -163,6 +164,34 @@ class TestSearchTocForZoning:
         toc = [{"Heading": "ULDC - Regulations", "Title": "", "Id": "ULDC1"}]
         matches = _search_toc_for_zoning(toc)
         assert len(matches) == 1
+
+
+class TestZoningRank:
+    """Regression: the primary code must outrank specialized/partial codes that
+    merely contain the word 'zoning'. These are the exact headings that mis-routed
+    Tiburon and Marin re-ingestion."""
+
+    def test_development_code_beats_coastal_zoning(self):
+        # Marin: "Title 22 - Development Code" is the real ordinance, not the
+        # "Title 20 - Coastal Zoning Code" the naive picker chose.
+        assert zoning_rank("Title 22 - Development Code") < zoning_rank(
+            "Title 20 - Coastal Zoning Code"
+        )
+
+    def test_zoning_chapter_beats_unrelated_title(self):
+        # Tiburon: "Chapter 16 - Zoning" must beat "Title III - Businesses,
+        # Professions and Utilities".
+        assert zoning_rank("Chapter 16 - ZONING") < zoning_rank(
+            "TITLE III - BUSINESSES, PROFESSIONS AND UTILITIES"
+        )
+
+    def test_specialized_codes_are_demoted(self):
+        base = zoning_rank("Chapter 16 - ZONING")
+        for specialized in ["Chapter 16A - Signs", "Coastal Zoning Code", "Historic Overlay"]:
+            assert zoning_rank(specialized) > base, specialized
+
+    def test_development_code_is_top_rank(self):
+        assert zoning_rank("Land Development Code") == 0
 
 
 # ---------------------------------------------------------------------------

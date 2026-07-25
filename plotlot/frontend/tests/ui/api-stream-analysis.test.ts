@@ -115,7 +115,7 @@ describe("streamAnalysis", () => {
       { address: report.address },
       () => {},
       (result) => {
-        receivedResult = result as typeof report;
+        receivedResult = result as unknown as typeof report;
       },
       (error) => {
         receivedError = error;
@@ -206,7 +206,7 @@ describe("streamAnalysis", () => {
         statuses.push(status.step);
       },
       (result) => {
-        receivedResult = result as typeof report;
+        receivedResult = result as unknown as typeof report;
       },
       (error) => {
         receivedError = error;

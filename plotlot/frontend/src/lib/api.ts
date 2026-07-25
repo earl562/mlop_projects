@@ -819,7 +819,7 @@ export interface DocumentTemplateInfo {
 export interface DocumentGenerateParams {
   document_type: string;
   deal_type: string;
-  context: Record<string, string | number>;
+  context: Record<string, string | number | boolean>;
   output_format?: string;
 }
 
