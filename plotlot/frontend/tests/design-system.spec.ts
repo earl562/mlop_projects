@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("PlotLot design system", () => {
   test("root route presents the restored public homepage", async ({ page }, testInfo) => {

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("sidebar navigation", () => {
   test("sidebar items are clickable and switch between lookup and agent modes", async ({ page }) => {

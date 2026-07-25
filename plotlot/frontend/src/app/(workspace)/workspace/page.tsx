@@ -147,6 +147,7 @@ export default function Home() {
   const messagesRef = useRef<DisplayMessage[]>([]);
   const currentReportRef = useRef<ZoningReportData | null>(null);
   const modeRef = useRef<AppMode>("lookup");
+  const pendingRouteModeRef = useRef<AppMode | null>(null);
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
@@ -211,11 +212,26 @@ export default function Home() {
   useEffect(() => { localSessionIdRef.current = localSessionId; }, [localSessionId]);
 
   useEffect(() => {
+    const pendingMode = pendingRouteModeRef.current;
+    if (pendingMode) {
+      if (routeMode === pendingMode) {
+        pendingRouteModeRef.current = null;
+      } else {
+        return;
+      }
+    }
     if (routeMode === modeRef.current) return;
     setMode(routeMode);
     setContextualSuggestions([]);
     setInputError(null);
   }, [routeMode]);
+
+  const selectMode = useCallback((nextMode: AppMode) => {
+    pendingRouteModeRef.current = nextMode;
+    setMode(nextMode);
+    setContextualSuggestions([]);
+    setInputError(null);
+  }, []);
 
   useEffect(() => {
     if (pathname !== "/workspace") return;
@@ -230,15 +246,13 @@ export default function Home() {
       const nextMode = (event as CustomEvent<{ mode?: AppMode }>).detail?.mode;
       if (!nextMode) return;
       if (nextMode !== modeRef.current) {
-        setMode(nextMode);
-        setContextualSuggestions([]);
-        setInputError(null);
+        selectMode(nextMode);
       }
       setTimeout(() => inputRef.current?.focus(), 50);
     };
     window.addEventListener("plotlot:mode-change", handler);
     return () => window.removeEventListener("plotlot:mode-change", handler);
-  }, []);
+  }, [selectMode]);
 
   // Persist backend sessionId
   useEffect(() => {
@@ -431,6 +445,7 @@ export default function Home() {
             updateMessage(progressId, {
               role: "assistant",
               content: errorContent,
+              pipelineSteps: undefined,
               errorType: isTimeout ? "timeout" : isBadAddress ? "bad_address" : isBackendUnavailable ? "backend_unavailable" : "generic",
               retryAddress: address,
             } as Partial<DisplayMessage>);
@@ -461,6 +476,9 @@ export default function Home() {
         updateMessage(progressId, {
           role: "assistant",
           content: `Connection error: ${err instanceof Error ? err.message : "Failed to reach backend"}`,
+          pipelineSteps: undefined,
+          errorType: "generic",
+          retryAddress: address,
         });
       }
     },
@@ -487,44 +505,41 @@ export default function Home() {
 
       addMessage({ role: "user", content: text.trim() });
 
-      // Lookup mode: address → analysis pipeline
-      if (mode === "lookup" && address) {
-        setCurrentReport(null);
-        await runAnalysis(address);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Agent mode: address detected — run pipeline directly
-      if (address && !currentReport) {
-        await runAnalysis(address);
-        setIsProcessing(false);
-        return;
-      }
-      if (address && currentReport) {
-        setCurrentReport(null);
-        await runAnalysis(address);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Regular chat (agent mode only)
-      const assistantId = addMessage({
-        role: "assistant",
-        content: "",
-        isStreaming: true,
-        toolActivity: [],
-        thinkingEvents: [],
-      });
-      const history: ChatMessageData[] = [
-        ...messagesRef.current
-          .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
-          .slice(-9)
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user" as const, content: text.trim() },
-      ];
-
       try {
+        // Lookup mode: address → analysis pipeline
+        if (mode === "lookup" && address) {
+          setCurrentReport(null);
+          await runAnalysis(address);
+          return;
+        }
+
+        // Agent mode: address detected — run pipeline directly
+        if (address && !currentReport) {
+          await runAnalysis(address);
+          return;
+        }
+        if (address && currentReport) {
+          setCurrentReport(null);
+          await runAnalysis(address);
+          return;
+        }
+
+        // Regular chat (agent mode only)
+        const assistantId = addMessage({
+          role: "assistant",
+          content: "",
+          isStreaming: true,
+          toolActivity: [],
+          thinkingEvents: [],
+        });
+        const history: ChatMessageData[] = [
+          ...messagesRef.current
+            .filter((m) => m.role === "user" || (m.role === "assistant" && m.content))
+            .slice(-9)
+            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+          { role: "user" as const, content: text.trim() },
+        ];
+
         await streamChat(
           text.trim(),
           history,
@@ -604,14 +619,9 @@ export default function Home() {
             );
           },
         );
-      } catch {
-        updateMessage(assistantId, {
-          content: "Connection failed. Is the backend running?",
-          isStreaming: false,
-        });
+      } finally {
+        setIsProcessing(false);
       }
-
-      setIsProcessing(false);
     },
     [isProcessing, currentReport, sessionId, mode, addMessage, updateMessage, runAnalysis],
   );
@@ -657,6 +667,9 @@ export default function Home() {
       for (let i = assistantIndex - 1; i >= 0; i -= 1) {
         const candidate = snapshot[i];
         if (candidate?.role === "user" && candidate.content.trim()) {
+          const trimmed = snapshot.slice(0, i);
+          messagesRef.current = trimmed;
+          setMessages(trimmed);
           void sendMessage(candidate.content);
           return;
         }
@@ -664,6 +677,19 @@ export default function Home() {
       toast("Nothing to retry yet", "info");
     },
     [sendMessage, toast],
+  );
+
+  const retryAnalysis = useCallback(
+    async (address: string) => {
+      if (isProcessing) return;
+      setIsProcessing(true);
+      try {
+        await runAnalysis(address);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [isProcessing, runAnalysis],
   );
 
   const handleSave = useCallback(
@@ -792,7 +818,7 @@ export default function Home() {
                     data-testid="agent-input"
                   />
                 )}
-                <ModeToggle mode={mode} onChange={setMode} />
+                <ModeToggle mode={mode} onChange={selectMode} />
                 <button
                   type="submit"
                   disabled={!input.trim() || isProcessing}
@@ -835,8 +861,7 @@ export default function Home() {
   // ─── Conversation State ───────────────────────────────────────────────
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col">
-      {/* New Analysis button — fixed top-right */}
-      <div className="fixed right-4 top-5 z-40 sm:right-6">
+      <div className="absolute right-4 top-5 z-40 sm:right-6">
         <button
           type="button"
           onClick={handleNewAnalysis}
@@ -857,7 +882,7 @@ export default function Home() {
         className="flex-1 overflow-y-auto pb-52"
         data-testid="conversation-scroll"
       >
-        <div className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+        <div className="mx-auto w-full max-w-5xl px-3 pb-4 pt-16 sm:px-4 sm:pb-6 sm:pt-20">
           <div className="min-w-0">
             <div className="space-y-4 sm:space-y-6" role="log" aria-live="polite" aria-label="Analysis conversation">
               {messages.map((msg, msgIndex) => (
@@ -1171,13 +1196,13 @@ export default function Home() {
                         {/* Error recovery buttons */}
                         {msg.errorType && !msg.isStreaming && (
                           <div className="mt-3 flex gap-2">
-                            {(msg.errorType === "timeout" || msg.errorType === "backend_unavailable") && msg.retryAddress && (
+                            {msg.retryAddress && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   setMessages((prev) => prev.filter((m) => m.id !== msg.id));
                                   if (msg.retryAddress) {
-                                    void runAnalysis(msg.retryAddress);
+                                    void retryAnalysis(msg.retryAddress);
                                   }
                                 }}
                                 disabled={isProcessing}
@@ -1244,7 +1269,7 @@ export default function Home() {
                 <button
                   type="button"
                   key={s}
-                  onClick={() => { setMode("agent"); sendMessage(s); }}
+                  onClick={() => { selectMode("agent"); sendMessage(s); }}
                   className="min-h-[44px] rounded-full border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm text-amber-700 transition-all hover:bg-amber-100 hover:-translate-y-0.5 active:scale-[0.98] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50 sm:min-h-0 sm:py-1.5"
                 >
                   {s}

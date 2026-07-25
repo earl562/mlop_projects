@@ -6,6 +6,7 @@ import type { NextConfig } from "next";
 const workspaceRoot = path.join(__dirname, "..", "..");
 
 const nextConfig: NextConfig = {
+  distDir: process.env.PLAYWRIGHT_TESTING === "1" ? ".next-playwright" : ".next",
   output: "standalone",
   outputFileTracingRoot: workspaceRoot,
   turbopack: {

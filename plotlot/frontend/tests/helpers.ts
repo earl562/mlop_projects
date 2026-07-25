@@ -1,7 +1,7 @@
-import { expect, Page, APIRequestContext } from "@playwright/test";
+import { type Page, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
-export { test } from "@playwright/test";
-export { expect };
+export { test, expect };
 
 export interface BackendPreflight {
   status: string;
@@ -98,16 +98,26 @@ export async function gotoLanding(page: Page) {
 }
 
 export async function switchToAgent(page: Page) {
-  await page.getByRole("button", { name: "Agent" }).click();
-  await expect(page.getByTestId("agent-input")).toBeVisible();
+  const agentInput = page.getByTestId("agent-input");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.getByRole("button", { name: "Agent" }).click();
+    if (await agentInput.isVisible().catch(() => false)) break;
+    await page.waitForTimeout(200);
+  }
+  await expect(agentInput).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
   await expect(page).toHaveURL(/\/workspace(?:\?mode=(?:agent|lookup))?$/);
 }
 
 export async function switchToLookup(page: Page) {
-  await page.getByRole("button", { name: "Lookup" }).click();
+  const lookupInput = page.getByTestId("lookup-input");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.getByRole("button", { name: "Lookup" }).click();
+    if (await lookupInput.isVisible().catch(() => false)) break;
+    await page.waitForTimeout(200);
+  }
   await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
-  await expect(page.getByTestId("lookup-input")).toBeVisible();
+  await expect(lookupInput).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
 }
 
@@ -118,12 +128,22 @@ export async function runLookupFlow(
   const input = page.getByTestId("lookup-input");
   const sendButton = page.getByTestId("send-button");
 
-  // In some environments the page can hydrate after the first fill, wiping the input value.
-  // Retry until the controlled value "sticks" before attempting to submit.
+  await page.route("**/api/v1/autocomplete**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ suggestions: [] }),
+    }));
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await input.fill(address);
-    if ((await input.inputValue().catch(() => "")) === address) break;
     await page.waitForTimeout(150);
+    if (
+      (await input.inputValue().catch(() => "")) === address &&
+      (await sendButton.isEnabled().catch(() => false))
+    ) {
+      break;
+    }
   }
 
   await expect(input).toHaveValue(address, { timeout: 10_000 });

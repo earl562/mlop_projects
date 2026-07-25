@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("workspace route scaffolds", () => {
   test("analyze route renders the dedicated agent console", async ({ page }) => {
