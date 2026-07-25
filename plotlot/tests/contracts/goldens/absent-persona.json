@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "OpportunityDecisionInputV1",
+  "opportunity": {
+    "externalId": "lead-sha256-88dbeba5",
+    "address": "redacted:sha256:88dbeba565e4523bd97230bf61dae01bf558266ca076825dc337da5afb8838f9",
+    "county": "miami-dade",
+    "municipalityLane": "miami",
+    "developmentProgramId": "program-001"
+  },
+  "facts": {
+    "propertyIdentity": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-identity"]
+    },
+    "localTruth": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-truth"]
+    },
+    "constraintsCapacity": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-capacity"]
+    },
+    "marketEvidence": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-market"]
+    },
+    "underwriting": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-underwriting"]
+    }
+  },
+  "support": {
+    "county": "miami-dade",
+    "municipalityLane": "miami",
+    "coordinateReceipts": []
+  },
+  "proposedCeilingCents": 52500000,
+  "review": {
+    "status": "approved",
+    "analystId": "analyst-001",
+    "reviewerId": "reviewer-002"
+  },
+  "requestedRelease": true,
+  "externalAction": "none"
+}

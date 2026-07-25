@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "ContractLeadSampleManifestV1",
+  "source": {
+    "repository": "byright",
+    "path": "packages/data/src/lead-list-records.ts",
+    "sha256": "51c098cae91bb708acc0cf9bfd5ce3f65e3856fffdcbafe1bb967426264a3322",
+    "list": "south-florida-public-parcel-list"
+  },
+  "privacy": {
+    "classification": "public-parcel-record",
+    "rawAddressesCopied": false,
+    "privateUploadedListsExcluded": true
+  },
+  "selection": [
+    {"addressSha256": "c299bb6b2ce4ae2451ff62584437be44743ebdbc5d3134ba1252c0c4df7399d4", "county": "miami-dade", "municipalityLane": "miami"},
+    {"addressSha256": "88dbeba565e4523bd97230bf61dae01bf558266ca076825dc337da5afb8838f9", "county": "miami-dade", "municipalityLane": "unincorporated-miami-dade"},
+    {"addressSha256": "71fdbcfe5af07df5b1a4054eb843be93b88e9f68fc82b83872cc687b614cbc6c", "county": "broward", "municipalityLane": "fort-lauderdale"},
+    {"addressSha256": "c8f6525608c240679c30a85c5dacf994af6c646875ebdac34a2901944040ee95", "county": "palm-beach", "municipalityLane": "west-palm-beach"}
+  ]
+}
