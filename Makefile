@@ -1,4 +1,4 @@
-.PHONY: backend-test frontend-install frontend-lint frontend-build frontend-test-ui repo-hygiene deploy-clean verify-local verify-local-no-browser
+.PHONY: backend-test frontend-install frontend-lint frontend-build frontend-test-ui pair-poison-matrix repo-hygiene deploy-clean verify-local verify-local-no-browser
 
 PLOTLOT_DIR := plotlot
 FRONTEND_DIR := $(PLOTLOT_DIR)/frontend
@@ -17,6 +17,9 @@ frontend-build:
 
 frontend-test-ui:
 	cd $(FRONTEND_DIR) && npm run test:ui
+
+pair-poison-matrix:
+	python3 scripts/ci/run_poison_matrix.py .omo/evidence/task-12-repository-pair-ci/poison-matrix.json
 
 repo-hygiene:
 	python3 $(PLOTLOT_DIR)/scripts/check_repo_hygiene.py
