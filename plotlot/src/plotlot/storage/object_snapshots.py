@@ -29,6 +29,7 @@ class SnapshotReceipt:
     physical_key: str = ""
     retain_until: datetime | None = None
     legal_hold: bool = False
+    operation_id: str = ""
 
     def with_version(self, version_id: str) -> SnapshotReceipt:
         return SnapshotReceipt(
@@ -43,6 +44,7 @@ class SnapshotReceipt:
             physical_key=self.physical_key,
             retain_until=self.retain_until,
             legal_hold=self.legal_hold,
+            operation_id=self.operation_id,
         )
 
 

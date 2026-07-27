@@ -4,9 +4,19 @@ import argparse
 import asyncio
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import asyncpg
+
+from plotlot.storage.s3_types import logical_key
+
+
+@dataclass(frozen=True, slots=True)
+class VersionRemap:
+    physical_key: str
+    source_version_id: str
+    destination_version_id: str
 
 
 def _asyncpg_url(database_url: str) -> str:
@@ -17,29 +27,87 @@ async def remap_restored_object_versions(
     database_url: str,
     version_map_path: Path,
 ) -> int:
-    version_map = json.loads(version_map_path.read_text())
-    if not isinstance(version_map, dict) or not all(
-        isinstance(source, str) and isinstance(destination, str)
-        for source, destination in version_map.items()
-    ):
-        raise RuntimeError("restore version map is invalid")
+    version_map = _load_version_map(version_map_path)
     connection = await asyncpg.connect(_asyncpg_url(database_url))
     try:
         async with connection.transaction():
             await connection.execute("SELECT set_config('app.restore_mode', 'on', true)")
             updated = 0
-            for source_version, destination_version in version_map.items():
-                result = await connection.execute(
-                    """UPDATE plotlot.raw_snapshots
-                    SET object_version_id = $1
-                    WHERE object_version_id = $2""",
-                    destination_version,
-                    source_version,
-                )
-                updated += int(result.rsplit(" ", 1)[-1])
+            for remap in version_map:
+                tenant_id, object_key = logical_key(remap.physical_key)
+                counts = await _reference_counts(connection, tenant_id, object_key, remap)
+                for table in ("raw_snapshots", "storage_operations", "lifecycle_receipts"):
+                    result = await connection.execute(
+                        f"""UPDATE plotlot.{table}
+                        SET object_version_id = $1
+                        WHERE tenant_id = $2 AND object_key = $3
+                          AND object_version_id = $4""",
+                        remap.destination_version_id,
+                        tenant_id,
+                        object_key,
+                        remap.source_version_id,
+                    )
+                    changed = int(result.rsplit(" ", 1)[-1])
+                    if changed != counts[table]:
+                        raise RuntimeError(f"incomplete restore remap for {table}")
+                    updated += changed
+                remaining = await _reference_counts(connection, tenant_id, object_key, remap)
+                if any(remaining.values()):
+                    raise RuntimeError("source object version remains after restore remap")
     finally:
         await connection.close()
     return updated
+
+
+def _load_version_map(path: Path) -> list[VersionRemap]:
+    document = json.loads(path.read_text())
+    if not isinstance(document, dict) or document.get("schema") != "PlotLotVersionMapV2":
+        raise RuntimeError("restore version map is invalid")
+    versions = document.get("versions")
+    if not isinstance(versions, list):
+        raise RuntimeError("restore version map versions are invalid")
+    remaps: list[VersionRemap] = []
+    identities: set[tuple[str, str]] = set()
+    for value in versions:
+        if not isinstance(value, dict):
+            raise RuntimeError("restore version map entry is invalid")
+        physical_key = value.get("physical_key")
+        source_version_id = value.get("source_version_id")
+        destination_version_id = value.get("destination_version_id")
+        if not (
+            isinstance(physical_key, str)
+            and physical_key
+            and isinstance(source_version_id, str)
+            and source_version_id
+            and isinstance(destination_version_id, str)
+            and destination_version_id
+        ):
+            raise RuntimeError("restore version map entry is incomplete")
+        remap = VersionRemap(physical_key, source_version_id, destination_version_id)
+        identity = (remap.physical_key, remap.source_version_id)
+        if identity in identities:
+            raise RuntimeError("duplicate restore version identity")
+        identities.add(identity)
+        remaps.append(remap)
+    return remaps
+
+
+async def _reference_counts(
+    connection: asyncpg.Connection,
+    tenant_id: str,
+    object_key: str,
+    remap: VersionRemap,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for table in ("raw_snapshots", "storage_operations", "lifecycle_receipts"):
+        counts[table] = await connection.fetchval(
+            f"""SELECT count(*) FROM plotlot.{table}
+            WHERE tenant_id=$1 AND object_key=$2 AND object_version_id=$3""",
+            tenant_id,
+            object_key,
+            remap.source_version_id,
+        )
+    return counts
 
 
 def main() -> None:

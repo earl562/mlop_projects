@@ -9,9 +9,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from plotlot.config import settings
-from plotlot.storage.lifecycle import LifecycleExecutor
+from plotlot.storage.delete_saga import LifecycleExecutor
 from plotlot.storage.object_snapshots import SnapshotMetadata, SnapshotReceipt
+from plotlot.storage.operation_repository import StorageOperationRepository
+from plotlot.storage.put_saga import FailureInjector, PutOperationSaga, no_failure
 from plotlot.storage.s3_objects import S3ImmutableObjectStore, S3ObjectStoreConfig
+from plotlot.storage.s3_saga import S3OperationWriter
 
 
 SessionProvider = Callable[[], Awaitable[AsyncSession]]
@@ -22,6 +25,8 @@ class StorageRuntime:
     object_store: S3ImmutableObjectStore
     lifecycle: LifecycleExecutor
     session_provider: SessionProvider
+    operations: StorageOperationRepository
+    put_saga: PutOperationSaga
 
     async def store_snapshot(
         self,
@@ -39,45 +44,10 @@ class StorageRuntime:
             retain_until=retain_until,
             legal_hold=metadata.legal_hold,
         )
-        receipt = await self.object_store.put_immutable(complete_metadata, content)
-        session = await self.session_provider()
-        async with session:
-            async with session.begin():
-                await session.execute(
-                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                    {"tenant_id": metadata.tenant_id},
-                )
-                await session.execute(
-                    text(
-                        """INSERT INTO plotlot.raw_snapshots
-                        (tenant_id, snapshot_id, object_key, object_version_id, content_sha256,
-                         byte_length, source_uri, fetched_at, encryption_algorithm,
-                         encryption_key_id, retain_until, legal_hold)
-                        VALUES
-                        (:tenant_id, :snapshot_id, :object_key, :object_version_id,
-                         :content_sha256, :byte_length, :source_uri, :fetched_at,
-                         :encryption_algorithm, :encryption_key_id, :retain_until, :legal_hold)"""
-                    ),
-                    {
-                        "tenant_id": metadata.tenant_id,
-                        "snapshot_id": snapshot_id,
-                        "object_key": metadata.object_key,
-                        "object_version_id": receipt.version_id,
-                        "content_sha256": receipt.content_sha256,
-                        "byte_length": receipt.byte_length,
-                        "source_uri": metadata.source_uri,
-                        "fetched_at": metadata.fetched_at,
-                        "encryption_algorithm": (
-                            "SSE-KMS"
-                            if self.object_store.config.sse_kms_key_id is not None
-                            else "S3-OBJECT-LOCK"
-                        ),
-                        "encryption_key_id": metadata.encryption_key_id,
-                        "retain_until": retain_until,
-                        "legal_hold": metadata.legal_hold,
-                    },
-                )
-        return receipt
+        algorithm = (
+            "SSE-KMS" if self.object_store.config.sse_kms_key_id is not None else "S3-OBJECT-LOCK"
+        )
+        return await self.put_saga.store(snapshot_id, complete_metadata, content, algorithm)
 
     async def read_snapshot(self, tenant_id: str, object_key: str) -> bytes:
         receipt = await self.load_snapshot_receipt(tenant_id, object_key)
@@ -95,6 +65,7 @@ class StorageRuntime:
                     """SELECT EXISTS(
                       SELECT 1 FROM plotlot.raw_snapshots
                       WHERE tenant_id = :tenant_id AND object_key = :object_key
+                        AND lifecycle_state = 'ACTIVE'
                     )"""
                 ),
                 {"tenant_id": tenant_id, "object_key": object_key},
@@ -116,11 +87,18 @@ class StorageRuntime:
                 (
                     await session.execute(
                         text(
-                            """SELECT tenant_id, object_key, object_version_id, content_sha256,
-                        byte_length, source_uri, fetched_at, encryption_key_id,
-                        retain_until, legal_hold
-                        FROM plotlot.raw_snapshots
-                        WHERE tenant_id = :tenant_id AND object_key = :object_key"""
+                            """SELECT r.tenant_id, r.object_key, r.object_version_id,
+                        r.content_sha256, r.byte_length, r.source_uri, r.fetched_at,
+                        r.encryption_key_id, r.retain_until, r.legal_hold,
+                        CASE WHEN o.operation_id LIKE 'legacy-put-%'
+                          THEN '' ELSE o.operation_id END AS operation_id
+                        FROM plotlot.raw_snapshots r
+                        JOIN plotlot.storage_operations o
+                          ON o.tenant_id=r.tenant_id AND o.object_key=r.object_key
+                         AND o.object_version_id=r.object_version_id
+                         AND o.operation_type='PUT' AND o.status='FINALIZED'
+                        WHERE r.tenant_id = :tenant_id AND r.object_key = :object_key
+                          AND r.lifecycle_state = 'ACTIVE'"""
                         ),
                         {"tenant_id": tenant_id, "object_key": object_key},
                     )
@@ -143,7 +121,17 @@ class StorageRuntime:
             physical_key=self.object_store.physical_key(row["tenant_id"], row["object_key"]),
             retain_until=row["retain_until"],
             legal_hold=row["legal_hold"],
+            operation_id=row["operation_id"],
         )
+
+    async def recover_pending_operations(self, tenant_id: str, limit: int = 100) -> int:
+        recovered = 0
+        for operation in await self.operations.pending(tenant_id, limit):
+            if operation.operation_type == "PUT":
+                recovered += int(await self.put_saga.recover(operation))
+            else:
+                recovered += int(await self.lifecycle.recover(operation))
+        return recovered
 
 
 _runtime: StorageRuntime | None = None
@@ -153,6 +141,7 @@ _runtime_lock = anyio.Lock()
 async def build_storage_runtime(
     object_config: S3ObjectStoreConfig,
     session_provider: SessionProvider | None = None,
+    failure_injector: FailureInjector = no_failure,
 ) -> StorageRuntime:
     if session_provider is None:
         from plotlot.storage.db import get_session
@@ -160,10 +149,20 @@ async def build_storage_runtime(
         session_provider = get_session
     object_store = S3ImmutableObjectStore(object_config)
     await object_store.initialize()
+    operations = StorageOperationRepository(session_provider)
+    writer = S3OperationWriter(object_store)
+    put_saga = PutOperationSaga(operations, writer, failure_injector)
     return StorageRuntime(
         object_store=object_store,
-        lifecycle=LifecycleExecutor(session_provider, object_store),
+        lifecycle=LifecycleExecutor(
+            session_provider,
+            object_store,
+            operations,
+            failure_injector,
+        ),
         session_provider=session_provider,
+        operations=operations,
+        put_saga=put_saga,
     )
 
 

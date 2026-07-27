@@ -14,6 +14,7 @@ from plotlot.storage.archive import ObjectArchiveService
 from plotlot.storage.object_snapshots import SnapshotMetadata
 from plotlot.storage.runtime import build_storage_runtime
 from plotlot.storage.s3_objects import S3ObjectStoreConfig
+from plotlot.storage.s3_versions import S3VersionArchive
 
 
 pytestmark = pytest.mark.skipif(
@@ -57,15 +58,25 @@ async def test_archive_restores_versions_metadata_and_hold_for_application_read(
 
     destination = await build_storage_runtime(_config(f"plotlot-destination-{uuid4().hex}"))
     version_map = await ObjectArchiveService(destination.object_store).restore(archive_path)
-    restored_receipt = receipt.with_version(version_map[receipt.version_id])
-    await ObjectArchiveService(destination.object_store).restore(archive_path)
+    mapping = next(
+        item
+        for item in version_map
+        if item["physical_key"].endswith("/evidence/held-source.json")
+        and item["source_version_id"] == receipt.version_id
+    )
+    restored_receipt = receipt.with_version(mapping["destination_version_id"])
     restored_archive = tmp_path / "restored-objects.tar"
     restored_export = await ObjectArchiveService(destination.object_store).export(restored_archive)
 
     assert exported.version_count == 1
-    assert restored_export.version_count == 2
+    assert restored_export.version_count == 1
     assert await destination.object_store.get_verified(restored_receipt) == b'{"restorable":true}'
     assert await destination.object_store.is_legal_hold_enabled(restored_receipt)
+    restored_payload = await S3VersionArchive(destination.object_store).export_version(
+        restored_receipt.physical_key,
+        restored_receipt.version_id,
+    )
+    assert restored_payload.retention_mode == "GOVERNANCE"
 
 
 @pytest.mark.asyncio
@@ -105,6 +116,22 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
         ),
         b'{"blank_stack_restore":true}',
     )
+    source_connection = await asyncpg.connect(source_url)
+    try:
+        await source_connection.execute(
+            """INSERT INTO plotlot.lifecycle_receipts
+            (tenant_id, request_id, object_key, object_version_id, decision,
+             reason, requested_by, requested_at)
+            VALUES ($1, $2, $3, $4, 'keep', 'restore-reference',
+             'integration-test', $5)""",
+            tenant_id,
+            f"request-{uuid4().hex}",
+            object_key,
+            receipt.version_id,
+            now,
+        )
+    finally:
+        await source_connection.close()
     backup_dir = tmp_path / "backup"
     backup_env = _script_environment(source_url, source_bucket)
     backup = subprocess.run(
@@ -123,7 +150,7 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
     restore = subprocess.run(
         [
             "scripts/storage/restore_storage.sh",
-            str(backup_dir / "storage-backup.tar.enc"),
+            str(backup_dir / "storage-backup.tar.aead"),
             str(restore_dir),
         ],
         cwd=Path(__file__).resolve().parents[2],
@@ -144,8 +171,19 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
 
     destination = await build_storage_runtime(_config(destination_bucket), destination_session)
     restored_receipt = await destination.load_snapshot_receipt(tenant_id, object_key)
+    destination_connection = await asyncpg.connect(destination_url)
+    try:
+        lifecycle_version = await destination_connection.fetchval(
+            """SELECT object_version_id FROM plotlot.lifecycle_receipts
+            WHERE tenant_id=$1 AND object_key=$2""",
+            tenant_id,
+            object_key,
+        )
+    finally:
+        await destination_connection.close()
 
     assert restored_receipt.version_id != receipt.version_id
+    assert lifecycle_version == restored_receipt.version_id
     assert await destination.read_snapshot(tenant_id, object_key) == b'{"blank_stack_restore":true}'
     assert await destination.object_store.is_legal_hold_enabled(restored_receipt)
     assert (restore_dir / "database-remap.json").read_text().strip()

@@ -92,6 +92,7 @@ async def test_composed_runtime_round_trips_exact_version_and_rejects_tamper() -
             },
             content_type="application/octet-stream",
             legal_hold=False,
+            retention_mode=None,
             retain_until=None,
             last_modified=now,
         )

@@ -76,13 +76,20 @@ class S3ImmutableObjectStore:
         self,
         metadata: SnapshotMetadata,
         content: bytes,
+        operation_id: str = "",
     ) -> SnapshotReceipt:
-        return await anyio.to_thread.run_sync(self._put_immutable_sync, metadata, bytes(content))
+        return await anyio.to_thread.run_sync(
+            self._put_immutable_sync,
+            metadata,
+            bytes(content),
+            operation_id,
+        )
 
     def _put_immutable_sync(
         self,
         metadata: SnapshotMetadata,
         content: bytes,
+        operation_id: str,
     ) -> SnapshotReceipt:
         object_storage_key = physical_key(metadata.tenant_id, metadata.object_key)
         try:
@@ -101,7 +108,7 @@ class S3ImmutableObjectStore:
             "ContentLength": len(content),
             "ContentType": "application/octet-stream",
             "IfNoneMatch": "*",
-            "Metadata": encode_snapshot_metadata(metadata, digest),
+            "Metadata": encode_snapshot_metadata(metadata, digest, operation_id),
             "ObjectLockLegalHoldStatus": "ON" if metadata.legal_hold else "OFF",
         }
         now = datetime.now(UTC)
@@ -130,6 +137,7 @@ class S3ImmutableObjectStore:
             physical_key=object_storage_key,
             retain_until=metadata.retain_until,
             legal_hold=metadata.legal_hold,
+            operation_id=operation_id,
         )
 
     async def get_verified(self, receipt: SnapshotReceipt) -> bytes:
@@ -156,6 +164,7 @@ class S3ImmutableObjectStore:
                 encryption_key_id=receipt.encryption_key_id,
             ),
             receipt.content_sha256,
+            receipt.operation_id,
         )
         content_digest = sha256(content).hexdigest()
         if content_digest != receipt.content_sha256 or any(

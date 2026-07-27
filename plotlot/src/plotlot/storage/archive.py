@@ -58,6 +58,7 @@ class ObjectArchiveService:
                     "metadata": version.metadata,
                     "content_type": version.content_type,
                     "legal_hold": version.legal_hold,
+                    "retention_mode": version.retention_mode,
                     "retain_until": (
                         version.retain_until.isoformat()
                         if version.retain_until is not None
@@ -67,7 +68,7 @@ class ObjectArchiveService:
                 }
             )
         manifest = {
-            "schema": "PlotLotObjectArchiveV1",
+            "schema": "PlotLotObjectArchiveV2",
             "bucket": self._object_store.config.bucket,
             "versions": entries,
         }
@@ -86,26 +87,44 @@ class ObjectArchiveService:
             manifest_sha256=sha256(manifest_bytes).hexdigest(),
         )
 
-    async def restore(self, archive_path: Path) -> dict[str, str]:
+    async def restore(self, archive_path: Path) -> list[dict[str, str]]:
+        payloads = self.validate(archive_path)
+        version_map: list[dict[str, str]] = []
+        for payload in payloads:
+            destination_version = await self._versions.restore_version(payload)
+            version_map.append(
+                {
+                    "physical_key": payload.physical_key,
+                    "source_version_id": payload.version_id,
+                    "destination_version_id": destination_version,
+                }
+            )
+        return version_map
+
+    def validate(self, archive_path: Path) -> list[ObjectVersionPayload]:
         with tarfile.open(archive_path, "r") as archive:
             manifest_member = archive.getmember("manifest.json")
             manifest_file = archive.extractfile(manifest_member)
             if manifest_file is None:
                 raise RuntimeError("object archive has no manifest")
             manifest = json.loads(manifest_file.read())
-            if manifest.get("schema") != "PlotLotObjectArchiveV1":
+            if manifest.get("schema") != "PlotLotObjectArchiveV2":
                 raise RuntimeError("unsupported object archive schema")
             entries = manifest.get("versions")
             if not isinstance(entries, list):
                 raise RuntimeError("object archive versions must be a list")
-            version_map: dict[str, str] = {}
+            payloads: list[ObjectVersionPayload] = []
+            identities: set[tuple[str, str]] = set()
             for entry in entries:
                 if not isinstance(entry, dict):
                     raise RuntimeError("object archive entry must be an object")
                 payload = self._payload_from_archive(archive, entry)
-                destination_version = await self._versions.restore_version(payload)
-                version_map[payload.version_id] = destination_version
-        return version_map
+                identity = (payload.physical_key, payload.version_id)
+                if identity in identities:
+                    raise RuntimeError("duplicate object archive version identity")
+                identities.add(identity)
+                payloads.append(payload)
+        return payloads
 
     def _payload_from_archive(
         self,
@@ -148,6 +167,11 @@ class ObjectArchiveService:
             metadata=metadata,
             content_type=self._required_string(entry, "content_type"),
             legal_hold=entry.get("legal_hold") is True,
+            retention_mode=(
+                self._required_string(entry, "retention_mode")
+                if entry.get("retention_mode") is not None
+                else None
+            ),
             retain_until=retain_until,
             last_modified=datetime.fromisoformat(self._required_string(entry, "last_modified")),
         )
@@ -180,8 +204,11 @@ def _config_from_arguments(arguments: argparse.Namespace) -> S3ObjectStoreConfig
 
 async def _run(arguments: argparse.Namespace) -> int:
     store = S3ImmutableObjectStore(_config_from_arguments(arguments))
-    await store.initialize()
     service = ObjectArchiveService(store)
+    if arguments.command == "validate":
+        print(json.dumps({"validated_versions": len(service.validate(arguments.archive))}))
+        return 0
+    await store.initialize()
     if arguments.command == "export":
         receipt = await service.export(arguments.archive)
         print(
@@ -195,7 +222,13 @@ async def _run(arguments: argparse.Namespace) -> int:
         )
         return 0
     version_map = await service.restore(arguments.archive)
-    arguments.version_map.write_text(json.dumps(version_map, sort_keys=True) + "\n")
+    arguments.version_map.write_text(
+        json.dumps(
+            {"schema": "PlotLotVersionMapV2", "versions": version_map},
+            sort_keys=True,
+        )
+        + "\n"
+    )
     print(json.dumps({"restored_versions": len(version_map)}, sort_keys=True))
     return 0
 
@@ -203,7 +236,7 @@ async def _run(arguments: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("export", "restore"):
+    for command in ("export", "restore", "validate"):
         child = subparsers.add_parser(command)
         child.add_argument("--endpoint", required=True)
         child.add_argument("--bucket", required=True)

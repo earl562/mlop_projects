@@ -45,6 +45,7 @@ class ObjectVersionPayload:
     metadata: dict[str, str]
     content_type: str
     legal_hold: bool
+    retention_mode: str | None
     retain_until: datetime | None
     last_modified: datetime
 
@@ -69,8 +70,12 @@ def logical_key(value: str) -> tuple[str, str]:
     return parts[1], parts[2]
 
 
-def encode_snapshot_metadata(metadata: SnapshotMetadata, digest: str) -> dict[str, str]:
-    return {
+def encode_snapshot_metadata(
+    metadata: SnapshotMetadata,
+    digest: str,
+    operation_id: str = "",
+) -> dict[str, str]:
+    encoded = {
         "tenant-id": quote(metadata.tenant_id, safe=""),
         "object-key": quote(metadata.object_key, safe=""),
         "source-uri": quote(metadata.source_uri, safe=""),
@@ -78,6 +83,9 @@ def encode_snapshot_metadata(metadata: SnapshotMetadata, digest: str) -> dict[st
         "encryption-key-id": quote(metadata.encryption_key_id, safe=""),
         "content-sha256": digest,
     }
+    if operation_id:
+        encoded["operation-id"] = quote(operation_id, safe="")
+    return encoded
 
 
 def decode_metadata(metadata: dict[str, str]) -> dict[str, str]:

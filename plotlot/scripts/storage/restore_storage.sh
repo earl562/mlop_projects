@@ -17,18 +17,31 @@ plotlot_python="${PLOTLOT_PYTHON:-python3}"
 backup_file="$1"
 restore_dir="$2"
 work_dir="$(mktemp -d)"
-trap 'rm -rf "$work_dir"' EXIT
+stage_database=""
+cleanup() {
+  if [[ -n "$stage_database" ]]; then
+    "$plotlot_python" -m plotlot.storage.restore_database drop \
+      --stage "$stage_database" >/dev/null || true
+  fi
+  rm -rf "$work_dir"
+}
+trap cleanup EXIT
 mkdir -p "$restore_dir"
 
-openssl enc -d -aes-256-cbc -pbkdf2 -pass env:STORAGE_BACKUP_PASSPHRASE \
-  -in "$backup_file" |
-  tar -C "$work_dir" -xf -
+"$plotlot_python" -m plotlot.storage.backup_crypto decrypt \
+  "$backup_file" "$work_dir/storage-backup.tar"
+tar -C "$work_dir" -xf "$work_dir/storage-backup.tar"
 expected_database_sha="$(sed -n 's/.*"database_sha256":"\([0-9a-f]*\)".*/\1/p' "$work_dir/manifest.json")"
 expected_objects_sha="$(sed -n 's/.*"objects_sha256":"\([0-9a-f]*\)".*/\1/p' "$work_dir/manifest.json")"
 actual_database_sha="$(shasum -a 256 "$work_dir/database.dump" | awk '{print $1}')"
 actual_objects_sha="$(shasum -a 256 "$work_dir/objects.tar" | awk '{print $1}')"
 [[ "$expected_database_sha" == "$actual_database_sha" ]]
 [[ "$expected_objects_sha" == "$actual_objects_sha" ]]
+pg_restore --list "$work_dir/database.dump" >/dev/null
+"$plotlot_python" -m plotlot.storage.archive validate \
+  --endpoint "$PLOTLOT_OBJECT_STORE_ENDPOINT" \
+  --bucket "$PLOTLOT_OBJECT_STORE_BUCKET" \
+  --archive "$work_dir/objects.tar" > "$restore_dir/staged-validation.json"
 
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
   "DO \$\$ BEGIN
@@ -39,13 +52,18 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
       CREATE ROLE byright_engine NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
     END IF;
   END \$\$;" >/dev/null
-pg_restore --clean --if-exists --no-owner --dbname="$TEST_DATABASE_URL" "$work_dir/database.dump"
+stage_json="$("$plotlot_python" -m plotlot.storage.restore_database create)"
+stage_database="$("$plotlot_python" -c 'import json,sys; print(json.load(sys.stdin)["stage"])' <<<"$stage_json")"
+stage_url="$("$plotlot_python" -c 'import json,sys; print(json.load(sys.stdin)["url"])' <<<"$stage_json")"
+pg_restore --no-owner --dbname="$stage_url" "$work_dir/database.dump"
 "$plotlot_python" -m plotlot.storage.archive restore \
   --endpoint "$PLOTLOT_OBJECT_STORE_ENDPOINT" \
   --bucket "$PLOTLOT_OBJECT_STORE_BUCKET" \
   --archive "$work_dir/objects.tar" \
   --version-map "$work_dir/version-map.json" > "$restore_dir/object-restore.json"
-PLOTLOT_RESTORE_DATABASE_URL="$TEST_DATABASE_URL" \
+PLOTLOT_RESTORE_DATABASE_URL="$stage_url" \
   "$plotlot_python" -m plotlot.storage.restore \
   --version-map "$work_dir/version-map.json" > "$restore_dir/database-remap.json"
+"$plotlot_python" -m plotlot.storage.restore_database promote --stage "$stage_database"
+stage_database=""
 cp "$work_dir/manifest.json" "$restore_dir/restore-manifest.json"

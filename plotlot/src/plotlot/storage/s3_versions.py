@@ -59,6 +59,7 @@ class S3VersionArchive:
         hold_status = hold_response.get("LegalHold", {}).get("Status")
         legal_hold = isinstance(hold_status, str) and hold_status == "ON"
         retain_until = None
+        retention_mode = None
         try:
             retention = self._client.get_object_retention(
                 Bucket=self._store.config.bucket,
@@ -69,9 +70,13 @@ class S3VersionArchive:
             if self._error_code(error) not in {"InvalidRequest", "NoSuchKey", "NotFound"}:
                 raise
         else:
-            value = retention.get("Retention", {}).get("RetainUntilDate")
+            retention_fields = retention.get("Retention", {})
+            value = retention_fields.get("RetainUntilDate")
             if isinstance(value, datetime):
                 retain_until = value
+            mode = retention_fields.get("Mode")
+            if isinstance(mode, str):
+                retention_mode = mode
         last_modified = response.get("LastModified")
         if not isinstance(last_modified, datetime):
             raise RuntimeError("object version is missing LastModified")
@@ -82,6 +87,7 @@ class S3VersionArchive:
             metadata=dict(response.get("Metadata", {})),
             content_type=str(response.get("ContentType", "application/octet-stream")),
             legal_hold=legal_hold,
+            retention_mode=retention_mode,
             retain_until=retain_until,
             last_modified=last_modified,
         )
@@ -100,7 +106,7 @@ class S3VersionArchive:
             "ObjectLockLegalHoldStatus": "ON" if payload.legal_hold else "OFF",
         }
         if payload.retain_until is not None and payload.retain_until > datetime.now(UTC):
-            request["ObjectLockMode"] = "GOVERNANCE"
+            request["ObjectLockMode"] = payload.retention_mode or "GOVERNANCE"
             request["ObjectLockRetainUntilDate"] = payload.retain_until
         response = self._client.put_object(**request)
         return required_string(response, "VersionId")

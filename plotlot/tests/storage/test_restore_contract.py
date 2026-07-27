@@ -10,12 +10,11 @@ def test_backup_and_restore_delegate_versioned_objects_to_application_archive() 
     backup = (ROOT / "scripts" / "storage" / "backup_storage.sh").read_text(encoding="utf-8")
     restore = (ROOT / "scripts" / "storage" / "restore_storage.sh").read_text(encoding="utf-8")
 
-    assert "aes-256-cbc" in backup
-    assert "rpo_minutes" in backup
-    assert "rto_hours" in backup
+    assert "plotlot.storage.backup" in backup
+    assert "backup_crypto decrypt" in restore
+    assert "archive validate" in restore
     assert "expected_database_sha" in restore
     assert "expected_objects_sha" in restore
-    assert "plotlot.storage.archive export" in backup
     assert "plotlot.storage.archive restore" in restore
     assert "plotlot.storage.restore" in restore
     assert "STORAGE_OBJECT_DIR" not in backup
