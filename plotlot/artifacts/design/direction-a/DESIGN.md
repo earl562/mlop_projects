@@ -6,7 +6,8 @@
 - Embedded references shortlisted: Linear for precise hierarchy and luminance stepping; Sentry for data-density discipline; Wired for ledger-like editorial scanning. Linear was selected only as the structural benchmark. PlotLot does not inherit Linear’s brand, dark marketing canvas, Inter typography, purple accent, or marketing layout.
 - Layer A constraint: the requested gpt-taste selection was applied only to compatible workbench decisions. AIDA, hero architecture, cinematic section spacing, marquees, testimonial carousels, decorative scroll scenes, and generic landing-page motion were rejected as category errors.
 - App-shell mechanics: fixed utility header; one named scroll owner per region; no document-level horizontal scroll; intrinsic reflow at narrow widths.
-- ImageGen truth correction: exactly one fresh built-in `image_gen.imagegen` `ui-mockup` call was made on 2026-07-27 UTC from canonical prompt `direction-a/v1.1.0`; selected output `reference-direction-a-v3.png`. Its decision rail visibly abstains from both maximum units and purchase ceiling because parking is not hash-bound. The prior v2 output is historical and rejected. The tool-scoped output name, prompt hash, timestamp, output hash, dimensions, and generation history are bound in `imagegen.metadata.json`.
+- ImageGen privacy correction: exactly one fresh built-in `image_gen.imagegen` `ui-mockup` call was made on 2026-07-27 UTC from canonical prompt `direction-a/v1.2.0`; selected output `reference-direction-a-v4.png`. Its decision rail visibly abstains from both maximum units and purchase ceiling because parking is not hash-bound, while all deal and parcel identifiers are opaque synthetic `DEAL-*` IDs. v2 and v3 are historical rejected outputs. The tool-scoped output name, prompt hash, timestamp, output hash, dimensions, generation history, and machine truth-contract hash are bound in `imagegen.metadata.json`.
+- Machine semantics: `design-truth-contract.json` is the versioned, hash-bound source for state IDs, abstention dependencies, scenario/current-value separation, coverage IDs, and privacy rules. The ImageGen prompt remains hash-bound generation input and is never parsed as executable contract prose.
 - External visual research: not used. This is a constrained sibling direction with an already-specified operational thesis; outside screen harvesting could collapse its distinction from map-first or deal-room lanes.
 
 ### Deterministic gpt-taste record
@@ -14,8 +15,8 @@
 Seed source: full UTF-8 bytes of `../direction-a.prompt.md`.
 
 ```text
-prompt characters: 5426
-prompt sha256: 6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8
+prompt characters: 5867
+prompt sha256: 5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510
 seed: integer value of sha256[0:16]
 selected structure: Constraint ladder workbench
 selected components: Agent handoff strip; Constraint ladder; Decision rail
@@ -288,6 +289,6 @@ Strategy: **tonal shift plus hairline rules**.
 
 | Item | Location | Why accepted | Exit |
 |---|---|---|---|
-| Built-in ImageGen raster renders at 1586×992 rather than the requested 1440×900 | `reference-direction-a-v3.png` | The built-in output is provenance-bound and retains the correct 16:10 composition, but raster geometry remains non-authoritative | Implementation follows the written responsive geometry and semantic copy |
+| Built-in ImageGen raster renders at 1586×992 rather than the requested 1440×900 | `reference-direction-a-v4.png` | The built-in output is provenance-bound and retains the correct 16:10 composition, but raster geometry remains non-authoritative | Implementation follows the written responsive geometry and machine truth contract |
 | Static design artifacts cannot prove runtime keyboard order, screen-reader output, or motion timing | Entire package | This lane contains no UI implementation | Implementation must run browser-based visual QA and accessibility checks before shipping |
 | Exact legal values in the South Florida fixture are illustrative | `CONTENT_FIXTURES_AND_GROUNDING.md` | The artifact demonstrates content shape, not a legal result | Replace fixtures with policy-verified test records before production acceptance |

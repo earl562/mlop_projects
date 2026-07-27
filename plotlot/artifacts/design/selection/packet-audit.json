@@ -1,15 +1,16 @@
 {
-  "schema_version": "plotlot-direction-packet-audit/v1.1.0",
+  "schema_version": "plotlot-direction-packet-audit/v1.2.0",
   "audited_at": "2026-07-27",
   "generation_policy": {
     "new_image_calls": 1,
-    "current_truth_correction_calls": 1,
-    "direction_a_total_recorded_calls": 2,
+    "current_privacy_correction_calls": 1,
+    "direction_a_total_recorded_calls": 3,
     "existing_reference_packets_only": false,
-    "correction_scope": "Exactly one fresh built-in ImageGen call was made for the v3 decision-rail truth correction. Direction A v2 is historical; no new Direction B or C image call was made.",
+    "correction_scope": "Exactly one fresh built-in ImageGen call was made for the v4 opaque-identifier privacy correction. Direction A v2 and v3 are historical; no new Direction B or C image call was made.",
     "one_call_claims": {
       "direction_a_v2_provenance_correction": 1,
       "direction_a_v3_truth_correction": 1,
+      "direction_a_v4_privacy_correction": 1,
       "direction_b": 1,
       "direction_c": 1
     }
@@ -24,21 +25,23 @@
   },
   "directions": {
     "a": {
-      "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
-      "image_sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
-      "selected_asset": "reference-direction-a-v3.png",
+      "prompt_sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+      "image_sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+      "selected_asset": "reference-direction-a-v4.png",
       "dimensions": [1586, 992],
       "manifest_verification": "pass",
       "visual_inspection": "pass",
-      "privacy": "stable-redacted synthetic identifiers only",
+      "privacy": "opaque synthetic DEAL-* identifiers only; no address-like text",
       "raster_role": "non-authoritative visual reference",
       "provenance": {
         "tool": "built-in image_gen.imagegen",
-        "invoked_at_utc": "2026-07-27T04:12:30Z",
-        "tool_scoped_output": "call_MsVmzzkbYp4tuStMWeB02Sug.png",
+        "invoked_at_utc": "2026-07-27T04:27:24Z",
+        "tool_scoped_output": "call_rvzv9UecapZkYRet64S9f95J.png",
         "metadata": "../direction-a/imagegen.metadata.json"
       },
-      "decision_rail_truth": "pass: maximum units and purchase ceiling are visibly abstained because parking is not hash-bound"
+      "truth_contract": "../direction-a/design-truth-contract.json",
+      "decision_rail_truth": "pass: maximum units and purchase ceiling are visibly abstained because parking is not hash-bound",
+      "privacy_truth": "pass: visible parcel/deal identifiers are opaque synthetic DEAL-* IDs only"
     },
     "b": {
       "prompt_sha256": "c7e23c9abc2d922da92c9f7dd8d23327f812160279eac0bbc5537788083ff963",

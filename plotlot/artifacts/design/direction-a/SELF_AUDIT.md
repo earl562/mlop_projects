@@ -9,13 +9,13 @@ This is a design-artifact audit, not a claim that runtime UI behavior has alread
 | Distinct interface signature | Pass | Continuous numbered evidence ledger plus anchored decision rail, not map-first, file-browser, or chat-first |
 | Common acquisition/preconstruction flow | Pass | Route map starts parcel/jurisdiction and ends blocker/handoff/replay |
 | Coverage truth | Pass | Miami-Dade private beta; Broward/Palm municipality-required; San Diego County planned/not enabled appear in prompt, fixtures, state matrix, and wireframes |
-| Parcel identifiers | Pass | Only stable redacted address/folio/APN strings appear in fixtures and examples |
-| Zoning, setbacks, capacity, max units | Pass | Ordered evidence + cited constraint ladder; the selected v3 rail shows `MAX UNITS — ABSTAINED` because parking is not hash-bound |
-| Constraints, survey/plat, documents, comps, ceiling | Pass | Dedicated rows/semantics and source requirements; the selected v3 rail shows `PURCHASE CEILING — ABSTAINED / REQUIRED INPUT MISSING` |
+| Parcel identifiers | Pass | The selected v4 visual uses only the five allowlisted opaque synthetic `DEAL-*` IDs and `PARCEL ID REDACTED`; no address-like text, folio, APN, owner, coordinates, or URL is visible |
+| Zoning, setbacks, capacity, max units | Pass | Ordered evidence + cited constraint ladder; the selected v4 rail shows `MAX UNITS — ABSTAINED` because parking is not hash-bound |
+| Constraints, survey/plat, documents, comps, ceiling | Pass | Dedicated rows/semantics and source requirements; the selected v4 rail shows `PURCHASE CEILING — ABSTAINED / REQUIRED INPUT MISSING` |
 | Evidence/replay | Pass | Artifact schema, hash mismatch quarantine, deterministic replay steps, and run IDs specified |
 | Grounded LLM / abstention | Pass | Citation-bound short brief; explicit parking-rule abstention and no streaming speculative copy |
 | No screenshot-embedded product | Pass | Reference is a standalone visual-direction artifact; the product is specified as semantic/structural documentation, not an embedded raster implementation |
-| No private address | Pass | Fixture scan should find only redacted `12•• NW 67 ST`; no real customer or private address is intentionally included |
+| No private address | Pass | Selected visual uses opaque synthetic deal IDs only; the textual fixture remains synthetic/redacted and is not rendered as queue copy |
 
 ## Accessibility review
 
