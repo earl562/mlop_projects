@@ -13,6 +13,7 @@ REQUIRED_PREFIXES = (
     "tests/contracts/",
     "tests/eval/",
     "tests/security/",
+    "tests/storage/",
     "tests/unit/",
 )
 BYRIGHT_DEFERRED_TESTS: tuple[tuple[str, list[int]], ...] = (

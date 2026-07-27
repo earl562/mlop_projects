@@ -113,6 +113,7 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
                     "--ignore=tests/eval/test_ingestion_golden_queries.py",
                     "tests/unit/",
                     "tests/security/",
+                    "tests/storage/",
                     "-q",
                     f"--junitxml={pytest_report}",
                 ],
