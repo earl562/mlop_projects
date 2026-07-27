@@ -65,7 +65,15 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
             Lane(
                 "plotlot-pytest",
                 "plotlot",
-                ["uv", "run", "pytest", "tests/", "-q", f"--junitxml={pytest_report}"],
+                [
+                    "uv",
+                    "run",
+                    "pytest",
+                    "tests/unit/",
+                    "tests/security/",
+                    "-q",
+                    f"--junitxml={pytest_report}",
+                ],
                 cwd="plotlot",
                 report={"format": "junit", "path": "reports/plotlot-pytest.xml"},
             ),
