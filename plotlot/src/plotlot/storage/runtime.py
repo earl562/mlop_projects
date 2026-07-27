@@ -174,7 +174,7 @@ async def _active_bucket(session_provider: SessionProvider, configured_bucket: s
     session = await session_provider()
     async with session:
         bucket = await session.scalar(
-            text("SELECT bucket FROM plotlot.storage_generation WHERE singleton=true")
+            text("SELECT bucket FROM plotlot.active_storage_generation")
         )
     return bucket if isinstance(bucket, str) and bucket else configured_bucket
 

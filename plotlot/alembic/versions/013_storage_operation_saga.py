@@ -36,6 +36,33 @@ def upgrade() -> None:
             REFERENCES plotlot.restore_attempts(attempt_id),
           updated_at timestamptz NOT NULL DEFAULT now()
         )""",
+        """CREATE FUNCTION plotlot.guard_storage_generation() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM plotlot.restore_attempts attempt
+            WHERE attempt.attempt_id=NEW.restore_attempt_id
+              AND attempt.state='PROMOTED'
+              AND attempt.stage_bucket=NEW.bucket
+          ) THEN
+            RAISE EXCEPTION 'storage_generation_requires_promoted_attempt';
+          END IF;
+          RETURN NEW;
+        END;
+        $$""",
+        """CREATE TRIGGER storage_generation_guard
+          BEFORE INSERT OR UPDATE ON plotlot.storage_generation
+          FOR EACH ROW EXECUTE FUNCTION plotlot.guard_storage_generation()""",
+        """CREATE VIEW plotlot.active_storage_generation
+          WITH (security_barrier=true) AS
+          SELECT generation.bucket
+          FROM plotlot.storage_generation generation
+          JOIN plotlot.restore_attempts attempt
+            ON attempt.attempt_id=generation.restore_attempt_id
+           AND attempt.stage_bucket=generation.bucket
+          WHERE generation.singleton=true AND attempt.state='PROMOTED'""",
+        "REVOKE ALL ON plotlot.active_storage_generation FROM PUBLIC",
+        "GRANT SELECT ON plotlot.active_storage_generation TO plotlot_app",
         "GRANT SELECT ON plotlot.storage_generation TO plotlot_app",
         "REVOKE INSERT, UPDATE, DELETE ON plotlot.storage_generation FROM plotlot_app",
         "REVOKE ALL ON plotlot.restore_attempts FROM plotlot_app",
@@ -443,6 +470,9 @@ def downgrade() -> None:
           BEFORE UPDATE OR DELETE ON plotlot.lifecycle_receipts
           FOR EACH ROW EXECUTE FUNCTION plotlot.reject_immutable_mutation()""",
         "DROP TABLE plotlot.storage_operations",
+        "DROP VIEW IF EXISTS plotlot.active_storage_generation",
+        "DROP TRIGGER IF EXISTS storage_generation_guard ON plotlot.storage_generation",
+        "DROP FUNCTION IF EXISTS plotlot.guard_storage_generation()",
         "DROP TABLE IF EXISTS plotlot.storage_generation",
         "DROP TABLE IF EXISTS plotlot.restore_attempts",
         "DROP FUNCTION plotlot.guard_storage_operation()",

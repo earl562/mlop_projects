@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from plotlot.storage.archive import ObjectArchiveService
 from plotlot.storage.object_snapshots import SnapshotMetadata
-from plotlot.storage.runtime import build_storage_runtime
+from plotlot.storage.runtime import _active_bucket, build_storage_runtime
 from plotlot.storage.s3_objects import S3ImmutableObjectStore, S3ObjectStoreConfig
 from plotlot.storage.s3_versions import S3VersionArchive
 
@@ -80,7 +81,7 @@ async def test_archive_restores_versions_metadata_and_hold_for_application_read(
 
 
 @pytest.mark.asyncio
-async def test_encrypted_blank_stack_restore_is_readable_through_application(
+async def test_hard_kill_restore_windows_never_expose_non_promoted_generation(
     tmp_path: Path,
 ) -> None:
     source_database = f"source_{uuid4().hex}"
@@ -169,7 +170,7 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
             str(tmp_path / "failed-restore"),
         ],
         cwd=Path(__file__).resolve().parents[2],
-        env={**restore_env, "PLOTLOT_RESTORE_FAIL_AFTER_OBJECTS": "true"},
+        env={**restore_env, "PLOTLOT_RESTORE_KILL_BEFORE_DB_RENAME": "true"},
         capture_output=True,
         check=False,
         text=True,
@@ -181,21 +182,22 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
         )
         recovery_attempt = await destination_connection.fetchrow(
             """SELECT stage_bucket, state FROM plotlot.restore_attempts
-            WHERE state='RECOVERY_REQUIRED'"""
+            WHERE state='OBJECTS_RESTORED'"""
         )
     finally:
         await destination_connection.close()
     target_versions_after = await S3VersionArchive(original_store).list_version_records()
-    assert failed_restore.returncode == 91
+    assert failed_restore.returncode == -9
     assert marker_after_failure == "unchanged"
     assert target_versions_after == target_versions_before
     assert recovery_attempt is not None
     assert recovery_attempt["stage_bucket"].startswith("plotlot-restore-")
-    restore = subprocess.run(
+    recovery = subprocess.run(
         [
-            "scripts/storage/restore_storage.sh",
-            str(backup_dir / "storage-backup.tar.aead"),
-            str(restore_dir),
+            str(Path(__file__).resolve().parents[2] / ".venv" / "bin" / "python"),
+            "-m",
+            "plotlot.storage.restore_attempt",
+            "list",
         ],
         cwd=Path(__file__).resolve().parents[2],
         env=restore_env,
@@ -203,7 +205,54 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
         check=False,
         text=True,
     )
-    assert restore.returncode == 0, restore.stdout + restore.stderr
+    assert recovery.returncode == 0, recovery.stdout + recovery.stderr
+    recovery_records = json.loads(recovery.stdout)
+    recovery_record = next(
+        record
+        for record in recovery_records
+        if record["stage_bucket"] == recovery_attempt["stage_bucket"]
+    )
+    assert (
+        recovery_record["state"] == "OBJECTS_RESTORED"
+        and recovery_record["stage_database"]
+    )
+    administration = await asyncpg.connect(
+        "postgresql://storage_admin:storage_test_password@127.0.0.1:55432/postgres"
+    )
+    try:
+        stage_database_exists = await administration.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=$1)",
+            recovery_record["stage_database"],
+        )
+    finally:
+        await administration.close()
+    original_store.client.head_bucket(Bucket=recovery_record["stage_bucket"])
+    assert stage_database_exists
+    pre_rename_engine = create_async_engine(
+        destination_url.replace("postgresql://", "postgresql+asyncpg://")
+    )
+    pre_rename_sessions = async_sessionmaker(pre_rename_engine, expire_on_commit=False)
+
+    async def pre_rename_session():
+        return pre_rename_sessions()
+
+    assert (
+        await _active_bucket(pre_rename_session, destination_bucket) == destination_bucket
+    )
+    await pre_rename_engine.dispose()
+    restore = subprocess.run(
+        [
+            "scripts/storage/restore_storage.sh",
+            str(backup_dir / "storage-backup.tar.aead"),
+            str(restore_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env={**restore_env, "PLOTLOT_RESTORE_KILL_AFTER_DB_RENAME": "true"},
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert restore.returncode == -9, restore.stdout + restore.stderr
 
     destination_engine = create_async_engine(
         destination_url.replace("postgresql://", "postgresql+asyncpg://")

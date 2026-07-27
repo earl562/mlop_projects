@@ -59,13 +59,14 @@ async def prepare_stage(
             await connection.execute(
                 """INSERT INTO plotlot.restore_attempts
                 (attempt_id, stage_bucket, stage_database, archive_sha256, state, cleanup_after)
-                VALUES ($1, $2, $3, $4, 'OBJECTS_RESTORED', $5)""",
+                VALUES ($1, $2, $3, $4, 'PROMOTED', $5)""",
                 attempt_id,
                 stage_bucket,
                 stage_database,
                 archive_sha256,
                 datetime.now(UTC) + timedelta(days=1),
             )
+            await connection.execute("DELETE FROM plotlot.storage_generation")
             await connection.execute(
                 """INSERT INTO plotlot.storage_generation
                 (singleton, bucket, restore_attempt_id)
@@ -97,7 +98,7 @@ async def list_recovery() -> list[dict[str, object]]:
         rows = await connection.fetch(
             """SELECT attempt_id, stage_bucket, stage_database, archive_sha256,
             state, cleanup_after, last_error FROM plotlot.restore_attempts
-            WHERE state='RECOVERY_REQUIRED' ORDER BY updated_at"""
+            WHERE state IN ('OBJECTS_RESTORED', 'RECOVERY_REQUIRED') ORDER BY updated_at"""
         )
         return [dict(row) for row in rows]
     finally:
@@ -109,7 +110,9 @@ async def clean_ready(attempt_id: UUID) -> None:
     try:
         row = await connection.fetchrow(
             """SELECT stage_bucket FROM plotlot.restore_attempts
-            WHERE attempt_id=$1 AND state='RECOVERY_REQUIRED' AND cleanup_after <= now()""",
+            WHERE attempt_id=$1
+              AND state IN ('OBJECTS_RESTORED', 'RECOVERY_REQUIRED')
+              AND cleanup_after <= now()""",
             attempt_id,
         )
         if row is None:
@@ -142,7 +145,8 @@ async def clean_ready(attempt_id: UUID) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", choices=("register", "prepare", "failed", "promoted", "list", "clean")
+        "command",
+        choices=("register", "objects-restored", "prepare", "failed", "list", "clean"),
     )
     parser.add_argument("--attempt")
     parser.add_argument("--stage-bucket")
@@ -171,7 +175,9 @@ def main() -> None:
     elif arguments.command == "clean":
         asyncio.run(clean_ready(UUID(arguments.attempt)))
     else:
-        state = "RECOVERY_REQUIRED" if arguments.command == "failed" else "PROMOTED"
+        state = (
+            "RECOVERY_REQUIRED" if arguments.command == "failed" else "OBJECTS_RESTORED"
+        )
         asyncio.run(set_state(UUID(arguments.attempt), state, arguments.error))
 
 

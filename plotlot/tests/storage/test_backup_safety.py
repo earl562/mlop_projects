@@ -21,7 +21,7 @@ from plotlot.storage.object_snapshots import SnapshotMetadata
 from plotlot.storage.restore import _load_version_map, remap_restored_object_versions
 from plotlot.storage.restore_database import promote
 from plotlot.storage.restore_attempt import clean_ready, list_recovery
-from plotlot.storage.runtime import build_storage_runtime
+from plotlot.storage.runtime import _active_bucket, build_storage_runtime
 from plotlot.storage.s3_types import S3ObjectStoreConfig
 
 
@@ -312,6 +312,97 @@ async def test_application_role_cannot_forge_storage_generation() -> None:
     finally:
         await connection.close()
     assert generation is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    ("REGISTERED", "OBJECTS_RESTORED", "RECOVERY_REQUIRED", "CLEANED"),
+)
+async def test_non_promoted_attempt_cannot_bind_generation_or_activate_bucket(
+    state: str,
+) -> None:
+    database_url = await _create_database(f"generation_state_{uuid4().hex}")
+    _migrate_database(database_url)
+    attempt_id = uuid4()
+    stage_bucket = f"plotlot-restore-{uuid4().hex}"
+    connection = await asyncpg.connect(database_url)
+    try:
+        await connection.execute(
+            """INSERT INTO plotlot.restore_attempts
+            (attempt_id, stage_bucket, stage_database, archive_sha256, state, cleanup_after)
+            VALUES ($1, $2, 'stage-db', repeat('0',64), $3, now())""",
+            attempt_id,
+            stage_bucket,
+            state,
+        )
+        with pytest.raises(
+            asyncpg.RaiseError,
+            match="storage_generation_requires_promoted_attempt",
+        ):
+            await connection.execute(
+                """INSERT INTO plotlot.storage_generation
+                (singleton, bucket, restore_attempt_id) VALUES (true, $1, $2)""",
+                stage_bucket,
+                attempt_id,
+            )
+        await connection.execute("SET session_replication_role=replica")
+        await connection.execute(
+            """INSERT INTO plotlot.storage_generation
+            (singleton, bucket, restore_attempt_id) VALUES (true, $1, $2)""",
+            stage_bucket,
+            attempt_id,
+        )
+        await connection.execute("SET session_replication_role=origin")
+    finally:
+        await connection.close()
+    engine = create_async_engine(
+        database_url.replace("postgresql://", "postgresql+asyncpg://")
+    )
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def session_provider():
+        return sessions()
+
+    configured_bucket = f"plotlot-live-{uuid4().hex}"
+    assert await _active_bucket(session_provider, configured_bucket) == configured_bucket
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_generation_cannot_be_updated_to_non_promoted_attempt() -> None:
+    database_url = await _create_database(f"generation_update_{uuid4().hex}")
+    _migrate_database(database_url)
+    promoted_attempt = uuid4()
+    non_promoted_attempt = uuid4()
+    connection = await asyncpg.connect(database_url)
+    try:
+        await connection.executemany(
+            """INSERT INTO plotlot.restore_attempts
+            (attempt_id, stage_bucket, stage_database, archive_sha256, state, cleanup_after)
+            VALUES ($1, $2, 'stage-db', repeat('0',64), $3, now())""",
+            (
+                (promoted_attempt, "plotlot-promoted", "PROMOTED"),
+                (non_promoted_attempt, "plotlot-registered", "REGISTERED"),
+            ),
+        )
+        await connection.execute(
+            """INSERT INTO plotlot.storage_generation
+            (singleton, bucket, restore_attempt_id)
+            VALUES (true, 'plotlot-promoted', $1)""",
+            promoted_attempt,
+        )
+        with pytest.raises(
+            asyncpg.RaiseError,
+            match="storage_generation_requires_promoted_attempt",
+        ):
+            await connection.execute(
+                """UPDATE plotlot.storage_generation
+                SET bucket='plotlot-registered', restore_attempt_id=$1""",
+                non_promoted_attempt,
+            )
+    finally:
+        await connection.close()
 
 
 @pytest.mark.asyncio

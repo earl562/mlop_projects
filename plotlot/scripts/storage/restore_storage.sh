@@ -71,6 +71,8 @@ pg_restore --no-owner --dbname="$stage_url" "$work_dir/database.dump"
   --bucket "$stage_bucket" \
   --archive "$work_dir/objects.tar" \
   --version-map "$work_dir/version-map.json" > "$restore_dir/object-restore.json"
+"$plotlot_python" -m plotlot.storage.restore_attempt objects-restored \
+  --attempt "$restore_attempt"
 PLOTLOT_RESTORE_DATABASE_URL="$stage_url" \
 PLOTLOT_RESTORE_STAGED_BUCKET="$stage_bucket" \
   "$plotlot_python" -m plotlot.storage.restore \
@@ -82,8 +84,13 @@ PLOTLOT_RESTORE_STAGED_BUCKET="$stage_bucket" \
 if [[ "${PLOTLOT_RESTORE_FAIL_AFTER_OBJECTS:-false}" == "true" ]]; then
   exit 91
 fi
+if [[ "${PLOTLOT_RESTORE_KILL_BEFORE_DB_RENAME:-false}" == "true" ]]; then
+  kill -KILL "$$"
+fi
 "$plotlot_python" -m plotlot.storage.restore_database promote --stage "$stage_database"
 stage_database=""
-"$plotlot_python" -m plotlot.storage.restore_attempt promoted --attempt "$restore_attempt"
+if [[ "${PLOTLOT_RESTORE_KILL_AFTER_DB_RENAME:-false}" == "true" ]]; then
+  kill -KILL "$$"
+fi
 restore_attempt=""
 cp "$work_dir/manifest.json" "$restore_dir/restore-manifest.json"
