@@ -83,8 +83,46 @@ async def _ensure_engine():
     return _engine
 
 
+def _detect_schema_drift(sync_conn) -> list[str]:
+    """Return human-readable drift between the ORM models and the live schema.
+
+    `Base.metadata.create_all` only ever CREATEs tables that do not exist — it
+    never ALTERs an existing table. So when a model gains a column, an already
+    created table silently keeps the old shape and every insert/select against
+    that column fails at runtime (this is exactly how workspaces.owner_user_id
+    went missing and broke the harness persistence path for weeks).
+
+    This check turns that silent divergence into a loud startup warning. It only
+    reports things the app itself declares and is missing from the database;
+    extra tables/columns are ignored on purpose because this database is shared
+    with MLflow and other apps whose tables are not in our metadata.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(sync_conn)
+    existing_tables = set(inspector.get_table_names())
+    problems: list[str] = []
+
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in existing_tables:
+            problems.append(f"missing table: {table_name}")
+            continue
+        db_columns = {c["name"] for c in inspector.get_columns(table_name)}
+        missing = sorted(set(table.columns.keys()) - db_columns)
+        if missing:
+            problems.append(f"{table_name} missing columns: {', '.join(missing)}")
+
+    return problems
+
+
 async def init_db() -> None:
-    """Create all tables and install triggers if they don't exist."""
+    """Create all tables and install triggers if they don't exist.
+
+    NOTE: `alembic upgrade head` is the authoritative schema mechanism; the
+    create_all below only bootstraps a brand-new database. Anything that
+    changes an EXISTING table must ship as a migration — see the drift check
+    at the end of this function.
+    """
     engine = await _ensure_engine()
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
@@ -124,6 +162,23 @@ async def init_db() -> None:
             ON ordinance_chunks USING GIN (search_vector);
         """)
         )
+
+        # Surface any model/schema divergence create_all cannot repair. Never
+        # fatal: a degraded-but-running API is better than refusing to boot, and
+        # the operator needs the log to know a migration is owed.
+        try:
+            drift = await conn.run_sync(_detect_schema_drift)
+        except Exception:
+            logger.warning("Schema drift check failed to run", exc_info=True)
+            drift = []
+        if drift:
+            logger.error(
+                "SCHEMA DRIFT DETECTED (%d) — the live database is behind the models. "
+                "create_all cannot fix an existing table; run `alembic upgrade head`. "
+                "Details: %s",
+                len(drift),
+                "; ".join(drift),
+            )
 
     logger.info("Database initialized")
 
