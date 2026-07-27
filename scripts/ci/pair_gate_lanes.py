@@ -118,6 +118,7 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
                     f"--junitxml={pytest_report}",
                 ],
                 cwd="plotlot",
+                environment={"MLFLOW_GENAI_EVAL_MAX_WORKERS": "1"},
                 report={"format": "junit", "path": "reports/plotlot-pytest.xml"},
             ),
             Lane("plotlot-build", "plotlot", ["uv", "build"], cwd="plotlot"),

@@ -13,9 +13,8 @@ _MLFLOW_TEST_DIR = Path(tempfile.gettempdir()) / "plotlot-mlflow-tests"
 _MLFLOW_TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _disable_mlflow_tracing():
-    """Disable MLflow tracing during tests — no side effects, no mlruns/ writes."""
     previous_tracking_uri = mlflow.get_tracking_uri()
     mlflow.set_tracking_uri(_MLFLOW_TEST_DIR.as_uri())
     mlflow.tracing.disable()
@@ -25,6 +24,10 @@ def _disable_mlflow_tracing():
     _prior_allow = os.environ.get("MLFLOW_ALLOW_FILE_STORE")
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
     yield
+    while mlflow.active_run() is not None:
+        mlflow.end_run()
+    mlflow.flush_trace_async_logging(terminate=True)
+    mlflow.tracing.disable()
     mlflow.tracing.enable()
     mlflow.set_tracking_uri(previous_tracking_uri)
     if _prior_allow is None:
