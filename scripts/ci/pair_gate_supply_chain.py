@@ -95,6 +95,16 @@ def create_python_sbom(
         require_object(raw_vulnerability, "Python vulnerability").pop("description", None)
     output.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n")
     enrich(plotlot, raw_audit_output, enrichment_cache, vulnerability_report)
+    raw_document = require_object(json.loads(raw_audit_output.read_text()), "pip-audit JSON")
+    for raw_dependency in require_list(raw_document.get("dependencies"), "audit dependencies"):
+        dependency = require_object(raw_dependency, "audit dependency")
+        for raw_vulnerability in require_list(
+            dependency.get("vulns", []), "audit vulnerabilities"
+        ):
+            require_object(raw_vulnerability, "audit vulnerability").pop("description", None)
+    raw_audit_output.write_bytes(
+        json.dumps(raw_document, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    )
 
 
 def verify_python_supply_chain(artifact_root: Path, gate: JsonObject) -> None:
