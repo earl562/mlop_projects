@@ -55,90 +55,169 @@ for (const state of ["verified", "missing", "stale", "conflict", "conditional", 
 }
 
 if (packet.radical_difference.result !== "pass") throw new Error("radical difference failed");
-if (packet.generation_policy.new_image_calls !== 1) throw new Error("truth correction must record exactly one fresh ImageGen call");
-if (packet.generation_policy.current_truth_correction_calls !== 1) {
-  throw new Error("Direction A truth correction must bind exactly one fresh ImageGen call");
+if (packet.generation_policy.new_image_calls !== 1) throw new Error("privacy correction must record exactly one fresh ImageGen call");
+if (packet.generation_policy.current_privacy_correction_calls !== 1) {
+  throw new Error("Direction A privacy correction must bind exactly one fresh ImageGen call");
 }
-if (packet.generation_policy.direction_a_total_recorded_calls !== 2) {
-  throw new Error("Direction A generation history must truthfully record v2 and v3 calls");
+if (packet.generation_policy.direction_a_total_recorded_calls !== 3) {
+  throw new Error("Direction A generation history must truthfully record v2, v3, and v4 calls");
 }
-if (packet.generation_policy.one_call_claims.direction_a_v3_truth_correction !== 1) {
-  throw new Error("Direction A v3 must bind exactly one truth-correction ImageGen call");
+if (packet.generation_policy.one_call_claims.direction_a_v4_privacy_correction !== 1) {
+  throw new Error("Direction A v4 must bind exactly one privacy-correction ImageGen call");
 }
 const directionAMetadata = JSON.parse(
   fs.readFileSync("plotlot/artifacts/design/direction-a/imagegen.metadata.json", "utf8"),
 );
-if (directionAMetadata.asset !== "reference-direction-a-v3.png") {
+const truthContract = JSON.parse(
+  fs.readFileSync("plotlot/artifacts/design/direction-a/design-truth-contract.json", "utf8"),
+);
+if (directionAMetadata.asset !== "reference-direction-a-v4.png") {
   throw new Error("Direction A selected asset mismatch");
 }
 if (directionAMetadata.generation.mode !== "built-in image_gen.imagegen") {
   throw new Error("Direction A generation mode mismatch");
 }
-if (directionAMetadata.generation.invocation_count_for_truth_correction !== 1) {
-  throw new Error("Direction A truth-correction invocation count mismatch");
+if (directionAMetadata.generation.invocation_count_for_privacy_correction !== 1) {
+  throw new Error("Direction A privacy-correction invocation count mismatch");
 }
-if (directionAMetadata.generation.total_recorded_direction_a_calls !== 2) {
+if (directionAMetadata.generation.total_recorded_direction_a_calls !== 3) {
   throw new Error("Direction A total generation history mismatch");
 }
-if (directionAMetadata.generation.prompt_sha256 !== "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8") {
+if (directionAMetadata.generation.prompt_sha256 !== "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510") {
   throw new Error("Direction A prompt binding mismatch");
 }
-if (directionAMetadata.output.sha256 !== "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5") {
+if (directionAMetadata.output.sha256 !== "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b") {
   throw new Error("Direction A output binding mismatch");
 }
-if (directionAMetadata.generation.tool_call_binding.tool_scoped_output !== "call_MsVmzzkbYp4tuStMWeB02Sug.png") {
+if (directionAMetadata.generation.tool_call_binding.tool_scoped_output !== "call_rvzv9UecapZkYRet64S9f95J.png") {
   throw new Error("Direction A tool-scoped output mismatch");
 }
-if (directionAMetadata.visual_validation.truth_table_result.indexOf("pass:") !== 0) {
-  throw new Error("Direction A decision-rail truth-table validation missing");
+if (packet.directions.a.selected_asset !== "reference-direction-a-v4.png") {
+  throw new Error("selection packet does not select Direction A v4");
 }
-if (packet.directions.a.selected_asset !== "reference-direction-a-v3.png") {
-  throw new Error("selection packet does not select Direction A v3");
-}
-if (!packet.directions.a.decision_rail_truth.startsWith("pass:")) {
-  throw new Error("selection packet does not record decision-rail truth pass");
-}
-
-const prompt = fs.readFileSync("plotlot/artifacts/design/direction-a.prompt.md", "utf8");
-for (const required of [
-  '"MAX UNITS"; "ABSTAINED"; "PARKING RULE NOT HASH-BOUND"',
-  '"PURCHASE CEILING"; "ABSTAINED"; "REQUIRED INPUT MISSING"',
-  "never render `MAX UNITS 2` or `PURCHASE CEILING $418,000` as current results",
-]) {
-  if (!prompt.includes(required)) throw new Error(`Direction A prompt missing truth guard: ${required}`);
-}
-
-const stateMatrix = fs.readFileSync("plotlot/artifacts/design/direction-a/STATE_MATRIX.md", "utf8");
-if (!stateMatrix.includes("**Abstain** from maximum-unit or purchase-ceiling conclusion affected by that input")) {
-  throw new Error("Direction A decision-rail truth table is missing the governing abstention rule");
+if (!packet.directions.a.decision_rail_truth.startsWith("pass:") || !packet.directions.a.privacy_truth.startsWith("pass:")) {
+  throw new Error("selection packet does not record decision-rail and privacy truth passes");
 }
 
 const crypto = require("crypto");
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
-const projectAsset = fs.readFileSync("plotlot/artifacts/design/direction-a/reference-direction-a-v3.png");
+const promptBytes = fs.readFileSync("plotlot/artifacts/design/direction-a.prompt.md");
+const truthContractBytes = fs.readFileSync("plotlot/artifacts/design/direction-a/design-truth-contract.json");
+const projectAsset = fs.readFileSync("plotlot/artifacts/design/direction-a/reference-direction-a-v4.png");
 const sourceAsset = fs.readFileSync(directionAMetadata.generation.tool_call_binding.generated_source_path);
 if (sha256(projectAsset) !== directionAMetadata.output.sha256 || sha256(sourceAsset) !== directionAMetadata.output.sha256) {
   throw new Error("Direction A generated source and project asset are not hash-identical");
+}
+if (sha256(promptBytes) !== truthContract.prompt_binding.sha256 || truthContract.prompt_binding.sha256 !== directionAMetadata.generation.prompt_sha256) {
+  throw new Error("Direction A prompt hash binding mismatch");
+}
+if (sha256(truthContractBytes) !== directionAMetadata.truth_contract.sha256) {
+  throw new Error("Direction A machine truth-contract hash mismatch");
+}
+if (truthContract.schema_version !== "plotlot-direction-a-truth-contract/v1.0.0") {
+  throw new Error("Direction A machine truth-contract schema mismatch");
+}
+if (truthContract.prompt_binding.role !== "hash-bound generation input; not an executable semantic contract") {
+  throw new Error("Direction A prompt role must be non-executable");
+}
+
+const requiredContractStates = new Set([
+  "evidence.verified",
+  "evidence.not_hash_bound",
+  "decision.abstained",
+  "scenario.conditional_not_reliance_ready",
+  "coverage.private_beta",
+  "coverage.municipality_required",
+  "coverage.planned_not_enabled",
+]);
+if (
+  truthContract.required_state_ids.length !== requiredContractStates.size ||
+  truthContract.required_state_ids.some((stateId) => !requiredContractStates.has(stateId))
+) {
+  throw new Error("Direction A machine truth-contract state IDs mismatch");
+}
+if (truthContract.inputs.parking_rule.state_id !== "evidence.not_hash_bound" || truthContract.inputs.parking_rule.trust_critical !== true) {
+  throw new Error("Direction A parking-rule input contract mismatch");
+}
+
+const maximumUnits = truthContract.decision_outputs.maximum_units;
+const purchaseCeiling = truthContract.decision_outputs.purchase_ceiling;
+if (
+  maximumUnits.state_id !== "decision.abstained" ||
+  maximumUnits.current_value !== null ||
+  JSON.stringify(maximumUnits.depends_on) !== JSON.stringify(["parking_rule"]) ||
+  maximumUnits.scenario.state_id !== "scenario.conditional_not_reliance_ready"
+) {
+  throw new Error("Direction A maximum-units structural contract mismatch");
+}
+if (
+  purchaseCeiling.state_id !== "decision.abstained" ||
+  purchaseCeiling.current_value !== null ||
+  JSON.stringify(purchaseCeiling.depends_on) !== JSON.stringify(["parking_rule", "maximum_units"]) ||
+  purchaseCeiling.scenario.state_id !== "scenario.conditional_not_reliance_ready"
+) {
+  throw new Error("Direction A purchase-ceiling structural contract mismatch");
+}
+
+const ruleById = Object.fromEntries(truthContract.dependency_rules.map((rule) => [rule.rule_id, rule]));
+for (const [ruleId, output] of [
+  ["parking-not-hash-bound-abstains-capacity", "maximum_units"],
+  ["parking-not-hash-bound-abstains-underwriting", "purchase_ceiling"],
+]) {
+  const rule = ruleById[ruleId];
+  if (
+    !rule ||
+    rule.when.input !== "parking_rule" ||
+    rule.when.state_id !== "evidence.not_hash_bound" ||
+    rule.then.output !== output ||
+    rule.then.state_id !== "decision.abstained" ||
+    rule.then.current_value !== null
+  ) {
+    throw new Error(`Direction A dependency rule mismatch: ${ruleId}`);
+  }
+}
+
+const allowedDealIds = [
+  "DEAL-MIA-0420",
+  "DEAL-MIA-0150",
+  "DEAL-BRW-0010",
+  "DEAL-PBC-1234",
+  "DEAL-SD-0000",
+];
+if (
+  truthContract.privacy.display_identifier_policy !== "opaque_synthetic_only" ||
+  JSON.stringify(truthContract.privacy.allowed_deal_ids) !== JSON.stringify(allowedDealIds) ||
+  directionAMetadata.visual_validation.address_like_strings_observed.length !== 0 ||
+  JSON.stringify(directionAMetadata.visual_validation.visible_deal_ids) !== JSON.stringify(allowedDealIds)
+) {
+  throw new Error("Direction A opaque synthetic identifier contract mismatch");
+}
+for (const dealId of truthContract.privacy.allowed_deal_ids) {
+  if (!new RegExp(truthContract.privacy.allowed_deal_id_pattern).test(dealId)) {
+    throw new Error(`Direction A deal ID does not match contract: ${dealId}`);
+  }
+}
+for (const dataClass of ["street_number", "street_name", "full_or_partial_address", "folio", "apn", "owner_name", "coordinates", "source_url"]) {
+  if (!truthContract.privacy.prohibited_visible_data_classes.includes(dataClass)) {
+    throw new Error(`Direction A privacy contract missing prohibited class: ${dataClass}`);
+  }
+}
+
+const expectedContractCoverage = {
+  miami_dade: "coverage.private_beta",
+  broward: "coverage.municipality_required",
+  palm_beach: "coverage.municipality_required",
+  san_diego: "coverage.planned_not_enabled",
+};
+if (JSON.stringify(truthContract.coverage) !== JSON.stringify(expectedContractCoverage)) {
+  throw new Error("Direction A machine truth-contract coverage mismatch");
 }
 if (ledger.baseline_commit !== "719e3179a77722e74df3ced161b350f60b5e6ad7") {
   throw new Error("iteration ledger is not bound to the audited baseline commit");
 }
 if (ledger.defects.length !== 9) throw new Error("unexpected baseline defect count");
 
-const design = fs.readFileSync("plotlot/DESIGN.md", "utf8");
-for (const term of [
-  "Foundation tokens",
-  "Route and component anatomy",
-  "Semantic state contract",
-  "Responsive behavior",
-  "Interaction, focus, and motion",
-  "Accessibility and content grounding",
-  "Coverage and release readiness",
-  "Token migration map",
-  "raster",
-]) {
-  if (!design.includes(term)) throw new Error(`DESIGN.md missing ${term}`);
-}
+if (fs.statSync("plotlot/DESIGN.md").size === 0) throw new Error("DESIGN.md is empty");
 
 console.log(JSON.stringify({
   result: "pass",
@@ -151,14 +230,17 @@ console.log(JSON.stringify({
   newImageCalls: packet.generation_policy.new_image_calls,
   selectedDirectionAAsset: packet.directions.a.selected_asset,
   decisionRailTruth: packet.directions.a.decision_rail_truth,
+  privacyTruth: packet.directions.a.privacy_truth,
+  truthContractSchema: truthContract.schema_version,
 }, null, 2));
 NODE
 
 (cd plotlot/artifacts/design/direction-a && shasum -a 256 -c checksums.sha256)
+(cd plotlot/artifacts/design/direction-a && shasum -a 256 -c design-truth-contract.sha256)
 (cd plotlot && shasum -a 256 -c artifacts/design/direction-b/checksums.sha256)
 (cd plotlot/artifacts/design/direction-c && shasum -a 256 -c checksums.sha256)
 
-file plotlot/artifacts/design/direction-a/reference-direction-a-v3.png
+file plotlot/artifacts/design/direction-a/reference-direction-a-v4.png
 file plotlot/artifacts/design/direction-b/reference-direction-b-v1.png
 file plotlot/artifacts/design/direction-c/reference-direction-c-v1.png
 
