@@ -45,6 +45,12 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
         value.to_json()
         for value in (
             Lane(
+                "plotlot-install",
+                "plotlot",
+                ["uv", "sync", "--frozen", "--extra", "dev", "--extra", "eval"],
+                cwd="plotlot",
+            ),
+            Lane(
                 "plotlot-ruff",
                 "plotlot",
                 ["uv", "run", "ruff", "check", "src/", "tests/"],
@@ -65,6 +71,12 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
             ),
             Lane("plotlot-build", "plotlot", ["uv", "build"], cwd="plotlot"),
             Lane("plotlot-frontend-install", "plotlot", ["npm", "ci"], cwd="plotlot/frontend"),
+            Lane(
+                "plotlot-playwright-install",
+                "plotlot",
+                ["npx", "playwright", "install", "chromium"],
+                cwd="plotlot/frontend",
+            ),
             Lane(
                 "plotlot-frontend-lint", "plotlot", ["npm", "run", "lint"], cwd="plotlot/frontend"
             ),
@@ -103,6 +115,12 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                     "PLAYWRIGHT_JSON_OUTPUT_FILE": str(plotlot_browser),
                     "PLAYWRIGHT_HTML_OUTPUT_DIR": str(artifact_root / "browser/plotlot"),
                 },
+            ),
+            Lane("byright-install", "byright", ["pnpm", "install", "--frozen-lockfile"]),
+            Lane(
+                "byright-playwright-install",
+                "byright",
+                ["pnpm", "exec", "playwright", "install", "chromium"],
             ),
             Lane("byright-hygiene", "byright", ["pnpm", "hygiene"]),
             Lane("byright-lint", "byright", ["pnpm", "lint"]),
