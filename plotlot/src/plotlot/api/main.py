@@ -40,6 +40,7 @@ from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
 from plotlot.observability.tracing import configure_mlflow
 from plotlot.oauth.openai_auth import has_saved_tokens
+from plotlot.protocol.router import router as engine_protocol_router
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.storage.db import get_session, init_db
 
@@ -210,6 +211,7 @@ app.include_router(geometry_router)
 app.include_router(ordinance_router)
 app.include_router(render_router)
 app.include_router(screening_router)
+app.include_router(engine_protocol_router)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)
 from plotlot.api.documents import router as documents_router  # noqa: E402
