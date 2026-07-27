@@ -16,6 +16,7 @@ from pair_gate_checks import (
     verify_bindings,
     verify_release_artifacts,
     verify_repository,
+    verify_test_policy_bindings,
 )
 from pair_gate_types import (
     GateError,
@@ -151,6 +152,7 @@ def verify(args: argparse.Namespace) -> None:
     ):
         raise gate_error("PAIR_E_ARTIFACT_ROOT", "artifact root must be outside both repositories")
     artifact_root.mkdir(parents=True, exist_ok=True)
+    verify_test_policy_bindings(gate)
     manifest_repositories = require_object(manifest.get("repositories"), "repositories")
     for name, repo in repositories.items():
         entry = require_object(manifest_repositories.get(name), f"repositories.{name}")

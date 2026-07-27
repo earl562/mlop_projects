@@ -114,6 +114,54 @@ def verify_bindings(repositories: dict[str, Path], gate: JsonObject) -> None:
         raise gate_error("PAIR_E_MANIFEST", "all binding kinds are required")
 
 
+def verify_test_policy_bindings(gate: JsonObject) -> None:
+    test_policy = require_object(gate.get("testPolicy", {}), "releaseGate.testPolicy")
+    policy_entries = require_list(
+        test_policy.get("byrightSeparatelyRequiredTests", []),
+        "testPolicy.byrightSeparatelyRequiredTests",
+    )
+    lanes = [
+        require_object(value, "lane")
+        for value in require_list(gate.get("lanes", []), "releaseGate.lanes")
+    ]
+    lanes_by_id = {require_string(lane.get("id"), "lane.id"): lane for lane in lanes}
+    policy_bindings: dict[str, str] = {}
+    for raw_entry in policy_entries:
+        entry = require_object(raw_entry, "separately required test")
+        title = require_string(entry.get("title"), "separately required test.title")
+        lane_id = require_string(entry.get("lane"), "separately required test.lane")
+        if entry.get("releaseStatus") != "required" or title in policy_bindings:
+            raise gate_error("PAIR_E_MANIFEST", "invalid separately required test policy")
+        lane = lanes_by_id.get(lane_id)
+        if lane is None:
+            raise gate_error("PAIR_E_MANIFEST", "separately required test lane is missing")
+        report = require_object(lane.get("report"), f"{lane_id}.report")
+        required_passed = {
+            require_string(value, "required passed test")
+            for value in require_list(
+                report.get("requiredPassedTests", []), f"{lane_id}.requiredPassedTests"
+            )
+        }
+        if title not in required_passed:
+            raise gate_error("PAIR_E_MANIFEST", "separately required test is not bound to its lane")
+        policy_bindings[title] = lane_id
+    referenced_titles: set[str] = set()
+    for lane in lanes:
+        report_value = lane.get("report")
+        if report_value is None:
+            continue
+        report = require_object(report_value, "lane.report")
+        referenced_titles.update(
+            require_string(value, "separately required test")
+            for value in require_list(
+                report.get("separatelyRequiredTests", []),
+                "report.separatelyRequiredTests",
+            )
+        )
+    if referenced_titles != set(policy_bindings):
+        raise gate_error("PAIR_E_MANIFEST", "separately required test policy binding mismatch")
+
+
 def parse_report(report: JsonObject, artifact_root: Path) -> tuple[int, int]:
     report_format = require_string(report.get("format"), "report.format")
     path = artifact_root / require_string(report.get("path"), "report.path")
@@ -137,33 +185,57 @@ def parse_report(report: JsonObject, artifact_root: Path) -> tuple[int, int]:
                 report.get("deferredSkippedTests", []), "report.deferredSkippedTests"
             )
         )
-        if not expected_deferred:
+        separately_required = sorted(
+            require_string(value, "separately required test")
+            for value in require_list(
+                report.get("separatelyRequiredTests", []), "report.separatelyRequiredTests"
+            )
+        )
+        required_passed = sorted(
+            require_string(value, "required passed test")
+            for value in require_list(
+                report.get("requiredPassedTests", []), "report.requiredPassedTests"
+            )
+        )
+        if not expected_deferred and not separately_required and not required_passed:
             return (
                 require_int(parsed.get("numTotalTests"), "numTotalTests"),
                 require_int(parsed.get("numPendingTests"), "numPendingTests"),
             )
-        actual_deferred: list[str] = []
+        actual_skipped: list[str] = []
+        actual_passed: list[str] = []
         for raw_result in require_list(parsed.get("testResults"), "testResults"):
             test_result = require_object(raw_result, "test result")
             for raw_assertion in require_list(
                 test_result.get("assertionResults"), "assertionResults"
             ):
                 assertion = require_object(raw_assertion, "assertion")
-                if assertion.get("status") != "skipped":
+                status = assertion.get("status")
+                if status not in {"passed", "skipped"}:
                     continue
                 titles = [
                     require_string(title, "ancestor title")
                     for title in require_list(assertion.get("ancestorTitles"), "ancestorTitles")
                 ]
                 titles.append(require_string(assertion.get("title"), "test title"))
-                actual_deferred.append(" > ".join(titles))
-        if sorted(actual_deferred) != expected_deferred:
+                full_title = " > ".join(titles)
+                if status == "skipped":
+                    actual_skipped.append(full_title)
+                else:
+                    actual_passed.append(full_title)
+        expected_skipped = sorted(expected_deferred + separately_required)
+        if sorted(actual_skipped) != expected_skipped:
             raise gate_error(
                 "PAIR_E_SKIPPED_TEST",
                 "Vitest skipped-test inventory differs from signed deferred policy",
             )
+        if not set(required_passed).issubset(actual_passed):
+            raise gate_error(
+                "PAIR_E_STALE_EVIDENCE",
+                "required separately-executed Vitest test did not pass",
+            )
         return (
-            require_int(parsed.get("numTotalTests"), "numTotalTests") - len(actual_deferred),
+            require_int(parsed.get("numTotalTests"), "numTotalTests") - len(actual_skipped),
             0,
         )
     if report_format == "playwright":

@@ -58,6 +58,12 @@ BYRIGHT_DEFERRED_TESTS: tuple[tuple[str, list[int]], ...] = (
         [15, 27, 32, 33],
     ),
 )
+BYRIGHT_SEPARATELY_REQUIRED_TESTS: tuple[tuple[str, str], ...] = (
+    (
+        "tenant persistence > leaves no partial row after a real PostgreSQL failure",
+        "byright-persistence",
+    ),
+)
 
 
 def byright_deferred_tests() -> list[JsonValue]:
@@ -72,6 +78,13 @@ def byright_deferred_tests() -> list[JsonValue]:
             }
         )
     return result
+
+
+def byright_separately_required_tests() -> list[JsonValue]:
+    return [
+        {"title": title, "lane": lane, "releaseStatus": "required"}
+        for title, lane in BYRIGHT_SEPARATELY_REQUIRED_TESTS
+    ]
 
 
 def classify_test_path(path: str) -> JsonObject:

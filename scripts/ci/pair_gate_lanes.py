@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from pair_gate_test_policy import BYRIGHT_DEFERRED_TESTS
+from pair_gate_test_policy import BYRIGHT_DEFERRED_TESTS, BYRIGHT_SEPARATELY_REQUIRED_TESTS
 from pair_gate_types import JsonObject, JsonValue
 
 
@@ -45,6 +45,7 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
     frontend_report = artifact_root / "reports/plotlot-vitest.json"
     byright_report = artifact_root / "reports/byright-vitest.json"
     byright_inventory = artifact_root / "reports/byright-vitest-inventory.json"
+    byright_persistence = artifact_root / "reports/byright-persistence.json"
     plotlot_browser = artifact_root / "reports/plotlot-playwright.json"
     byright_browser = artifact_root / "reports/byright-playwright.json"
     python_licenses = artifact_root / "scans/python-licenses.json"
@@ -208,7 +209,7 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
                     "format": "vitest-list",
                     "path": "reports/byright-vitest-inventory.json",
                 },
-                expected_test_count=478,
+                expected_test_count=495,
             ),
             Lane(
                 "byright-vitest",
@@ -225,10 +226,30 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
                     "format": "vitest",
                     "path": "reports/byright-vitest.json",
                     "deferredSkippedTests": [title for title, _ in BYRIGHT_DEFERRED_TESTS],
+                    "separatelyRequiredTests": [
+                        title for title, _ in BYRIGHT_SEPARATELY_REQUIRED_TESTS
+                    ],
                 },
-                expected_test_count=478,
+                expected_test_count=495,
             ),
-            Lane("byright-persistence", "byright", ["pnpm", "test:persistence"]),
+            Lane(
+                "byright-persistence",
+                "byright",
+                [
+                    "node",
+                    "scripts/run-persistence-tests.mjs",
+                    "--report",
+                    str(byright_persistence),
+                ],
+                report={
+                    "format": "vitest",
+                    "path": "reports/byright-persistence.json",
+                    "requiredPassedTests": [
+                        title for title, _ in BYRIGHT_SEPARATELY_REQUIRED_TESTS
+                    ],
+                },
+                expected_test_count=7,
+            ),
             Lane("byright-build", "byright", ["pnpm", "build"]),
             Lane(
                 "byright-playwright",
