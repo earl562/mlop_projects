@@ -13,157 +13,30 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import ValidationError
 
-
-class ContractModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class Frontend(ContractModel):
-    provider: Literal["vercel"]
-    plan: str
-    deployment_id: str
-    public_https: bool
-
-
-class ServiceAssertion(ContractModel):
-    algorithm: Literal["Ed25519"]
-    audience: str
-    issuer: str
-    key_owner: str | None = None
-
-
-class Service(ContractModel):
-    name: str
-    provider: Literal["render"]
-    plan: str
-    exposure: Literal["public", "private"]
-    tls: Literal["required", "disabled"]
-    image_digest: str
-    service_assertion: ServiceAssertion
-
-
-class Deployment(ContractModel):
-    frontend: Frontend
-    services: tuple[Service, ...]
-
-
-class DatabaseSchema(ContractModel):
-    name: str
-    role: str
-
-
-class Backup(ContractModel):
-    enabled: bool
-    pitr: bool
-    restore_owner: str
-    rpo_minutes: int
-    rto_hours: int
-
-
-class Database(ContractModel):
-    provider: Literal["neon"]
-    network_access: Literal["private", "public"]
-    tls: Literal["verify-full", "disabled"]
-    schemas: tuple[DatabaseSchema, ...]
-    backup: Backup
-
-
-class ObjectStore(ContractModel):
-    compatibility: Literal["s3"]
-    access: Literal["private", "public"]
-    tls: Literal["required", "disabled"]
-    immutability: Literal["object-lock"]
-    encryption: str
-    key_owner: str | None = None
-
-
-class Secret(ContractModel):
-    name: str
-    owner: str | None = None
-    rotation_days: int
-
-
-class DataPolicy(ContractModel):
-    classification: str
-    rights_basis: str
-    retention_days: int | None = None
-    deletion_owner: str
-
-
-class Entitlements(ContractModel):
-    mode: Literal["manual"]
-    owner: str
-
-
-class DedicatedDeployments(ContractModel):
-    code_fork: bool
-    digest_parity: bool
-    schema_parity: bool
-    setup: Literal["paid"]
-
-
-class Incident(ContractModel):
-    owner: str
-    rollback_owner: str
-    rollback_manifest: str
-
-
-class Slo(ContractModel):
-    name: str
-    target: str
-    owner: str
-
-
-class Governance(ContractModel):
-    data_policies: tuple[DataPolicy, ...]
-    entitlements: Entitlements
-    dedicated_deployments: DedicatedDeployments
-    incident: Incident
-    slos: tuple[Slo, ...]
-
-
-class Contracts(ContractModel):
-    plotlot_openapi_sha256: str
-    byright_expected_openapi_sha256: str
-    migration_head: str
-    database_schema_sha256: str
-
-
-class Signature(ContractModel):
-    algorithm: Literal["Ed25519"]
-    key_id: str
-    signed_by: str
-    payload_sha256: str
-    value: str
-
-
-class ReleaseCandidate(ContractModel):
-    schema_version: Literal["1.0"]
-    environment: Literal["production"]
-    deployment: Deployment
-    database: Database
-    object_store: ObjectStore
-    secrets: tuple[Secret, ...]
-    governance: Governance
-    contracts: Contracts
-    signature: Signature | None = None
-
-
-class ReleaseManifest(ReleaseCandidate):
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-        json_schema_extra={"$id": "https://plotlot.app/schemas/release-manifest-v1.json"},
-    )
-
-    signature: Signature
+from release_contract import ReleaseCandidate
 
 
 Policy = tuple[str, Callable[[ReleaseCandidate], bool]]
+
+
+def validation_error_code(error: ValidationError) -> str:
+    assertion_errors = [detail for detail in error.errors() if "service_assertion" in detail["loc"]]
+    if not assertion_errors:
+        return "MANIFEST_SCHEMA_INVALID"
+    if all(
+        detail["type"] == "missing" and detail["loc"][-1] == "signature"
+        for detail in assertion_errors
+    ):
+        return "SERVICE_ASSERTION_UNSIGNED"
+    if any(
+        detail["type"] in {"service_assertion_deadline", "service_assertion_lifetime"}
+        for detail in assertion_errors
+    ):
+        return "SERVICE_ASSERTION_WINDOW_INVALID"
+    return "SERVICE_ASSERTION_INVALID"
 
 
 def policy_results(manifest: ReleaseCandidate) -> list[str]:
@@ -273,7 +146,7 @@ def main(argv: list[str]) -> int:
     path = Path(argv[1])
     try:
         manifest = ReleaseCandidate.model_validate_json(path.read_text(encoding="utf-8"))
-    except (OSError, ValidationError) as error:
+    except OSError as error:
         print(
             json.dumps(
                 {
@@ -286,6 +159,20 @@ def main(argv: list[str]) -> int:
             )
         )
         return 2
+    except ValidationError as error:
+        code = validation_error_code(error)
+        print(
+            json.dumps(
+                {
+                    "codes": [code],
+                    "detail": str(error),
+                    "manifest": os.path.relpath(path, Path.cwd()),
+                    "valid": False,
+                },
+                sort_keys=True,
+            )
+        )
+        return 2 if code == "MANIFEST_SCHEMA_INVALID" else 1
 
     codes = policy_results(manifest)
     print(report(path, codes))

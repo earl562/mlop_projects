@@ -16,7 +16,7 @@
         "exposure": "public",
         "tls": "required",
         "image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-api", "issuer": "plotlot-release-controller", "key_owner": "Security Owner", "kid": "plotlot-api-assertion-2026-01", "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-api", "issuer": "plotlot-release-controller", "key_owner": "Security Owner", "kid": "plotlot-api-assertion-2026-01", "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
       },
       {
         "name": "plotlot-worker",
@@ -55,7 +55,7 @@
       {"name": "plotlot", "role": "plotlot_app"},
       {"name": "byright", "role": "byright_engine"}
     ],
-    "backup": {"enabled": true, "pitr": true, "restore_owner": "Platform Operations", "rpo_minutes": 15, "rto_hours": 5}
+    "backup": {"enabled": true, "pitr": true, "restore_owner": "Platform Operations", "rpo_minutes": 15, "rto_hours": 4}
   },
   "object_store": {
     "compatibility": "s3",

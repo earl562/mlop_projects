@@ -24,6 +24,9 @@ POISON_CODES = {
     "contract-hash-mismatch.json": "CONTRACT_HASH_MISMATCH",
     "customer-fork.json": "CUSTOMER_CODE_FORK_FORBIDDEN",
     "unsigned-release.json": "RELEASE_SIGNATURE_REQUIRED",
+    "unsigned-service-assertion.json": "SERVICE_ASSERTION_UNSIGNED",
+    "invalid-service-assertion.json": "SERVICE_ASSERTION_INVALID",
+    "unbounded-service-assertion.json": "SERVICE_ASSERTION_WINDOW_INVALID",
 }
 
 

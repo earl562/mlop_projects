@@ -25,7 +25,9 @@ until `scripts/release/validate_manifest.py` accepts its signed manifest.
   Render services. Only the PlotLot API has public ingress; workers and ByRight
   are private services.
 - Every Render hop requires TLS. Each service presents an Ed25519 service
-  assertion with an explicit audience, issuer, and owned signing key.
+  assertion with schema version, audience, issuer, key ID, owned signing key,
+  signed-payload SHA-256, base64url signature, issued-at time, and an expiry no
+  more than five minutes later.
 - Neon PostgreSQL is private and uses `verify-full` TLS. PlotLot uses the
   `plotlot` schema through `plotlot_app`; ByRight uses the `byright` schema
   through `byright_engine`. Sharing either application role is forbidden.
@@ -98,6 +100,9 @@ The validator fails closed and emits these stable policy codes:
 | `CONTRACT_HASH_MISMATCH` | PlotLot and ByRight OpenAPI hashes differ |
 | `CUSTOMER_CODE_FORK_FORBIDDEN` | Dedicated deployment enables a code fork |
 | `RELEASE_SIGNATURE_REQUIRED` | Release signature fields are absent |
+| `SERVICE_ASSERTION_UNSIGNED` | A service assertion omits its signature |
+| `SERVICE_ASSERTION_INVALID` | A service assertion has malformed signed fields |
+| `SERVICE_ASSERTION_WINDOW_INVALID` | Assertion expiry is non-positive or exceeds five minutes |
 | `DEDICATED_PARITY_REQUIRED` | Image-digest or schema parity is disabled |
 
 Malformed manifests fail separately with `MANIFEST_SCHEMA_INVALID`.

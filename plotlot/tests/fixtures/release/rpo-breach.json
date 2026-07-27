@@ -16,7 +16,7 @@
         "exposure": "public",
         "tls": "required",
         "image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "service_assertion": {"algorithm": "Ed25519", "audience": "plotlot-api", "issuer": "plotlot-release-controller", "key_owner": "Security Owner"}
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-api", "issuer": "plotlot-release-controller", "key_owner": "Security Owner", "kid": "plotlot-api-assertion-2026-01", "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
       },
       {
         "name": "plotlot-worker",
@@ -25,7 +25,7 @@
         "exposure": "private",
         "tls": "required",
         "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "service_assertion": {"algorithm": "Ed25519", "audience": "plotlot-worker", "issuer": "plotlot-api", "key_owner": "Security Owner"}
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-worker", "issuer": "plotlot-api", "key_owner": "Security Owner", "kid": "plotlot-worker-assertion-2026-01", "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
       },
       {
         "name": "byright-api",
@@ -34,7 +34,7 @@
         "exposure": "private",
         "tls": "required",
         "image_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "service_assertion": {"algorithm": "Ed25519", "audience": "byright-api", "issuer": "plotlot-worker", "key_owner": "Security Owner"}
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "byright-api", "issuer": "plotlot-worker", "key_owner": "Security Owner", "kid": "byright-api-assertion-2026-01", "payload_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
       },
       {
         "name": "byright-worker",
@@ -43,7 +43,7 @@
         "exposure": "private",
         "tls": "required",
         "image_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "service_assertion": {"algorithm": "Ed25519", "audience": "byright-worker", "issuer": "byright-api", "key_owner": "Security Owner"}
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "byright-worker", "issuer": "byright-api", "key_owner": "Security Owner", "kid": "byright-worker-assertion-2026-01", "payload_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
       }
     ]
   },

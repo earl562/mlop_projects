@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import TypedDict
 
 from pydantic import TypeAdapter
 
-from scripts.release.validate_manifest import ReleaseManifest
+from scripts.release.release_contract import ReleaseManifest
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,7 @@ class SignatureSchema(TypedDict):
 
 
 class SchemaDefinitions(TypedDict):
+    ServiceAssertion: SignatureSchema
     Signature: SignatureSchema
 
 
@@ -45,6 +47,15 @@ def test_production_topology_uses_paid_private_canonical_services() -> None:
     assert all(
         service.plan != "free" and service.tls == "required"
         for service in manifest.deployment.services
+    )
+    assert all(
+        assertion.version == "1.0"
+        and assertion.algorithm == "Ed25519"
+        and assertion.kid
+        and len(assertion.payload_sha256) == 64
+        and len(assertion.signature) == 86
+        and assertion.expires_at - assertion.issued_at <= timedelta(minutes=5)
+        for assertion in (service.service_assertion for service in manifest.deployment.services)
     )
     assert manifest.database.provider == "neon"
     assert manifest.database.network_access == "private"
@@ -106,4 +117,16 @@ def test_release_manifest_schema_requires_signature_and_contract_binding() -> No
         "signed_by",
         "payload_sha256",
         "value",
+    ]
+    assert schema["$defs"]["ServiceAssertion"]["required"] == [
+        "version",
+        "algorithm",
+        "audience",
+        "issuer",
+        "key_owner",
+        "kid",
+        "payload_sha256",
+        "signature",
+        "issued_at",
+        "expires_at",
     ]

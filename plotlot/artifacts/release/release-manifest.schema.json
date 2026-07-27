@@ -473,30 +473,62 @@
           "type": "string"
         },
         "audience": {
+          "minLength": 1,
           "title": "Audience",
           "type": "string"
         },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "issued_at": {
+          "format": "date-time",
+          "title": "Issued At",
+          "type": "string"
+        },
         "issuer": {
+          "minLength": 1,
           "title": "Issuer",
           "type": "string"
         },
         "key_owner": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Key Owner"
+          "minLength": 1,
+          "title": "Key Owner",
+          "type": "string"
+        },
+        "kid": {
+          "minLength": 1,
+          "title": "Kid",
+          "type": "string"
+        },
+        "payload_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Payload Sha256",
+          "type": "string"
+        },
+        "signature": {
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "title": "Signature",
+          "type": "string"
+        },
+        "version": {
+          "const": "1.0",
+          "title": "Version",
+          "type": "string"
         }
       },
       "required": [
+        "version",
         "algorithm",
         "audience",
-        "issuer"
+        "issuer",
+        "key_owner",
+        "kid",
+        "payload_sha256",
+        "signature",
+        "issued_at",
+        "expires_at"
       ],
       "title": "ServiceAssertion",
       "type": "object"
