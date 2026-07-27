@@ -223,7 +223,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: [backend-unit, frontend-quality, playwright-no-db, playwright-db]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: plotlot
+          POSTGRES_PASSWORD: plotlot
+          POSTGRES_DB: plotlot
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U plotlot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     env:
+      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
       PAIR_MANIFEST_SIGNING_KEY: ${{ secrets.PAIR_MANIFEST_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v6
