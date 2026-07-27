@@ -25,6 +25,8 @@ class _ServiceClaims(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     sub: str
+    iat: int
+    exp: int
     tenant_id: str
     actions: list[str]
     token_type: str
@@ -93,6 +95,11 @@ def verify_service_principal_token(
         },
     )
     claims = _ServiceClaims.model_validate(payload)
+    lifetime_seconds = claims.exp - claims.iat
+    if not 0 < lifetime_seconds <= settings.service_principal_max_ttl_seconds:
+        raise jwt.InvalidTokenError(
+            "service-principal lifetime is outside configured bounds"
+        )
     if claims.token_type != "service_principal":
         raise jwt.InvalidTokenError("invalid service-principal token type")
     if claims.sub in scope.revoked_principal_ids:
