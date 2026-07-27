@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, StrictBool
 
 from plotlot.protocol.base import ProtocolModel
 
@@ -31,7 +31,7 @@ class ProtocolErrorV1(ProtocolModel):
     schema_version: Literal["ProtocolErrorV1"]
     code: ProtocolErrorCode
     category: ProtocolErrorCategory
-    retryable: bool
+    retryable: StrictBool
     http_status: Literal[400, 401, 404, 409, 422, 429, 500, 503, 504]
     message: str = Field(min_length=1)
     request_id: str = Field(pattern=r"^request_[A-Za-z0-9_-]+$")

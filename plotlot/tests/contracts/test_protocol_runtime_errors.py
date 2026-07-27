@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+from typing import Literal, assert_never
+
 import pytest
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from httpx import Response
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from plotlot.api.main import app as production_app
 from plotlot.protocol.errors import ProtocolErrorV1
-from plotlot.protocol.openapi import protocol_app, protocol_http_error
+from plotlot.protocol.openapi import install_engine_protocol, protocol_app
 
 
 client = TestClient(protocol_app, raise_server_exceptions=False)
+production_client = TestClient(production_app, raise_server_exceptions=False)
+type ProductionScenario = Literal[
+    "unavailable",
+    "invalid-engine-id",
+    "missing-cursor",
+    "malformed-body",
+]
 
 
 def _protocol_error(
@@ -103,6 +111,68 @@ def test_malformed_body_uses_body_request_correlation() -> None:
     assert error.request_id == "request_malformed_body"
 
 
+def _production_error_response(scenario: ProductionScenario) -> Response:
+    match scenario:
+        case "unavailable":
+            return production_client.get(
+                "/api/v1/engine/runs/engrun_alpha",
+                headers={"x-request-id": "request_production_503"},
+            )
+        case "invalid-engine-id":
+            return production_client.get(
+                "/api/v1/engine/runs/hostrun_wrong",
+                headers={"x-request-id": "request_production_invalid"},
+            )
+        case "missing-cursor":
+            return production_client.get(
+                "/api/v1/engine/runs/engrun_alpha/events",
+                headers={"x-request-id": "request_production_cursor"},
+            )
+        case "malformed-body":
+            return production_client.post(
+                "/api/v1/engine/opportunities",
+                json={
+                    "schema_version": "OpportunityCommandV1",
+                    "host": {"request_id": "request_production_body"},
+                },
+            )
+        case _:
+            assert_never(scenario)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "status_code", "code", "retryable"),
+    [
+        ("unavailable", 503, "ENGINE_UNAVAILABLE", True),
+        ("invalid-engine-id", 422, "REQUEST_INVALID", False),
+        ("missing-cursor", 422, "CURSOR_INVALID", False),
+        ("malformed-body", 422, "REQUEST_INVALID", False),
+    ],
+)
+def test_production_app_emits_protocol_errors(
+    scenario: ProductionScenario,
+    status_code: int,
+    code: str,
+    retryable: bool,
+) -> None:
+    # Given: one real production application engine request that fails.
+    response = _production_error_response(scenario)
+
+    # When/Then: production emits the same strict error transport as protocol_app.
+    _protocol_error(
+        response,
+        status_code=status_code,
+        code=code,
+        retryable=retryable,
+    )
+
+
+def test_production_non_engine_errors_keep_fastapi_default_shape() -> None:
+    response = production_client.get("/not-a-production-route")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
+
+
 @pytest.mark.parametrize(
     ("status_code", "code", "retryable"),
     [
@@ -122,25 +192,27 @@ def test_every_declared_http_error_status_uses_protocol_shape(
 ) -> None:
     # Given: an isolated route raising one declared protocol error status.
     error_app = FastAPI()
+    install_engine_protocol(error_app)
+    install_engine_protocol(error_app)
 
-    @error_app.exception_handler(StarletteHTTPException)
-    async def handle_declared_error(
-        request: Request,
-        exception: StarletteHTTPException,
-    ) -> JSONResponse:
-        return await protocol_http_error(request, exception)
-
-    @error_app.get("/error")
+    @error_app.get("/api/v1/engine/test-error")
     async def raise_declared_error() -> None:
         raise HTTPException(status_code=status_code)
 
     # When: the declared error crosses the ASGI boundary.
     response = TestClient(error_app).get(
-        "/error",
+        "/api/v1/engine/test-error",
         headers={"x-request-id": "request_declared_status"},
     )
 
     # Then: status and retryability are preserved in a versioned error body.
+    assert (
+        sum(
+            getattr(route, "path", None) == "/api/v1/engine/opportunities"
+            for route in error_app.routes
+        )
+        == 1
+    )
     error = _protocol_error(
         response,
         status_code=status_code,

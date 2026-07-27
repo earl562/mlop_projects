@@ -5,8 +5,13 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 from plotlot.protocol.errors import (
     ProtocolErrorCategory,
@@ -85,21 +90,12 @@ def _error_response(
     return JSONResponse(status_code=status_code, content=error.model_dump(mode="json"))
 
 
-protocol_app = FastAPI(
-    title="PlotLot ByRight Engine Protocol",
-    version="1.0.0",
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-)
-protocol_app.include_router(router)
-
-
-@protocol_app.exception_handler(RequestValidationError)
 async def protocol_validation_error(
     request: Request,
     exception: RequestValidationError,
-) -> JSONResponse:
+) -> Response:
+    if not request.url.path.startswith("/api/v1/engine"):
+        return await request_validation_exception_handler(request, exception)
     fields = {str(part) for error in exception.errors() for part in error.get("loc", ())}
     code: ProtocolErrorCode = (
         "CURSOR_INVALID" if fields.intersection({"cursor", "after_cursor"}) else "REQUEST_INVALID"
@@ -120,11 +116,12 @@ async def protocol_validation_error(
     )
 
 
-@protocol_app.exception_handler(StarletteHTTPException)
 async def protocol_http_error(
     request: Request,
     exception: StarletteHTTPException,
-) -> JSONResponse:
+) -> Response:
+    if not request.url.path.startswith("/api/v1/engine"):
+        return await http_exception_handler(request, exception)
     code, category, retryable, message = _HTTP_ERRORS.get(exception.status_code, _HTTP_ERRORS[500])
     status_code = exception.status_code if exception.status_code in _HTTP_ERRORS else 500
     return _error_response(
@@ -135,6 +132,37 @@ async def protocol_http_error(
         retryable=retryable,
         message=message,
     )
+
+
+async def _installed_validation_handler(request: Request, exception: Exception) -> Response:
+    if not isinstance(exception, RequestValidationError):
+        raise exception
+    return await protocol_validation_error(request, exception)
+
+
+async def _installed_http_handler(request: Request, exception: Exception) -> Response:
+    if not isinstance(exception, StarletteHTTPException):
+        raise exception
+    return await protocol_http_error(request, exception)
+
+
+def install_engine_protocol(app: FastAPI) -> None:
+    if getattr(app.state, "engine_protocol_installed", False):
+        return
+    app.include_router(router)
+    app.add_exception_handler(RequestValidationError, _installed_validation_handler)
+    app.add_exception_handler(StarletteHTTPException, _installed_http_handler)
+    app.state.engine_protocol_installed = True
+
+
+protocol_app = FastAPI(
+    title="PlotLot ByRight Engine Protocol",
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+install_engine_protocol(protocol_app)
 
 
 def protocol_openapi_document() -> dict[str, Any]:

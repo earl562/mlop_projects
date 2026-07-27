@@ -189,6 +189,23 @@ def test_released_revision_rejects_evidence_loss_and_status_widening() -> None:
         EngineRevisionProjectionV1.model_validate(payload)
 
 
+def test_protocol_error_rejects_retryable_string_coercion() -> None:
+    # Given: a protocol error whose boolean wire field drifted to a string.
+    payload = {
+        "schema_version": "ProtocolErrorV1",
+        "code": "REQUEST_INVALID",
+        "category": "validation",
+        "retryable": "false",
+        "http_status": 422,
+        "message": "Protocol request validation failed.",
+        "request_id": "request_retryable_drift",
+    }
+
+    # When/Then: Python rejects the same error-field poison as the generated consumer.
+    with pytest.raises(ValidationError):
+        ProtocolErrorV1.model_validate(payload)
+
+
 def test_missing_or_unbounded_deadline_is_rejected() -> None:
     # Given: a valid host context serialized at the boundary.
     payload = _command().host.model_dump(mode="json")
