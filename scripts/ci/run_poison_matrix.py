@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -191,10 +192,15 @@ def run_probe(root: Path, runner: Path, name: PoisonName, expected: str) -> Json
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("output_path", nargs="?")
+    parser.add_argument("--output")
+    arguments = parser.parse_args()
+    if arguments.output_path is not None and arguments.output is not None:
+        parser.error("choose either output_path or --output")
     runner = Path(__file__).with_name("verify_repository_pair.sh")
-    output = (
-        Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path("poison-matrix.json").resolve()
-    )
+    selected_output = arguments.output or arguments.output_path or "poison-matrix.json"
+    output = Path(selected_output).resolve()
     temporary = Path(tempfile.mkdtemp(prefix="repository-pair-poisons-"))
     results: list[JsonValue] = []
     try:
