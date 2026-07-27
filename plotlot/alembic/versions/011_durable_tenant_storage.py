@@ -186,7 +186,5 @@ def downgrade() -> None:
     for statement in (
         "DROP SCHEMA IF EXISTS byright CASCADE",
         "DROP SCHEMA IF EXISTS plotlot CASCADE",
-        "DROP ROLE IF EXISTS byright_engine",
-        "DROP ROLE IF EXISTS plotlot_app",
     ):
         op.execute(statement)

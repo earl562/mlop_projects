@@ -8,6 +8,11 @@ if [[ $# -ne 2 ]]; then
 fi
 : "${TEST_DATABASE_URL:?TEST_DATABASE_URL is required}"
 : "${STORAGE_BACKUP_PASSPHRASE:?STORAGE_BACKUP_PASSPHRASE is required}"
+: "${PLOTLOT_OBJECT_STORE_ENDPOINT:?PLOTLOT_OBJECT_STORE_ENDPOINT is required}"
+: "${PLOTLOT_OBJECT_STORE_BUCKET:?PLOTLOT_OBJECT_STORE_BUCKET is required}"
+: "${PLOTLOT_OBJECT_STORE_ACCESS_KEY:?PLOTLOT_OBJECT_STORE_ACCESS_KEY is required}"
+: "${PLOTLOT_OBJECT_STORE_SECRET_KEY:?PLOTLOT_OBJECT_STORE_SECRET_KEY is required}"
+plotlot_python="${PLOTLOT_PYTHON:-python3}"
 
 backup_file="$1"
 restore_dir="$2"
@@ -35,5 +40,12 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
     END IF;
   END \$\$;" >/dev/null
 pg_restore --clean --if-exists --no-owner --dbname="$TEST_DATABASE_URL" "$work_dir/database.dump"
-tar -C "$restore_dir" -xf "$work_dir/objects.tar"
+"$plotlot_python" -m plotlot.storage.archive restore \
+  --endpoint "$PLOTLOT_OBJECT_STORE_ENDPOINT" \
+  --bucket "$PLOTLOT_OBJECT_STORE_BUCKET" \
+  --archive "$work_dir/objects.tar" \
+  --version-map "$work_dir/version-map.json" > "$restore_dir/object-restore.json"
+PLOTLOT_RESTORE_DATABASE_URL="$TEST_DATABASE_URL" \
+  "$plotlot_python" -m plotlot.storage.restore \
+  --version-map "$work_dir/version-map.json" > "$restore_dir/database-remap.json"
 cp "$work_dir/manifest.json" "$restore_dir/restore-manifest.json"

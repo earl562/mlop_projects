@@ -83,6 +83,9 @@ async def init_db() -> None:
     engine = await _ensure_engine()
     async with engine.connect():
         logger.info("Database connection verified")
+    from plotlot.storage.runtime import initialize_configured_storage_runtime
+
+    await initialize_configured_storage_runtime()
 
 
 async def get_session() -> AsyncSession:

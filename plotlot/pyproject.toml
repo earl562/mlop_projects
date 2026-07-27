@@ -32,6 +32,7 @@ dependencies = [
     "email-validator>=2.0",
     "pypdf>=6.12.2",
     "fastmcp>=3.4.0",
+    "boto3>=1.42",
 ]
 
 [project.optional-dependencies]

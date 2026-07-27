@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
     database_require_ssl: bool = False
+    object_store_enabled: bool = False
+    object_store_endpoint_url: str = ""
+    object_store_bucket: str = ""
+    object_store_access_key_id: str = ""
+    object_store_secret_access_key: str = ""
+    object_store_region: str = "us-east-1"
+    object_store_sse_kms_key_id: str = ""
 
     @model_validator(mode="after")
     def _normalize_database_url(self) -> "Settings":
@@ -184,6 +191,12 @@ class Settings(BaseSettings):
             "openai_oauth_redirect_uri",
             "openai_oauth_scope",
             "connector_encryption_key",
+            "object_store_endpoint_url",
+            "object_store_bucket",
+            "object_store_access_key_id",
+            "object_store_secret_access_key",
+            "object_store_region",
+            "object_store_sse_kms_key_id",
         ):
             val = getattr(self, field)
             if val and val != val.strip():

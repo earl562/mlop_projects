@@ -1,0 +1,196 @@
+from __future__ import annotations
+
+import os
+import subprocess
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
+
+import asyncpg
+import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from plotlot.storage.archive import ObjectArchiveService
+from plotlot.storage.object_snapshots import SnapshotMetadata
+from plotlot.storage.runtime import build_storage_runtime
+from plotlot.storage.s3_objects import S3ObjectStoreConfig
+
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("PLOTLOT_STORAGE_INTEGRATION") != "true",
+    reason="requires disposable PostgreSQL and MinIO",
+)
+
+
+def _config(bucket: str) -> S3ObjectStoreConfig:
+    return S3ObjectStoreConfig(
+        endpoint_url=os.environ["PLOTLOT_OBJECT_STORE_ENDPOINT"],
+        bucket=bucket,
+        access_key_id=os.environ["PLOTLOT_OBJECT_STORE_ACCESS_KEY"],
+        secret_access_key=os.environ["PLOTLOT_OBJECT_STORE_SECRET_KEY"],
+        region="us-east-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_archive_restores_versions_metadata_and_hold_for_application_read(
+    tmp_path: Path,
+) -> None:
+    source = await build_storage_runtime(_config(f"plotlot-source-{uuid4().hex}"))
+    tenant_id = f"tenant-{uuid4().hex}"
+    now = datetime.now(UTC)
+    receipt = await source.store_snapshot(
+        f"snapshot-{uuid4().hex}",
+        SnapshotMetadata(
+            tenant_id=tenant_id,
+            object_key="evidence/held-source.json",
+            source_uri="https://example.invalid/source/archive",
+            fetched_at=now,
+            encryption_key_id="kms/test/key",
+            retain_until=now + timedelta(minutes=1),
+            legal_hold=True,
+        ),
+        b'{"restorable":true}',
+    )
+    archive_path = tmp_path / "objects.tar"
+    exported = await ObjectArchiveService(source.object_store).export(archive_path)
+
+    destination = await build_storage_runtime(_config(f"plotlot-destination-{uuid4().hex}"))
+    version_map = await ObjectArchiveService(destination.object_store).restore(archive_path)
+    restored_receipt = receipt.with_version(version_map[receipt.version_id])
+    await ObjectArchiveService(destination.object_store).restore(archive_path)
+    restored_archive = tmp_path / "restored-objects.tar"
+    restored_export = await ObjectArchiveService(destination.object_store).export(restored_archive)
+
+    assert exported.version_count == 1
+    assert restored_export.version_count == 2
+    assert await destination.object_store.get_verified(restored_receipt) == b'{"restorable":true}'
+    assert await destination.object_store.is_legal_hold_enabled(restored_receipt)
+
+
+@pytest.mark.asyncio
+async def test_encrypted_blank_stack_restore_is_readable_through_application(
+    tmp_path: Path,
+) -> None:
+    source_database = f"source_{uuid4().hex}"
+    destination_database = f"restore_{uuid4().hex}"
+    await _create_database(source_database)
+    await _create_database(destination_database)
+    source_url = _database_url(source_database)
+    destination_url = _database_url(destination_database)
+    _migrate_database(source_url)
+    source_engine = create_async_engine(
+        source_url.replace("postgresql://", "postgresql+asyncpg://")
+    )
+    source_sessions = async_sessionmaker(source_engine, expire_on_commit=False)
+
+    async def source_session():
+        return source_sessions()
+
+    source_bucket = f"plotlot-backup-{uuid4().hex}"
+    source = await build_storage_runtime(_config(source_bucket), source_session)
+    tenant_id = f"tenant-{uuid4().hex}"
+    object_key = "evidence/blank-stack.json"
+    now = datetime.now(UTC)
+    receipt = await source.store_snapshot(
+        f"snapshot-{uuid4().hex}",
+        SnapshotMetadata(
+            tenant_id=tenant_id,
+            object_key=object_key,
+            source_uri="https://example.invalid/source/blank-stack",
+            fetched_at=now,
+            encryption_key_id="kms/test/key",
+            retain_until=now + timedelta(minutes=1),
+            legal_hold=True,
+        ),
+        b'{"blank_stack_restore":true}',
+    )
+    backup_dir = tmp_path / "backup"
+    backup_env = _script_environment(source_url, source_bucket)
+    backup = subprocess.run(
+        ["scripts/storage/backup_storage.sh", str(backup_dir)],
+        cwd=Path(__file__).resolve().parents[2],
+        env=backup_env,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert backup.returncode == 0, backup.stdout + backup.stderr
+
+    destination_bucket = f"plotlot-restored-{uuid4().hex}"
+    restore_dir = tmp_path / "restore"
+    restore_env = _script_environment(destination_url, destination_bucket)
+    restore = subprocess.run(
+        [
+            "scripts/storage/restore_storage.sh",
+            str(backup_dir / "storage-backup.tar.enc"),
+            str(restore_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=restore_env,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert restore.returncode == 0, restore.stdout + restore.stderr
+
+    destination_engine = create_async_engine(
+        destination_url.replace("postgresql://", "postgresql+asyncpg://")
+    )
+    destination_sessions = async_sessionmaker(destination_engine, expire_on_commit=False)
+
+    async def destination_session():
+        return destination_sessions()
+
+    destination = await build_storage_runtime(_config(destination_bucket), destination_session)
+    restored_receipt = await destination.load_snapshot_receipt(tenant_id, object_key)
+
+    assert restored_receipt.version_id != receipt.version_id
+    assert await destination.read_snapshot(tenant_id, object_key) == b'{"blank_stack_restore":true}'
+    assert await destination.object_store.is_legal_hold_enabled(restored_receipt)
+    assert (restore_dir / "database-remap.json").read_text().strip()
+    assert (restore_dir / "object-restore.json").read_text().strip()
+    await source_engine.dispose()
+    await destination_engine.dispose()
+
+
+async def _create_database(database_name: str) -> None:
+    if not database_name.replace("_", "").isalnum():
+        raise ValueError("unsafe test database name")
+    connection = await asyncpg.connect(
+        "postgresql://storage_admin:storage_test_password@127.0.0.1:55432/postgres"
+    )
+    try:
+        await connection.execute(f'CREATE DATABASE "{database_name}"')
+    finally:
+        await connection.close()
+
+
+def _database_url(database_name: str) -> str:
+    return f"postgresql://storage_admin:storage_test_password@127.0.0.1:55432/{database_name}"
+
+
+def _migrate_database(database_url: str) -> None:
+    result = subprocess.run(
+        [".venv/bin/alembic", "upgrade", "head"],
+        cwd=Path(__file__).resolve().parents[2],
+        env={**os.environ, "DATABASE_URL": database_url},
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stdout + result.stderr)
+
+
+def _script_environment(database_url: str, bucket: str) -> dict[str, str]:
+    return {
+        **os.environ,
+        "TEST_DATABASE_URL": database_url,
+        "STORAGE_BACKUP_PASSPHRASE": "integration-test-passphrase",
+        "PLOTLOT_OBJECT_STORE_ENDPOINT": os.environ["PLOTLOT_OBJECT_STORE_ENDPOINT"],
+        "PLOTLOT_OBJECT_STORE_BUCKET": bucket,
+        "PLOTLOT_OBJECT_STORE_ACCESS_KEY": os.environ["PLOTLOT_OBJECT_STORE_ACCESS_KEY"],
+        "PLOTLOT_OBJECT_STORE_SECRET_KEY": os.environ["PLOTLOT_OBJECT_STORE_SECRET_KEY"],
+        "PLOTLOT_PYTHON": str(Path(__file__).resolve().parents[2] / ".venv" / "bin" / "python"),
+    }
