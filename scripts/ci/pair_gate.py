@@ -22,6 +22,7 @@ from pair_gate_types import (
     JsonObject,
     JsonValue,
     gate_error,
+    require_int,
     require_list,
     require_object,
     require_path,
@@ -103,6 +104,16 @@ def run_lane(
             raise gate_error("PAIR_E_SKIPPED_TEST", f"{lane_id} skipped {skipped} tests")
         if test_count == 0:
             raise gate_error("PAIR_E_ZERO_TEST", f"{lane_id} discovered zero tests")
+        expected_count = lane.get("expectedTestCount")
+        if expected_count is not None:
+            required_count = require_int(expected_count, "lane.expectedTestCount")
+        else:
+            required_count = None
+        if required_count is not None and test_count != required_count:
+            raise gate_error(
+                "PAIR_E_STALE_EVIDENCE",
+                f"{lane_id} expected {required_count} tests but recorded {test_count}",
+            )
     browser_glob = lane.get("browserArtifactGlob")
     if browser_glob is not None:
         pattern = require_string(browser_glob, "lane.browserArtifactGlob")

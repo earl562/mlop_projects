@@ -15,6 +15,7 @@ class Lane:
     report: JsonObject | None = None
     browser_artifact: str | None = None
     environment: JsonObject | None = None
+    expected_test_count: int | None = None
 
     def to_json(self) -> JsonObject:
         command_values: list[JsonValue] = [item for item in self.command]
@@ -32,6 +33,8 @@ class Lane:
             value["browserArtifactGlob"] = self.browser_artifact
         if self.environment is not None:
             value["environment"] = self.environment
+        if self.expected_test_count is not None:
+            value["expectedTestCount"] = self.expected_test_count
         return value
 
 
@@ -136,25 +139,22 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                 "plotlot-frontend-build", "plotlot", ["npm", "run", "build"], cwd="plotlot/frontend"
             ),
             Lane(
+                "plotlot-frontend-auth-boundary",
+                "plotlot",
+                ["python3", "../../scripts/ci/verify_frontend_auth_boundary.py"],
+                cwd="plotlot/frontend",
+            ),
+            Lane(
                 "plotlot-playwright",
                 "plotlot",
-                ["npx", "playwright", "test", "--project=no-db", "--reporter=json,html"],
+                ["python3", "../../scripts/ci/run_plotlot_playwright.py"],
                 cwd="plotlot/frontend",
                 report={"format": "playwright", "path": "reports/plotlot-playwright.json"},
                 browser_artifact="browser/plotlot/index.html",
+                expected_test_count=21,
                 environment={
-                    "CLERK_SECRET_KEY": "sk_test_dummy",
-                    "NEXT_PUBLIC_API_URL": "http://127.0.0.1:8000",
-                    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:3003",
-                    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_dummy",
-                    "NEXT_PUBLIC_GOOGLE_MAPS_KEY": "dummy-key",
                     "PLAYWRIGHT_JSON_OUTPUT_FILE": str(plotlot_browser),
                     "PLAYWRIGHT_HTML_OUTPUT_DIR": str(artifact_root / "browser/plotlot"),
-                    "PLOTLOT_MATRIX_LANE": "no-db",
-                    "PLOTLOT_RELEASE_GATE": "1",
-                    "PLOTLOT_TEST_AUTH_BYPASS": "0",
-                    "STRIPE_PRO_PRICE_ID": "price_test_dummy",
-                    "STRIPE_SECRET_KEY": "sk_test_dummy",
                 },
             ),
             Lane("byright-install", "byright", ["pnpm", "install", "--frozen-lockfile"]),

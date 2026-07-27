@@ -142,6 +142,14 @@ def create(args: argparse.Namespace) -> None:
         "lanes": lanes(artifact_root),
         "testPolicy": {
             "collectionArtifact": "reports/plotlot-pytest-inventory.json",
+            "frontendJourneys": [
+                {"path": "tests/lookup-uat.spec.ts", "requiredCount": 4},
+                {"path": "tests/mutation.spec.ts", "requiredCount": 7},
+                {"path": "tests/sidebar-navigation.spec.ts", "requiredCount": 1},
+                {"path": "tests/smoke.no-db.spec.ts", "requiredCount": 5},
+                {"path": "tests/vc-readiness.no-db.spec.ts", "requiredCount": 1},
+                {"path": "tests/workspace-routes.no-db.spec.ts", "requiredCount": 3},
+            ],
             "requiredBaseline": [
                 "tests/architecture/",
                 "tests/contracts/",
