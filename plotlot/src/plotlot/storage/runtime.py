@@ -173,20 +173,10 @@ async def build_storage_runtime(
 async def _active_bucket(session_provider: SessionProvider, configured_bucket: str) -> str:
     session = await session_provider()
     async with session:
-        async with session.begin():
-            await session.execute(
-                text(
-                    """INSERT INTO plotlot.storage_generation (singleton, bucket)
-                    VALUES (true, :bucket) ON CONFLICT (singleton) DO NOTHING"""
-                ),
-                {"bucket": configured_bucket},
-            )
-            bucket = await session.scalar(
-                text("SELECT bucket FROM plotlot.storage_generation WHERE singleton=true")
-            )
-    if not isinstance(bucket, str) or not bucket:
-        raise RuntimeError("active storage generation is unavailable")
-    return bucket if bucket.startswith("plotlot-restore-") else configured_bucket
+        bucket = await session.scalar(
+            text("SELECT bucket FROM plotlot.storage_generation WHERE singleton=true")
+        )
+    return bucket if isinstance(bucket, str) and bucket else configured_bucket
 
 
 async def initialize_configured_storage_runtime() -> StorageRuntime | None:

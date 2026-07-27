@@ -90,6 +90,7 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
     source_url = _database_url(source_database)
     destination_url = _database_url(destination_database)
     _migrate_database(source_url)
+    _migrate_database(destination_url)
     source_engine = create_async_engine(
         source_url.replace("postgresql://", "postgresql+asyncpg://")
     )
@@ -178,12 +179,18 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
         marker_after_failure = await destination_connection.fetchval(
             "SELECT value FROM restore_marker"
         )
+        recovery_attempt = await destination_connection.fetchrow(
+            """SELECT stage_bucket, state FROM plotlot.restore_attempts
+            WHERE state='RECOVERY_REQUIRED'"""
+        )
     finally:
         await destination_connection.close()
     target_versions_after = await S3VersionArchive(original_store).list_version_records()
     assert failed_restore.returncode == 91
     assert marker_after_failure == "unchanged"
     assert target_versions_after == target_versions_before
+    assert recovery_attempt is not None
+    assert recovery_attempt["stage_bucket"].startswith("plotlot-restore-")
     restore = subprocess.run(
         [
             "scripts/storage/restore_storage.sh",
@@ -216,12 +223,20 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
             tenant_id,
             object_key,
         )
+        promoted_binding = await destination_connection.fetchval(
+            """SELECT count(*) FROM plotlot.storage_generation generation
+            JOIN plotlot.restore_attempts attempt
+              ON attempt.attempt_id=generation.restore_attempt_id
+            WHERE attempt.state='PROMOTED'
+              AND attempt.stage_bucket=generation.bucket"""
+        )
     finally:
         await destination_connection.close()
 
     assert restored_receipt.version_id != receipt.version_id
     assert destination.object_store.config.bucket != destination_bucket
     assert lifecycle_version == restored_receipt.version_id
+    assert promoted_binding == 1
     assert await destination.read_snapshot(tenant_id, object_key) == b'{"blank_stack_restore":true}'
     assert await destination.object_store.is_legal_hold_enabled(restored_receipt)
     assert (restore_dir / "database-remap.json").read_text().strip()

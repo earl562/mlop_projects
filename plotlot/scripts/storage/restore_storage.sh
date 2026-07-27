@@ -19,7 +19,12 @@ restore_dir="$2"
 work_dir="$(mktemp -d)"
 stage_database=""
 stage_bucket="plotlot-restore-$("$plotlot_python" -c 'import uuid; print(uuid.uuid4().hex)')"
+restore_attempt=""
 cleanup() {
+  if [[ -n "$restore_attempt" ]]; then
+    "$plotlot_python" -m plotlot.storage.restore_attempt failed \
+      --attempt "$restore_attempt" --error "restore pipeline failed" >/dev/null || true
+  fi
   if [[ -n "$stage_database" ]]; then
     "$plotlot_python" -m plotlot.storage.restore_database drop \
       --stage "$stage_database" >/dev/null || true
@@ -56,6 +61,10 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
 stage_json="$("$plotlot_python" -m plotlot.storage.restore_database create)"
 stage_database="$("$plotlot_python" -c 'import json,sys; print(json.load(sys.stdin)["stage"])' <<<"$stage_json")"
 stage_url="$("$plotlot_python" -c 'import json,sys; print(json.load(sys.stdin)["url"])' <<<"$stage_json")"
+archive_sha="$(shasum -a 256 "$backup_file" | awk '{print $1}')"
+restore_attempt="$("$plotlot_python" -m plotlot.storage.restore_attempt register \
+  --stage-bucket "$stage_bucket" --stage-database "$stage_database" \
+  --archive-sha "$archive_sha")"
 pg_restore --no-owner --dbname="$stage_url" "$work_dir/database.dump"
 "$plotlot_python" -m plotlot.storage.archive restore \
   --endpoint "$PLOTLOT_OBJECT_STORE_ENDPOINT" \
@@ -66,9 +75,15 @@ PLOTLOT_RESTORE_DATABASE_URL="$stage_url" \
 PLOTLOT_RESTORE_STAGED_BUCKET="$stage_bucket" \
   "$plotlot_python" -m plotlot.storage.restore \
   --version-map "$work_dir/version-map.json" > "$restore_dir/database-remap.json"
+"$plotlot_python" -m plotlot.storage.restore_attempt prepare \
+  --attempt "$restore_attempt" --stage-bucket "$stage_bucket" \
+  --stage-database "$stage_database" --stage-url "$stage_url" \
+  --archive-sha "$archive_sha"
 if [[ "${PLOTLOT_RESTORE_FAIL_AFTER_OBJECTS:-false}" == "true" ]]; then
   exit 91
 fi
 "$plotlot_python" -m plotlot.storage.restore_database promote --stage "$stage_database"
 stage_database=""
+"$plotlot_python" -m plotlot.storage.restore_attempt promoted --attempt "$restore_attempt"
+restore_attempt=""
 cp "$work_dir/manifest.json" "$restore_dir/restore-manifest.json"

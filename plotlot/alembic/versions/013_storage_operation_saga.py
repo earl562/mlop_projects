@@ -18,13 +18,27 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     statements = (
+        """CREATE TABLE plotlot.restore_attempts (
+          attempt_id uuid PRIMARY KEY,
+          stage_bucket varchar(255) NOT NULL UNIQUE,
+          stage_database varchar(255) NOT NULL,
+          archive_sha256 char(64) NOT NULL,
+          state varchar(24) NOT NULL CHECK
+            (state IN ('REGISTERED','OBJECTS_RESTORED','RECOVERY_REQUIRED','PROMOTED','CLEANED')),
+          cleanup_after timestamptz NOT NULL,
+          last_error text,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )""",
         """CREATE TABLE plotlot.storage_generation (
           singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
           bucket varchar(255) NOT NULL,
+          restore_attempt_id uuid NOT NULL UNIQUE
+            REFERENCES plotlot.restore_attempts(attempt_id),
           updated_at timestamptz NOT NULL DEFAULT now()
         )""",
-        "GRANT SELECT, INSERT ON plotlot.storage_generation TO plotlot_app",
-        "REVOKE UPDATE, DELETE ON plotlot.storage_generation FROM plotlot_app",
+        "GRANT SELECT ON plotlot.storage_generation TO plotlot_app",
+        "REVOKE INSERT, UPDATE, DELETE ON plotlot.storage_generation FROM plotlot_app",
+        "REVOKE ALL ON plotlot.restore_attempts FROM plotlot_app",
         """ALTER TABLE plotlot.raw_snapshots
           ADD COLUMN lifecycle_state varchar(16) NOT NULL DEFAULT 'ACTIVE'
           CHECK (lifecycle_state IN ('ACTIVE', 'DELETING'))""",
@@ -430,6 +444,7 @@ def downgrade() -> None:
           FOR EACH ROW EXECUTE FUNCTION plotlot.reject_immutable_mutation()""",
         "DROP TABLE plotlot.storage_operations",
         "DROP TABLE IF EXISTS plotlot.storage_generation",
+        "DROP TABLE IF EXISTS plotlot.restore_attempts",
         "DROP FUNCTION plotlot.guard_storage_operation()",
         "ALTER TABLE plotlot.raw_snapshots DROP COLUMN lifecycle_state",
         """CREATE FUNCTION plotlot.delete_expired_snapshot(

@@ -68,11 +68,6 @@ async def remap_restored_object_versions(
                 if any(remaining.values()):
                     raise RuntimeError("source object version remains after restore remap")
             staged_bucket = os.environ["PLOTLOT_RESTORE_STAGED_BUCKET"]
-            await connection.execute(
-                """UPDATE plotlot.storage_generation
-                SET bucket=$1, updated_at=now() WHERE singleton=true""",
-                staged_bucket,
-            )
             await _validate_staged_references(connection, staged_bucket, version_map)
     finally:
         await connection.close()

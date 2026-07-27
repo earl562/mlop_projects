@@ -279,6 +279,40 @@ async def test_restore_refuses_map_omitting_each_required_reference_table(
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_application_role_cannot_forge_storage_generation() -> None:
+    database_url = await _create_database(f"generation_{uuid4().hex}")
+    _migrate_database(database_url)
+    for statement in (
+        """INSERT INTO plotlot.restore_attempts
+        (attempt_id, stage_bucket, stage_database, archive_sha256, state, cleanup_after)
+        VALUES (gen_random_uuid(), 'plotlot-restore-attacker', 'attacker',
+        repeat('0', 64), 'PROMOTED', now())""",
+        """INSERT INTO plotlot.storage_generation
+        (singleton, bucket, restore_attempt_id)
+        VALUES (true, 'plotlot-restore-attacker', gen_random_uuid())""",
+        "UPDATE plotlot.storage_generation SET bucket='plotlot-restore-attacker'",
+        "DELETE FROM plotlot.storage_generation",
+    ):
+        connection = await asyncpg.connect(database_url)
+        try:
+            await connection.execute("SET ROLE plotlot_app")
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                await connection.execute(statement)
+        finally:
+            await connection.close()
+    connection = await asyncpg.connect(database_url)
+    try:
+        await connection.execute("SET ROLE plotlot_app")
+        await connection.execute("SELECT set_config('app.restore_mode', 'on', false)")
+        generation = await connection.fetchval(
+            "SELECT bucket FROM plotlot.storage_generation WHERE singleton=true"
+        )
+    finally:
+        await connection.close()
+    assert generation is None
+
+
 async def _create_database(database_name: str) -> str:
     connection = await asyncpg.connect(
         "postgresql://storage_admin:storage_test_password@127.0.0.1:55432/postgres"
