@@ -1,0 +1,41 @@
+{
+  "schema_version": "direction-a-imagegen-metadata/v1.0.0",
+  "asset": "reference-direction-a-v1.png",
+  "validation": {
+    "validated_at": "2026-07-26",
+    "method": [
+      "PNG file-signature inspection",
+      "image dimension inspection",
+      "manual visual inspection"
+    ],
+    "result": "valid existing ui-mockup reference",
+    "pixel_dimensions": { "width": 1586, "height": 992 },
+    "has_alpha": false,
+    "sha256": "69ad0bd9973bbf16a8991bfb4b6f6fb16398b393b6c1d072472e1b78b05b17db"
+  },
+  "prompt": {
+    "path": "../direction-a.prompt.md",
+    "version": "direction-a/v1.0.0",
+    "use_case": "ui-mockup",
+    "sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078"
+  },
+  "current_task_disposition": {
+    "generated_new_image": false,
+    "reason": "The existing reference is a valid, visually inspected PNG and satisfies the required single ui-mockup reference. Regeneration would add variation without improving the semantic contract.",
+    "generation_mode_claim": "Not independently asserted from the raster file; this metadata records current validation, not unverified historical tooling provenance."
+  },
+  "reference_contract": {
+    "authoritative_for": ["density", "three-panel proportion", "paper-and-hairline material", "evidence-led hierarchy", "calm decision rail"],
+    "not_authoritative_for": ["exact raster copy", "legal/economic facts", "coverage policy beyond the text packet", "pixel-perfect 1440x900 geometry", "runtime behavior"],
+    "known_limitations": [
+      "The reference is 1586x992, not the requested 1440x900 target.",
+      "Generated raster text must be superseded by the textual specification when copy differs or is unclear.",
+      "The image contains only redacted illustrative identifiers and must not be used as a production data source."
+    ]
+  },
+  "fixture": {
+    "path": "fixtures/redacted-acquisition-case.json",
+    "sha256": "e81ade34d18a10c5aa6bc9e7bd63e4654818b2ed34f77271e7a8ec4a73530338",
+    "privacy": "Contains stable redacted display identifiers only; no private/customer address is allowed."
+  }
+}

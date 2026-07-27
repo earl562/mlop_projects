@@ -1,0 +1,71 @@
+{
+  "viewport": {
+    "name": "desktop-1440x900",
+    "width": 1440,
+    "height": 900
+  },
+  "state": {
+    "name": "workspace",
+    "url": "/workspace"
+  },
+  "httpStatus": 200,
+  "metrics": {
+    "title": "PlotLot - AI Zoning Analysis",
+    "url": "http://127.0.0.1:3215/workspace?mode=lookup",
+    "bodyText": "P\n\nPlotLot\n\nAI ZONING ANALYSIS\n\n⊕\nNew analysis\n⌘ K\n⌖\nSite Finder\n◫\nAnalyses\n◉\nEvidence\n☰\nReports\n✳\nHarness Workspace\n◎\nConnectors\nCHAT HISTORY\n\nNo conversations yet\n\n104 municipalities\nFree\nPLOTLOT\nHi there\nAnalyze any property in the US\n\nZoning, density, comps, pro forma, and development potential — in seconds\n\nLookup\nAgent\n\nPlotLot analyzes zoning, density, comps & pro forma for any US property",
+    "documentWidth": 1440,
+    "viewportWidth": 1440,
+    "horizontalOverflow": false,
+    "activeElement": "INPUT",
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": 12,
+        "width": 295,
+        "right": 307,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 453,
+        "width": 675.078125,
+        "right": 1128.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ],
+    "headings": [
+      {
+        "tag": "H1",
+        "text": "Analyze any property in the US",
+        "lines": 2
+      }
+    ],
+    "buttons": [
+      "Toggle dark mode",
+      "⊕New analysis⌘ K",
+      "⌖Site Finder",
+      "◫Analyses",
+      "◉Evidence",
+      "☰Reports",
+      "✳Harness Workspace",
+      "◎Connectors",
+      "Toggle sidebar",
+      "Lookup",
+      "Agent",
+      "Send message"
+    ]
+  },
+  "console": [],
+  "requestFailures": [],
+  "badResponses": []
+}

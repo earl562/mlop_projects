@@ -1,0 +1,172 @@
+- main:
+  - link "Plotlot home":
+    - /url: /
+    - text: Plotlot
+  - link "Analyze a Lot":
+    - /url: /workspace
+  - paragraph: Land intelligence platform
+  - heading "See What Fits." [level=1]
+  - paragraph: Understand zoning potential, parcel constraints, and development possibilities in minutes.
+  - link "Analyze a Lot":
+    - /url: /workspace
+  - link "View Demo":
+    - /url: "#product"
+  - text: Trusted by developers, architects, and municipal teams Gensler Clayco CIRofus Hines McWhinney
+  - img "Plotlot product preview":
+    - img "Aerial parcel map with lot boundary"
+    - article:
+      - img "White massing study model"
+  - paragraph: Trust & proof
+  - heading "Trusted for faster diligence." [level=2]
+  - paragraph: Built for real estate, design, and municipal teams who move projects forward.
+  - text: CBRE Eastdil Secured Gensler Skidmore Owings & Merrill Related Clayco Toronto
+  - article:
+    - text: 10x
+    - strong: faster site review
+    - paragraph: Automated discovery and surface what matters instantly.
+  - article:
+    - text: "[ ]"
+    - strong: Parcel + zoning + overlays
+    - paragraph: All key layers in one place. Always up to date.
+  - article:
+    - text: OK
+    - strong: Minutes, not days.
+    - paragraph: From search to site summary in just a few clicks.
+  - paragraph: Capabilities
+  - heading "Everything needed to evaluate a lot." [level=2]
+  - paragraph: All the context, constraints, and tools you need in one place.
+  - link "Zoning Intelligence Instantly understand zoning, overlays, and land use rules.":
+    - /url: "#product"
+    - strong: Zoning Intelligence
+    - paragraph: Instantly understand zoning, overlays, and land use rules.
+  - link "Setbacks & Overlays See building envelopes, setbacks, and overlay constraints.":
+    - /url: "#product"
+    - strong: Setbacks & Overlays
+    - paragraph: See building envelopes, setbacks, and overlay constraints.
+  - link "Massing Studies Test bulk, height, and scale with real-time massing.":
+    - /url: "#product"
+    - strong: Massing Studies
+    - paragraph: Test bulk, height, and scale with real-time massing.
+  - link "Parcel Insights Explore parcel details, dimensions, ownership, and more.":
+    - /url: "#product"
+    - strong: Parcel Insights
+    - paragraph: Explore parcel details, dimensions, ownership, and more.
+  - link "Export Reports Generate clean, shareable reports with all key findings.":
+    - /url: /sign-up?intent=report
+    - strong: Export Reports
+    - paragraph: Generate clean, shareable reports with all key findings.
+  - link "Collaborative Review Share, comment, and align with your team.":
+    - /url: /sign-up?intent=team
+    - strong: Collaborative Review
+    - paragraph: Share, comment, and align with your team.
+  - paragraph: Product showcase
+  - heading "A clearer view of the site." [level=2]
+  - paragraph: From zoning and constraints to massing and compliance, everything lives in one place.
+  - link "Explore the Product":
+    - /url: /workspace
+  - img "Aerial parcel product view"
+  - article:
+    - img "Massing study interface"
+    - strong: Massing Study
+    - text: "[]"
+  - paragraph: 05 How it works
+  - heading "From address to answer." [level=2]
+  - paragraph: Plotlot turns complexity into clarity. Our workflow gives you faster insights, so you can move with confidence.
+  - article:
+    - text: "1"
+    - heading "Enter an address" [level=3]
+    - paragraph: Search any site to get started in seconds.
+  - article:
+    - text: "2"
+    - heading "Review zoning & parcel constraints" [level=3]
+    - paragraph: Understand what is possible on your site.
+  - article:
+    - text: "3"
+    - heading "Explore massing options" [level=3]
+    - paragraph: Compare options that fit the rules and context.
+  - article:
+    - text: "4"
+    - heading "Export a report" [level=3]
+    - paragraph: Download a shareable report with key findings.
+  - paragraph: 06 Built for every stakeholder
+  - heading "Built for land decisions." [level=2]
+  - paragraph: Plotlot brings clarity to every stage of the land lifecycle for the people who move projects forward.
+  - article:
+    - paragraph: Developers
+    - heading "Size opportunities with confidence." [level=3]
+    - text: Validate feasibility, yield, and risk before you buy.
+  - article:
+    - paragraph: Brokers
+    - heading "Strengthen listings with insights." [level=3]
+    - text: Add zoning clarity and upside to every deal.
+  - article:
+    - paragraph: Architects
+    - heading "Explore concepts faster." [level=3]
+    - text: Test massing, setbacks, and code in real time.
+  - article:
+    - paragraph: Municipal teams
+    - heading "Review projects with clarity." [level=3]
+    - text: Standardize analysis and communicate with confidence.
+  - paragraph: 07 Proof in practice
+  - heading "What teams say." [level=2]
+  - paragraph: Plotlot helps real estate and planning teams move faster with confidence.
+  - blockquote: "\" Plotlot helped us go from a napkin sketch to a feasible plan in minutes. It is now part of every early conversation."
+  - text: Sarah Thompson VP of Development, Gensler
+  - img "Completed urban development"
+  - article:
+    - text: "\""
+    - paragraph: The zoning and massing insights are incredibly accurate and save us days of back-and-forth.
+    - text: Michael Lee
+  - article:
+    - text: "\""
+    - paragraph: We use Plotlot to test more scenarios, earlier. It helps us design smarter and de-risk every site.
+    - text: Alicia Morgan
+  - paragraph: 8 Pricing & get started
+  - heading "Start with one lot." [level=2]
+  - paragraph: Plans built for every stage of land intelligence.
+  - link "Start analyzing":
+    - /url: /workspace
+  - link "Talk to our team":
+    - /url: /sign-up?intent=team
+  - article:
+    - heading "Starter" [level=3]
+    - paragraph: Explore with confidence.
+    - strong: $0
+    - text: Free forever
+    - list:
+      - listitem: OK 3 lot analyses / month
+      - listitem: OK Standard reports
+      - listitem: OK Community support
+    - link "Get started":
+      - /url: /sign-up?plan=starter
+  - article:
+    - text: Most popular
+    - heading "Pro" [level=3]
+    - paragraph: For professionals who move fast.
+    - strong: $49
+    - text: / month Billed monthly
+    - list:
+      - listitem: OK Unlimited lot analyses
+      - listitem: OK Advanced reports
+      - listitem: OK Export & data layers
+      - listitem: OK Priority support
+    - link "Start Pro":
+      - /url: /sign-up?plan=pro
+  - article:
+    - heading "Team" [level=3]
+    - paragraph: Scale insights across your team.
+    - strong: $199
+    - text: / month Billed monthly
+    - list:
+      - listitem: OK Everything in Pro
+      - listitem: OK Team collaboration
+      - listitem: OK Shared workspaces
+      - listitem: OK Dedicated support
+    - link "Contact sales":
+      - /url: /sign-up?plan=team
+  - link "Plotlot home":
+    - /url: /
+    - text: Plotlot
+  - paragraph: Land intelligence, made simple.
+  - paragraph: (c) 2026 Plotlot. All rights reserved.
+- alert

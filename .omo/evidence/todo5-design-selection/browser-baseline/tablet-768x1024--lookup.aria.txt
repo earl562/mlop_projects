@@ -1,0 +1,37 @@
+- complementary:
+  - text: P
+  - paragraph: PlotLot
+  - paragraph: AI ZONING ANALYSIS
+  - button "Toggle dark mode":
+    - img
+  - button "⊕ New analysis ⌘ K"
+  - list:
+    - listitem:
+      - button "⌖ Site Finder"
+    - listitem:
+      - button "◫ Analyses"
+    - listitem:
+      - button "◉ Evidence"
+    - listitem:
+      - button "☰ Reports"
+    - listitem:
+      - button "✳ Harness Workspace"
+    - listitem:
+      - button "◎ Connectors"
+  - textbox "Search conversations..."
+  - text: Chat History
+  - paragraph: No conversations yet
+  - text: 104 municipalities Free
+- button "Toggle sidebar":
+  - img "Toggle sidebar"
+- text: P PlotLot
+- main:
+  - text: PlotLot Hi there
+  - heading "Analyze any property in the US" [level=1]
+  - paragraph: Zoning, density, comps, pro forma, and development potential — in seconds
+  - textbox "Enter a property address..."
+  - button "Lookup"
+  - button "Agent"
+  - button "Send message" [disabled]
+  - paragraph: PlotLot analyzes zoning, density, comps & pro forma for any US property
+- alert

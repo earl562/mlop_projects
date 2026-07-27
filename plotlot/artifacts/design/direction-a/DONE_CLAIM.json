@@ -1,0 +1,21 @@
+{
+  "claim_version": "direction-a-done/v1.0.0",
+  "scope": "Design-only packet for PlotLot Direction A, Operational Intelligence Workbench.",
+  "status": "complete",
+  "completed": [
+    "Materially distinct evidence-led acquisition/preconstruction workbench direction",
+    "Route map, panel hierarchy, semantic state matrix, and responsive specifications for 1440x900, 768x1024, and 390x844",
+    "Truthful coverage gates: Miami-Dade private beta; Broward/Palm municipality-conditional; San Diego County planned/not enabled",
+    "Redacted parcel/folio/APN fixture with zoning, setbacks, capacity/max-units, constraints, survey/plat/documents, comps, conditional purchase ceiling, evidence/replay, and agent handoff",
+    "Grounded LLM brief contract with citation binding and explicit abstention",
+    "Validated existing ui-mockup reference with prompt, output, and fixture SHA-256 bindings",
+    "Accessibility, overflow, focus, and reduced-motion design audit"
+  ],
+  "not_claimed": [
+    "UI implementation",
+    "Legal, title, survey, appraisal, underwriting, entitlement, or investment advice",
+    "Runtime visual QA, keyboard testing, accessibility testing, or Lighthouse results",
+    "Coverage beyond the explicitly stated gates"
+  ],
+  "validation_pointer": ".omo/evidence/direction-a-packet-validation/validation.md"
+}

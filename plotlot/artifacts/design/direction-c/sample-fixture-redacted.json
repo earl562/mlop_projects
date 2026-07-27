@@ -1,0 +1,30 @@
+{
+  "fixtureVersion": "direction-c-fixture/v1",
+  "dealId": "deal_mia_beta_0142",
+  "dealLabel": "Northwest infill — review binder",
+  "folio": "30-3115-•••-0420",
+  "apn": "436-302-••-00",
+  "coverage": {
+    "miamiDade": "private_beta_enabled",
+    "broward": "municipality_conditional",
+    "palmBeach": "municipality_conditional",
+    "sanDiego": "planned_not_enabled"
+  },
+  "zoning": {
+    "code": "RU-2",
+    "setbacks": { "frontFt": 20, "sideFt": 7.5, "rearFt": 15 }
+  },
+  "capacity": {
+    "lotAreaSqft": 12500,
+    "illustrativeLotAreaPerUnitSqft": 6250,
+    "scenarioLotAreaCap": 2,
+    "decisionState": "abstained",
+    "blocker": "parking rule is not hash-bound"
+  },
+  "purchaseCeiling": {
+    "illustrativeUsd": 418000,
+    "decisionState": "unavailable_pending_capacity"
+  },
+  "sourceRefs": ["P-01", "Z-03", "D-04", "S-02", "C-06", "PK-01", "CMP-07"],
+  "privacy": "stable-redacted illustrative fixture; not a real parcel, owner, or legal conclusion"
+}
