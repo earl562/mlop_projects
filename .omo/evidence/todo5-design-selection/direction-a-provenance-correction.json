@@ -1,0 +1,31 @@
+{
+  "schema_version": "todo5-direction-a-provenance-correction/v1.0.0",
+  "recorded_at_utc": "2026-07-27T03:57:57Z",
+  "requirement": "Make exactly one new built-in ImageGen call using the committed Direction A canonical prompt and bind its output.",
+  "invocation": {
+    "tool": "image_gen.imagegen",
+    "use_case": "ui-mockup",
+    "count": 1,
+    "canonical_prompt": "plotlot/artifacts/design/direction-a.prompt.md",
+    "prompt_version": "direction-a/v1.0.0",
+    "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
+    "tool_scoped_output": "call_5rMr5MLITuLduZoT1qPYdGpn.png",
+    "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_5rMr5MLITuLduZoT1qPYdGpn.png",
+    "project_copy": "plotlot/artifacts/design/direction-a/reference-direction-a-v2.png"
+  },
+  "output": {
+    "sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
+    "dimensions": [1586, 992],
+    "format": "PNG RGB",
+    "bytes": 1410748
+  },
+  "manual_visual_observable": {
+    "result": "pass",
+    "direction_a_signature": "narrow deal queue, dominant ordered evidence ledger, anchored acquisition decision rail",
+    "evidence_comprehension": "parcel, coverage, zoning, dimensional rules, constraints, capacity, documents, comparables, underwriting, provenance, citations, hashes, blocker, and handoff are visible",
+    "coverage": "Miami-Dade private beta; Broward and Palm Beach municipality required; San Diego planned/not enabled",
+    "privacy": "stable-redacted synthetic identifiers only; no private address, customer, or raw lead data",
+    "prohibited_patterns": "no map-first composition, chat-first UI, screenshot-in-device, beach/luxury/palm imagery, fake partner marks, or countywide/nationwide availability claim",
+    "selection": "Direction A remains the deterministic winner at 100.0 with no blocker"
+  }
+}

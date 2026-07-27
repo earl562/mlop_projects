@@ -2,10 +2,11 @@
   "schema_version": "plotlot-direction-packet-audit/v1.0.0",
   "audited_at": "2026-07-26",
   "generation_policy": {
-    "new_image_calls": 0,
-    "existing_reference_packets_only": true,
+    "new_image_calls": 1,
+    "existing_reference_packets_only": false,
+    "correction_scope": "Exactly one built-in ImageGen call was made to bind Direction A to a verifiable tool output. No Direction B or C image call was made.",
     "one_call_claims": {
-      "direction_a": "Historical generation mode is not independently asserted; current metadata truthfully records only current validation.",
+      "direction_a": 1,
       "direction_b": 1,
       "direction_c": 1
     }
@@ -21,12 +22,19 @@
   "directions": {
     "a": {
       "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
-      "image_sha256": "69ad0bd9973bbf16a8991bfb4b6f6fb16398b393b6c1d072472e1b78b05b17db",
+      "image_sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
+      "selected_asset": "reference-direction-a-v2.png",
       "dimensions": [1586, 992],
       "manifest_verification": "pass",
       "visual_inspection": "pass",
       "privacy": "stable-redacted synthetic identifiers only",
-      "raster_role": "non-authoritative visual reference"
+      "raster_role": "non-authoritative visual reference",
+      "provenance": {
+        "tool": "built-in image_gen.imagegen",
+        "invoked_at_utc": "2026-07-27T03:57:57Z",
+        "tool_scoped_output": "call_5rMr5MLITuLduZoT1qPYdGpn.png",
+        "metadata": "../direction-a/imagegen.metadata.json"
+      }
     },
     "b": {
       "prompt_sha256": "c7e23c9abc2d922da92c9f7dd8d23327f812160279eac0bbc5537788083ff963",

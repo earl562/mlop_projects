@@ -35,10 +35,16 @@
         "artifact": ".omo/evidence/todo5-design-selection/browser-baseline/diagnostic-375x844--lookup-placeholder.png"
       },
       {
-        "scenario": "manual visual inspection of all three existing direction references",
+        "scenario": "manual visual inspection of the fresh provenance-bound Direction A reference and existing Direction B/C references",
         "invocation": "open original-resolution PNGs",
         "observable": "distinct ledger/atlas/binder compositions; no screenshot-in-device, generic chat home, private lead data, or regional cliché imagery",
-        "artifact": "plotlot/artifacts/design/direction-{a,b,c}/reference-direction-{a,b,c}-v1.png"
+        "artifact": "plotlot/artifacts/design/direction-a/reference-direction-a-v2.png; plotlot/artifacts/design/direction-b/reference-direction-b-v1.png; plotlot/artifacts/design/direction-c/reference-direction-c-v1.png"
+      },
+      {
+        "scenario": "Direction A built-in ImageGen provenance correction",
+        "invocation": "exactly one image_gen.imagegen call using the unchanged direction-a/v1.0.0 canonical prompt",
+        "observable": "tool-scoped output call_5rMr5MLITuLduZoT1qPYdGpn.png copied as reference-direction-a-v2.png; prompt/output hashes and dimensions bind in metadata",
+        "artifact": ".omo/evidence/todo5-design-selection/direction-a-provenance-correction.json"
       }
     ],
     "cleanup": [
@@ -56,7 +62,7 @@
     },
     "risks": [
       "Todo5 is a design contract only; runtime conformance remains for Todo21.",
-      "All generated references are 1586x992 rather than the requested 1440x900 and remain non-authoritative.",
+      "All generated references, including the fresh provenance-bound Direction A v2 output, are 1586x992 rather than the requested 1440x900 and remain non-authoritative.",
       "The known 375px placeholder defect is present in the current app and is explicitly not claimed as passed."
     ]
   }

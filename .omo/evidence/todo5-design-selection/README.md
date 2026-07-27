@@ -2,10 +2,18 @@
 
 ## Direction packet integrity and selection
 
-- Scenario: validate all three existing one-call reference packets and deterministic selection.
+- Scenario: validate all three direction packets, the provenance-bound Direction A correction, and deterministic selection.
 - Invocation: `.omo/evidence/todo5-design-selection/verify-todo5.sh`
 - Binary observable: exit 0; every manifest row reports `OK`; all three files report PNG RGB 1586×992; recomputed winner is Direction A at 100.0 with no blocker; `TODO5_VERIFICATION: PASS`.
 - Artifact: `verification.txt`
+
+## Direction A provenance correction
+
+- Scenario: bind Direction A to one fresh built-in ImageGen output without changing the canonical prompt or deterministic selection.
+- Invocation: exactly one `image_gen.imagegen` call in `ui-mockup` mode using `plotlot/artifacts/design/direction-a.prompt.md` version `direction-a/v1.0.0`.
+- Binary observable: prompt SHA-256 `2b24a5…6078`; tool-scoped output `call_5rMr5MLITuLduZoT1qPYdGpn.png`; project asset `reference-direction-a-v2.png`; output SHA-256 `4100a9…cc7`; PNG RGB 1586×992; metadata invocation count 1.
+- Manual observable: the fresh image retains Direction A’s deal queue, ordered evidence ledger, decision rail, evidence/citation/hash hierarchy, explicit abstention/handoff, and truthful market gates with only stable-redacted identifiers.
+- Artifacts: `direction-a-provenance-correction.json`, `plotlot/artifacts/design/direction-a/imagegen.metadata.json`, and `plotlot/artifacts/design/direction-a/reference-direction-a-v2.png`.
 
 ## Desktop, tablet, and mobile current-app baseline
 

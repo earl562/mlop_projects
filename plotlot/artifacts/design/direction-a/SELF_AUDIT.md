@@ -52,6 +52,6 @@ This is a design-artifact audit, not a claim that runtime UI behavior has alread
 
 ## Known limitations and implementation gates
 
-1. The existing ImageGen reference is 1586×992 rather than the 1440×900 target and must not be treated as pixel-perfect implementation geometry.
+1. The selected provenance-bound ImageGen reference is 1586×992 rather than the 1440×900 target and must not be treated as pixel-perfect implementation geometry.
 2. Generated raster text is comparison material only; source specifications control exact coverage copy and legal-safety language.
 3. This packet intentionally includes no UI code. Before release, implementation must run fresh browser captures at 1440×900, 768×1024, and 390×844; exercise default/focus/expanded/blocker/coverage states; run accessibility checks; and complete visual-QA independent review according to the applicable skill.

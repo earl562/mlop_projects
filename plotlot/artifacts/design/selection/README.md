@@ -44,3 +44,5 @@ Direction C makes the home object a stage-gate binder passed between accountable
 ## Reference authority and raster ban
 
 The three PNG files are composition references only. They may inform hierarchy, density, material, and responsive intent. They must never be shipped as a page background, image map, canvas substitute, hit target, OCR content source, or screenshot embedded beneath interactive controls. Product facts, accessible names, focus order, layout, and states must be implemented with semantic DOM and shared design-system primitives. Written specifications override raster text and generated dimensions.
+
+Direction A's selected reference is `../direction-a/reference-direction-a-v2.png`. It is bound to the unchanged canonical prompt and exactly one corrective built-in `image_gen.imagegen` call by `../direction-a/imagegen.metadata.json`. Direction A v1 remains a historical reference only. This provenance correction does not change the deterministic scores or selection.

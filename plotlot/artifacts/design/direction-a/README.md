@@ -42,8 +42,9 @@ This makes Direction A structurally distinct from a map-first explorer and from 
 | `RESPONSIVE_WIREFRAMES.md` | 1440×900, 768×1024, and 390×844 wireframes plus overflow/content-stress behavior |
 | `CONTENT_FIXTURES_AND_GROUNDING.md` | Redacted South Florida fixtures, coverage truth, evidence provenance, documents, grounded LLM, and handoff schemas |
 | `SELF_AUDIT.md` | Accessibility, hierarchy, overflow, heading-wrap, focus, reduced-motion, and market-specificity audit |
-| `reference-direction-a-v1.png` | One ImageGen-generated desktop visual reference |
-| `imagegen.metadata.json` | Generation mode, prompt/hash binding, image hash, dimensions, and known reference defects |
+| `reference-direction-a-v2.png` | Selected provenance-bound desktop visual reference from the single corrective built-in ImageGen call |
+| `reference-direction-a-v1.png` | Preserved historical visual reference; not the selected provenance-bound output |
+| `imagegen.metadata.json` | Built-in tool-call/output binding, invocation timestamp, prompt hash, image hash, dimensions, and known limitations |
 | `checksums.sha256` | Final package hashes |
 | `DONE_CLAIM.json` | Bounded design-only completion claim |
 | `../direction-a.prompt.md` | Versioned canonical ImageGen prompt |
@@ -89,4 +90,4 @@ This makes Direction A structurally distinct from a map-first explorer and from 
 
 ## Reference-image authority
 
-The generated image is a visual reference for density, hierarchy, panel proportion, hairline material, and color temperament. It is not implementation code and is not the semantic source of truth. Textual specifications override raster text and the documented dimension/copy limitations in `imagegen.metadata.json`.
+The selected `reference-direction-a-v2.png` is bound to one built-in `image_gen.imagegen` call and the canonical prompt through `imagegen.metadata.json`. It is a visual reference for density, hierarchy, panel proportion, hairline material, and color temperament. It is not implementation code and is not the semantic source of truth. Textual specifications override raster text and the documented dimension/copy limitations in `imagegen.metadata.json`.

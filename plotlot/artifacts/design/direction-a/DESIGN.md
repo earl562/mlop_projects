@@ -6,7 +6,7 @@
 - Embedded references shortlisted: Linear for precise hierarchy and luminance stepping; Sentry for data-density discipline; Wired for ledger-like editorial scanning. Linear was selected only as the structural benchmark. PlotLot does not inherit Linear’s brand, dark marketing canvas, Inter typography, purple accent, or marketing layout.
 - Layer A constraint: the requested gpt-taste selection was applied only to compatible workbench decisions. AIDA, hero architecture, cinematic section spacing, marquees, testimonial carousels, decorative scroll scenes, and generic landing-page motion were rejected as category errors.
 - App-shell mechanics: fixed utility header; one named scroll owner per region; no document-level horizontal scroll; intrinsic reflow at narrow widths.
-- ImageGen: one built-in `ui-mockup` call from `../direction-a.prompt.md`; selected output `reference-direction-a-v1.png`; no second generation was permitted or needed.
+- ImageGen provenance correction: one built-in `image_gen.imagegen` `ui-mockup` call was made on 2026-07-27 UTC from the unchanged canonical `../direction-a.prompt.md`; selected output `reference-direction-a-v2.png`. The tool-scoped output name, prompt hash, timestamp, output hash, and dimensions are bound in `imagegen.metadata.json`.
 - External visual research: not used. This is a constrained sibling direction with an already-specified operational thesis; outside screen harvesting could collapse its distinction from map-first or deal-room lanes.
 
 ### Deterministic gpt-taste record
@@ -288,6 +288,6 @@ Strategy: **tonal shift plus hairline rules**.
 
 | Item | Location | Why accepted | Exit |
 |---|---|---|---|
-| ImageGen raster contains one misspelled jurisdiction string and renders at 1586×992 rather than 1440×900 | `reference-direction-a-v1.png` | Only one generation call was allowed; the raster is non-authoritative and retains the correct 16:10 composition | Implementation follows textual copy/spec; a future image-only refresh may replace the reference |
+| Built-in ImageGen raster renders at 1586×992 rather than the requested 1440×900 | `reference-direction-a-v2.png` | The built-in output is provenance-bound and retains the correct 16:10 composition, but raster geometry remains non-authoritative | Implementation follows the written responsive geometry and semantic copy |
 | Static design artifacts cannot prove runtime keyboard order, screen-reader output, or motion timing | Entire package | This lane contains no UI implementation | Implementation must run browser-based visual QA and accessibility checks before shipping |
 | Exact legal values in the South Florida fixture are illustrative | `CONTENT_FIXTURES_AND_GROUNDING.md` | The artifact demonstrates content shape, not a legal result | Replace fixtures with policy-verified test records before production acceptance |

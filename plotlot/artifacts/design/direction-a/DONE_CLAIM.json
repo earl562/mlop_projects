@@ -8,7 +8,7 @@
     "Truthful coverage gates: Miami-Dade private beta; Broward/Palm municipality-conditional; San Diego County planned/not enabled",
     "Redacted parcel/folio/APN fixture with zoning, setbacks, capacity/max-units, constraints, survey/plat/documents, comps, conditional purchase ceiling, evidence/replay, and agent handoff",
     "Grounded LLM brief contract with citation binding and explicit abstention",
-    "Validated existing ui-mockup reference with prompt, output, and fixture SHA-256 bindings",
+    "Validated provenance-bound ui-mockup reference from exactly one corrective built-in ImageGen call with tool-scoped output, timestamp, prompt SHA-256, output SHA-256, dimensions, and fixture binding",
     "Accessibility, overflow, focus, and reduced-motion design audit"
   ],
   "not_claimed": [

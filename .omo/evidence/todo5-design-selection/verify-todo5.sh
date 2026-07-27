@@ -55,7 +55,28 @@ for (const state of ["verified", "missing", "stale", "conflict", "conditional", 
 }
 
 if (packet.radical_difference.result !== "pass") throw new Error("radical difference failed");
-if (packet.generation_policy.new_image_calls !== 0) throw new Error("unexpected new ImageGen call");
+if (packet.generation_policy.new_image_calls !== 1) throw new Error("provenance correction must record exactly one new ImageGen call");
+if (packet.generation_policy.one_call_claims.direction_a !== 1) {
+  throw new Error("Direction A must bind exactly one corrective ImageGen call");
+}
+const directionAMetadata = JSON.parse(
+  fs.readFileSync("plotlot/artifacts/design/direction-a/imagegen.metadata.json", "utf8"),
+);
+if (directionAMetadata.asset !== "reference-direction-a-v2.png") {
+  throw new Error("Direction A selected asset mismatch");
+}
+if (directionAMetadata.generation.mode !== "built-in image_gen.imagegen") {
+  throw new Error("Direction A generation mode mismatch");
+}
+if (directionAMetadata.generation.invocation_count_for_provenance_correction !== 1) {
+  throw new Error("Direction A provenance invocation count mismatch");
+}
+if (directionAMetadata.generation.prompt_sha256 !== "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078") {
+  throw new Error("Direction A prompt binding mismatch");
+}
+if (directionAMetadata.output.sha256 !== "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7") {
+  throw new Error("Direction A output binding mismatch");
+}
 if (ledger.baseline_commit !== "719e3179a77722e74df3ced161b350f60b5e6ad7") {
   throw new Error("iteration ledger is not bound to the audited baseline commit");
 }
@@ -92,7 +113,7 @@ NODE
 (cd plotlot && shasum -a 256 -c artifacts/design/direction-b/checksums.sha256)
 (cd plotlot/artifacts/design/direction-c && shasum -a 256 -c checksums.sha256)
 
-file plotlot/artifacts/design/direction-a/reference-direction-a-v1.png
+file plotlot/artifacts/design/direction-a/reference-direction-a-v2.png
 file plotlot/artifacts/design/direction-b/reference-direction-b-v1.png
 file plotlot/artifacts/design/direction-c/reference-direction-c-v1.png
 
