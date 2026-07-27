@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 import anyio
@@ -147,6 +147,10 @@ async def build_storage_runtime(
         from plotlot.storage.db import get_session
 
         session_provider = get_session
+    object_config = replace(
+        object_config,
+        bucket=await _active_bucket(session_provider, object_config.bucket),
+    )
     object_store = S3ImmutableObjectStore(object_config)
     await object_store.initialize()
     operations = StorageOperationRepository(session_provider)
@@ -164,6 +168,25 @@ async def build_storage_runtime(
         operations=operations,
         put_saga=put_saga,
     )
+
+
+async def _active_bucket(session_provider: SessionProvider, configured_bucket: str) -> str:
+    session = await session_provider()
+    async with session:
+        async with session.begin():
+            await session.execute(
+                text(
+                    """INSERT INTO plotlot.storage_generation (singleton, bucket)
+                    VALUES (true, :bucket) ON CONFLICT (singleton) DO NOTHING"""
+                ),
+                {"bucket": configured_bucket},
+            )
+            bucket = await session.scalar(
+                text("SELECT bucket FROM plotlot.storage_generation WHERE singleton=true")
+            )
+    if not isinstance(bucket, str) or not bucket:
+        raise RuntimeError("active storage generation is unavailable")
+    return bucket if bucket.startswith("plotlot-restore-") else configured_bucket
 
 
 async def initialize_configured_storage_runtime() -> StorageRuntime | None:

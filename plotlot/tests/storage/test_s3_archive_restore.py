@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from plotlot.storage.archive import ObjectArchiveService
 from plotlot.storage.object_snapshots import SnapshotMetadata
 from plotlot.storage.runtime import build_storage_runtime
-from plotlot.storage.s3_objects import S3ObjectStoreConfig
+from plotlot.storage.s3_objects import S3ImmutableObjectStore, S3ObjectStoreConfig
 from plotlot.storage.s3_versions import S3VersionArchive
 
 
@@ -147,6 +147,43 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
     destination_bucket = f"plotlot-restored-{uuid4().hex}"
     restore_dir = tmp_path / "restore"
     restore_env = _script_environment(destination_url, destination_bucket)
+    destination_connection = await asyncpg.connect(destination_url)
+    try:
+        await destination_connection.execute("CREATE TABLE restore_marker (value text NOT NULL)")
+        await destination_connection.execute("INSERT INTO restore_marker VALUES ('unchanged')")
+    finally:
+        await destination_connection.close()
+    original_store = S3ImmutableObjectStore(_config(destination_bucket))
+    await original_store.initialize()
+    original_store.client.put_object(
+        Bucket=destination_bucket,
+        Key="preexisting/marker",
+        Body=b"unchanged",
+    )
+    target_versions_before = await S3VersionArchive(original_store).list_version_records()
+    failed_restore = subprocess.run(
+        [
+            "scripts/storage/restore_storage.sh",
+            str(backup_dir / "storage-backup.tar.aead"),
+            str(tmp_path / "failed-restore"),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env={**restore_env, "PLOTLOT_RESTORE_FAIL_AFTER_OBJECTS": "true"},
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    destination_connection = await asyncpg.connect(destination_url)
+    try:
+        marker_after_failure = await destination_connection.fetchval(
+            "SELECT value FROM restore_marker"
+        )
+    finally:
+        await destination_connection.close()
+    target_versions_after = await S3VersionArchive(original_store).list_version_records()
+    assert failed_restore.returncode == 91
+    assert marker_after_failure == "unchanged"
+    assert target_versions_after == target_versions_before
     restore = subprocess.run(
         [
             "scripts/storage/restore_storage.sh",
@@ -183,6 +220,7 @@ async def test_encrypted_blank_stack_restore_is_readable_through_application(
         await destination_connection.close()
 
     assert restored_receipt.version_id != receipt.version_id
+    assert destination.object_store.config.bucket != destination_bucket
     assert lifecycle_version == restored_receipt.version_id
     assert await destination.read_snapshot(tenant_id, object_key) == b'{"blank_stack_restore":true}'
     assert await destination.object_store.is_legal_hold_enabled(restored_receipt)

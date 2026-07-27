@@ -18,6 +18,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     statements = (
+        """CREATE TABLE plotlot.storage_generation (
+          singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+          bucket varchar(255) NOT NULL,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )""",
+        "GRANT SELECT, INSERT ON plotlot.storage_generation TO plotlot_app",
+        "REVOKE UPDATE, DELETE ON plotlot.storage_generation FROM plotlot_app",
         """ALTER TABLE plotlot.raw_snapshots
           ADD COLUMN lifecycle_state varchar(16) NOT NULL DEFAULT 'ACTIVE'
           CHECK (lifecycle_state IN ('ACTIVE', 'DELETING'))""",
@@ -422,6 +429,7 @@ def downgrade() -> None:
           BEFORE UPDATE OR DELETE ON plotlot.lifecycle_receipts
           FOR EACH ROW EXECUTE FUNCTION plotlot.reject_immutable_mutation()""",
         "DROP TABLE plotlot.storage_operations",
+        "DROP TABLE IF EXISTS plotlot.storage_generation",
         "DROP FUNCTION plotlot.guard_storage_operation()",
         "ALTER TABLE plotlot.raw_snapshots DROP COLUMN lifecycle_state",
         """CREATE FUNCTION plotlot.delete_expired_snapshot(

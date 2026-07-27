@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import asyncpg
+import boto3
+from botocore.config import Config
 
 from plotlot.storage.s3_types import logical_key
 
@@ -32,6 +34,17 @@ async def remap_restored_object_versions(
     try:
         async with connection.transaction():
             await connection.execute("SELECT set_config('app.restore_mode', 'on', true)")
+            references = await _all_references(connection)
+            mappings = {
+                (remap.physical_key, remap.source_version_id): remap for remap in version_map
+            }
+            missing = {
+                (physical_key, version_id)
+                for _, _, _, physical_key, version_id in references
+                if (physical_key, version_id) not in mappings
+            }
+            if missing:
+                raise RuntimeError("restore version map omits database references")
             updated = 0
             for remap in version_map:
                 tenant_id, object_key = logical_key(remap.physical_key)
@@ -54,9 +67,62 @@ async def remap_restored_object_versions(
                 remaining = await _reference_counts(connection, tenant_id, object_key, remap)
                 if any(remaining.values()):
                     raise RuntimeError("source object version remains after restore remap")
+            staged_bucket = os.environ["PLOTLOT_RESTORE_STAGED_BUCKET"]
+            await connection.execute(
+                """UPDATE plotlot.storage_generation
+                SET bucket=$1, updated_at=now() WHERE singleton=true""",
+                staged_bucket,
+            )
+            await _validate_staged_references(connection, staged_bucket, version_map)
     finally:
         await connection.close()
     return updated
+
+
+async def _all_references(
+    connection: asyncpg.Connection,
+) -> list[tuple[str, str, str, str, str]]:
+    references: list[tuple[str, str, str, str, str]] = []
+    for table in ("raw_snapshots", "storage_operations", "lifecycle_receipts"):
+        rows = await connection.fetch(
+            f"""SELECT tenant_id, object_key, object_version_id FROM plotlot.{table}
+            WHERE object_version_id IS NOT NULL"""
+        )
+        references.extend(
+            (
+                table,
+                row["tenant_id"],
+                row["object_key"],
+                f"tenants/{row['tenant_id']}/{row['object_key']}",
+                row["object_version_id"],
+            )
+            for row in rows
+        )
+    return references
+
+
+async def _validate_staged_references(
+    connection: asyncpg.Connection,
+    bucket: str,
+    version_map: list[VersionRemap],
+) -> None:
+    destination_identities = {
+        (remap.physical_key, remap.destination_version_id) for remap in version_map
+    }
+    references = await _all_references(connection)
+    identities = {(physical_key, version_id) for _, _, _, physical_key, version_id in references}
+    if not identities.issubset(destination_identities):
+        raise RuntimeError("restored database contains unmapped object references")
+    client = boto3.client(
+        "s3",
+        endpoint_url=os.environ["PLOTLOT_OBJECT_STORE_ENDPOINT"],
+        aws_access_key_id=os.environ["PLOTLOT_OBJECT_STORE_ACCESS_KEY"],
+        aws_secret_access_key=os.environ["PLOTLOT_OBJECT_STORE_SECRET_KEY"],
+        region_name=os.environ.get("PLOTLOT_OBJECT_STORE_REGION", "us-east-1"),
+        config=Config(s3={"addressing_style": "path"}),
+    )
+    for physical_key, version_id in identities:
+        client.head_object(Bucket=bucket, Key=physical_key, VersionId=version_id)
 
 
 def _load_version_map(path: Path) -> list[VersionRemap]:

@@ -18,6 +18,7 @@ backup_file="$1"
 restore_dir="$2"
 work_dir="$(mktemp -d)"
 stage_database=""
+stage_bucket="plotlot-restore-$("$plotlot_python" -c 'import uuid; print(uuid.uuid4().hex)')"
 cleanup() {
   if [[ -n "$stage_database" ]]; then
     "$plotlot_python" -m plotlot.storage.restore_database drop \
@@ -58,12 +59,16 @@ stage_url="$("$plotlot_python" -c 'import json,sys; print(json.load(sys.stdin)["
 pg_restore --no-owner --dbname="$stage_url" "$work_dir/database.dump"
 "$plotlot_python" -m plotlot.storage.archive restore \
   --endpoint "$PLOTLOT_OBJECT_STORE_ENDPOINT" \
-  --bucket "$PLOTLOT_OBJECT_STORE_BUCKET" \
+  --bucket "$stage_bucket" \
   --archive "$work_dir/objects.tar" \
   --version-map "$work_dir/version-map.json" > "$restore_dir/object-restore.json"
 PLOTLOT_RESTORE_DATABASE_URL="$stage_url" \
+PLOTLOT_RESTORE_STAGED_BUCKET="$stage_bucket" \
   "$plotlot_python" -m plotlot.storage.restore \
   --version-map "$work_dir/version-map.json" > "$restore_dir/database-remap.json"
+if [[ "${PLOTLOT_RESTORE_FAIL_AFTER_OBJECTS:-false}" == "true" ]]; then
+  exit 91
+fi
 "$plotlot_python" -m plotlot.storage.restore_database promote --stage "$stage_database"
 stage_database=""
 cp "$work_dir/manifest.json" "$restore_dir/restore-manifest.json"
