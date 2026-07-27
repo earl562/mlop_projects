@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pair_gate_checks import git, tree_hash
 from pair_gate_lanes import lanes
-from pair_gate_test_policy import source_inventory
+from pair_gate_test_policy import byright_deferred_tests, source_inventory
 from pair_gate_types import JsonObject, JsonValue, gate_error, require_object
 
 
@@ -141,6 +141,8 @@ def create(args: argparse.Namespace) -> None:
         "bindings": bindings,
         "lanes": lanes(artifact_root),
         "testPolicy": {
+            "byrightDeferredTests": byright_deferred_tests(),
+            "byrightVitestInventoryArtifact": "reports/byright-vitest-inventory.json",
             "collectionArtifact": "reports/plotlot-pytest-inventory.json",
             "frontendJourneys": [
                 {"path": "tests/lookup-uat.spec.ts", "requiredCount": 4},

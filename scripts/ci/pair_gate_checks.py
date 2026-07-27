@@ -126,11 +126,44 @@ def parse_report(report: JsonObject, artifact_root: Path) -> tuple[int, int]:
             sum(int(suite.attrib.get("skipped", "0")) for suite in suites),
         )
     value = json.loads(path.read_text())
+    if report_format == "vitest-list":
+        return len(require_list(value, "Vitest inventory")), 0
     parsed = require_object(value, "test report")
     if report_format == "vitest":
+        expected_deferred = sorted(
+            require_string(value, "deferred test")
+            for value in require_list(
+                report.get("deferredSkippedTests", []), "report.deferredSkippedTests"
+            )
+        )
+        if not expected_deferred:
+            return (
+                require_int(parsed.get("numTotalTests"), "numTotalTests"),
+                require_int(parsed.get("numPendingTests"), "numPendingTests"),
+            )
+        actual_deferred: list[str] = []
+        for raw_result in require_list(parsed.get("testResults"), "testResults"):
+            test_result = require_object(raw_result, "test result")
+            for raw_assertion in require_list(
+                test_result.get("assertionResults"), "assertionResults"
+            ):
+                assertion = require_object(raw_assertion, "assertion")
+                if assertion.get("status") != "skipped":
+                    continue
+                titles = [
+                    require_string(title, "ancestor title")
+                    for title in require_list(assertion.get("ancestorTitles"), "ancestorTitles")
+                ]
+                titles.append(require_string(assertion.get("title"), "test title"))
+                actual_deferred.append(" > ".join(titles))
+        if sorted(actual_deferred) != expected_deferred:
+            raise gate_error(
+                "PAIR_E_SKIPPED_TEST",
+                "Vitest skipped-test inventory differs from signed deferred policy",
+            )
         return (
-            require_int(parsed.get("numTotalTests"), "numTotalTests"),
-            require_int(parsed.get("numPendingTests"), "numPendingTests"),
+            require_int(parsed.get("numTotalTests"), "numTotalTests") - len(actual_deferred),
+            0,
         )
     if report_format == "playwright":
         stats = require_object(parsed.get("stats"), "stats")

@@ -15,6 +15,62 @@ REQUIRED_PREFIXES = (
     "tests/security/",
     "tests/unit/",
 )
+BYRIGHT_DEFERRED_TESTS: tuple[tuple[str, list[int]], ...] = (
+    (
+        "Broward live parcel adapter > reaches the official Broward ArcGIS parcel layer when enabled",
+        [17, 32],
+    ),
+    (
+        "City of Charlotte zoning adapter > reaches the official City of Charlotte zoning layer when enabled",
+        [15],
+    ),
+    (
+        "FEMA NFHL flood-zone adapter > reaches the official FEMA NFHL Flood Hazard Zones layer when enabled",
+        [15],
+    ),
+    (
+        "Gaston live parcel adapter > reaches the official Gaston ArcGIS parcel layer when enabled",
+        [15],
+    ),
+    (
+        "Mecklenburg live parcel adapter > reaches the official Mecklenburg POLARIS parcel endpoint when enabled",
+        [15],
+    ),
+    (
+        "Miami-Dade live parcel adapter > reaches the official Miami-Dade ArcGIS parcel layer when enabled",
+        [16, 27],
+    ),
+    (
+        "Palm Beach live parcel adapter > reaches the official Palm Beach ArcGIS parcel layer when enabled",
+        [18, 33],
+    ),
+    (
+        "workflow persistence > persists to Docker Postgres when explicitly enabled",
+        [8, 10, 11],
+    ),
+    (
+        "San Diego live parcel adapter > reaches the official SANDAG parcel layer when enabled",
+        [15],
+    ),
+    (
+        "source probing > probes registered official source paths when live source smoke is explicitly enabled",
+        [15, 27, 32, 33],
+    ),
+)
+
+
+def byright_deferred_tests() -> list[JsonValue]:
+    result: list[JsonValue] = []
+    for title, owner_todos in BYRIGHT_DEFERRED_TESTS:
+        owner_values: list[JsonValue] = [value for value in owner_todos]
+        result.append(
+            {
+                "title": title,
+                "ownerTodos": owner_values,
+                "releaseStatus": "blocked-non-release",
+            }
+        )
+    return result
 
 
 def classify_test_path(path: str) -> JsonObject:

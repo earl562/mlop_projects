@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from pair_gate_test_policy import BYRIGHT_DEFERRED_TESTS
 from pair_gate_types import JsonObject, JsonValue
 
 
@@ -43,6 +44,7 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
     pytest_inventory = artifact_root / "reports/plotlot-pytest-inventory.json"
     frontend_report = artifact_root / "reports/plotlot-vitest.json"
     byright_report = artifact_root / "reports/byright-vitest.json"
+    byright_inventory = artifact_root / "reports/byright-vitest-inventory.json"
     plotlot_browser = artifact_root / "reports/plotlot-playwright.json"
     byright_browser = artifact_root / "reports/byright-playwright.json"
     return [
@@ -167,6 +169,16 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
             Lane("byright-lint", "byright", ["pnpm", "lint"]),
             Lane("byright-typecheck", "byright", ["pnpm", "typecheck"]),
             Lane(
+                "byright-vitest-inventory",
+                "byright",
+                ["pnpm", "exec", "vitest", "list", f"--json={byright_inventory}"],
+                report={
+                    "format": "vitest-list",
+                    "path": "reports/byright-vitest-inventory.json",
+                },
+                expected_test_count=478,
+            ),
+            Lane(
                 "byright-vitest",
                 "byright",
                 [
@@ -177,7 +189,12 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                     "--reporter=json",
                     f"--outputFile={byright_report}",
                 ],
-                report={"format": "vitest", "path": "reports/byright-vitest.json"},
+                report={
+                    "format": "vitest",
+                    "path": "reports/byright-vitest.json",
+                    "deferredSkippedTests": [title for title, _ in BYRIGHT_DEFERRED_TESTS],
+                },
+                expected_test_count=478,
             ),
             Lane("byright-persistence", "byright", ["pnpm", "test:persistence"]),
             Lane("byright-build", "byright", ["pnpm", "build"]),
