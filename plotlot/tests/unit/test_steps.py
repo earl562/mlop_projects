@@ -49,6 +49,7 @@ def test_step_def_lookup_is_exhaustive():
     for step in KleymanStep:
         assert step_def(step).step is step
         assert step_def(step).produces  # every step produces something
+        assert isinstance(step_def(step).produces, tuple)
 
 
 # --- THE LOAD-BEARING RULE (spec acceptance #3) -------------------------

@@ -37,9 +37,7 @@ def _redact_recursive(obj: object, depth: int = 0) -> object:
 async def persist_event(event: HarnessEvent) -> HarnessEventORM:
     """Persist one event to the DB. Returns the ORM row after commit."""
     redacted = _redact_recursive(event.payload)
-    ts = event.timestamp
-    if isinstance(ts, str):
-        ts = datetime.fromisoformat(ts)
+    ts: datetime = datetime.fromisoformat(event.timestamp)
     orm = HarnessEventORM(
         id=event.id, type=event.type, timestamp=ts,
         correlation_id=event.correlation_id, severity=event.severity,
