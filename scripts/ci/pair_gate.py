@@ -162,6 +162,7 @@ def verify(args: argparse.Namespace) -> None:
             lane_receipts.append(
                 run_lane(require_object(value, "lane"), repositories, artifact_root)
             )
+        verify_bindings(repositories, gate)
         for name, repo in repositories.items():
             entry = require_object(manifest_repositories.get(name), f"repositories.{name}")
             verify_repository(repo, require_string(entry.get("head"), f"{name}.head"))

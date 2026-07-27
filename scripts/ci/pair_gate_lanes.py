@@ -39,7 +39,7 @@ class Lane:
         return value
 
 
-def lanes(artifact_root: Path) -> list[JsonValue]:
+def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
     pytest_report = artifact_root / "reports/plotlot-pytest.xml"
     pytest_inventory = artifact_root / "reports/plotlot-pytest-inventory.json"
     frontend_report = artifact_root / "reports/plotlot-vitest.json"
@@ -160,6 +160,19 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                 },
             ),
             Lane("byright-install", "byright", ["pnpm", "install", "--frozen-lockfile"]),
+            Lane(
+                "byright-generated-client",
+                "byright",
+                [
+                    "pnpm",
+                    "generate:plotlot-client",
+                    "--",
+                    "--input",
+                    str(plotlot / "artifacts/contracts/plotlot-openapi.json"),
+                    "--output",
+                    "packages/contracts/src/generated",
+                ],
+            ),
             Lane(
                 "byright-playwright-install",
                 "byright",

@@ -81,7 +81,7 @@ def create(args: argparse.Namespace) -> None:
             ["plotlot/tests/contracts/**/*.py", "plotlot/tests/contracts/**/*.json"],
         ),
         ("migration", "plotlot", ["plotlot/alembic/**/*.py"]),
-        ("generated-client", "byright", ["packages/protocol-client/src/**/*.ts"]),
+        ("generated-client", "byright", ["packages/contracts/src/generated/**/*"]),
     )
     repository_paths = {"plotlot": plotlot, "byright": byright}
     for kind, repository, paths in specifications:
@@ -139,7 +139,7 @@ def create(args: argparse.Namespace) -> None:
     manifest["releaseGate"] = {
         "artifactRoot": str(artifact_root),
         "bindings": bindings,
-        "lanes": lanes(artifact_root),
+        "lanes": lanes(artifact_root, plotlot),
         "testPolicy": {
             "byrightDeferredTests": byright_deferred_tests(),
             "byrightVitestInventoryArtifact": "reports/byright-vitest-inventory.json",
