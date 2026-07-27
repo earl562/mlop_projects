@@ -64,6 +64,12 @@ def base_manifest(plotlot: Path, byright: Path, artifacts: Path) -> JsonObject:
     )
     (scans / "provenance.json").write_text('{"predicateType":"https://slsa.dev/provenance/v1"}\n')
     (scans / "images.json").write_text('{"status":"source-only","criticalFindings":0}\n')
+    (scans / "python-sbom.json").write_text(
+        '{"bomFormat":"CycloneDX","components":[{"name":"boto3"}],"vulnerabilities":[]}\n'
+    )
+    (scans / "python-licenses.json").write_text(
+        '{"packages":[{"name":"boto3","license":"Apache-2.0"}]}\n'
+    )
     value: JsonObject = {
         "schema": "RepositoryPairV1",
         "repositories": {
@@ -98,6 +104,9 @@ def base_manifest(plotlot: Path, byright: Path, artifacts: Path) -> JsonObject:
             "rollbackPath": "scans/rollback.json",
             "provenancePath": "scans/provenance.json",
             "imageScanPath": "scans/images.json",
+            "pythonLicensesPath": "scans/python-licenses.json",
+            "pythonSbomPath": "scans/python-sbom.json",
+            "requiredPythonComponents": ["boto3"],
         },
     }
     sign(value)

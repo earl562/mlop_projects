@@ -11,6 +11,7 @@ from pathlib import Path
 
 from pair_gate_checks import git, tree_hash
 from pair_gate_lanes import lanes
+from pair_gate_supply_chain import create_python_sbom
 from pair_gate_test_policy import byright_deferred_tests, source_inventory
 from pair_gate_types import JsonObject, JsonValue, gate_error, require_object
 
@@ -135,6 +136,7 @@ def create(args: argparse.Namespace) -> None:
         "criticalFindings": 0,
     }
     (artifact_root / "scans/images.json").write_bytes(canonical(image_scan) + b"\n")
+    create_python_sbom(plotlot, artifact_root / "scans/python-sbom.json")
     scan_paths: list[JsonValue] = ["scans", "commands", "reports"]
     manifest["releaseGate"] = {
         "artifactRoot": str(artifact_root),
@@ -170,6 +172,9 @@ def create(args: argparse.Namespace) -> None:
         "rollbackPath": "scans/rollback.json",
         "provenancePath": "scans/provenance.json",
         "imageScanPath": "scans/images.json",
+        "pythonLicensesPath": "scans/python-licenses.json",
+        "pythonSbomPath": "scans/python-sbom.json",
+        "requiredPythonComponents": ["boto3"],
     }
     integrity = hashlib.sha256(canonical(manifest)).hexdigest()
     manifest["integritySha256"] = integrity

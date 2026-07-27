@@ -16,6 +16,7 @@ from pair_gate_types import (
     require_object,
     require_string,
 )
+from pair_gate_supply_chain import verify_python_supply_chain
 
 DEPENDENCY_PATHS = {
     "package.json",
@@ -202,6 +203,7 @@ def scan_artifacts(artifact_root: Path, gate: JsonObject) -> None:
 
 
 def verify_release_artifacts(artifact_root: Path, gate: JsonObject) -> None:
+    verify_python_supply_chain(artifact_root, gate)
     sbom_path = artifact_root / require_string(gate.get("sbomPath"), "releaseGate.sbomPath")
     sbom = require_object(json.loads(sbom_path.read_text()), "SBOM")
     vulnerabilities = require_list(sbom.get("vulnerabilities"), "SBOM vulnerabilities")

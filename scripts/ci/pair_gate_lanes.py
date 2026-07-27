@@ -47,6 +47,7 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
     byright_inventory = artifact_root / "reports/byright-vitest-inventory.json"
     plotlot_browser = artifact_root / "reports/plotlot-playwright.json"
     byright_browser = artifact_root / "reports/byright-playwright.json"
+    python_licenses = artifact_root / "scans/python-licenses.json"
     return [
         value.to_json()
         for value in (
@@ -60,6 +61,19 @@ def lanes(artifact_root: Path, plotlot: Path) -> list[JsonValue]:
                 "plotlot-ruff",
                 "plotlot",
                 ["uv", "run", "ruff", "check", "src/", "tests/"],
+                cwd="plotlot",
+            ),
+            Lane(
+                "plotlot-python-licenses",
+                "plotlot",
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "../scripts/ci/write_python_license_inventory.py",
+                    "--output",
+                    str(python_licenses),
+                ],
                 cwd="plotlot",
             ),
             Lane(
