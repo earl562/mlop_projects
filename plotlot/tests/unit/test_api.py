@@ -16,6 +16,7 @@ from plotlot.core.types import (
     DensityAnalysis,
     NumericZoningParams,
     PropertyRecord,
+    SearchResult,
     Setbacks,
     ZoningReport,
 )
@@ -276,7 +277,20 @@ async def test_analyze_stream_passes_state_to_property_lookup(client):
         ) as mock_lookup,
         patch("plotlot.api.routes.get_cached_report", new_callable=AsyncMock, return_value=None),
         patch("plotlot.api.routes.get_session", new_callable=AsyncMock, return_value=mock_session),
-        patch("plotlot.api.routes.hybrid_search", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "plotlot.api.routes.hybrid_search",
+            new_callable=AsyncMock,
+            return_value=[
+                SearchResult(
+                    section="Sec. 401",
+                    section_title="Residential districts",
+                    zone_codes=["RS5"],
+                    chunk_text="Residential district standards.",
+                    score=1.0,
+                    municipality="Miramar",
+                )
+            ],
+        ),
         patch(
             "plotlot.api.routes._agentic_analysis",
             new_callable=AsyncMock,

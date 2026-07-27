@@ -1,7 +1,7 @@
 """Tests for the ingestion pipeline module."""
 
 from dataclasses import replace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -345,6 +345,7 @@ class TestIngestAll:
                 "plotlot.ingestion.discovery.get_municode_configs", new_callable=AsyncMock
             ) as mock_disc,
             patch("plotlot.pipeline.ingest.MunicodeScraper") as MockScraper,
+            patch("plotlot.pipeline.ingest.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
             mock_disc.return_value = configs
             mock_instance = MockScraper.return_value
@@ -352,6 +353,8 @@ class TestIngestAll:
 
             results = await ingest_all()
 
+        assert mock_sleep.await_args_list == [call(30.0), call(0)]
+        assert call_count["n"] == 3
         assert len(results) == 2
         assert results["good_city"] == 0
         assert results["bad_city"] == 0

@@ -241,6 +241,7 @@ def _offline_combined_discovery_patches():
         patch("plotlot.ingestion.discovery.discover_tx", new=AsyncMock(return_value={})),
         patch("plotlot.ingestion.discovery.discover_ga", new=AsyncMock(return_value={})),
         patch("plotlot.ingestion.discovery.discover_sc", new=AsyncMock(return_value={})),
+        patch("plotlot.ingestion.discovery.discover_ca", new=AsyncMock(return_value={})),
         patch(
             "plotlot.ingestion.discovery.discover_county_authorities",
             new=AsyncMock(return_value={}),
