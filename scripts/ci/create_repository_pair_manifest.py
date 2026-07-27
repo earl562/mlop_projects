@@ -136,7 +136,13 @@ def create(args: argparse.Namespace) -> None:
         "criticalFindings": 0,
     }
     (artifact_root / "scans/images.json").write_bytes(canonical(image_scan) + b"\n")
-    create_python_sbom(plotlot, artifact_root / "scans/python-sbom.json")
+    create_python_sbom(
+        plotlot,
+        artifact_root / "scans/python-sbom.json",
+        artifact_root / "scans/python-pip-audit.json",
+        artifact_root / "scans/python-enrichment-cache.json",
+        artifact_root / "scans/python-vulnerability-report.json",
+    )
     scan_paths: list[JsonValue] = ["scans", "commands", "reports"]
     manifest["releaseGate"] = {
         "artifactRoot": str(artifact_root),
@@ -159,6 +165,7 @@ def create(args: argparse.Namespace) -> None:
                 "tests/contracts/",
                 "tests/eval/ excluding authorized-live files",
                 "tests/security/",
+                "tests/storage/",
                 "tests/unit/",
             ],
             "deferredPolicy": (
@@ -174,6 +181,8 @@ def create(args: argparse.Namespace) -> None:
         "imageScanPath": "scans/images.json",
         "pythonLicensesPath": "scans/python-licenses.json",
         "pythonSbomPath": "scans/python-sbom.json",
+        "pythonEnrichmentCachePath": "scans/python-enrichment-cache.json",
+        "pythonVulnerabilityReportPath": "scans/python-vulnerability-report.json",
         "requiredPythonComponents": ["boto3"],
     }
     integrity = hashlib.sha256(canonical(manifest)).hexdigest()

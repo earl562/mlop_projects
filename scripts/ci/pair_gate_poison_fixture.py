@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pair_gate_checks import tree_hash
@@ -70,6 +71,26 @@ def base_manifest(plotlot: Path, byright: Path, artifacts: Path) -> JsonObject:
     (scans / "python-licenses.json").write_text(
         '{"packages":[{"name":"boto3","license":"Apache-2.0"}]}\n'
     )
+    cache: JsonObject = {
+        "schema": "PythonVulnerabilityEnrichmentCacheV1",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "sources": {"osv": {"status": "available"}, "cisaKev": {"status": "available"}},
+        "osv": [],
+        "kevCveIds": [],
+    }
+    (scans / "python-enrichment-cache.json").write_bytes(canonical(cache) + b"\n")
+    report: JsonObject = {
+        "schema": "PythonVulnerabilityReportV1",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "maxAgeHours": 24,
+        "enrichmentStatus": "available",
+        "cacheSha256": hashlib.sha256(
+            (scans / "python-enrichment-cache.json").read_bytes()
+        ).hexdigest(),
+        "findingCount": 0,
+        "findings": [],
+    }
+    (scans / "python-vulnerability-report.json").write_bytes(canonical(report) + b"\n")
     value: JsonObject = {
         "schema": "RepositoryPairV1",
         "repositories": {
@@ -106,6 +127,8 @@ def base_manifest(plotlot: Path, byright: Path, artifacts: Path) -> JsonObject:
             "imageScanPath": "scans/images.json",
             "pythonLicensesPath": "scans/python-licenses.json",
             "pythonSbomPath": "scans/python-sbom.json",
+            "pythonEnrichmentCachePath": "scans/python-enrichment-cache.json",
+            "pythonVulnerabilityReportPath": "scans/python-vulnerability-report.json",
             "requiredPythonComponents": ["boto3"],
         },
     }

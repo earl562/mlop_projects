@@ -28,6 +28,9 @@ PoisonName: TypeAlias = Literal[
     "secret-shape",
     "pii-raw-licensed-data",
     "sbom-critical-finding",
+    "sbom-kev-finding",
+    "sbom-direct-fixable",
+    "sbom-enrichment-stale",
     "missing-rollback-metadata",
 ]
 POISONS: dict[PoisonName, str] = {
@@ -43,6 +46,9 @@ POISONS: dict[PoisonName, str] = {
     "secret-shape": "PAIR_E_SECRET",
     "pii-raw-licensed-data": "PAIR_E_PRIVACY",
     "sbom-critical-finding": "PAIR_E_SBOM_CRITICAL",
+    "sbom-kev-finding": "PAIR_E_SBOM_KEV",
+    "sbom-direct-fixable": "PAIR_E_SBOM_DIRECT_FIXABLE",
+    "sbom-enrichment-stale": "PAIR_E_SBOM_ENRICHMENT",
     "missing-rollback-metadata": "PAIR_E_ROLLBACK",
 }
 
@@ -80,6 +86,15 @@ def set_lane(manifest: JsonObject, command: str, report: str, browser: bool = Fa
     if browser:
         lane["browserArtifactGlob"] = "browser/**/*"
     gate["lanes"] = [lane]
+
+
+def write_python_findings(artifacts: Path, findings: list[JsonValue]) -> None:
+    path = artifacts / "scans/python-vulnerability-report.json"
+    report = json.loads(path.read_text())
+    assert isinstance(report, dict)
+    report["findingCount"] = len(findings)
+    report["findings"] = findings
+    path.write_text(json.dumps(report))
 
 
 def mutate(name: PoisonName, fixture: PoisonFixture) -> None:
@@ -132,9 +147,33 @@ def mutate(name: PoisonName, fixture: PoisonFixture) -> None:
         case "pii-raw-licensed-data":
             (artifacts / "scans/content.json").write_text('{"payload":"RAW_LICENSED_DATA"}\n')
         case "sbom-critical-finding":
-            (artifacts / "scans/sbom.json").write_text(
-                '{"vulnerabilities":[{"severity":"critical"}]}\n'
+            write_python_findings(
+                artifacts,
+                [{"severity": "critical", "dependencyScope": "transitive"}],
             )
+        case "sbom-kev-finding":
+            write_python_findings(
+                artifacts,
+                [{"knownExploited": True, "severity": "high"}],
+            )
+        case "sbom-direct-fixable":
+            write_python_findings(
+                artifacts,
+                [
+                    {
+                        "knownExploited": False,
+                        "severity": "unknown",
+                        "dependencyScope": "direct",
+                        "nonBreakingFixAvailable": True,
+                    }
+                ],
+            )
+        case "sbom-enrichment-stale":
+            path = artifacts / "scans/python-vulnerability-report.json"
+            report = json.loads(path.read_text())
+            assert isinstance(report, dict)
+            report["generatedAt"] = "2020-01-01T00:00:00+00:00"
+            path.write_text(json.dumps(report))
         case "missing-rollback-metadata":
             (artifacts / "scans/rollback.json").write_text('{"candidateSha":"a"}\n')
         case unreachable:
