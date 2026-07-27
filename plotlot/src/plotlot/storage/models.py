@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -329,8 +329,28 @@ class WorkspaceMember(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
     user_id = Column(String, nullable=False, index=True)
-    role = Column(String(50), nullable=False, default="member")
+    clerk_organization_id = Column(String(120), nullable=True, index=True)
+    role = Column(String(50), nullable=False, default="viewer")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServicePrincipal(Base):
+    """Tenant-scoped non-human identity with an explicitly bounded action set."""
+
+    __tablename__ = "service_principals"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    allowed_actions: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Project(Base):
@@ -738,7 +758,7 @@ class DistrictDimensionalStandardORM(Base):
             max_density_units_per_acre=self.max_density_units_per_acre,
             source_section_id=self.source_section_id,
             source_url=self.source_url or "",
-            extracted_at=self.extracted_at or func.now(),
+            extracted_at=self.extracted_at or datetime.now(UTC),
             verification_status=VerificationStatus(self.verification_status or "unverified"),
         )
 

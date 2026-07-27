@@ -1,0 +1,100 @@
+
+> frontend@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.21
+
+   Creating an optimized production build ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (264kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+(node:43349) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ Compiled successfully in 2.6s
+   Linting and checking validity of types ...
+
+./src/app/api/video/generate/route.ts
+9:20  Warning: 'lat' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+9:25  Warning: 'lng' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/BuildingRenderViewer.tsx
+170:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/FloorPlanViewer.tsx
+4:29  Warning: 'FloorPlanInput' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/OutreachPanel.tsx
+65:18  Warning: 'setToName' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/ParcelViewer.tsx
+134:10  Warning: 'TabBar' is defined but never used.  @typescript-eslint/no-unused-vars
+176:10  Warning: 'StreetViewTab' is defined but never used.  @typescript-eslint/no-unused-vars
+191:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+229:7  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/ProjectTree.tsx
+186:26  Warning: 'session' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/PropertyFlyoverVideo.tsx
+162:14  Warning: Unused eslint-disable directive (no problems were reported from 'jsx-a11y/media-has-caption').
+
+./src/components/SatelliteMap.tsx
+3:20  Warning: 'useEffect' is defined but never used.  @typescript-eslint/no-unused-vars
+5:3  Warning: 'APIProvider' is defined but never used.  @typescript-eslint/no-unused-vars
+6:3  Warning: 'Map' is defined but never used.  @typescript-eslint/no-unused-vars
+7:3  Warning: 'AdvancedMarker' is defined but never used.  @typescript-eslint/no-unused-vars
+8:3  Warning: 'InfoWindow' is defined but never used.  @typescript-eslint/no-unused-vars
+9:3  Warning: 'useMap' is defined but never used.  @typescript-eslint/no-unused-vars
+46:9  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+69:9  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/Sidebar.tsx
+6:8  Warning: 'PortfolioPanel' is defined but never used.  @typescript-eslint/no-unused-vars
+7:8  Warning: 'ProjectTree' is defined but never used.  @typescript-eslint/no-unused-vars
+8:8  Warning: 'WorkspaceSelector' is defined but never used.  @typescript-eslint/no-unused-vars
+9:8  Warning: 'NewProjectModal' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+No allowed endpoints specified, all endpoints will be allowed. This is not recommended for production use cases.
+Allowing unauthenticated requests. Make sure you protect your proxy endpoint or handle unauthenticated users appropriately.
+   Generating static pages (0/18) ...
+No allowed endpoints specified, all endpoints will be allowed. This is not recommended for production use cases.
+Allowing unauthenticated requests. Make sure you protect your proxy endpoint or handle unauthenticated users appropriately.
+   Generating static pages (4/18)
+   Generating static pages (8/18)
+   Generating static pages (13/18)
+ ✓ Generating static pages (18/18)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                                        Size  First Load JS
+┌ ○ /                                                             10 kB         117 kB
+├ ○ /_not-found                                                   995 B         104 kB
+├ ○ /admin                                                      1.48 kB         105 kB
+├ ○ /analyses                                                     152 B         103 kB
+├ ○ /analyze                                                    6.51 kB         159 kB
+├ ƒ /api/fal/proxy                                                152 B         103 kB
+├ ƒ /api/gis-proxy                                                152 B         103 kB
+├ ƒ /api/stripe/checkout                                          152 B         103 kB
+├ ƒ /api/video/generate                                           152 B         103 kB
+├ ○ /billing                                                    1.61 kB         105 kB
+├ ƒ /connectors                                                   152 B         103 kB
+├ ○ /datacenter                                                 4.47 kB         151 kB
+├ ○ /evidence                                                     152 B         103 kB
+├ ○ /projects                                                     152 B         103 kB
+├ ƒ /projects/[projectId]                                         152 B         103 kB
+├ ƒ /projects/[projectId]/sites/[siteId]                          152 B         103 kB
+├ ƒ /projects/[projectId]/sites/[siteId]/analyses/[analysisId]    152 B         103 kB
+├ ○ /reports                                                      152 B         103 kB
+├ ƒ /sign-in/[[...sign-in]]                                       329 B         146 kB
+├ ƒ /sign-up/[[...sign-up]]                                       329 B         146 kB
+└ ○ /workspace                                                  42.5 kB         233 kB
++ First Load JS shared by all                                    103 kB
+  ├ chunks/255-62902f04efbdd792.js                              46.3 kB
+  ├ chunks/4bd1b696-c023c6e3521b1417.js                         54.2 kB
+  └ other shared chunks (total)                                 2.53 kB
+
+
+ƒ Middleware                                                    90.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

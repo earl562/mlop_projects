@@ -62,7 +62,9 @@ async function requireReleasePreflight(lane: string): Promise<void> {
 }
 
 export default async function globalSetup() {
-  process.env.PLAYWRIGHT_TESTING = "1";
+  if (process.env.PLOTLOT_TEST_AUTH_BYPASS === "1") {
+    throw new Error("PLOTLOT_TEST_AUTH_BYPASS is forbidden; tests must exercise authentication");
+  }
 
   const lane = process.env.PLOTLOT_MATRIX_LANE;
   if (

@@ -1,0 +1,10 @@
+HTTP/1.1 401 Unauthorized
+date: Mon, 27 Jul 2026 04:17:59 GMT
+server: uvicorn
+www-authenticate: Bearer
+content-length: 67
+content-type: application/json
+x-request-id: bbe5a0c0-6569-4208-bf59-f5c1f019f213
+x-api-version: 1.0
+
+{"detail":"Authentication required. Provide a valid Bearer token."}

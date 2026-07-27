@@ -1,0 +1,27 @@
+
+==================================== ERRORS ====================================
+______________ ERROR collecting tests/security/test_clerk_auth.py ______________
+ImportError while importing test module '/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/tests/security/test_clerk_auth.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/security/test_clerk_auth.py:14: in <module>
+    from plotlot.api.auth import (
+E   ImportError: cannot import name 'Capability' from 'plotlot.api.auth' (/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/src/plotlot/api/auth.py)
+__________ ERROR collecting tests/security/test_service_principals.py __________
+ImportError while importing test module '/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/tests/security/test_service_principals.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/security/test_service_principals.py:8: in <module>
+    from plotlot.api.auth import (
+E   ImportError: cannot import name 'ServicePrincipalScope' from 'plotlot.api.auth' (/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/src/plotlot/api/auth.py)
+=========================== short test summary info ============================
+ERROR tests/security/test_clerk_auth.py
+ERROR tests/security/test_service_principals.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.23s

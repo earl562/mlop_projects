@@ -1,0 +1,42 @@
+
+> frontend@0.1.0 test:ui
+> vitest run --config vitest.config.ts
+
+
+ RUN  v3.2.4 /Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend
+
+(node:44595) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:44602) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44599) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44600) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44604) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44601) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44603) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44605) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/sessions.test.ts (8 tests) 7ms
+ ✓ tests/ui/api-stream-analysis.test.ts (3 tests) 10ms
+ ✓ tests/ui/api-stream-chat.test.ts (6 tests) 10ms
+ ✓ tests/ui/analyze-shell.test.tsx (1 test) 89ms
+ ✓ tests/ui/testing-standard.test.tsx (3 tests) 176ms
+(node:44617) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/ui/quick-lookup.test.tsx (1 test) 360ms
+   ✓ QuickLookup degraded retry UX > shows retry for backend-unavailable errors and reruns analysis  359ms
+ ✓ tests/ui/map-alternatives.test.ts (2 tests) 5ms
+(node:44618) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/ui/jsdom-environment.test.ts (2 tests) 2ms
+ ✓ tests/ui/document-generator-entitlement.test.tsx (4 tests) 334ms
+
+ Test Files  9 passed (9)
+      Tests  30 passed (30)
+   Start at  00:18:43
+   Duration  1.70s (transform 365ms, setup 818ms, collect 1.45s, tests 992ms, environment 4.30s, prepare 581ms)

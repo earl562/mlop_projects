@@ -1,6 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { assertProductionAuthConfiguration } from "./lib/auth-config";
+
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
@@ -10,18 +12,20 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const clerkEnabled = Boolean(
-  process.env.PLAYWRIGHT_TESTING !== "1" &&
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-    process.env.CLERK_SECRET_KEY,
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
 );
 
-const proxy = clerkEnabled ? clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-}) : function publicProxy() {
-  return NextResponse.next();
-};
+assertProductionAuthConfiguration(process.env);
+
+const proxy = clerkEnabled
+  ? clerkMiddleware(async (auth, req) => {
+      if (!isPublicRoute(req)) {
+        await auth.protect();
+      }
+    })
+  : function developmentOnlyPublicProxy() {
+      return NextResponse.next();
+    };
 
 export default proxy;
 
@@ -31,5 +35,7 @@ export const config = {
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     // Always run for API routes
     "/(api|trpc)(.*)",
+    // Always run for Clerk-specific frontend API routes
+    "/__clerk/(.*)",
   ],
 };

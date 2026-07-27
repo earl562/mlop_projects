@@ -2,13 +2,24 @@
 
 from urllib.parse import parse_qs, urlparse, urlunparse
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings
+from typing import Literal
+
+from pydantic import AliasChoices, Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from plotlot.oauth.openai_auth import DEFAULT_AUTHORIZE_URL, DEFAULT_REDIRECT_URI, DEFAULT_TOKEN_URL
 
 
+class ProductionIdentityConfigurationError(ValueError):
+    pass
+
+
 class Settings(BaseSettings):
+    deployment_environment: Literal["development", "test", "production"] = Field(
+        default="development",
+        validation_alias=AliasChoices("PLOTLOT_ENVIRONMENT", "PLOTLOT_ENV", "ENVIRONMENT"),
+    )
+
     # Database
     database_url: str = "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
     database_require_ssl: bool = False
@@ -68,10 +79,16 @@ class Settings(BaseSettings):
     # Debug mode — enables /debug/* endpoints (off by default in production)
     debug_mode: bool = False
 
-    # Auth (opt-in — app works without auth configured)
     auth_enabled: bool = False
-    # Clerk JWT verification (RS256 via JWKS)
     clerk_jwks_url: str = ""  # e.g. https://<instance>.clerk.accounts.dev/.well-known/jwks.json
+    clerk_issuer: str = ""
+    clerk_audience: str = ""
+    clerk_authorized_parties: list[str] = Field(default_factory=list)
+    clerk_revoked_token_ids: list[str] = Field(default_factory=list)
+    service_principal_signing_key: str = ""
+    service_principal_issuer: str = "plotlot-service"
+    service_principal_audience: str = "plotlot-api"
+    service_principal_max_ttl_seconds: int = Field(default=900, ge=60, le=900)
     # Stripe billing
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
@@ -149,6 +166,11 @@ class Settings(BaseSettings):
             "stripe_secret_key",
             "stripe_webhook_secret",
             "clerk_jwks_url",
+            "clerk_issuer",
+            "clerk_audience",
+            "service_principal_signing_key",
+            "service_principal_issuer",
+            "service_principal_audience",
             "openai_base_url",
             "openai_organization",
             "openai_project",
@@ -166,6 +188,24 @@ class Settings(BaseSettings):
             val = getattr(self, field)
             if val and val != val.strip():
                 setattr(self, field, val.strip())
+        return self
+
+    @model_validator(mode="after")
+    def _require_production_identity(self) -> "Settings":
+        if self.deployment_environment != "production":
+            return self
+        configured = (
+            self.auth_enabled
+            and self.clerk_jwks_url.startswith("https://")
+            and bool(self.clerk_issuer)
+            and bool(self.clerk_audience)
+            and bool(self.clerk_authorized_parties)
+            and len(self.service_principal_signing_key) >= 32
+        )
+        if not configured:
+            raise ProductionIdentityConfigurationError(
+                "production identity configuration is incomplete"
+            )
         return self
 
     @model_validator(mode="after")
@@ -234,7 +274,11 @@ class Settings(BaseSettings):
         "https://plotlot-api-production.up.railway.app",
     ]
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
 
 settings = Settings()
