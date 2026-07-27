@@ -16,10 +16,9 @@ Create Date: 2026-05-08
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
-revision: str = "007"
+revision: str = "007_phase6"
 down_revision: Union[str, None] = "d3e4f5a6b7c8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

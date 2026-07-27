@@ -689,8 +689,8 @@ class DistrictDimensionalStandardORM(Base):
     row extracted from the ordinance's Schedule of District Regulations at
     ingestion time, not from LLM re-parsing the table on every analysis.
 
-    Provisioned by ``init_db``→``Base.metadata.create_all``; populated by the
-    ingestion extractor (Slice 3.2 generalizes across municipalities). Natural
+    Provisioned by versioned Alembic migrations; populated by the ingestion
+    extractor (Slice 3.2 generalizes across municipalities). Natural
     key: ``(municipality, district_code)`` — one row per (municipality, district).
     """
 
