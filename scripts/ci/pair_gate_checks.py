@@ -135,6 +135,11 @@ def parse_report(report: JsonObject, artifact_root: Path) -> tuple[int, int]:
             for key in ("expected", "unexpected", "flaky", "skipped")
         )
         return total, require_int(stats.get("skipped"), "stats.skipped")
+    if report_format == "collection":
+        return (
+            require_int(parsed.get("total"), "total"),
+            require_int(parsed.get("skipped"), "skipped"),
+        )
     raise gate_error("PAIR_E_MANIFEST", f"unsupported report format: {report_format}")
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from pair_gate_checks import git, tree_hash
 from pair_gate_lanes import lanes
+from pair_gate_test_policy import source_inventory
 from pair_gate_types import JsonObject, JsonValue, gate_error, require_object
 
 
@@ -139,6 +140,21 @@ def create(args: argparse.Namespace) -> None:
         "artifactRoot": str(artifact_root),
         "bindings": bindings,
         "lanes": lanes(artifact_root),
+        "testPolicy": {
+            "collectionArtifact": "reports/plotlot-pytest-inventory.json",
+            "requiredBaseline": [
+                "tests/architecture/",
+                "tests/contracts/",
+                "tests/eval/ excluding authorized-live files",
+                "tests/security/",
+                "tests/unit/",
+            ],
+            "deferredPolicy": (
+                "integration and authorized-live tests remain blocked-non-release until their "
+                "listed owner todos provide bounded prerequisites and release receipts"
+            ),
+            "sources": source_inventory(plotlot),
+        },
         "scanPaths": scan_paths,
         "sbomPath": "scans/sbom.json",
         "rollbackPath": "scans/rollback.json",

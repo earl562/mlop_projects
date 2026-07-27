@@ -37,6 +37,7 @@ class Lane:
 
 def lanes(artifact_root: Path) -> list[JsonValue]:
     pytest_report = artifact_root / "reports/plotlot-pytest.xml"
+    pytest_inventory = artifact_root / "reports/plotlot-pytest-inventory.json"
     frontend_report = artifact_root / "reports/plotlot-vitest.json"
     byright_report = artifact_root / "reports/byright-vitest.json"
     plotlot_browser = artifact_root / "reports/plotlot-playwright.json"
@@ -57,6 +58,23 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                 cwd="plotlot",
             ),
             Lane(
+                "plotlot-pytest-inventory",
+                "plotlot",
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "../scripts/ci/collect_pytest_inventory.py",
+                    "--output",
+                    str(pytest_inventory),
+                ],
+                cwd="plotlot",
+                report={
+                    "format": "collection",
+                    "path": "reports/plotlot-pytest-inventory.json",
+                },
+            ),
+            Lane(
                 "plotlot-mypy",
                 "plotlot",
                 ["uv", "run", "mypy", "src/plotlot/", "--no-error-summary"],
@@ -69,6 +87,11 @@ def lanes(artifact_root: Path) -> list[JsonValue]:
                     "uv",
                     "run",
                     "pytest",
+                    "tests/architecture/",
+                    "tests/contracts/",
+                    "tests/eval/",
+                    "--ignore=tests/eval/test_eval_live.py",
+                    "--ignore=tests/eval/test_ingestion_golden_queries.py",
                     "tests/unit/",
                     "tests/security/",
                     "-q",
