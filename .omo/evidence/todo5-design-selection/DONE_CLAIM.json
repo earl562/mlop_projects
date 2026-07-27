@@ -35,16 +35,22 @@
         "artifact": ".omo/evidence/todo5-design-selection/browser-baseline/diagnostic-375x844--lookup-placeholder.png"
       },
       {
-        "scenario": "manual visual inspection of the fresh provenance-bound Direction A reference and existing Direction B/C references",
+        "scenario": "manual visual inspection of the truth-table-correct Direction A v3 reference and existing Direction B/C references",
         "invocation": "open original-resolution PNGs",
-        "observable": "distinct ledger/atlas/binder compositions; no screenshot-in-device, generic chat home, private lead data, or regional cliché imagery",
-        "artifact": "plotlot/artifacts/design/direction-a/reference-direction-a-v2.png; plotlot/artifacts/design/direction-b/reference-direction-b-v1.png; plotlot/artifacts/design/direction-c/reference-direction-c-v1.png"
+        "observable": "v3 visibly abstains maximum units and purchase ceiling while parking is not hash-bound; distinct ledger/atlas/binder compositions; no screenshot-in-device, generic chat home, private lead data, or regional cliché imagery",
+        "artifact": "plotlot/artifacts/design/direction-a/reference-direction-a-v3.png; plotlot/artifacts/design/direction-b/reference-direction-b-v1.png; plotlot/artifacts/design/direction-c/reference-direction-c-v1.png"
       },
       {
-        "scenario": "Direction A built-in ImageGen provenance correction",
-        "invocation": "exactly one image_gen.imagegen call using the unchanged direction-a/v1.0.0 canonical prompt",
-        "observable": "tool-scoped output call_5rMr5MLITuLduZoT1qPYdGpn.png copied as reference-direction-a-v2.png; prompt/output hashes and dimensions bind in metadata",
-        "artifact": ".omo/evidence/todo5-design-selection/direction-a-provenance-correction.json"
+        "scenario": "Direction A v3 built-in ImageGen truth correction",
+        "invocation": "exactly one fresh image_gen.imagegen call using canonical prompt direction-a/v1.1.0",
+        "observable": "tool-scoped output call_MsVmzzkbYp4tuStMWeB02Sug.png copied as reference-direction-a-v3.png; prompt/output hashes, dimensions, and abstained rail labels bind in metadata",
+        "artifact": ".omo/evidence/todo5-design-selection/direction-a-v3-truth-correction.json"
+      },
+      {
+        "scenario": "exact immutable content-commit binding",
+        "invocation": "git object identity, tree, parent, scope, and per-blob audit of content commit 84d13551b46062075a36ae63e10e5b113483643c",
+        "observable": "11 content blobs match CONTENT_COMMIT_BINDING.json; no frontend source; full verifier passes",
+        "artifact": ".omo/evidence/todo5-design-selection/CONTENT_COMMIT_BINDING.json; .omo/evidence/todo5-design-selection/content-commit-verification.txt"
       }
     ],
     "cleanup": [
@@ -62,7 +68,7 @@
     },
     "risks": [
       "Todo5 is a design contract only; runtime conformance remains for Todo21.",
-      "All generated references, including the fresh provenance-bound Direction A v2 output, are 1586x992 rather than the requested 1440x900 and remain non-authoritative.",
+      "All generated references, including the selected truth-table-correct Direction A v3 output, are 1586x992 rather than the requested 1440x900 and remain non-authoritative.",
       "The known 375px placeholder defect is present in the current app and is explicitly not claimed as passed."
     ]
   }
