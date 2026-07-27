@@ -6,7 +6,7 @@ Decision record: `docs/adr/0019-select-operational-intelligence-workbench.md`
 
 ## 0. Authority, purpose, and scope
 
-This document governs PlotLot’s production frontend. Direction packet prose and PNGs are supporting references; this file wins when artifacts differ. Direction A's selected `reference-direction-a-v2.png` is bound to the unchanged canonical prompt and exactly one corrective built-in `image_gen.imagegen` call in `artifacts/design/direction-a/imagegen.metadata.json`; Direction A v1 is historical only. Generated rasters define composition mood only and must never be shipped as interactive UI, background screenshots, image maps, OCR copy sources, or canvas substitutes.
+This document governs PlotLot’s production frontend. Direction packet prose and PNGs are supporting references; this file wins when artifacts differ. Direction A's selected `reference-direction-a-v3.png` is bound to canonical prompt `direction-a/v1.1.0` and exactly one fresh built-in `image_gen.imagegen` call for the decision-rail truth correction in `artifacts/design/direction-a/imagegen.metadata.json`; v1 and rejected v2 are historical only. The selected rail visibly abstains from maximum units and purchase ceiling because parking is not hash-bound, as required by the decision-rail truth table. Generated rasters define composition mood only and must never be shipped as interactive UI, background screenshots, image maps, OCR copy sources, or canvas substitutes.
 
 PlotLot helps an acquisition or preconstruction user answer: **what can this parcel support, which evidence supports the answer, what is the purchase ceiling, and what must be resolved before reliance?**
 

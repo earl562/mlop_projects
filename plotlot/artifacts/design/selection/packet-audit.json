@@ -1,12 +1,15 @@
 {
-  "schema_version": "plotlot-direction-packet-audit/v1.0.0",
-  "audited_at": "2026-07-26",
+  "schema_version": "plotlot-direction-packet-audit/v1.1.0",
+  "audited_at": "2026-07-27",
   "generation_policy": {
     "new_image_calls": 1,
+    "current_truth_correction_calls": 1,
+    "direction_a_total_recorded_calls": 2,
     "existing_reference_packets_only": false,
-    "correction_scope": "Exactly one built-in ImageGen call was made to bind Direction A to a verifiable tool output. No Direction B or C image call was made.",
+    "correction_scope": "Exactly one fresh built-in ImageGen call was made for the v3 decision-rail truth correction. Direction A v2 is historical; no new Direction B or C image call was made.",
     "one_call_claims": {
-      "direction_a": 1,
+      "direction_a_v2_provenance_correction": 1,
+      "direction_a_v3_truth_correction": 1,
       "direction_b": 1,
       "direction_c": 1
     }
@@ -21,9 +24,9 @@
   },
   "directions": {
     "a": {
-      "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
-      "image_sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
-      "selected_asset": "reference-direction-a-v2.png",
+      "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
+      "image_sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
+      "selected_asset": "reference-direction-a-v3.png",
       "dimensions": [1586, 992],
       "manifest_verification": "pass",
       "visual_inspection": "pass",
@@ -31,10 +34,11 @@
       "raster_role": "non-authoritative visual reference",
       "provenance": {
         "tool": "built-in image_gen.imagegen",
-        "invoked_at_utc": "2026-07-27T03:57:57Z",
-        "tool_scoped_output": "call_5rMr5MLITuLduZoT1qPYdGpn.png",
+        "invoked_at_utc": "2026-07-27T04:12:30Z",
+        "tool_scoped_output": "call_MsVmzzkbYp4tuStMWeB02Sug.png",
         "metadata": "../direction-a/imagegen.metadata.json"
-      }
+      },
+      "decision_rail_truth": "pass: maximum units and purchase ceiling are visibly abstained because parking is not hash-bound"
     },
     "b": {
       "prompt_sha256": "c7e23c9abc2d922da92c9f7dd8d23327f812160279eac0bbc5537788083ff963",

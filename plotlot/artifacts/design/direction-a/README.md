@@ -42,8 +42,9 @@ This makes Direction A structurally distinct from a map-first explorer and from 
 | `RESPONSIVE_WIREFRAMES.md` | 1440×900, 768×1024, and 390×844 wireframes plus overflow/content-stress behavior |
 | `CONTENT_FIXTURES_AND_GROUNDING.md` | Redacted South Florida fixtures, coverage truth, evidence provenance, documents, grounded LLM, and handoff schemas |
 | `SELF_AUDIT.md` | Accessibility, hierarchy, overflow, heading-wrap, focus, reduced-motion, and market-specificity audit |
-| `reference-direction-a-v2.png` | Selected provenance-bound desktop visual reference from the single corrective built-in ImageGen call |
-| `reference-direction-a-v1.png` | Preserved historical visual reference; not the selected provenance-bound output |
+| `reference-direction-a-v3.png` | Selected truth-table-correct desktop visual reference from the single fresh built-in ImageGen call for this correction |
+| `reference-direction-a-v2.png` | Historical rejected reference; its rail showed current figures while parking was not hash-bound |
+| `reference-direction-a-v1.png` | Preserved historical visual reference; not selected |
 | `imagegen.metadata.json` | Built-in tool-call/output binding, invocation timestamp, prompt hash, image hash, dimensions, and known limitations |
 | `checksums.sha256` | Final package hashes |
 | `DONE_CLAIM.json` | Bounded design-only completion claim |
@@ -90,4 +91,4 @@ This makes Direction A structurally distinct from a map-first explorer and from 
 
 ## Reference-image authority
 
-The selected `reference-direction-a-v2.png` is bound to one built-in `image_gen.imagegen` call and the canonical prompt through `imagegen.metadata.json`. It is a visual reference for density, hierarchy, panel proportion, hairline material, and color temperament. It is not implementation code and is not the semantic source of truth. Textual specifications override raster text and the documented dimension/copy limitations in `imagegen.metadata.json`.
+The selected `reference-direction-a-v3.png` is bound to the single fresh built-in `image_gen.imagegen` call for the decision-rail truth correction and to canonical prompt `direction-a/v1.1.0` through `imagegen.metadata.json`. Its rail visibly abstains from maximum units and purchase ceiling because parking is not hash-bound, matching `STATE_MATRIX.md` lines 42–50. It is a visual reference for density, hierarchy, panel proportion, hairline material, and abstained-state treatment. It is not implementation code and is not the semantic source of truth. Textual specifications override raster text and the documented dimension/copy limitations in `imagegen.metadata.json`.

@@ -1,40 +1,44 @@
 {
-  "schema_version": "direction-a-imagegen-metadata/v1.1.0",
-  "asset": "reference-direction-a-v2.png",
+  "schema_version": "direction-a-imagegen-metadata/v1.2.0",
+  "asset": "reference-direction-a-v3.png",
   "generation": {
     "mode": "built-in image_gen.imagegen",
     "use_case": "ui-mockup",
-    "invocation_count_for_provenance_correction": 1,
-    "invoked_at_utc": "2026-07-27T03:57:57Z",
+    "invocation_count_for_truth_correction": 1,
+    "total_recorded_direction_a_calls": 2,
+    "invoked_at_utc": "2026-07-27T04:12:30Z",
     "canonical_prompt": "../direction-a.prompt.md",
-    "prompt_version": "direction-a/v1.0.0",
-    "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
+    "prompt_version": "direction-a/v1.1.0",
+    "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
     "tool_call_binding": {
       "tool": "image_gen.imagegen",
-      "tool_scoped_output": "call_5rMr5MLITuLduZoT1qPYdGpn.png",
-      "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_5rMr5MLITuLduZoT1qPYdGpn.png",
-      "project_copy": "reference-direction-a-v2.png"
+      "tool_scoped_output": "call_MsVmzzkbYp4tuStMWeB02Sug.png",
+      "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_MsVmzzkbYp4tuStMWeB02Sug.png",
+      "project_copy": "reference-direction-a-v3.png"
     }
   },
   "output": {
-    "sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
+    "sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
     "format": "PNG RGB",
     "dimensions": [1586, 992],
     "requested_dimensions": [1440, 900],
-    "bytes": 1410748,
+    "bytes": 1443125,
     "alpha_channel": false
   },
   "visual_validation": {
     "result": "pass",
     "observed": [
-      "fixed utility header, narrow deal queue, dominant ordered evidence spine, and anchored decision rail",
-      "parcel identity, jurisdiction and coverage, zoning, dimensional rules, constraints, capacity, documents, comparables, underwriting, and provenance",
-      "citation identifiers, truncated SHA-256 values, verified and conditional states, explicit parking-rule abstention, and bounded handoff",
-      "Miami-Dade private beta, Broward and Palm Beach municipality required, and San Diego planned/not enabled",
+      "fixed utility header, narrow deal queue, dominant ordered evidence ledger, and anchored acquisition decision rail",
+      "decision rail visibly labels MAX UNITS as ABSTAINED with PARKING RULE NOT HASH-BOUND",
+      "decision rail visibly labels PURCHASE CEILING as ABSTAINED with REQUIRED INPUT MISSING",
+      "capacity and underwriting rows repeat the abstained state instead of presenting 2 or $418,000 as current results",
+      "parcel, jurisdiction, zoning, setbacks, constraints, documents, comps, underwriting, provenance, citations, and truncated hashes remain visible",
+      "Miami-Dade private beta, Broward and Palm Beach municipality required, and San Diego planned/not enabled remain explicit",
       "stable-redacted synthetic identifiers only"
     ],
     "prohibited_content_observed": [],
-    "selection_impact": "No change. The fresh reference conforms to Direction A's written contract and does not alter deterministic scoring."
+    "truth_table_result": "pass: STATE_MATRIX.md lines 42-50 require abstention when parking is missing or not hash-bound",
+    "selection_impact": "No score change. Direction A still satisfies the written contract and remains the deterministic winner."
   },
   "reference_contract": {
     "authoritative_for": [
@@ -42,7 +46,7 @@
       "three-region proportion",
       "paper-and-hairline material",
       "evidence-led hierarchy",
-      "calm decision rail"
+      "abstained decision-rail treatment"
     ],
     "not_authoritative_for": [
       "exact raster copy",
@@ -57,10 +61,26 @@
       "The image contains only redacted illustrative identifiers and must not be used as a production data source."
     ]
   },
+  "generation_history": [
+    {
+      "asset": "reference-direction-a-v2.png",
+      "prompt_version": "direction-a/v1.0.0",
+      "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
+      "output_sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
+      "status": "historical; rejected because the rail rendered current figures while parking was not hash-bound"
+    },
+    {
+      "asset": "reference-direction-a-v3.png",
+      "prompt_version": "direction-a/v1.1.0",
+      "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
+      "output_sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
+      "status": "selected truth-table-correct reference"
+    }
+  ],
   "legacy_reference": {
     "asset": "reference-direction-a-v1.png",
     "sha256": "69ad0bd9973bbf16a8991bfb4b6f6fb16398b393b6c1d072472e1b78b05b17db",
-    "status": "preserved historical reference; not the selected provenance-bound output"
+    "status": "preserved historical reference; not selected"
   },
   "fixture": {
     "path": "fixtures/redacted-acquisition-case.json",

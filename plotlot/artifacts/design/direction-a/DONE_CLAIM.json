@@ -1,5 +1,5 @@
 {
-  "claim_version": "direction-a-done/v1.0.0",
+  "claim_version": "direction-a-done/v1.1.0",
   "scope": "Design-only packet for PlotLot Direction A, Operational Intelligence Workbench.",
   "status": "complete",
   "completed": [
@@ -8,7 +8,8 @@
     "Truthful coverage gates: Miami-Dade private beta; Broward/Palm municipality-conditional; San Diego County planned/not enabled",
     "Redacted parcel/folio/APN fixture with zoning, setbacks, capacity/max-units, constraints, survey/plat/documents, comps, conditional purchase ceiling, evidence/replay, and agent handoff",
     "Grounded LLM brief contract with citation binding and explicit abstention",
-    "Validated provenance-bound ui-mockup reference from exactly one corrective built-in ImageGen call with tool-scoped output, timestamp, prompt SHA-256, output SHA-256, dimensions, and fixture binding",
+    "Validated provenance-bound v3 ui-mockup reference from exactly one fresh built-in ImageGen call for this truth correction, with tool-scoped output, timestamp, prompt SHA-256, output SHA-256, dimensions, fixture binding, and preserved generation history",
+    "Decision rail visibly abstains from both maximum units and purchase ceiling while parking is not hash-bound, matching STATE_MATRIX.md lines 42-50",
     "Accessibility, overflow, focus, and reduced-motion design audit"
   ],
   "not_claimed": [

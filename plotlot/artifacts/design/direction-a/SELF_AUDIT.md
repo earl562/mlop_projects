@@ -10,8 +10,8 @@ This is a design-artifact audit, not a claim that runtime UI behavior has alread
 | Common acquisition/preconstruction flow | Pass | Route map starts parcel/jurisdiction and ends blocker/handoff/replay |
 | Coverage truth | Pass | Miami-Dade private beta; Broward/Palm municipality-required; San Diego County planned/not enabled appear in prompt, fixtures, state matrix, and wireframes |
 | Parcel identifiers | Pass | Only stable redacted address/folio/APN strings appear in fixtures and examples |
-| Zoning, setbacks, capacity, max units | Pass | Ordered evidence + cited constraint ladder; `2 units` is fixture-only and conditional on parking evidence |
-| Constraints, survey/plat, documents, comps, ceiling | Pass | Dedicated rows/semantics and source requirements in grounding contract |
+| Zoning, setbacks, capacity, max units | Pass | Ordered evidence + cited constraint ladder; the selected v3 rail shows `MAX UNITS — ABSTAINED` because parking is not hash-bound |
+| Constraints, survey/plat, documents, comps, ceiling | Pass | Dedicated rows/semantics and source requirements; the selected v3 rail shows `PURCHASE CEILING — ABSTAINED / REQUIRED INPUT MISSING` |
 | Evidence/replay | Pass | Artifact schema, hash mismatch quarantine, deterministic replay steps, and run IDs specified |
 | Grounded LLM / abstention | Pass | Citation-bound short brief; explicit parking-rule abstention and no streaming speculative copy |
 | No screenshot-embedded product | Pass | Reference is a standalone visual-direction artifact; the product is specified as semantic/structural documentation, not an embedded raster implementation |
