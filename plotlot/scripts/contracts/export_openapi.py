@@ -4,13 +4,13 @@ import argparse
 import json
 from pathlib import Path
 
-from plotlot.api.main import app
+from plotlot.protocol.openapi import protocol_openapi_document
 
 
 def export_openapi(output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(
-        app.openapi(),
+        protocol_openapi_document(),
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
