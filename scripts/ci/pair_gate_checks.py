@@ -120,7 +120,11 @@ def parse_report(report: JsonObject, artifact_root: Path) -> tuple[int, int]:
         raise gate_error("PAIR_E_ZERO_TEST", f"missing structured report: {path.name}")
     if report_format == "junit":
         root = ElementTree.parse(path).getroot()
-        return int(root.attrib.get("tests", "0")), int(root.attrib.get("skipped", "0"))
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+        return (
+            sum(int(suite.attrib.get("tests", "0")) for suite in suites),
+            sum(int(suite.attrib.get("skipped", "0")) for suite in suites),
+        )
     value = json.loads(path.read_text())
     parsed = require_object(value, "test report")
     if report_format == "vitest":
