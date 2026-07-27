@@ -20,6 +20,7 @@ from plotlot.storage.backup import LOCK_SQL, UNLOCK_SQL
 from plotlot.storage.object_snapshots import SnapshotMetadata
 from plotlot.storage.restore import _load_version_map, remap_restored_object_versions
 from plotlot.storage.restore_database import promote
+from plotlot.storage.restore_attempt import clean_ready, list_recovery
 from plotlot.storage.runtime import build_storage_runtime
 from plotlot.storage.s3_types import S3ObjectStoreConfig
 
@@ -311,6 +312,34 @@ async def test_application_role_cannot_forge_storage_generation() -> None:
     finally:
         await connection.close()
     assert generation is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_list_discovers_attempt_and_cleanup_waits_for_retention(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = await _create_database(f"recovery_{uuid4().hex}")
+    _migrate_database(database_url)
+    attempt_id = uuid4()
+    connection = await asyncpg.connect(database_url)
+    try:
+        await connection.execute(
+            """INSERT INTO plotlot.restore_attempts
+            (attempt_id, stage_bucket, stage_database, archive_sha256, state, cleanup_after)
+            VALUES ($1, $2, 'stage-db', repeat('0',64), 'RECOVERY_REQUIRED',
+            now() + interval '1 day')""",
+            attempt_id,
+            f"plotlot-restore-{uuid4().hex}",
+        )
+    finally:
+        await connection.close()
+    monkeypatch.setenv("TEST_DATABASE_URL", database_url)
+
+    attempts = await list_recovery()
+    with pytest.raises(RuntimeError, match="not eligible for cleanup"):
+        await clean_ready(attempt_id)
+
+    assert [row["attempt_id"] for row in attempts] == [attempt_id]
 
 
 async def _create_database(database_name: str) -> str:
