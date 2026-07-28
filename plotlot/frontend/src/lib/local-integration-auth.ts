@@ -2,11 +2,27 @@ import { createRemoteJWKSet } from "jose/jwks/remote";
 import { jwtVerify } from "jose/jwt/verify";
 
 const LOCAL_INTEGRATION_ENABLED = "1";
+const LOCAL_INTEGRATION_TEST_ONLY = "1";
 const SESSION_COOKIE = "plotlot_local_integration_session";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const ROLES = ["owner", "admin", "analyst", "reviewer", "viewer"] as const;
+const DEPLOYMENT_ENVIRONMENT_NAMES = [
+  "AWS_EXECUTION_ENV",
+  "FLY_APP_NAME",
+  "K_SERVICE",
+  "RAILWAY_ENVIRONMENT",
+  "RENDER_SERVICE_ID",
+  "VERCEL",
+] as const;
 
 type LocalRole = (typeof ROLES)[number];
+
+type LocalIntegrationEnvironment = {
+  readonly [name: string]: string | undefined;
+  readonly NODE_ENV?: string;
+  readonly PLOTLOT_LOCAL_AUTH_INTEGRATION?: string;
+  readonly PLOTLOT_LOCAL_AUTH_TEST_ONLY?: string;
+};
 
 type LocalIntegrationConfiguration = {
   readonly authorizedParty: string;
@@ -80,6 +96,33 @@ function isLocalRole(value: string): value is LocalRole {
   return ROLES.some((role) => role === value);
 }
 
+export function localIntegrationModeEnabled(environment: LocalIntegrationEnvironment): boolean {
+  if (
+    environment.PLOTLOT_LOCAL_AUTH_INTEGRATION !== LOCAL_INTEGRATION_ENABLED ||
+    environment.PLOTLOT_LOCAL_AUTH_TEST_ONLY !== LOCAL_INTEGRATION_TEST_ONLY
+  ) {
+    return false;
+  }
+  if (environment.NODE_ENV !== "development" && environment.NODE_ENV !== "test") {
+    return false;
+  }
+  return DEPLOYMENT_ENVIRONMENT_NAMES.every((name) => environment[name] === undefined);
+}
+
+export function localIntegrationRequestHasTrustedLoopbackHost(request: Request): boolean {
+  const host = request.headers.get("host");
+  if (host === null) {
+    return false;
+  }
+  try {
+    const requestHostname = new URL(request.url).hostname;
+    const hostHeaderHostname = new URL(`http://${host}`).hostname;
+    return LOOPBACK_HOSTS.has(requestHostname) && LOOPBACK_HOSTS.has(hostHeaderHostname);
+  } catch {
+    return false;
+  }
+}
+
 function localRole(value: unknown): LocalRole {
   if (typeof value === "string") {
     const normalized = value.startsWith("org:") ? value.slice("org:".length) : value;
@@ -91,7 +134,7 @@ function localRole(value: unknown): LocalRole {
 }
 
 function localConfiguration(): LocalIntegrationConfiguration | null {
-  if (process.env.PLOTLOT_LOCAL_AUTH_INTEGRATION !== LOCAL_INTEGRATION_ENABLED) {
+  if (!localIntegrationModeEnabled(process.env)) {
     return null;
   }
 
@@ -157,8 +200,4 @@ export async function verifyLocalIntegrationToken(token: string): Promise<Verifi
     tenantId,
     userId,
   };
-}
-
-export function localIntegrationRequestIsLoopback(hostname: string): boolean {
-  return LOOPBACK_HOSTS.has(hostname);
 }

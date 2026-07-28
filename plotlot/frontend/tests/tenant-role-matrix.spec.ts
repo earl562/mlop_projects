@@ -124,7 +124,61 @@ async function backendRequest(
   return context.request.fetch(url, { method, data: body });
 }
 
+async function frontendRequest(
+  context: BrowserContext,
+  method: "GET" | "POST" | "PUT",
+  path: string,
+  body?: Record<string, unknown>,
+) {
+  const url = `${FRONTEND_BASE_URL}${path}`;
+  if (body === undefined) {
+    return context.request.fetch(url, { method });
+  }
+  return context.request.fetch(url, { method, data: body });
+}
+
 test.describe("tenant and role browser matrix with production authentication", () => {
+  test("Given anonymous and Viewer callers, when they reach connector proxies or spoof the Host header, then the boundary denies access before a connector can run", async ({ browser }) => {
+    // Given
+    const tokens = readRoleTokens();
+    const anonymousContext = await browser.newContext();
+    const viewerContext = await browser.newContext();
+    const spoofedHostContext = await browser.newContext();
+    await establishSession(viewerContext, tokens.tenantAViewer);
+
+    try {
+      // When
+      const anonymousFal = await frontendRequest(anonymousContext, "GET", "/api/fal/proxy");
+      const anonymousGis = await frontendRequest(anonymousContext, "GET", "/api/gis-proxy");
+      const anonymousVideo = await frontendRequest(anonymousContext, "POST", "/api/video/generate", {});
+      const viewerFal = await frontendRequest(viewerContext, "POST", "/api/fal/proxy", {});
+      const viewerVideo = await frontendRequest(viewerContext, "POST", "/api/video/generate", {});
+      const spoofedHost = await spoofedHostContext.request.post(
+        `${FRONTEND_BASE_URL}/api/local-auth/session`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokens.tenantAAnalyst}`,
+            Host: "attacker.invalid",
+          },
+        },
+      );
+
+      // Then
+      expect(anonymousFal.status()).toBe(401);
+      expect(anonymousGis.status()).toBe(401);
+      expect(anonymousVideo.status()).toBe(401);
+      expect(viewerFal.status()).toBe(403);
+      expect(viewerVideo.status()).toBe(403);
+      expect(spoofedHost.status()).toBe(404);
+    } finally {
+      await Promise.all([
+        anonymousContext.close(),
+        viewerContext.close(),
+        spoofedHostContext.close(),
+      ]);
+    }
+  });
+
   test("Given distinct Analyst and Reviewer sessions, when the Analyst requests and both attempt release, then self-release is denied and review releases exactly once", async ({ browser }) => {
     // Given
     const tokens = readRoleTokens();

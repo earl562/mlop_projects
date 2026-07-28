@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { assertProductionAuthConfiguration } from "./lib/auth-config";
 import {
   localIntegrationConfiguration,
-  localIntegrationRequestIsLoopback,
+  localIntegrationRequestHasTrustedLoopbackHost,
   localIntegrationSessionCookie,
   verifyLocalIntegrationToken,
 } from "./lib/local-integration-auth";
@@ -13,8 +13,6 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/stripe/webhook", // Stripe sends unsigned webhooks — must stay public
-  "/api/gis-proxy(.*)", // GIS tile proxy — no auth needed
-  "/api/fal/(.*)", // FAL AI proxy
 ]);
 
 const clerkEnabled = Boolean(
@@ -28,7 +26,7 @@ if (localIntegration === null) {
 }
 
 async function localIntegrationProxy(request: NextRequest): Promise<NextResponse> {
-  if (!localIntegrationRequestIsLoopback(request.nextUrl.hostname)) {
+  if (!localIntegrationRequestHasTrustedLoopbackHost(request)) {
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
   }
   if (request.nextUrl.pathname.startsWith("/api/local-auth/")) {

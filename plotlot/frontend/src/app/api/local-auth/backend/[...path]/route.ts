@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 
 import {
   localIntegrationConfiguration,
-  localIntegrationRequestIsLoopback,
+  localIntegrationRequestHasTrustedLoopbackHost,
   localIntegrationSessionCookie,
   verifyLocalIntegrationToken,
 } from "@/lib/local-integration-auth";
@@ -20,7 +20,7 @@ function validPath(path: readonly string[]): boolean {
 
 async function proxyBackendRequest(request: Request, context: RouteContext): Promise<Response> {
   const configuration = localIntegrationConfiguration();
-  if (configuration === null || !localIntegrationRequestIsLoopback(new URL(request.url).hostname)) {
+  if (configuration === null || !localIntegrationRequestHasTrustedLoopbackHost(request)) {
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
   }
 
