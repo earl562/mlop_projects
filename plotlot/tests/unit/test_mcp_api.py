@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+
+from plotlot.api.auth_types import Actor, IdentityRole, capabilities_for_role
+
+
+@pytest.fixture(autouse=True)
+def _verified_mcp_actor():
+    role = IdentityRole.OWNER
+    actor = Actor(
+        user_id="mcp-test-owner",
+        tenant_id="ws_test",
+        role=role,
+        capabilities=capabilities_for_role(role),
+    )
+    with patch(
+        "plotlot.api.security_middleware.get_current_user",
+        new=AsyncMock(return_value=actor.as_request_user()),
+    ):
+        yield
 
 
 class FakeSession:
@@ -65,11 +83,8 @@ async def test_mcp_tools_call_geocode(client):
                 "arguments": {"address": "123 Main St"},
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_1",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 0,
-                    "live_network_allowed": False,
                     "approved_approval_ids": [],
                 },
             },
@@ -124,11 +139,8 @@ async def test_mcp_lookup_property_info_passes_state_to_dynamic_lookup(client):
                 },
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_wake_lookup",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 0,
-                    "live_network_allowed": False,
                     "approved_approval_ids": [],
                 },
             },
@@ -191,11 +203,8 @@ async def test_mcp_search_properties_accepts_dynamic_county_state(client):
                 },
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_wake_search",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 50,
-                    "live_network_allowed": True,
                     "approved_approval_ids": [],
                 },
             },
@@ -246,11 +255,8 @@ async def test_mcp_discover_municode_authorities_returns_county_matches(client):
                 "arguments": {"county": "Wake", "state": "NC"},
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_wake_municode",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 25,
-                    "live_network_allowed": True,
                     "approved_approval_ids": [],
                 },
             },
@@ -308,11 +314,8 @@ async def test_mcp_discover_code_authorities_returns_non_municode_sources(client
                 "arguments": {"county": "Alpine", "state": "CA"},
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_alpine_code",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 25,
-                    "live_network_allowed": True,
                     "approved_approval_ids": [],
                 },
             },
@@ -353,11 +356,8 @@ async def test_mcp_search_code_authority_live_handles_pending_source(client):
                 },
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_alpine_code_search",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 25,
-                    "live_network_allowed": True,
                     "approved_approval_ids": [],
                 },
             },
@@ -386,11 +386,8 @@ async def test_mcp_tools_call_write_external_requires_approval_and_persists_requ
                 "arguments": {"draft_id": "draft_email_123"},
                 "context": {
                     "workspace_id": "ws_test",
-                    "actor_user_id": "anonymous",
                     "run_id": "run_mcp_send_1",
                     "project_id": "prj_test",
-                    "risk_budget_cents": 0,
-                    "live_network_allowed": True,
                     "approved_approval_ids": [],
                 },
             },

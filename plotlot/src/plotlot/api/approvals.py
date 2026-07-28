@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from plotlot.storage.db import get_session
@@ -21,17 +21,19 @@ router = APIRouter(prefix="/api/v1", tags=["approvals"])
 
 class ApprovalDecisionRequest(BaseModel):
     decision: str = Field(..., pattern="^(approve|reject)$")
-    decided_by: str | None = None
     response_json: dict = Field(default_factory=dict)
 
 
 class ApprovalActionRequest(BaseModel):
-    decided_by: str | None = None
     response_json: dict = Field(default_factory=dict)
 
 
 @router.post("/approvals/{approval_id}/decision")
-async def decide_approval(approval_id: str, body: ApprovalDecisionRequest):
+async def decide_approval(
+    approval_id: str,
+    body: ApprovalDecisionRequest,
+    request: Request,
+):
     session = await get_session()
     try:
         approval = await session.get(ApprovalRequest, approval_id)
@@ -45,7 +47,7 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionRequest):
             raise HTTPException(status_code=409, detail="Approval has expired")
 
         approval.status = "approved" if body.decision == "approve" else "rejected"  # type: ignore[assignment]
-        approval.decided_by = body.decided_by  # type: ignore[assignment]
+        approval.decided_by = request.state.actor.user_id  # type: ignore[assignment]
         approval.decided_at = datetime.now(timezone.utc)  # type: ignore[assignment]
         approval.response_json = body.response_json or {}  # type: ignore[assignment]
         await session.commit()
@@ -58,26 +60,34 @@ async def decide_approval(approval_id: str, body: ApprovalDecisionRequest):
 
 
 @router.post("/approvals/{approval_id}/approve")
-async def approve_approval(approval_id: str, body: ApprovalActionRequest):
+async def approve_approval(
+    approval_id: str,
+    body: ApprovalActionRequest,
+    request: Request,
+):
     return await decide_approval(
         approval_id,
         ApprovalDecisionRequest(
             decision="approve",
-            decided_by=body.decided_by,
             response_json=body.response_json,
         ),
+        request,
     )
 
 
 @router.post("/approvals/{approval_id}/reject")
-async def reject_approval(approval_id: str, body: ApprovalActionRequest):
+async def reject_approval(
+    approval_id: str,
+    body: ApprovalActionRequest,
+    request: Request,
+):
     return await decide_approval(
         approval_id,
         ApprovalDecisionRequest(
             decision="reject",
-            decided_by=body.decided_by,
             response_json=body.response_json,
         ),
+        request,
     )
 
 

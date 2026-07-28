@@ -204,6 +204,10 @@ def test_role_capabilities_are_least_privilege() -> None:
         {Capability.RUN_ANALYSIS, Capability.VIEW_ANALYSIS}
     )
     assert capabilities_for_role(IdentityRole.REVIEWER) == frozenset(
-        {Capability.REVIEW_ANALYSIS, Capability.VIEW_ANALYSIS}
+        {
+            Capability.RELEASE_EXTERNAL,
+            Capability.REVIEW_ANALYSIS,
+            Capability.VIEW_ANALYSIS,
+        }
     )
     assert capabilities_for_role(IdentityRole.VIEWER) == frozenset({Capability.VIEW_ANALYSIS})

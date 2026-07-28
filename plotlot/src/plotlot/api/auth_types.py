@@ -18,8 +18,13 @@ class Capability(StrEnum):
     MANAGE_WORKSPACE = "workspace:manage"
     MANAGE_MEMBERS = "members:manage"
     MANAGE_SERVICE_PRINCIPALS = "service-principals:manage"
+    ADMINISTER_SYSTEM = "system:admin"
+    USE_DEBUG_TOOLS = "debug:use"
+    PERFORM_DESTRUCTIVE_ACTION = "destructive:perform"
+    MANAGE_CONNECTORS = "connectors:manage"
     RUN_ANALYSIS = "analysis:run"
     REVIEW_ANALYSIS = "analysis:review"
+    RELEASE_EXTERNAL = "analysis:release"
     VIEW_ANALYSIS = "analysis:view"
 
 
@@ -29,6 +34,10 @@ _ROLE_CAPABILITIES: dict[IdentityRole, frozenset[Capability]] = {
         {
             Capability.MANAGE_MEMBERS,
             Capability.MANAGE_SERVICE_PRINCIPALS,
+            Capability.ADMINISTER_SYSTEM,
+            Capability.USE_DEBUG_TOOLS,
+            Capability.PERFORM_DESTRUCTIVE_ACTION,
+            Capability.MANAGE_CONNECTORS,
             Capability.RUN_ANALYSIS,
             Capability.REVIEW_ANALYSIS,
             Capability.VIEW_ANALYSIS,
@@ -38,7 +47,11 @@ _ROLE_CAPABILITIES: dict[IdentityRole, frozenset[Capability]] = {
         {Capability.RUN_ANALYSIS, Capability.VIEW_ANALYSIS}
     ),
     IdentityRole.REVIEWER: frozenset(
-        {Capability.REVIEW_ANALYSIS, Capability.VIEW_ANALYSIS}
+        {
+            Capability.REVIEW_ANALYSIS,
+            Capability.RELEASE_EXTERNAL,
+            Capability.VIEW_ANALYSIS,
+        }
     ),
     IdentityRole.VIEWER: frozenset({Capability.VIEW_ANALYSIS}),
 }

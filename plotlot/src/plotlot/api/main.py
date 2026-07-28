@@ -20,9 +20,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from plotlot.api.auth import get_current_user
+from plotlot.api.security_middleware import TenantAuthorizationMiddleware
 from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
 from plotlot.api.chat import router as chat_router
+from plotlot.api.connectors.email import router as email_connector_router
 from plotlot.api.approvals import router as approvals_router
 from plotlot.api.workspaces import router as workspaces_router
 from plotlot.api.analyses import router as analyses_router
@@ -34,6 +35,7 @@ from plotlot.api.middleware import rate_limiter
 from plotlot.api.ordinance import router as ordinance_router
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.render import router as render_router
+from plotlot.api.releases import router as releases_router
 from plotlot.api.routes import router
 from plotlot.api.screening import router as screening_router
 from plotlot.config import settings
@@ -143,19 +145,6 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
             correlation_id.reset(token)
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """Resolve the current user (if any) and attach to request.state.
-
-    Runs on every request so downstream dependencies and the rate limiter
-    can distinguish authenticated from anonymous users.  When auth is
-    disabled this is essentially a no-op (sets user=None).
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        request.state.user = await get_current_user(request)
-        return await call_next(request)
-
-
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Apply rate limiting to expensive API endpoints.
 
@@ -186,7 +175,7 @@ app = FastAPI(
 # 4. Auth — resolve user from JWT (attaches to request.state.user)
 # 5. Rate limit — enforce per-IP/per-user limits on expensive endpoints
 app.add_middleware(RateLimitMiddleware)
-app.add_middleware(AuthMiddleware)
+app.add_middleware(TenantAuthorizationMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(
@@ -200,6 +189,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(billing_router)
 app.include_router(chat_router)
+app.include_router(email_connector_router)
 app.include_router(approvals_router)
 app.include_router(workspaces_router)
 app.include_router(analyses_router)
@@ -211,6 +201,7 @@ app.include_router(geometry_router)
 app.include_router(ordinance_router)
 app.include_router(render_router)
 app.include_router(screening_router)
+app.include_router(releases_router)
 install_engine_protocol(app)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)

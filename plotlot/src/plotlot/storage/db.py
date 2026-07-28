@@ -11,9 +11,13 @@ the active loop changes instead of reusing a stale pooled connection.
 import logging
 
 import anyio
+from sqlalchemy import event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, SessionTransaction
 
 from plotlot.config import settings
+from plotlot.security.context import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,20 @@ _engine = None
 _session_factory = None
 _engine_loop_id = None
 _engine_lock = anyio.Lock()
+
+
+@event.listens_for(Session, "after_begin")
+def _set_transaction_tenant(
+    _session: Session,
+    _transaction: SessionTransaction,
+    connection: Connection,
+) -> None:
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": tenant_id},
+        )
 
 
 def _current_loop_id() -> int | None:

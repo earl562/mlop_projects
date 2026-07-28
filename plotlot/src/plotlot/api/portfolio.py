@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from plotlot.api.schemas import SaveAnalysisRequest, SavedAnalysisResponse
 from plotlot.storage.db import get_session
 from plotlot.storage.models import PortfolioEntry
+from plotlot.security.context import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ async def save_analysis(request: SaveAnalysisRequest):
     report = request.report
 
     entry = PortfolioEntry(
+        workspace_id=current_tenant_id(),
         address=report.formatted_address or report.address,
         municipality=report.municipality,
         county=report.county,
