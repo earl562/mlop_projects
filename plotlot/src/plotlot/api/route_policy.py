@@ -18,6 +18,8 @@ class RouteMatrix:
 
 
 def capability_for_route(method: str, path: str) -> Capability | None:
+    if not path.startswith("/api/"):
+        return None
     if path == "/api/v1/stripe/webhook":
         return None
     if path.startswith("/api/v1/admin/"):

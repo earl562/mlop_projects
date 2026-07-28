@@ -59,6 +59,10 @@ def test_every_non_public_route_has_an_explicit_role_policy() -> None:
     assert matrix.missing_routes == frozenset()
 
 
+def test_non_api_readiness_routes_remain_public() -> None:
+    assert capability_for_route("GET", "/health") is None
+
+
 @pytest.mark.parametrize(
     ("method", "path", "role", "allowed"),
     [
