@@ -1,7 +1,13 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { assertProductionAuthConfiguration } from "./lib/auth-config";
+import {
+  localIntegrationConfiguration,
+  localIntegrationRequestIsLoopback,
+  localIntegrationSessionCookie,
+  verifyLocalIntegrationToken,
+} from "./lib/local-integration-auth";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
@@ -15,9 +21,35 @@ const clerkEnabled = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
 );
 
-assertProductionAuthConfiguration(process.env);
+const localIntegration = localIntegrationConfiguration();
 
-const proxy = clerkEnabled
+if (localIntegration === null) {
+  assertProductionAuthConfiguration(process.env);
+}
+
+async function localIntegrationProxy(request: NextRequest): Promise<NextResponse> {
+  if (!localIntegrationRequestIsLoopback(request.nextUrl.hostname)) {
+    return NextResponse.json({ detail: "Not found" }, { status: 404 });
+  }
+  if (request.nextUrl.pathname.startsWith("/api/local-auth/")) {
+    return NextResponse.next();
+  }
+
+  const token = request.cookies.get(localIntegrationSessionCookie())?.value;
+  if (token === undefined) {
+    return NextResponse.json({ detail: "Authentication required" }, { status: 401 });
+  }
+  try {
+    await verifyLocalIntegrationToken(token);
+  } catch {
+    return NextResponse.json({ detail: "Authentication rejected" }, { status: 401 });
+  }
+  return NextResponse.next();
+}
+
+const proxy = localIntegration !== null
+  ? localIntegrationProxy
+  : clerkEnabled
   ? clerkMiddleware(async (auth, req) => {
       if (!isPublicRoute(req)) {
         await auth.protect();
