@@ -161,6 +161,39 @@ class ReportCache(Base):
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class AssessorParcelCache(Base):
+    """Cached county-assessor parcel facts (recorded lot area + owner) by APN.
+
+    County assessor GIS endpoints are public, unmetered, and shared — measured
+    behaviour on San Diego's is ~1s median with individual requests occasionally
+    stalling past 20s. Losing the lookup silently swaps the authoritative
+    recorded lot for a GIS polygon estimate, which changes the headline unit
+    count (7,710 vs 6,471 sqft = 7 vs 6 units on APN 4364230200) and forces the
+    offer to provisional. Persisting successful lookups means a parcel is
+    fetched once rather than once per process, so restarts and redeploys no
+    longer re-expose us to the stall.
+
+    Rows carry a TTL because ownership changes on sale even though lot area is
+    static between splits; a stale owner is a trust problem, not just a stale
+    cache. Keyed by (source layer, APN) since APNs are unique per county, not
+    globally.
+    """
+
+    __tablename__ = "assessor_parcel_cache"
+
+    # sha256(source_url)[:12] + ":" + apn_digits — identifies the parcel within
+    # the specific county layer it was read from.
+    cache_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    apn: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String, nullable=False)
+    lot_sqft: Mapped[float | None] = mapped_column(Float, nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ConnectorCredential(Base):
     """SMTP credentials for the Outreach connector, encrypted at rest with Fernet.
 

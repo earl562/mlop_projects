@@ -420,11 +420,20 @@ class CaliforniaProvider(PropertyProvider):
         if len(apn_digits) < 8:
             return None, ""
 
-        # Recorded lot area/owner for an APN is static between lot splits, so a
-        # successful lookup is cached for the process; failures are never cached.
+        # Two cache layers, both success-only: in-process for repeat calls inside
+        # one run, and the database so a restart or redeploy doesn't re-expose us
+        # to the endpoint's stalls. Failures are never cached — that would pin a
+        # parcel to the degraded geometry path.
         cached = _ASSESSOR_CACHE.get(apn_digits)
         if cached is not None:
             return cached
+
+        from plotlot.storage.assessor_cache import get_cached_parcel, store_cached_parcel
+
+        persisted = await get_cached_parcel(assessor_url, apn_digits)
+        if persisted is not None:
+            _ASSESSOR_CACHE[apn_digits] = persisted
+            return persisted
 
         params = {
             "where": f"APN='{apn_digits}'",
@@ -470,6 +479,7 @@ class CaliforniaProvider(PropertyProvider):
                 result = (st_area, owner) if st_area > 0 else (None, owner)
             if result[0] is not None:
                 _ASSESSOR_CACHE[apn_digits] = result
+                await store_cached_parcel(assessor_url, apn_digits, result[0], result[1])
             return result
 
         # Exhausted retries: warn, not debug — this silently costs the caller the

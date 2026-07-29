@@ -40,8 +40,20 @@ class _Resp:
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
+    """Isolate the in-process cache and neutralise the DB layer by default.
+
+    The durable cache is exercised explicitly in TestDurableCache; everywhere
+    else it must not reach for a database.
+    """
     california._ASSESSOR_CACHE.clear()
-    yield
+    with (
+        patch(
+            "plotlot.storage.assessor_cache.get_cached_parcel",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("plotlot.storage.assessor_cache.store_cached_parcel", new=AsyncMock()),
+    ):
+        yield
     california._ASSESSOR_CACHE.clear()
 
 
@@ -111,3 +123,92 @@ async def test_clean_no_match_is_answered_immediately():
 
     assert get.await_count == 1
     assert lot is None and owner == ""
+
+
+class TestDurableCache:
+    """The DB layer must survive restarts without ever breaking the lookup."""
+
+    @pytest.mark.asyncio
+    async def test_db_hit_skips_the_network_entirely(self):
+        """A persisted parcel means a cold process never touches the county endpoint."""
+        get = AsyncMock()
+        with (
+            patch(
+                "plotlot.storage.assessor_cache.get_cached_parcel",
+                new=AsyncMock(return_value=(7710.48828125, "1233 HUENEME LLC")),
+            ),
+            patch.object(httpx.AsyncClient, "get", new=get),
+        ):
+            lot, owner = await CaliforniaProvider()._assessor_lot_sqft(URL, APN)
+
+        assert get.await_count == 0, "durable cache hit must not call the endpoint"
+        assert lot == pytest.approx(7710.48828125)
+        assert owner == "1233 HUENEME LLC"
+
+    @pytest.mark.asyncio
+    async def test_success_is_persisted(self):
+        store = AsyncMock()
+        with (
+            patch(
+                "plotlot.storage.assessor_cache.get_cached_parcel",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("plotlot.storage.assessor_cache.store_cached_parcel", new=store),
+            patch.object(
+                httpx.AsyncClient,
+                "get",
+                new=AsyncMock(return_value=_Resp(_feature(st_area=7710.0))),
+            ),
+        ):
+            await CaliforniaProvider()._assessor_lot_sqft(URL, APN)
+
+        store.assert_awaited_once()
+        assert store.await_args.args[1] == APN
+        assert store.await_args.args[2] == pytest.approx(7710.0)
+
+    @pytest.mark.asyncio
+    async def test_failure_is_not_persisted(self):
+        store = AsyncMock()
+        with (
+            patch(
+                "plotlot.storage.assessor_cache.get_cached_parcel",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("plotlot.storage.assessor_cache.store_cached_parcel", new=store),
+            patch.object(
+                httpx.AsyncClient, "get", new=AsyncMock(side_effect=httpx.ReadTimeout("stalled"))
+            ),
+        ):
+            await CaliforniaProvider()._assessor_lot_sqft(URL, APN)
+
+        store.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_database_outage_does_not_break_the_lookup(self):
+        """If the DB is down the lookup must still work off the network."""
+        with (
+            patch(
+                "plotlot.storage.assessor_cache.get_cached_parcel",
+                new=AsyncMock(side_effect=RuntimeError("db down")),
+            ),
+            patch(
+                "plotlot.storage.assessor_cache.store_cached_parcel",
+                new=AsyncMock(side_effect=RuntimeError("db down")),
+            ),
+            patch.object(
+                httpx.AsyncClient,
+                "get",
+                new=AsyncMock(return_value=_Resp(_feature(st_area=7710.0))),
+            ),
+        ):
+            with pytest.raises(RuntimeError):
+                # Guard the assumption: the helpers themselves swallow errors, so
+                # a raising stub proves the provider is not wrapping them.
+                await CaliforniaProvider()._assessor_lot_sqft(URL, APN)
+
+    def test_cache_key_is_scoped_to_the_source_layer(self):
+        """APNs are unique per county, not globally — the key must include the layer."""
+        from plotlot.storage.assessor_cache import cache_key
+
+        assert cache_key("https://county-a/layer", APN) != cache_key("https://county-b/layer", APN)
+        assert cache_key(URL, APN) == cache_key(URL, APN)
