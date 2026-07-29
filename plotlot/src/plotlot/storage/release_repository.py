@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -58,10 +56,10 @@ class PostgresReleaseRepository:
                 text(
                     """INSERT INTO plotlot.external_release_requests (
                     tenant_id, request_id, analysis_id, revision_id,
-                    revision_sha256, requested_by, status
+                    revision_sha256, requested_by
                     ) VALUES (
                     :tenant_id, :request_id, :analysis_id, :revision_id,
-                    :revision_sha256, :requested_by, 'pending'
+                    :revision_sha256, :requested_by
                     )"""
                 ),
                 {
@@ -111,8 +109,7 @@ class PostgresReleaseRepository:
                     text(
                         """UPDATE plotlot.external_release_requests AS release
                         SET status='released',
-                            reviewed_by=:reviewed_by,
-                            released_at=:released_at
+                            reviewed_by=:reviewed_by
                         WHERE release.request_id=:request_id
                           AND release.status='pending'
                           AND release.requested_by<>:reviewed_by
@@ -131,7 +128,6 @@ class PostgresReleaseRepository:
                     {
                         "request_id": request_id,
                         "reviewed_by": reviewer_user_id,
-                        "released_at": datetime.now(timezone.utc),
                     },
                 )
             ).mappings().one_or_none()
