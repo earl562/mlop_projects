@@ -1,5 +1,6 @@
 """PlotLot configuration — all external service credentials and settings."""
 
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse, urlunparse
 
 from pydantic import Field, model_validator
@@ -118,7 +119,9 @@ class Settings(BaseSettings):
     )
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # Groq retired llama-4-scout (404 model_not_found); llama-3.3-70b-versatile is
+    # the current served equivalent — 131k context, reliable tool-calling, ~1s/turn.
+    groq_model: str = "llama-3.3-70b-versatile"
     # Fast extraction: route the parcel-extraction agentic loop (pipeline/lookup.py)
     # Groq-FIRST instead of the mainline NIM 49B reasoning model, whose ~10-15s
     # per turn makes a cold lookup_address ~35-55s — past Render's proxy timeout,
@@ -243,7 +246,20 @@ class Settings(BaseSettings):
         "https://plotlot-api-production.up.railway.app",
     ]
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # Resolve .env from the repo root as well as the working directory. An MCP
+    # client (Claude Code / Claude Desktop) spawns the server with its own cwd —
+    # typically the user's project, not this repo — so a cwd-relative .env is
+    # silently missed and every setting falls back to its default: the database
+    # URL points at localhost instead of Neon and no API keys are present. Listing
+    # both means the server works wherever it is launched from, with a cwd .env
+    # still taking precedence when one exists.
+    model_config = {
+        "env_file": (
+            str(Path(__file__).resolve().parents[2] / ".env"),
+            ".env",
+        ),
+        "extra": "ignore",
+    }
 
 
 settings = Settings()
