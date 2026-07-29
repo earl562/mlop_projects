@@ -19,6 +19,7 @@ Governance flags (shared):
     --no-live-network    disallow live-network tools this run
     --approve ID         supply an approval id for a gated external write
     --json               emit machine-readable JSON (for external harnesses)
+    --verbose            show pipeline diagnostics (quiet by default)
 
 Exit codes: 0 ok | 1 error/unknown | 2 blocked | 3 pending approval.
 """
@@ -52,8 +53,28 @@ class _Flags:
         self.live_network = True
         self.approve: str | None = None
         self.json_args: str | None = None
+        self.verbose = False
         self.kv: dict[str, Any] = {}
         self.positionals: list[str] = []
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Quiet by default: a CLI run should print its result, not its plumbing.
+
+    The pipeline logs handled degradations at WARNING/ERROR — a Groq rate-limit
+    that falls back to the primary provider, an optional wetlands layer that
+    404s, an unactivated comps key that 403s. Each is recovered from and each is
+    already reflected in the returned payload (`lot_size_source`, `adv_source`,
+    `verification`), so surfacing the raw log lines makes a successful run read
+    like a failed one. `--verbose` restores them for diagnosis.
+    """
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO if verbose else logging.CRITICAL,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("plotlot").setLevel(logging.INFO if verbose else logging.CRITICAL)
 
 
 def _coerce(value: str) -> Any:
@@ -69,6 +90,8 @@ def _coerce(value: str) -> Any:
 
 
 def _parse_flags(rest: list[str]) -> _Flags:
+    """Parse shared flags. Also applies the logging policy, since every caller
+    parses flags before doing any work that could log."""
     flags = _Flags()
     i = 0
     while i < len(rest):
@@ -77,6 +100,8 @@ def _parse_flags(rest: list[str]) -> _Flags:
             flags.as_json = True
         elif tok == "--no-live-network":
             flags.live_network = False
+        elif tok in ("--verbose", "-v"):
+            flags.verbose = True
         elif tok == "--budget-cents":
             i += 1
             flags.budget_cents = int(rest[i]) if i < len(rest) else flags.budget_cents
@@ -94,6 +119,7 @@ def _parse_flags(rest: list[str]) -> _Flags:
         else:
             flags.positionals.append(tok)
         i += 1
+    _configure_logging(flags.verbose)
     return flags
 
 

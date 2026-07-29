@@ -104,3 +104,23 @@ def test_screen_requires_addresses(capsys):
     code = harness_cli.dispatch(["screen"])
     assert code == harness_cli._EXIT_ERROR
     assert "Usage" in capsys.readouterr().out
+
+
+def test_verbose_flag_parsed():
+    assert harness_cli._parse_flags(["--verbose"]).verbose is True
+    assert harness_cli._parse_flags(["-v"]).verbose is True
+    assert harness_cli._parse_flags([]).verbose is False
+
+
+def test_quiet_by_default_silences_pipeline_logs(capsys):
+    """A successful run must not print handled degradations as if they failed."""
+    import logging
+
+    harness_cli._parse_flags([])  # applies the quiet policy
+    assert logging.getLogger("plotlot").level == logging.CRITICAL
+    # A handled fallback logged by the pipeline must not surface.
+    logging.getLogger("plotlot.retrieval.llm").error("Groq unusable; falling back")
+    assert "Groq" not in capsys.readouterr().err
+
+    harness_cli._parse_flags(["--verbose"])
+    assert logging.getLogger("plotlot").level == logging.INFO

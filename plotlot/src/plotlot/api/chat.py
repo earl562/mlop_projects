@@ -3085,11 +3085,23 @@ def _format_grounded_analysis(report) -> dict:
     pf = report.pro_forma
     valuation: dict[str, Any] = {}
     if comps is not None:
-        valuation["estimated_land_value"] = _round(comps.estimated_land_value)
-        valuation["land_value_range"] = [
-            _round(comps.estimated_land_value_low),
-            _round(comps.estimated_land_value_high),
-        ]
+        # A comps-derived land value only exists when comps were actually found.
+        # When none were, these come back 0.0 — and "estimated land value: $0" is
+        # a false statement about a real parcel (it renders as "$0" because
+        # _fmt_money(0.0) is truthy), not a missing value. Emit None so every
+        # consumer says "not available" and defers to max_land_price_residual.
+        has_comp_value = (comps.estimated_land_value or 0) > 0
+        valuation["estimated_land_value"] = (
+            _round(comps.estimated_land_value) if has_comp_value else None
+        )
+        valuation["land_value_range"] = (
+            [
+                _round(comps.estimated_land_value_low),
+                _round(comps.estimated_land_value_high),
+            ]
+            if has_comp_value
+            else [None, None]
+        )
         valuation["adv_per_unit"] = _round(comps.adv_per_unit)
         valuation["adv_per_unit_range"] = [
             _round(comps.adv_per_unit_low),

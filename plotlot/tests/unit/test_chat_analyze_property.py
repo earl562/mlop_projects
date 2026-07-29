@@ -23,6 +23,7 @@ from plotlot.api.chat import (
     _build_active_analysis_context,
     _execute_analyze_property,
     _execute_screen_properties,
+    _fmt_money,
     _format_grounded_analysis,
 )
 from plotlot.core.types import (
@@ -1518,3 +1519,40 @@ class TestForcedGrounding:
             out = json.loads(await chat_mod._execute_analyze_property("1233 Hueneme St", sid))
         m_deep.assert_not_called()  # cache hit → no re-run
         assert out["by_right"]["max_units"] == 7
+
+
+def test_land_value_is_null_not_zero_when_no_comps_were_found():
+    """"$0" is a false claim about a real parcel; absent is the honest answer.
+
+    With no comps the CompAnalysis fields come back 0.0. Emitting that verbatim
+    made the chat formatter print "Implied land value from comps: $0" (because
+    _fmt_money(0.0) is a truthy "$0"), which reads as a worthless parcel rather
+    than a missing figure. The residual (max_land_price_residual) is the number
+    that carries meaning in this case.
+    """
+    from dataclasses import replace
+
+    report = _hueneme_report()
+    report.comp_analysis = replace(
+        report.comp_analysis,
+        estimated_land_value=0.0,
+        estimated_land_value_low=0.0,
+        estimated_land_value_high=0.0,
+        adv_source="regional_default",
+        confidence=0.0,
+    )
+
+    val = _format_grounded_analysis(report)["valuation"]
+
+    assert val["estimated_land_value"] is None
+    assert val["land_value_range"] == [None, None]
+    # The meaningful figure must still be present.
+    assert val["max_land_price_residual"] is not None
+    # And the formatter must omit the line rather than print "$0".
+    assert _fmt_money(val["estimated_land_value"]) is None
+
+
+def test_land_value_is_kept_when_comps_exist():
+    val = _format_grounded_analysis(_hueneme_report())["valuation"]
+    assert val["estimated_land_value"] == 1_200_000
+    assert val["land_value_range"] == [1_000_000, 1_400_000]
