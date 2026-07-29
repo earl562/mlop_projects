@@ -119,3 +119,8 @@ do_not_mutate = [
 ]
 mutate_only_covered_lines = false
 debug = true
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
+]
