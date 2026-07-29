@@ -1,12 +1,18 @@
 import { expect, test } from "@playwright/test";
 import type { BrowserContext, Page } from "@playwright/test";
 import { readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 const FRONTEND_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3003";
 const TOKEN_FILE =
   process.env.PLOTLOT_TASK8_TOKEN_FILE ??
-  resolve(process.cwd(), "../../.omo/evidence/task-8-tenant-authorization/local-auth-state/tokens.json");
+  resolve(
+    tmpdir(),
+    `plotlot-task8-${createHash("sha256").update(resolve(process.cwd())).digest("hex").slice(0, 16)}`,
+    "tokens.json",
+  );
 const RELEASE_FIXTURE = {
   analysisId: "analysis-reviewed",
   revisionId: "revision-reviewed",

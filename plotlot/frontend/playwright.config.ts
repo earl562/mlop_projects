@@ -9,6 +9,16 @@ const WEB_SERVER_PORT = new URL(BASE_URL).port || PLAYWRIGHT_PORT;
 const MATRIX_LANE = process.env.PLOTLOT_MATRIX_LANE ?? "adhoc";
 const MATRIX_OUTPUT = `.quality-matrix/playwright-${MATRIX_LANE}.json`;
 const DESKTOP_CHROME = { ...devices["Desktop Chrome"] };
+const TASK8_ROLE_MATRIX = process.argv.some((argument) => argument.includes("tenant-role-matrix.spec.ts"));
+const TASK8_WEBSERVER = {
+  command: "node tests/task8-local-auth-webserver.mjs",
+  env: {
+    NEXT_TELEMETRY_DISABLED: "1",
+  },
+  reuseExistingServer: false,
+  timeout: 180_000,
+  url: `${BASE_URL}/api/local-auth/session`,
+};
 
 export default defineConfig({
   testDir: "./tests",
@@ -38,7 +48,9 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: "**/lookup-uat.spec.ts",
+      testMatch: TASK8_ROLE_MATRIX
+        ? ["**/lookup-uat.spec.ts", "**/tenant-role-matrix.spec.ts"]
+        : "**/lookup-uat.spec.ts",
       use: DESKTOP_CHROME,
     },
     {
@@ -92,6 +104,8 @@ export default defineConfig({
   ],
   webServer: USE_EXTERNAL_WEBSERVER
     ? undefined
+    : TASK8_ROLE_MATRIX
+    ? TASK8_WEBSERVER
     : [
         {
           command: `npm run build && npm run start -- --hostname 127.0.0.1 --port ${WEB_SERVER_PORT}`,

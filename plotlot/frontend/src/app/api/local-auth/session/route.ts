@@ -50,3 +50,11 @@ export async function POST(request: Request): Promise<Response> {
   });
   return response;
 }
+
+export function GET(request: Request): Response {
+  const configuration = localIntegrationConfiguration();
+  if (configuration === null || !localIntegrationRequestHasTrustedLoopbackHost(request)) {
+    return NextResponse.json({ detail: "Not found" }, { status: 404 });
+  }
+  return new NextResponse(null, { status: 204 });
+}

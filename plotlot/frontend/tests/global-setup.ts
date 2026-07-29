@@ -7,6 +7,13 @@ type HealthPayload = {
   };
 };
 
+const TASK8_ROLE_MATRIX = process.argv.some((argument) => argument.includes("tenant-role-matrix.spec.ts"));
+
+function task8RuntimeDirectory(): string {
+  const suffix = createHash("sha256").update(resolve(process.cwd())).digest("hex").slice(0, 16);
+  return join(tmpdir(), `plotlot-task8-${suffix}`);
+}
+
 function databaseIsHealthy(payload: HealthPayload): boolean {
   const database = payload.checks?.database;
   return (
@@ -61,7 +68,7 @@ async function requireReleasePreflight(lane: string): Promise<void> {
   }
 }
 
-export default async function globalSetup() {
+export default async function globalSetup(): Promise<void | (() => Promise<void>)> {
   if (process.env.PLOTLOT_TEST_AUTH_BYPASS === "1") {
     throw new Error("PLOTLOT_TEST_AUTH_BYPASS is forbidden; tests must exercise authentication");
   }
@@ -73,4 +80,12 @@ export default async function globalSetup() {
   ) {
     await requireReleasePreflight(lane);
   }
+
+  if (TASK8_ROLE_MATRIX) {
+    return async () => rm(task8RuntimeDirectory(), { force: true, recursive: true });
+  }
 }
+import { createHash } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
