@@ -37,7 +37,7 @@ MAX_RETRIES = 2
 BASE_DELAY = 1.0
 DEFAULT_OPENAI_MODEL = "gpt-4.1"
 OPENAI_TIMEOUT_SECONDS = 60.0
-DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
 # ---------------------------------------------------------------------------

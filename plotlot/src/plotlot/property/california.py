@@ -22,6 +22,7 @@ UniversalProvider fallback is imported lazily to avoid a circular init
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -55,6 +56,20 @@ def _escape_where(value: str) -> str:
 _SD_ASSESSOR_PARCEL_URL = (
     "https://gis-public.sandiegocounty.gov/arcgis/rest/services/PDS/PDS_Layers/MapServer/0"
 )
+
+# Assessor lookup resilience. The county endpoint answers in ~1s when healthy but
+# individual requests occasionally stall for tens of seconds (one of eight in a
+# concurrent burst). Waiting out a long timeout buys nothing, so give each attempt
+# a short budget and re-issue on a fresh connection instead: worst case here
+# (3 x 6s + backoff) still beats a single 15s hang, and the common recovery is ~1s.
+_ASSESSOR_TIMEOUT_S = 6.0
+_ASSESSOR_ATTEMPTS = 3
+_ASSESSOR_BACKOFF_S = 0.4
+
+# APN -> (lot_sqft, owner). Recorded lot area only changes on a lot split/merge,
+# so a successful lookup is reused for the life of the process. Only successes
+# are stored — caching a failure would pin a parcel to the degraded geometry path.
+_ASSESSOR_CACHE: dict[str, tuple[float | None, str]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -389,23 +404,59 @@ class CaliforniaProvider(PropertyProvider):
         or failure — the caller keeps the geometry-derived estimate but flags it
         as unconfirmed, never silently substituting a guess (fail loud, per the
         anti-hallucination doctrine). ``owner_name`` is empty ``""`` on miss.
+
+        Retries because losing this call silently downgrades the headline number:
+        without the assessor's recorded lot the unit count is computed from the
+        GIS polygon estimate instead (6,471 vs 7,710 sqft on APN 4364230200 —
+        6 units vs 7) and drops to provisional. Measured behaviour of the county
+        endpoint is fast-but-occasionally-stalling: sequential probes ran ~0.9s
+        median, while a concurrent burst had one request of eight hang past 20s
+        while its siblings returned in ~1s. A stalled request is therefore worth
+        abandoning quickly and re-issuing on a fresh connection rather than
+        waiting out a long timeout — so the per-attempt timeout is short and
+        each attempt uses its own client.
         """
         apn_digits = re.sub(r"\D", "", apn or "")
         if len(apn_digits) < 8:
             return None, ""
+
+        # Recorded lot area/owner for an APN is static between lot splits, so a
+        # successful lookup is cached for the process; failures are never cached.
+        cached = _ASSESSOR_CACHE.get(apn_digits)
+        if cached is not None:
+            return cached
+
         params = {
             "where": f"APN='{apn_digits}'",
             "outFields": "ACREAGE,Shape.STArea(),OWN_NAME1",
             "returnGeometry": "false",
             "f": "json",
         }
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(assessor_url + "/query", params=params)
-                resp.raise_for_status()
-                features = resp.json().get("features", [])
+
+        last_error: str = ""
+        for attempt in range(_ASSESSOR_ATTEMPTS):
+            try:
+                async with httpx.AsyncClient(timeout=_ASSESSOR_TIMEOUT_S) as client:
+                    resp = await client.get(assessor_url + "/query", params=params)
+                    resp.raise_for_status()
+                    features = resp.json().get("features", [])
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                if attempt < _ASSESSOR_ATTEMPTS - 1:
+                    logger.info(
+                        "Assessor lookup attempt %d/%d failed for APN %s (%s); retrying",
+                        attempt + 1,
+                        _ASSESSOR_ATTEMPTS,
+                        apn,
+                        type(exc).__name__,
+                    )
+                    await asyncio.sleep(_ASSESSOR_BACKOFF_S * (attempt + 1))
+                continue
+
             if not features:
+                # A clean response with no match is a real answer, not a fault.
                 return None, ""
+
             attrs = features[0].get("attributes", {})
             # Return owner name if present
             owner = str(attrs.get("OWN_NAME1") or "").strip()
@@ -413,14 +464,24 @@ class CaliforniaProvider(PropertyProvider):
             # assessor parcel's own geometry area (State Plane US-ft → sqft).
             acreage = safe_float(attrs.get("ACREAGE"))
             if acreage > 0:
-                return acreage * 43_560, owner
-            st_area = safe_float(attrs.get("Shape.STArea()"))
-            if st_area > 0:
-                return st_area, owner
-            return None, owner
-        except Exception as exc:
-            logger.debug("Assessor lot lookup failed for APN %s: %s", apn, exc)
-            return None, ""
+                result = (acreage * 43_560, owner)
+            else:
+                st_area = safe_float(attrs.get("Shape.STArea()"))
+                result = (st_area, owner) if st_area > 0 else (None, owner)
+            if result[0] is not None:
+                _ASSESSOR_CACHE[apn_digits] = result
+            return result
+
+        # Exhausted retries: warn, not debug — this silently costs the caller the
+        # authoritative lot and forces a provisional unit count.
+        logger.warning(
+            "Assessor lot lookup failed for APN %s after %d attempts (%s); "
+            "falling back to GIS polygon area — unit count will be provisional",
+            apn,
+            _ASSESSOR_ATTEMPTS,
+            last_error,
+        )
+        return None, ""
 
     async def _address_parcel(
         self,
