@@ -65,6 +65,9 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
             "properties": {
                 "municipality": {"type": "string", "minLength": 2},
                 "query": {"type": "string", "minLength": 1},
+                "known_zoning_code": {"type": "string"},
+                "lot_area_sqft": {"type": "number", "exclusiveMinimum": 0},
+                "lot_depth_ft": {"type": "number", "exclusiveMinimum": 0},
             },
             "required": ["municipality", "query"],
         },

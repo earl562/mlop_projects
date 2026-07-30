@@ -801,6 +801,7 @@ async def _run_live_deal_analysis_async(request: FixtureDealRunRequest) -> Fixtu
         municipality=str(property_payload.get("municipality") or municipality),
         state=state,
         zoning_code=str(property_payload.get("ordinance_district_code") or zoning_code),
+        property_payload=property_payload,
     )
     if ordinance_payload is not None:
         artifacts["ordinance_search"] = ordinance_payload
@@ -3640,25 +3641,38 @@ async def _resolve_live_ordinance_payload(
     municipality: str,
     state: str,
     zoning_code: str,
+    property_payload: JsonObject,
 ) -> JsonObject | None:
     if not municipality:
         return None
+    property_lot_dimensions = str(property_payload.get("lot_dimensions") or "").strip()
+    _parsed_frontage_ft, parsed_depth_ft = parse_lot_dimensions(property_lot_dimensions)
+    _geometry_frontage_ft, geometry_depth_ft = derive_lot_dimensions_from_parcel_geometry(
+        property_payload.get("parcel_geometry")
+    )
+    lot_area_sqft = float(property_payload.get("lot_size_sqft") or 0.0)
+    lot_depth_ft = parsed_depth_ft or geometry_depth_ft
     query = f"{zoning_code} setbacks density height parking permitted uses".strip()
     fallback_payload = await _fallback_live_ordinance_payload(
         municipality=municipality,
         zoning_code=zoning_code,
     )
+    zoning_args: JsonObject = {
+        "municipality": municipality,
+        "query": query,
+        "zone_code_boost": zoning_code or None,
+        "known_zoning_code": zoning_code or None,
+        "limit": 5,
+    }
+    if lot_area_sqft > 0:
+        zoning_args["lot_area_sqft"] = lot_area_sqft
+    if lot_depth_ft is not None and lot_depth_ft > 0:
+        zoning_args["lot_depth_ft"] = lot_depth_ft
     zoning_call = await _tool_result(
         request=ToolExecutionRequest(
             run_id=run_id,
             tool_name="search_zoning_ordinance",
-            args={
-                "municipality": municipality,
-                "query": query,
-                "zone_code_boost": zoning_code or None,
-                "known_zoning_code": zoning_code or None,
-                "limit": 5,
-            },
+            args=zoning_args,
             execution_mode=request.execution_mode,
             source_mode=request.source_mode,
             context=context,
@@ -5420,13 +5434,22 @@ def _merge_live_land_comp_payloads(
     return merged_payload
 
 
-def _is_vacant_single_family_payload(property_payload: JsonObject) -> bool:
+def _is_vacant_residential_land_payload(property_payload: JsonObject) -> bool:
     zoning = str(property_payload.get("zoning_code") or "").upper().replace(" ", "")
-    land_use_description = str(property_payload.get("land_use_description") or "").upper()
+    land_use = " ".join(
+        (
+            str(property_payload.get("land_use_code") or ""),
+            str(property_payload.get("land_use_description") or ""),
+        )
+    ).upper()
     return (
         any(zoning.startswith(prefix) for prefix in ("RS", "R-1", "R1", "RE", "RH", "SF", "SFR"))
-        and "VACANT" in land_use_description
-    )
+        or zoning.startswith("NWD-R")
+    ) and "VACANT" in land_use
+
+
+def _is_vacant_single_family_payload(property_payload: JsonObject) -> bool:
+    return _is_vacant_residential_land_payload(property_payload)
 
 
 def _infer_vacant_single_family_unit_count(property_payload: JsonObject) -> int | None:

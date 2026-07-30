@@ -180,11 +180,13 @@ def _has_verified_underwriting_inputs(
 ) -> bool:
     if underwriting_mode.get("status") != "completed" or not cost_assumptions:
         return False
-    if bool(cost_assumptions.get("requires_official_verification")) or bool(
+    if bool(cost_assumptions.get("requires_official_verification")):
+        return False
+    mode = str(underwriting_mode.get("mode") or "")
+    if mode == "income_cap_rate" and bool(
         cost_assumptions.get("requires_income_assumption_verification")
     ):
         return False
-    mode = str(underwriting_mode.get("mode") or "")
     positive_fields, nonnegative_fields = {
         "income_cap_rate": (
             (

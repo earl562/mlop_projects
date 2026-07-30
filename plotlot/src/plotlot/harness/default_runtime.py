@@ -18,6 +18,7 @@ from plotlot.harness.ordinance_lookup import (
     IndexedZoningSearchArgs,
     execute_indexed_zoning_search,
 )
+from plotlot.harness.official_dimensional_sources import resolve_official_dimensional_rules
 from plotlot.harness.runtime import HarnessRuntime
 from plotlot.harness.fixture_site_data import (
     fixture_property_record,
@@ -246,12 +247,26 @@ async def _handle_search_zoning_ordinance(
     This produces evidence items so downstream reports can reference `evidence_id`s
     rather than uncited prose.
     """
+    municipality = str(args.get("municipality", "")).strip()
+    known_zoning_code = str(args.get("known_zoning_code") or "").strip()
+    official_payload = await resolve_official_dimensional_rules(
+        municipality=municipality,
+        zoning_code=known_zoning_code,
+        lot_area_sqft=float(args.get("lot_area_sqft") or 0.0),
+        lot_depth_ft=(
+            float(args["lot_depth_ft"])
+            if isinstance(args.get("lot_depth_ft"), int | float)
+            else None
+        ),
+    )
+    if official_payload is not None:
+        return official_payload
     search_args = IndexedZoningSearchArgs(
-        municipality=str(args.get("municipality", "")).strip(),
+        municipality=municipality,
         query=str(args.get("query", "")).strip(),
         limit=int(args.get("limit", 8) or 8),
         zone_code_boost=str(args.get("zone_code_boost") or "").strip() or None,
-        known_zoning_code=str(args.get("known_zoning_code") or "").strip() or None,
+        known_zoning_code=known_zoning_code or None,
     )
     return await execute_indexed_zoning_search(search_args, context=context)
 

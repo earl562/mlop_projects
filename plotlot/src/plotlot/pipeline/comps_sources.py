@@ -122,8 +122,6 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
     # Sale price + date ride directly on the parcel feature.
     # Verified live 2026-06-26 (field names reconciled against the actual layer schema,
     # not the metadata listing — the listing and live schema diverge for this layer).
-    # Actual fields: PARCEL_NUMBER, PRICE, SALE_DATE, MONTHS_SINCE_SALE, ACRES,
-    # PROPERTY_USE, YEAR_ADDED, SALEKEY.
     ("FL", "palm beach"): SalesSource(
         layer_url=(
             "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services"
@@ -131,12 +129,17 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
         ),
         fields=(
             "PARCEL_NUMBER",
+            "SITE_ADDR_STR",
+            "MUNICIPALITY",
             "PRICE",
             "SALE_DATE",
             "MONTHS_SINCE_SALE",
             "SALEKEY",
             "PROPERTY_USE",
             "ACRES",
+            "YRBLT",
+            "TOTAL_MARKET",
+            "ASSESSED_VAL",
             "YEAR_ADDED",
             "AG_USE_VAL",
         ),

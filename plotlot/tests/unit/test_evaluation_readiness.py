@@ -143,7 +143,7 @@ def test_acquisition_evaluation_rejects_zero_value_driving_inputs() -> None:
     assert "verified_underwriting_inputs" in readiness.missing_requirements
 
 
-def test_acquisition_evaluation_is_ready_with_authoritative_inputs_and_outputs() -> None:
+def test_sold_exit_evaluation_ignores_unverified_income_defaults() -> None:
     readiness = assess_live_evaluation_readiness(
         analysis_type="acquisition_memo",
         artifacts={
@@ -171,6 +171,7 @@ def test_acquisition_evaluation_is_ready_with_authoritative_inputs_and_outputs()
             },
             "cost_assumptions": {
                 "requires_official_verification": False,
+                "requires_income_assumption_verification": True,
                 "construction_cost_psf": 225,
                 "avg_unit_size_sqft": 1800,
                 "soft_cost_pct": 20,

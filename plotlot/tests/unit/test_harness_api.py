@@ -21,6 +21,7 @@ from plotlot.harness.contracts import (
     ToolCallId,
 )
 from plotlot.harness.contracts.base import EventId
+from plotlot.harness.fixture_runs import _is_vacant_residential_land_payload
 from plotlot.harness.tool_router import HarnessToolCallResult, ToolRouteStatus
 
 
@@ -88,6 +89,19 @@ def transport() -> ASGITransport:
 async def client(transport: ASGITransport):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+def test_nwd_r_property_with_vacant_land_use_code_uses_residential_land_strategy():
+    assert (
+        _is_vacant_residential_land_payload(
+            {
+                "zoning_code": "NWD-R (city)",
+                "land_use_code": "VACANT",
+                "land_use_description": "",
+            }
+        )
+        is True
+    )
 
 
 async def test_noi_valuation_calculator_is_available_through_api(client: AsyncClient):

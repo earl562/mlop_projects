@@ -50,6 +50,9 @@ def test_palm_beach_sales_source_registered():
     field_names = {f.upper() for f in src.fields}
     assert "PRICE" in field_names, f"PRICE missing from {src.fields}"
     assert "SALE_DATE" in field_names, f"SALE_DATE missing from {src.fields}"
+    assert "SITE_ADDR_STR" in field_names, f"SITE_ADDR_STR missing from {src.fields}"
+    assert "MUNICIPALITY" in field_names, f"MUNICIPALITY missing from {src.fields}"
+    assert "YRBLT" in field_names, f"YRBLT missing from {src.fields}"
     assert src.source, "missing provenance/source citation"
 
 

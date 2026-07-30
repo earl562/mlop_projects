@@ -17,6 +17,8 @@ from plotlot.pipeline.comps import (
     _feature_latlng,
     _haversine_miles,
     _is_arms_length,
+    _is_compatible_residential_exit_use,
+    _is_vacant_residential_land_subject,
     _municipality_is_comparable,
     _municipality_comparability_status,
     _parse_sale_date,
@@ -289,6 +291,44 @@ class TestVacantSingleFamilyLandCompFilter:
 
 
 class TestVacantSingleFamilyUnitCompFilter:
+    def test_nwd_r_vacant_land_uses_residential_exit_comp_strategy(self):
+        subject = PropertyRecord(
+            county="Palm Beach",
+            municipality="West Palm Beach",
+            zoning_code="NWD-R (city)",
+            land_use_description="VACANT",
+            lot_size_sqft=7000.0,
+        )
+
+        assert _is_vacant_residential_land_subject(subject) is True
+
+    @pytest.mark.parametrize(
+        ("property_use", "expected"),
+        [
+            ("SINGLE FAMILY", True),
+            ("TOWNHOUSE", True),
+            ("DUPLEX", True),
+            ("CONDOMINIUM", False),
+            ("OFFICE BLDG-NON MEDICAL 1 TO 3 STORIES", False),
+            ("VACANT", False),
+            ("", True),
+        ],
+    )
+    def test_nwd_r_exit_comps_require_compatible_property_use(
+        self,
+        property_use: str,
+        expected: bool,
+    ):
+        subject = PropertyRecord(
+            county="Palm Beach",
+            municipality="West Palm Beach",
+            zoning_code="NWD-R (city)",
+            land_use_code="VACANT",
+            lot_size_sqft=7000.0,
+        )
+
+        assert _is_compatible_residential_exit_use(subject, property_use) is expected
+
     def test_prefers_recent_new_build_exit_comps_when_two_or_more_exist(self):
         subject = PropertyRecord(
             county="Miami-Dade",

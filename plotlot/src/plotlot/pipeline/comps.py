@@ -60,7 +60,15 @@ _DATE_FIELDS = {
     "DOS",
     "DATEOFSALE",
 }
-_ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
+_ADDR_FIELDS = {
+    "SITE_ADDR",
+    "SITE_ADDR_STR",
+    "ADDRESS",
+    "SITUS_ADDR",
+    "PROP_ADDR",
+    "SITEADDR",
+    "TRUE_SITE_ADDR",
+}
 _CITY_FIELDS = {"TRUE_SITE_CITY", "SITE_CITY", "SITUS_CITY", "CITY", "MUNICIPALITY"}
 _LOT_FIELDS = {
     "LOT_SIZE",
@@ -74,7 +82,14 @@ _LOT_FIELDS = {
     "SHAPE_AREA",
 }
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}
-_LAND_USE_FIELDS = {"DOR_CODE_CUR", "LAND_USE_CODE", "LAND_USE", "USE_CODE", "PROPERTY_TYPE"}
+_LAND_USE_FIELDS = {
+    "DOR_CODE_CUR",
+    "LAND_USE_CODE",
+    "LAND_USE",
+    "USE_CODE",
+    "PROPERTY_TYPE",
+    "PROPERTY_USE",
+}
 _IDENTIFIER_FIELDS = {"FOLIO", "FOLIO_NUMBER", "PARCEL_NUMBER", "PARCEL_ID"}
 # Improvement signals — presence of any (> 0) marks a parcel as improved.
 _UNITS_FIELDS = {
@@ -295,21 +310,65 @@ def _feature_latlng(geom: dict[str, Any]) -> tuple[float, float] | None:
 
 
 def _allows_single_unit_exit_comp(subject: PropertyRecord) -> bool:
-    zoning = (subject.zoning_code or "").upper().replace(" ", "")
-    low_density_prefixes = ("RS", "R-1", "R1", "RE", "RH", "SF", "SFR")
     if subject.living_units == 1:
         return True
-    return any(zoning.startswith(prefix) for prefix in low_density_prefixes)
+    zoning = (subject.zoning_code or "").upper().replace(" ", "")
+    if any(zoning.startswith(prefix) for prefix in ("RS", "R-1", "R1", "RE", "RH", "SF", "SFR")):
+        return True
+    return _is_vacant_residential_land_subject(subject)
 
 
-def _is_vacant_single_family_subject(subject: PropertyRecord) -> bool:
+def _is_vacant_residential_land_subject(subject: PropertyRecord) -> bool:
     zoning = (subject.zoning_code or "").upper().replace(" ", "")
     land_text = f"{subject.land_use_code} {subject.land_use_description}".upper()
     is_low_density = any(
         zoning.startswith(prefix) for prefix in ("RS", "R-1", "R1", "RE", "RH", "SF", "SFR")
     )
+    is_nwd_residential = zoning.startswith("NWD-R")
     is_vacant = "VACANT" in land_text
-    return is_low_density and is_vacant
+    return (is_low_density or is_nwd_residential) and is_vacant
+
+
+def _is_vacant_single_family_subject(subject: PropertyRecord) -> bool:
+    return _is_vacant_residential_land_subject(subject)
+
+
+def _is_compatible_residential_exit_use(
+    subject: PropertyRecord,
+    property_use: str,
+) -> bool:
+    if not _is_vacant_residential_land_subject(subject):
+        return True
+    normalized_use = " ".join(property_use.upper().replace("-", " ").split())
+    if not normalized_use:
+        return True
+    rejected_uses = (
+        "VACANT",
+        "CONDOMINIUM",
+        "COOPERATIVE",
+        "APARTMENT",
+        "OFFICE",
+        "COMMERCIAL",
+        "HOTEL",
+        "MOTEL",
+        "STORE",
+        "WAREHOUSE",
+        "PARKING",
+    )
+    if any(value in normalized_use for value in rejected_uses):
+        return False
+    accepted_uses = (
+        "SINGLE FAMILY",
+        "TOWNHOUSE",
+        "DUPLEX",
+        "TRIPLEX",
+        "QUADRUPLEX",
+        "TWO FAMILY",
+        "MULTI FAMILY",
+        "MULTIFAMILY",
+        "RESIDENTIAL",
+    )
+    return any(value in normalized_use for value in accepted_uses)
 
 
 def _filter_vacant_single_family_unit_comps(
@@ -1318,8 +1377,14 @@ async def find_comparables(
             attrs, units_field, bldg_area_field, year_field, imprv_field
         )
         year_built_value = safe_float(attrs.get(year_field)) if year_field else 0.0
+        property_use = str(attrs.get(land_use_field) or "") if land_use_field else ""
+        if "VACANT" in property_use.upper():
+            is_improved = False
+            units = 0
 
         if is_improved and has_improvement_signal:
+            if not _is_compatible_residential_exit_use(subject, property_use):
+                continue
             if units <= 1 and not _allows_single_unit_exit_comp(subject):
                 continue
             # Exit comp → ADV per unit (full finished-product sale price / units).
