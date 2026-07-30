@@ -1273,22 +1273,6 @@ CHAT_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-def _merge_chat_tools(*tool_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    merged: list[dict[str, Any]] = []
-    index_by_name: dict[str, int] = {}
-    for group in tool_groups:
-        for tool in group:
-            name = str(tool["function"]["name"])
-            if name in index_by_name:
-                merged[index_by_name[name]] = tool
-                continue
-            index_by_name[name] = len(merged)
-            merged.append(tool)
-    return merged
-
-
-CHAT_TOOLS = _merge_chat_tools(CHAT_TOOLS, FULL_HARNESS_CHAT_TOOLS)
-
 
 def _merge_chat_tools(*tool_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []

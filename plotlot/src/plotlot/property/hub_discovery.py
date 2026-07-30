@@ -173,26 +173,44 @@ _COUNTY_URL_PATTERNS: list[str] = [
     "https://{county}county.gov/arcgis/rest/services",
 ]
 
-_BROWARD_BCPA_MAPSERVER = (
-    "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer"
-)
-_BROWARD_PARCEL_FIELDS = (
-    "SHAPE",
-    "FOLIO",
-    "OBJECTID",
-    "PARCEL_TYPE",
-    "GLOBALID",
-    "SHAPE.STArea()",
-    "SHAPE.STLength()",
-)
-_BROWARD_ZONING_FIELDS = (
-    "FID",
-    "Shape",
-    "ZONE_NAME",
-    "ZONING",
-    "OBJECTID",
-    "Area_Acres",
-)
+_KNOWN_COUNTY_LAYERS: dict[tuple[str, str, str], tuple[str, int]] = {
+    ("miamidade", "fl", "parcels"): (
+        "https://gis.miamidade.gov/arcgis/rest/services/MD_Communications/MapServer",
+        1,
+    ),
+    ("miamidade", "fl", "zoning"): (
+        "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer",
+        2,
+    ),
+    ("broward", "fl", "parcels"): (
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer",
+        16,
+    ),
+    ("broward", "fl", "zoning"): (
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer",
+        9,
+    ),
+    ("palmbeach", "fl", "parcels"): (
+        "https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services/"
+        "Parcels_and_Property_Details_WebMercator/FeatureServer",
+        0,
+    ),
+    ("palmbeach", "fl", "zoning"): (
+        "https://maps.co.palm-beach.fl.us/arcgis/rest/services/"
+        "OpenData/Planning_Open_Data/MapServer",
+        9,
+    ),
+}
+
+
+def known_county_layer_identity(
+    county: str,
+    state: str,
+    dataset_type: str,
+) -> tuple[str, int] | None:
+    county_key = county.casefold().replace("-", "").replace(" ", "")
+    return _KNOWN_COUNTY_LAYERS.get((county_key, state.casefold().strip(), dataset_type))
+
 
 # Sub-area indicators: district/neighborhood datasets cover only a small slice
 # of the county and will fail spatial queries for addresses outside that area.
@@ -258,11 +276,15 @@ async def _discover_pair(
     """Run the three-stage discovery cascade for both parcels and zoning."""
 
     async def find(dataset_type: str) -> DatasetInfo | None:
-        curated = _curated_county_dataset(county, state, dataset_type)
-        if curated is not None and (
-            not validate_coverage or await _has_coverage(curated, lat, lng)
-        ):
-            return curated
+        if known_county_layer_identity(county, state, dataset_type) is not None:
+            return await _known_county_dataset(
+                lat,
+                lng,
+                county,
+                state,
+                dataset_type=dataset_type,
+                validate_coverage=validate_coverage,
+            )
 
         # Stage 1: ArcGIS Hub
         result = await _search_hub(
@@ -303,39 +325,38 @@ async def _discover_pair(
     return parcels, zoning
 
 
-def _curated_county_dataset(
+async def _known_county_dataset(
+    lat: float,
+    lng: float,
     county: str,
     state: str,
+    *,
     dataset_type: str,
+    validate_coverage: bool,
 ) -> DatasetInfo | None:
-    county_key = " ".join(county.casefold().replace("-", " ").split())
-    state_key = state.casefold().strip()
-    if county_key != "broward" or state_key not in {"fl", "florida"}:
+    identity = known_county_layer_identity(county, state, dataset_type)
+    if identity is None:
         return None
 
-    match dataset_type:
-        case "parcels":
-            layer_id = 16
-            name = "Broward County Property Appraiser Parcels"
-            fields: tuple[str, ...] = _BROWARD_PARCEL_FIELDS
-        case "zoning":
-            layer_id = 9
-            name = "Broward County City Zoning Codes"
-            fields = _BROWARD_ZONING_FIELDS
-        case _:
-            return None
+    service_url, layer_id = identity
+    fields, discovered_layer_id = await _fetch_layer_fields(f"{service_url}/{layer_id}")
+    if not fields or discovered_layer_id != layer_id:
+        return None
 
-    layer_url = f"{_BROWARD_BCPA_MAPSERVER}/{layer_id}"
-    return DatasetInfo(
-        dataset_id=layer_url,
-        name=name,
-        url=_BROWARD_BCPA_MAPSERVER,
+    candidate = DatasetInfo(
+        dataset_id=f"{service_url}/{layer_id}",
+        name=f"{county} {dataset_type}",
+        url=service_url,
         layer_id=layer_id,
         dataset_type=dataset_type,
         county=county,
         state=state,
-        fields=list(fields),
+        fields=fields,
+        discovered_at=datetime.now(timezone.utc),
     )
+    if validate_coverage and not await _has_coverage(candidate, lat, lng):
+        return None
+    return candidate
 
 
 async def _search_hub(

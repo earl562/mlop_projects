@@ -136,7 +136,7 @@ async def test_probe_arcgis_server_finds_parcel_layer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_probe_arcgis_server_skips_layer_with_null_fields() -> None:
+async def test_probe_arcgis_server_skips_feature_layer_with_null_fields() -> None:
     root_data = {
         "folders": [],
         "services": [{"name": "BrokenParcels", "type": "MapServer"}],
@@ -210,7 +210,7 @@ async def test_probe_arcgis_server_skips_no_coverage() -> None:
 
 
 @pytest.mark.asyncio
-async def test_probe_arcgis_server_skips_layer_with_null_fields() -> None:
+async def test_probe_arcgis_server_skips_group_layer_with_null_fields() -> None:
     """ArcGIS group layers may explicitly return null instead of a field list."""
     root_data = {"folders": [], "services": [{"name": "ParcelsService", "type": "MapServer"}]}
     service_data = {"layers": [{"id": 0, "name": "Parcel Group", "type": "Group Layer"}]}
@@ -380,8 +380,7 @@ async def test_known_county_dataset_uses_broward_authoritative_layer() -> None:
 
     assert result is not None
     assert result.url == (
-        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/"
-        "BCPA_EXTERNAL_JAN26/MapServer"
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer"
     )
     assert result.layer_id == 16
     assert mock_fields.call_args.args[0].endswith("/MapServer/16")
@@ -436,18 +435,14 @@ async def test_known_county_dataset_uses_palm_beach_authoritative_parcel_layer()
         )
 
     assert result is not None
-    assert result.url.endswith(
-        "/Parcels_and_Property_Details_WebMercator/FeatureServer"
-    )
+    assert result.url.endswith("/Parcels_and_Property_Details_WebMercator/FeatureServer")
     assert result.layer_id == 0
 
 
 @pytest.mark.asyncio
 async def test_discover_pair_known_success_skips_generic_stages() -> None:
     parcels = _make_dataset("Known Parcels")
-    zoning = _make_dataset("Known Zoning").model_copy(
-        update={"dataset_type": "zoning"}
-    )
+    zoning = _make_dataset("Known Zoning").model_copy(update={"dataset_type": "zoning"})
     with (
         patch(
             "plotlot.property.hub_discovery._known_county_dataset",
@@ -504,9 +499,7 @@ async def test_discover_pair_without_known_pin_falls_back_to_hub() -> None:
 @pytest.mark.asyncio
 async def test_discover_pair_does_not_replace_unavailable_pinned_zoning_with_generic() -> None:
     parcels = _make_dataset("Known Parcels")
-    generic_zoning = _make_dataset("Generic Zoning").model_copy(
-        update={"dataset_type": "zoning"}
-    )
+    generic_zoning = _make_dataset("Generic Zoning").model_copy(update={"dataset_type": "zoning"})
     with (
         patch(
             "plotlot.property.hub_discovery._known_county_dataset",

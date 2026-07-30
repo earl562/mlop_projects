@@ -37,6 +37,4 @@ def test_alembic_revision_ids_are_unique_with_one_head() -> None:
         elif isinstance(parent, tuple):
             referenced_parents.update(parent)
 
-    assert set(revisions) - referenced_parents == {
-        "011_add_district_dimensional_standards"
-    }
+    assert set(revisions) - referenced_parents == {"011_add_district_dimensional_standards"}

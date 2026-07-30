@@ -129,6 +129,14 @@ async def test_palm_beach_zoning_prefers_fcode_over_description() -> None:
 class TestUniversalProvider:
     """Test the full provider lookup flow."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_registered_provider(self):
+        with patch(
+            "plotlot.property.universal.get_registered_provider",
+            return_value=None,
+        ):
+            yield
+
     @pytest.fixture
     def provider(self):
         return UniversalProvider()
