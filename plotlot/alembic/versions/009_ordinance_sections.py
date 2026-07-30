@@ -1,7 +1,7 @@
 """Add ordinance_sections table — structural index over chunks.
 
 Revision ID: 009_ordinance_sections
-Revises: 008
+Revises: 009
 Create Date: 2026-06-26
 
 Slice 3.1: `OrdinanceSection` is the structural unit over `OrdinanceChunk`
@@ -25,13 +25,8 @@ and is written idempotently (CREATE TABLE IF NOT EXISTS / CREATE INDEX IF
 NOT EXISTS) so it is safe to re-run and safe to apply out-of-order with the
 chunk tables.
 
-GRAPH NOTE: the alembic versions dir already carries a pre-existing
-duplicate-revision anomaly (two files claim revision "008", two claim "007";
-`alembic heads` reports two heads both named "008"). That is a separate,
-pre-existing operator-to-resolve issue and is NOT introduced by this slice.
-This migration's `down_revision = "008"` references that head family; once an
-operator collapses the duplicate heads, this node chains onto the single
-resolved head without further edit.
+GRAPH NOTE: revision 009 merges the phase-six lineage and harness-artifact
+branches before this migration continues the single operator-managed chain.
 """
 
 from typing import Sequence, Union
@@ -41,7 +36,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "009_ordinance_sections"
-down_revision: Union[str, None] = "008"
+down_revision: Union[str, None] = "009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -20,7 +20,10 @@ from plotlot.property.arcgis_utils import (
 )
 from plotlot.property.base import PropertyProvider
 from plotlot.property.field_mapper import ACRES_TO_SQFT, SQ_METERS_TO_SQFT, map_fields
-from plotlot.property.hub_discovery import discover_datasets
+from plotlot.property.hub_discovery import (
+    discover_datasets,
+    known_county_layer_identity,
+)
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
 from plotlot.property.registry import get_registered_provider
 from plotlot.property.schemas import (
@@ -31,6 +34,18 @@ from plotlot.property.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _matches_identity(
+    dataset: DatasetInfo | None,
+    identity: tuple[str, int] | None,
+) -> bool:
+    if identity is None:
+        return True
+    if dataset is None:
+        return False
+    url, layer_id = identity
+    return dataset.url.rstrip("/") == url.rstrip("/") and dataset.layer_id == layer_id
 
 
 class UniversalProvider(PropertyProvider):
@@ -75,13 +90,18 @@ class UniversalProvider(PropertyProvider):
         parcels_ds = cache.parcels_dataset if cache else None
         zoning_ds = cache.zoning_dataset if cache else None
         field_map = cache.field_mapping if cache else None
+        pinned_parcels = known_county_layer_identity(county, state, "parcels")
+        pinned_zoning = known_county_layer_identity(county, state, "zoning")
+        refresh_required = not _matches_identity(
+            parcels_ds, pinned_parcels
+        ) or not _matches_identity(zoning_ds, pinned_zoning)
 
         # Also check standalone field mapping cache
-        if field_map is None:
+        if field_map is None and not refresh_required:
             field_map = await get_field_mapping(county_key)
 
         # Step 2: Discover if not cached
-        if parcels_ds is None:
+        if parcels_ds is None or refresh_required:
             parcels_ds, zoning_ds = await discover_datasets(lat, lng, county, state)
 
             if parcels_ds is None:
@@ -94,16 +114,18 @@ class UniversalProvider(PropertyProvider):
                 county=county,
             )
 
-            # Cache everything
-            new_cache = CountyCache(
-                county_key=county_key,
-                state=state,
-                parcels_dataset=parcels_ds,
-                zoning_dataset=zoning_ds,
-                field_mapping=field_map,
-            )
-            await save_county_cache(new_cache)
-            if field_map:
+            authoritative_resolution_complete = _matches_identity(
+                parcels_ds, pinned_parcels
+            ) and _matches_identity(zoning_ds, pinned_zoning)
+            if authoritative_resolution_complete:
+                new_cache = CountyCache(
+                    county_key=county_key,
+                    state=state,
+                    parcels_dataset=parcels_ds,
+                    zoning_dataset=zoning_ds,
+                    field_mapping=field_map,
+                )
+                await save_county_cache(new_cache)
                 await save_field_mapping(field_map)
 
         if field_map is None:
@@ -121,7 +143,12 @@ class UniversalProvider(PropertyProvider):
 
         # Step 5: Build PropertyRecord
         record = _build_property_record(
-            parcel_feature, field_map, county, zoning_code, zoning_description
+            parcel_feature,
+            field_map,
+            county,
+            zoning_code,
+            zoning_description,
+            clear_parcel_zoning=pinned_zoning is not None,
         )
         if record:
             record.lat = lat
@@ -187,19 +214,28 @@ async def _query_zoning(
 
         attrs = features[0].get("attributes", {})
 
-        # Try common zoning field names
         code = ""
         desc = ""
-        for key, val in attrs.items():
-            key_upper = key.upper()
-            if not code and any(
-                kw in key_upper for kw in ("ZONE_CODE", "ZONING_CODE", "ZONE", "ZONING")
-            ):
-                code = str(val) if val else ""
-            if not desc and any(
-                kw in key_upper for kw in ("ZONE_DESC", "ZONING_DESC", "ZONE_LABEL", "ZONE_NAME")
-            ):
-                desc = str(val) if val else ""
+        for key in ("ZONE_CODE", "ZONING_CODE", "ZONE", "ZONING", "FCODE"):
+            value = attrs.get(key)
+            if value:
+                code = str(value)
+                break
+        for key in ("ZONE_DESC", "ZONING_DESC", "ZONE_LABEL", "ZONE_NAME", "FNAME"):
+            value = attrs.get(key)
+            if value:
+                desc = str(value)
+                break
+        if not code:
+            for key, value in attrs.items():
+                key_upper = key.upper()
+                if any(
+                    keyword in key_upper
+                    for keyword in ("ZONE_CODE", "ZONING_CODE", "ZONE", "ZONING")
+                ):
+                    code = str(value) if value else ""
+                    if code:
+                        break
 
         return code, desc
     except Exception:
@@ -213,6 +249,8 @@ def _build_property_record(
     county: str,
     zoning_code: str = "",
     zoning_description: str = "",
+    *,
+    clear_parcel_zoning: bool = False,
 ) -> PropertyRecord | None:
     """Build PropertyRecord from ArcGIS feature using field mapping."""
     if feature is None:
@@ -237,6 +275,10 @@ def _build_property_record(
                 raw_val = numeric_val * SQ_METERS_TO_SQFT
 
         _set_record_field(record, tgt_field, raw_val)
+
+    if clear_parcel_zoning:
+        record.zoning_code = ""
+        record.zoning_description = ""
 
     # Override with spatial zoning if available
     if zoning_code:

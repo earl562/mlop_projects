@@ -60,7 +60,7 @@ class TestHealthEndpoint:
 
     async def test_health_degraded_on_db_failure(self):
         """Health returns degraded when DB is unreachable."""
-        from plotlot.api.main import _runtime_health, health
+        from plotlot.api.main import _runtime_health, health, settings
 
         _runtime_health["startup_mode"] = "degraded"
         _runtime_health["startup_warnings"] = ["database_unavailable"]

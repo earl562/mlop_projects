@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from plotlot.property.hub_discovery import (
+    _discover_pair,
+    _known_county_dataset,
     _probe_arcgis_server,
     _probe_county_url_patterns,
     _search_state_servers,
@@ -207,6 +209,39 @@ async def test_probe_arcgis_server_skips_no_coverage() -> None:
     assert result is None
 
 
+@pytest.mark.asyncio
+async def test_probe_arcgis_server_skips_layer_with_null_fields() -> None:
+    """ArcGIS group layers may explicitly return null instead of a field list."""
+    root_data = {"folders": [], "services": [{"name": "ParcelsService", "type": "MapServer"}]}
+    service_data = {"layers": [{"id": 0, "name": "Parcel Group", "type": "Group Layer"}]}
+    layer_data = {"name": "Parcel Group", "fields": None}
+
+    def _get_response(url: str, params: dict | None = None):
+        if url.split("/")[-1].isdigit():
+            return _json_resp(layer_data)
+        if "ParcelsService/MapServer" in url:
+            return _json_resp(service_data)
+        return _json_resp(root_data)
+
+    with patch("plotlot.property.hub_discovery.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=_get_response)
+        mock_cls.return_value = mock_client
+
+        result = await _probe_arcgis_server(
+            "https://example.gov/arcgis/rest/services",
+            _COUNTY,
+            _STATE,
+            "parcels",
+            _LAT,
+            _LNG,
+        )
+
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # _search_state_servers tests
 # ---------------------------------------------------------------------------
@@ -319,6 +354,180 @@ async def test_probe_county_url_patterns_probes_live_server() -> None:
         )
 
     assert result is expected
+
+
+@pytest.mark.asyncio
+async def test_known_county_dataset_uses_broward_authoritative_layer() -> None:
+    expected = _make_dataset("Broward Parcels")
+    with (
+        patch(
+            "plotlot.property.hub_discovery._fetch_layer_fields",
+            new=AsyncMock(return_value=(expected.fields, 16)),
+        ) as mock_fields,
+        patch(
+            "plotlot.property.hub_discovery._has_coverage",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result = await _known_county_dataset(
+            26.12,
+            -80.14,
+            "Broward",
+            "FL",
+            dataset_type="parcels",
+            validate_coverage=True,
+        )
+
+    assert result is not None
+    assert result.url == (
+        "https://gisweb-adapters.bcpa.net/arcgis/rest/services/"
+        "BCPA_EXTERNAL_JAN26/MapServer"
+    )
+    assert result.layer_id == 16
+    assert mock_fields.call_args.args[0].endswith("/MapServer/16")
+
+
+@pytest.mark.asyncio
+async def test_known_county_dataset_uses_miami_dade_zoning_layer() -> None:
+    with (
+        patch(
+            "plotlot.property.hub_discovery._fetch_layer_fields",
+            new=AsyncMock(return_value=(["ZONE", "ZONE_DESC"], 2)),
+        ) as mock_fields,
+        patch(
+            "plotlot.property.hub_discovery._has_coverage",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result = await _known_county_dataset(
+            25.953,
+            -80.2449,
+            "Miami-Dade",
+            "FL",
+            dataset_type="zoning",
+            validate_coverage=True,
+        )
+
+    assert result is not None
+    assert result.url.endswith("/LandManagement/MD_Zoning/MapServer")
+    assert result.layer_id == 2
+    assert mock_fields.call_args.args[0].endswith("/MapServer/2")
+
+
+@pytest.mark.asyncio
+async def test_known_county_dataset_uses_palm_beach_authoritative_parcel_layer() -> None:
+    with (
+        patch(
+            "plotlot.property.hub_discovery._fetch_layer_fields",
+            new=AsyncMock(return_value=(["PARCEL_NUMBER", "SITE_ADDR_STR"], 0)),
+        ),
+        patch(
+            "plotlot.property.hub_discovery._has_coverage",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result = await _known_county_dataset(
+            26.3448,
+            -80.0838,
+            "Palm Beach",
+            "FL",
+            dataset_type="parcels",
+            validate_coverage=True,
+        )
+
+    assert result is not None
+    assert result.url.endswith(
+        "/Parcels_and_Property_Details_WebMercator/FeatureServer"
+    )
+    assert result.layer_id == 0
+
+
+@pytest.mark.asyncio
+async def test_discover_pair_known_success_skips_generic_stages() -> None:
+    parcels = _make_dataset("Known Parcels")
+    zoning = _make_dataset("Known Zoning").model_copy(
+        update={"dataset_type": "zoning"}
+    )
+    with (
+        patch(
+            "plotlot.property.hub_discovery._known_county_dataset",
+            new=AsyncMock(side_effect=[parcels, zoning]),
+        ),
+        patch(
+            "plotlot.property.hub_discovery._search_hub",
+            new=AsyncMock(side_effect=AssertionError("generic discovery must not run")),
+        ),
+    ):
+        result = await _discover_pair(
+            26.12,
+            -80.14,
+            "Broward",
+            "FL",
+            validate_coverage=True,
+            place_hint=None,
+        )
+
+    assert result == (parcels, zoning)
+
+
+@pytest.mark.asyncio
+async def test_discover_pair_without_known_pin_falls_back_to_hub() -> None:
+    generic = _make_dataset("Generic Parcels")
+    with (
+        patch(
+            "plotlot.property.hub_discovery._known_county_dataset",
+            new=AsyncMock(return_value=None),
+        ) as mock_known,
+        patch(
+            "plotlot.property.hub_discovery._search_hub",
+            new=AsyncMock(return_value=generic),
+        ) as mock_hub,
+        patch(
+            "plotlot.property.hub_discovery._search_state_servers",
+            new=AsyncMock(side_effect=AssertionError("state discovery must not run")),
+        ),
+    ):
+        result = await _discover_pair(
+            _LAT,
+            _LNG,
+            _COUNTY,
+            _STATE,
+            validate_coverage=True,
+            place_hint=None,
+        )
+
+    assert result == (generic, generic)
+    mock_known.assert_not_awaited()
+    assert mock_hub.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_discover_pair_does_not_replace_unavailable_pinned_zoning_with_generic() -> None:
+    parcels = _make_dataset("Known Parcels")
+    generic_zoning = _make_dataset("Generic Zoning").model_copy(
+        update={"dataset_type": "zoning"}
+    )
+    with (
+        patch(
+            "plotlot.property.hub_discovery._known_county_dataset",
+            new=AsyncMock(side_effect=[parcels, None]),
+        ),
+        patch(
+            "plotlot.property.hub_discovery._search_hub",
+            new=AsyncMock(return_value=generic_zoning),
+        ) as mock_hub,
+    ):
+        result = await _discover_pair(
+            25.953,
+            -80.2449,
+            "Miami-Dade",
+            "FL",
+            validate_coverage=True,
+            place_hint=None,
+        )
+
+    assert result == (parcels, None)
+    mock_hub.assert_not_awaited()
 
 
 @pytest.mark.asyncio

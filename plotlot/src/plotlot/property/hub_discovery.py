@@ -542,7 +542,7 @@ async def _fetch_layer_fields(base_url: str) -> tuple[list[str], int]:
         logger.debug("Failed to fetch layer metadata: %s", layer_url)
         return [], 0
 
-    fields = [f.get("name", "") for f in data.get("fields", [])]
+    fields = [f.get("name", "") for f in (data.get("fields") or [])]
     return fields, layer_id
 
 

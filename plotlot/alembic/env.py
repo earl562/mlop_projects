@@ -8,7 +8,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -27,6 +27,25 @@ if config.config_file_name is not None:
 
 # Target metadata for autogenerate support
 target_metadata = Base.metadata
+
+
+def guard_ambiguous_legacy_revision(connection: Connection) -> None:
+    version_table = connection.execute(
+        text("SELECT to_regclass('public.alembic_version')")
+    ).scalar_one()
+    if version_table is None:
+        return
+    current_revisions = set(
+        connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
+    )
+    ambiguous = current_revisions.intersection({"007", "008"})
+    if ambiguous:
+        revisions = ", ".join(sorted(ambiguous))
+        raise RuntimeError(
+            "Automatic migration blocked: alembic_version reports ambiguous "
+            f"legacy revision(s) {revisions}. Perform a manual schema audit "
+            "before stamping the proven revision lineage."
+        )
 
 
 def run_migrations_offline() -> None:
@@ -58,6 +77,7 @@ def do_run_migrations(connection: Connection) -> None:
     )
 
     with context.begin_transaction():
+        guard_ambiguous_legacy_revision(connection)
         context.run_migrations()
 
 

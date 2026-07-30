@@ -1,5 +1,4 @@
 """PlotLot configuration — all external service credentials and settings."""
-
 from urllib.parse import parse_qs, urlparse, urlunparse
 
 from pydantic import Field, model_validator
@@ -240,6 +239,10 @@ class Settings(BaseSettings):
     mlflow_tracking_uri: str = "sqlite:///mlruns/mlflow.db"
     mlflow_experiment_name: str = "plotlot-rag"
     mlflow_tracing_enabled: bool = False
+
+    otel_service_name: str = "plotlot"
+    otel_service_version: str = "2.0.0"
+    otel_console_exporter: bool = False
 
     otel_service_name: str = "plotlot"
     otel_service_version: str = "2.0.0"

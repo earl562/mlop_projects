@@ -531,6 +531,7 @@ async def _handle_search_municode_live(
     config = None
     if state:
         config = await discover_municode_authority_for_name(municipality, state)
+        used_discovered_config = config is not None
     if config is None:
         # Not on Municode at all — fall back to the local index so the agent gets
         # real ordinance text (any indexed non-Municode city) instead of nothing.
@@ -559,6 +560,12 @@ async def _handle_search_municode_live(
         state=state,
         zoning_code=known_zoning_code,
         config=config,
+    )
+    known_zoning_code = str(args.get("known_zoning_code") or "").strip()
+    live_rules = await extract_live_municode_rules(
+        municipality=config.municipality,
+        state=state,
+        zoning_code=known_zoning_code,
     )
 
     evidence: list[dict[str, Any]] = []
