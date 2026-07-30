@@ -2,8 +2,8 @@
 
 The agent has:
 - Rich personality with passion for helping people build their communities
-- Tools: search_zoning_ordinance (local DB), web_search (Jina.ai),
-         create_spreadsheet (Google Sheets), create_document (Google Docs)
+- Shared harness-backed tools, including ordinance lookup, GIS, calculators, and
+  web search through the common PlotLot tool lane
 - Conversation memory persisted in-memory (upgradeable to DB)
 - Full context from any active ZoningReport
 
@@ -23,6 +23,11 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+from plotlot.api.chat_harness_bridge import (
+    FULL_HARNESS_CHAT_TOOL_NAMES,
+    FULL_HARNESS_CHAT_TOOLS,
+    execute_full_harness_chat_tool,
+)
 from plotlot.api.schemas import ChatRequest
 from plotlot.config import settings
 from plotlot.retrieval.bulk_search import (
@@ -34,8 +39,7 @@ from plotlot.retrieval.bulk_search import (
     _safe_filter,
 )
 from plotlot.retrieval.google_workspace import create_document, create_spreadsheet
-from plotlot.retrieval.llm import call_llm
-from plotlot.retrieval.search import hybrid_search
+from plotlot.retrieval.llm import _get_primary_provider, call_llm
 from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
 from plotlot.observability.prompts import get_active_prompt
 from plotlot.observability.tracing import start_span
@@ -46,7 +50,10 @@ from plotlot.land_use import ToolContext
 from plotlot.land_use.policy import ToolPolicy
 from plotlot.harness.policy import HarnessPolicyEngine
 from plotlot.harness.tool_registry import get_tool_contract
-from plotlot.harness.default_runtime import get_default_runtime
+from plotlot.harness.ordinance_lookup import (
+    IndexedZoningSearchArgs,
+    execute_indexed_zoning_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -227,10 +234,6 @@ class SessionStore:
         self._evidence_ids.pop(session_id, None)
         self._tokens.pop(session_id, None)
         self._last_access.pop(session_id, None)
-
-    def get(self, session_id: str) -> Any:
-        """Get session object (compatibility method — always returns None)."""
-        return None
 
     def get_messages(self, session_id: str) -> list[dict]:
         self.touch(session_id)
@@ -435,12 +438,19 @@ never recompute, re-scale, or re-attribute them:
 
 
 def _llm_unavailable_detail() -> str:
-    using_nvidia = bool(settings.nvidia_api_key)
+    provider = _get_primary_provider(settings)
+
+    def has_credential(name: str) -> bool:
+        value = getattr(settings, name, "")
+        return bool(value.strip()) if isinstance(value, str) else False
+
     if not (
-        settings.openai_access_token
-        or settings.openai_api_key
-        or settings.nvidia_api_key
-        or settings.groq_api_key
+        has_credential("openrouter_api_key")
+        or has_credential("deepseek_api_key")
+        or has_credential("openai_access_token")
+        or has_credential("openai_api_key")
+        or has_credential("nvidia_api_key")
+        or has_credential("groq_api_key")
         or (
             settings.use_codex_oauth
             and has_saved_tokens(Path(settings.codex_auth_file).expanduser())
@@ -448,14 +458,19 @@ def _llm_unavailable_detail() -> str:
     ):
         return (
             "Chat is temporarily unavailable because no LLM credentials are configured. "
-            "Set NVIDIA_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, OPENAI_ACCESS_TOKEN, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
+            "Set OPENROUTER_API_KEY, DEEPSEEK_API_KEY, NVIDIA_API_KEY, GROQ_API_KEY, "
+            "OPENAI_API_KEY, "
+            "OPENAI_ACCESS_TOKEN, or enable PLOTLOT_USE_CODEX_OAUTH to enable agent responses."
         )
-    if using_nvidia:
+    if provider.slug == "nvidia":
         return (
             "Chat is temporarily unavailable because the configured NVIDIA NIM model "
             "returned no usable response. Verify the model slug or try the fallback model."
         )
-    return "Chat is temporarily unavailable because the LLM returned an empty response."
+    return (
+        "Chat is temporarily unavailable because the configured "
+        f"{provider.display_name} model returned no usable response."
+    )
 
 
 def _build_report_context(report, *, suppress_grounded_fields: bool = False) -> str:
@@ -895,27 +910,6 @@ CHAT_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "web_search",
-            "description": (
-                "LAST RESORT — ONLY use when search_zoning_ordinance returns nothing "
-                "relevant. For current events, market data, or municipal news not in "
-                "the local database."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Web search query",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "create_spreadsheet",
             "description": (
                 "Create a Google Sheets spreadsheet with structured data. "
@@ -1280,6 +1274,23 @@ CHAT_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+def _merge_chat_tools(*tool_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    index_by_name: dict[str, int] = {}
+    for group in tool_groups:
+        for tool in group:
+            name = str(tool["function"]["name"])
+            if name in index_by_name:
+                merged[index_by_name[name]] = tool
+                continue
+            index_by_name[name] = len(merged)
+            merged.append(tool)
+    return merged
+
+
+CHAT_TOOLS = _merge_chat_tools(CHAT_TOOLS, FULL_HARNESS_CHAT_TOOLS)
+
+
 # Tool groups for dynamic masking (Notion/CloudQuery pattern:
 # reduce context bloat by only showing relevant tools per turn)
 CORE_TOOLS = [
@@ -1298,6 +1309,7 @@ CORE_TOOLS = [
         "discover_open_data_layers",
         "web_search",
         "search_properties",
+        *FULL_HARNESS_CHAT_TOOL_NAMES,
     }
 ]
 DATASET_TOOLS = [
@@ -1576,6 +1588,76 @@ def _build_active_analysis_context(payload: dict) -> str:
     """
     if not payload or payload.get("status") != "success":
         return ""
+    if payload.get("analysis_origin") == "harness_run":
+        harness_lines = [
+            "\n\n## ACTIVE HARNESS ANALYSIS — AUTHORITATIVE (cite these EXACT numbers)",
+            f"Property: {payload.get('address', '')} · Zoning: {payload.get('zoning_code', '')}",
+            f"Source mode: {payload.get('source_mode', 'unknown')}",
+            f"Verification status: {payload.get('verification_status', 'unknown')}",
+        ]
+        folio = payload.get("folio")
+        if folio:
+            harness_lines.append(f"Parcel ID / folio: {folio}")
+        owner = payload.get("owner")
+        if owner:
+            harness_lines.append(f"Owner of record: {owner}")
+        lot = payload.get("lot_size_sqft")
+        if lot:
+            lot_size_source = payload.get("lot_size_source") or "unknown"
+            harness_lines.append(f"Lot size: {lot:,.0f} sqft (source: {lot_size_source})")
+            if lot_size_source == "unknown":
+                harness_lines.append(
+                    "Lot-size authority is unknown; do not label it assessor-recorded "
+                    "or geometry-derived without recorded evidence."
+                )
+        by_right = payload.get("by_right") or {}
+        if by_right:
+            harness_lines.append(
+                f"Feasibility units: {by_right.get('max_units')} "
+                f"(constraints: {by_right.get('governing_constraint')}, "
+                f"verification: {by_right.get('verification')})"
+            )
+        val = payload.get("valuation") or {}
+        if val:
+            if val.get("adv_per_unit") is not None:
+                harness_lines.append(
+                    f"Exit value per unit: ${val['adv_per_unit']:,.0f} "
+                    f"(source: {val.get('adv_source', 'n/a')})"
+                )
+            if val.get("max_land_price_residual") is not None:
+                harness_lines.append(
+                    f"Max land price (residual): ${val['max_land_price_residual']:,.0f}"
+                )
+            if val.get("recommended_offer") is not None:
+                harness_lines.append(
+                    f"Recommended offer: ${val['recommended_offer']:,.0f} "
+                    f"({val.get('recommended_action', 'n/a')})"
+                )
+            land_value_range = val.get("land_value_range")
+            if (
+                isinstance(land_value_range, list)
+                and len(land_value_range) == 2
+                and all(isinstance(value, int | float) for value in land_value_range)
+            ):
+                harness_lines.append(
+                    f"Land value range: ${land_value_range[0]:,.0f}–${land_value_range[1]:,.0f}"
+                )
+        warnings = payload.get("warnings") or []
+        for warning in warnings[:4]:
+            harness_lines.append(f"Warning: {warning}")
+        evidence_ids = payload.get("evidence_ids") or []
+        if evidence_ids:
+            harness_lines.append(
+                "Evidence IDs: " + ", ".join(str(evidence_id) for evidence_id in evidence_ids[:12])
+            )
+        else:
+            harness_lines.append("Evidence IDs: none recorded; do not create placeholder IDs.")
+        harness_lines.append(
+            "\nUSE THIS HARNESS OUTPUT for follow-ups on this property. Do NOT replace it "
+            "with hypothetical comps, uncited zoning assumptions, or recomputed offer logic. "
+            "Do NOT invent URLs, ordinance sections, numeric standards, or likely values."
+        )
+        return "\n".join(harness_lines)
 
     lines: list[str] = [
         "\n\n## ACTIVE GROUNDED ANALYSIS — AUTHORITATIVE (cite these EXACT numbers)",
@@ -1846,7 +1928,12 @@ _ADDRESS_RE = re.compile(
 
 def _needs_grounded_analysis(message: str) -> bool:
     """True when a message is a property deal/source question that must be grounded."""
-    return bool(_is_source_query(message) or _DEAL_QUERY_RE.search(message or ""))
+    text = message or ""
+    return bool(
+        _is_source_query(text)
+        or _DEAL_QUERY_RE.search(text)
+        or re.search(r"\brun_deal_analysis\b|\bacquisition[_\s-]+memo\b", text, re.IGNORECASE)
+    )
 
 
 def _norm_addr(address: str) -> str:
@@ -1889,10 +1976,176 @@ def _resolve_deal_address(
     return ""
 
 
+_SOUTH_FLORIDA_HARNESS_COUNTIES = frozenset({"miami-dade", "broward", "palm beach"})
+
+
+def _context_text_field(payload: object | None, field: str) -> str:
+    if payload is None:
+        return ""
+    match payload:
+        case dict():
+            value = payload.get(field)
+        case _:
+            value = getattr(payload, field, None)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _should_use_harness_grounding(
+    address: str,
+    session_id: str,
+    analysis: dict[str, Any] | None,
+    report_context: object | None = None,
+) -> bool:
+    property_context = _sessions.get_property_context(session_id)
+    state_tokens = [
+        _context_text_field(analysis, "state"),
+        _context_text_field(property_context, "state"),
+        _context_text_field(report_context, "state"),
+    ]
+    if any(token.upper() == "FL" for token in state_tokens):
+        return True
+
+    county_tokens = [
+        _context_text_field(analysis, "county"),
+        _context_text_field(property_context, "county"),
+        _context_text_field(report_context, "county"),
+    ]
+    if any(token.casefold() in _SOUTH_FLORIDA_HARNESS_COUNTIES for token in county_tokens):
+        return True
+
+    florida_pattern = re.compile(r"\b(?:fl|florida)\b", re.IGNORECASE)
+    address_candidates = [
+        address,
+        _context_text_field(analysis, "address"),
+        _context_text_field(property_context, "address"),
+        _context_text_field(report_context, "formatted_address"),
+        _context_text_field(report_context, "address"),
+    ]
+    return any(florida_pattern.search(candidate) for candidate in address_candidates if candidate)
+
+
+def _forced_grounding_tool_name(
+    address: str,
+    session_id: str,
+    analysis: dict[str, Any] | None,
+    report_context: object | None = None,
+) -> str:
+    if _should_use_harness_grounding(address, session_id, analysis, report_context):
+        return "run_deal_analysis"
+    return "analyze_property"
+
+
 # Display-hygiene: strip any leftover text-emitted tool-call blob (closed or
 # dangling) so raw JSON never reaches the user. Parseable blobs are recovered and
 # routed upstream in call_llm; this only cleans unparseable residue.
 _TOOL_CALL_RESIDUE_RE = re.compile(r"<tool_call>.*?(?:</tool_call>|$)", re.DOTALL)
+_EVIDENCE_ID_TOKEN_RE = re.compile(r"\b(?:ev|evt)_[A-Za-z0-9][A-Za-z0-9_.:-]*\b")
+
+
+def _sanitize_unrecorded_evidence_ids(
+    content: str,
+    *,
+    allowed_evidence_ids: set[str],
+) -> str:
+    """Prevent narrator-created evidence identifiers from reaching the user."""
+    referenced = set(_EVIDENCE_ID_TOKEN_RE.findall(content))
+    if referenced <= allowed_evidence_ids:
+        return content
+    sanitized = _EVIDENCE_ID_TOKEN_RE.sub(
+        lambda match: (
+            match.group(0) if match.group(0) in allowed_evidence_ids else "unrecorded_evidence_id"
+        ),
+        content,
+    )
+    return (
+        sanitized.rstrip()
+        + "\n\n**Evidence warning:** One or more narrator-generated evidence identifiers "
+        "were not present in the recorded harness run and were removed. Treat the "
+        "affected citation as unsupported."
+    )
+
+
+def _build_failed_harness_answer(payload: dict[str, Any], address: str) -> str:
+    """Render a failed trust-critical lookup without model narration."""
+    warnings = [str(item) for item in (payload.get("warnings") or []) if item]
+    evidence_ids = [str(item) for item in (payload.get("evidence_ids") or []) if item]
+    error_payload = payload.get("error")
+    error_code = (
+        str(error_payload.get("code"))
+        if isinstance(error_payload, dict) and error_payload.get("code")
+        else "lookup_failed"
+    )
+    lines = [
+        "## Analysis blocked",
+        f"**Address:** {address}",
+        f"**Status:** failed (`{error_code}`)",
+        f"**Source mode:** {payload.get('source_mode', 'unknown')}",
+        "",
+        "The live harness did not record an authoritative parcel match, so parcel facts, "
+        "zoning, dimensional standards, calculations, comps, and recommendations remain unknown.",
+        "",
+        "### Evidence",
+    ]
+    if evidence_ids:
+        lines.extend(f"- `{evidence_id}`" for evidence_id in evidence_ids)
+    else:
+        lines.append("- No evidence IDs were recorded. Placeholder IDs are not allowed.")
+    if warnings:
+        lines.extend(["", "### Warnings"])
+        lines.extend(f"- {warning}" for warning in warnings)
+    lines.extend(
+        [
+            "",
+            "### Next verification step",
+            "Resolve the parcel identity against the official county assessor or GIS using "
+            "the supplied address and APN, record that source as evidence, then rerun the "
+            "live acquisition analysis. Do not infer zoning or development capacity until "
+            "the authoritative parcel match succeeds.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _build_blocked_evaluation_answer(payload: dict[str, Any], address: str) -> str:
+    """Render a completed evidence run that cannot support an evaluation."""
+    active_analysis = payload.get("active_analysis")
+    analysis = active_analysis if isinstance(active_analysis, dict) else {}
+    readiness_value = analysis.get("evaluation_readiness")
+    readiness = readiness_value if isinstance(readiness_value, dict) else {}
+    evidence_ids = [str(item) for item in (payload.get("evidence_ids") or []) if item]
+    missing = [str(item) for item in (readiness.get("missing_requirements") or []) if item]
+    next_steps = [str(item) for item in (readiness.get("next_steps") or []) if item]
+    lot_size = analysis.get("lot_size_sqft")
+    lot_size_label = (
+        f"{lot_size:,.0f} sqft"
+        if isinstance(lot_size, (int, float)) and not isinstance(lot_size, bool)
+        else "unknown"
+    )
+    lines = [
+        "## Evaluation blocked",
+        f"**Address:** {address}",
+        f"**Parcel ID:** {analysis.get('folio') or 'unknown'}",
+        f"**Zoning district:** {analysis.get('zoning_code') or 'unknown'}",
+        f"**Lot size:** {lot_size_label}",
+        "",
+        "The harness completed its evidence-collection attempt, but the property cannot "
+        "be evaluated from the data currently available. No valuation or offer "
+        "recommendation was produced.",
+        "",
+        "### Missing required data",
+    ]
+    lines.extend(f"- `{requirement}`" for requirement in missing)
+    if not missing:
+        lines.append("- The readiness gate did not record a specific missing requirement.")
+    lines.extend(["", "### Recorded evidence"])
+    lines.extend(f"- `{evidence_id}`" for evidence_id in evidence_ids)
+    if not evidence_ids:
+        lines.append("- No evidence IDs were recorded.")
+    lines.extend(["", "### Data acquisition plan"])
+    lines.extend(f"- {step}" for step in next_steps)
+    if not next_steps:
+        lines.append("- Resolve the missing authoritative sources, then rerun the analysis.")
+    return "\n".join(lines)
 
 
 def _build_source_answer(payload: dict) -> str | None:
@@ -2239,85 +2492,119 @@ async def _execute_lookup_property(
         return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
 
 
+def _property_lookup_args_from_session(args: dict[str, Any], session_id: str) -> dict[str, Any]:
+    tool_args = dict(args)
+    geo = _sessions.get_geocode(session_id) if session_id else None
+    if geo:
+        precise_lat = geo.get("lat")
+        precise_lng = geo.get("lng")
+        if precise_lat is not None and precise_lng is not None:
+            tool_args["lat"] = precise_lat
+            tool_args["lng"] = precise_lng
+        if not tool_args.get("state"):
+            tool_args["state"] = str(geo.get("state") or "")
+    return tool_args
+
+
+def _store_property_context_from_runtime_result(
+    session_id: str,
+    tool_result_payload: dict[str, Any],
+) -> None:
+    prop = tool_result_payload.get("result")
+    if not isinstance(prop, dict) or not session_id:
+        return
+    _sessions.set_property_context(
+        session_id,
+        {
+            "address": prop.get("address", ""),
+            "municipality": prop.get("municipality", ""),
+            "county": prop.get("county", ""),
+            "zoning_code": prop.get("zoning_code", ""),
+            "ordinance_district_code": prop.get("ordinance_district_code", ""),
+            "zoning_description": prop.get("zoning_description", ""),
+            "lot_size_sqft": prop.get("lot_size_sqft"),
+            "owner": prop.get("owner", ""),
+        },
+    )
+
+
+def _store_harness_analysis_context(
+    session_id: str,
+    raw_result: dict[str, Any],
+) -> None:
+    if not session_id:
+        return
+    evidence_ids = raw_result.get("evidence_ids")
+    if isinstance(evidence_ids, list):
+        _sessions.add_evidence_ids(
+            session_id,
+            [str(value) for value in evidence_ids if isinstance(value, str) and value],
+        )
+    active_analysis = raw_result.get("active_analysis")
+    if isinstance(active_analysis, dict) and active_analysis.get("status") == "success":
+        _sessions.set_analysis(session_id, active_analysis)
+    payload = raw_result.get("payload")
+    if not isinstance(payload, dict):
+        return
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return
+    property_record = artifacts.get("property_record")
+    if not isinstance(property_record, dict):
+        return
+    _sessions.set_property_context(
+        session_id,
+        {
+            "address": property_record.get("address", ""),
+            "municipality": property_record.get("municipality", ""),
+            "county": property_record.get("county", ""),
+            "zoning_code": property_record.get("zoning_code", ""),
+            "ordinance_district_code": property_record.get("ordinance_district_code", ""),
+            "zoning_description": property_record.get("zoning_description", ""),
+            "lot_size_sqft": property_record.get("lot_size_sqft"),
+            "owner": property_record.get("owner", ""),
+        },
+    )
+
+
+def _indexed_zoning_args_from_session(
+    *,
+    municipality: str,
+    query: str,
+    session_id: str,
+    limit: int,
+) -> IndexedZoningSearchArgs:
+    boost = ""
+    known_zoning_code = ""
+    if session_id:
+        ctx = _sessions.get_property_context(session_id)
+        if ctx:
+            boost = str(ctx.get("ordinance_district_code") or ctx.get("zoning_code") or "")
+            known_zoning_code = str(ctx.get("zoning_code") or "")
+
+    return IndexedZoningSearchArgs(
+        municipality=municipality.strip(),
+        query=query.strip(),
+        limit=limit,
+        zone_code_boost=boost or None,
+        known_zoning_code=known_zoning_code or None,
+    )
+
+
 async def _execute_zoning_search(municipality: str, query: str, session_id: str = "") -> str:
     """Search the local zoning ordinance database via hybrid RAG.
 
     Uses the same hybrid_search (vector + full-text + RRF fusion) and
     retrieval depth as the pipeline endpoint for consistent quality.
     """
-    with start_span(name="chat_zoning_search", span_type="RETRIEVER") as span:
-        span.set_inputs({"municipality": municipality, "query": query, "limit": 15})
-
-        # Boost chunks tagged with this parcel's exact ordinance district code.
-        # Prefer the crosswalked ordinance code (e.g. "R-E") established by
-        # lookup_property_info; fall back to the raw GIS code.
-        boost = ""
-        if session_id:
-            ctx = _sessions.get_property_context(session_id)
-            if ctx:
-                boost = str(ctx.get("ordinance_district_code") or ctx.get("zoning_code") or "")
-
-        session = await get_session()
-        try:
-            results = await hybrid_search(
-                session, municipality, query, limit=15, zone_code_boost=boost or None
-            )
-        finally:
-            await session.close()
-
-        if not results:
-            span.set_outputs({"result_count": 0, "status": "no_results"})
-            # Anti-hallucination contract: echo the zoning code already established
-            # this session and tell the agent exactly how to present a coverage gap
-            # without fabricating contacts, URLs, or "could not be retrieved" wording.
-            known_zoning_code = ""
-            if session_id:
-                ctx = _sessions.get_property_context(session_id)
-                if ctx:
-                    known_zoning_code = str(ctx.get("zoning_code") or "")
-            if known_zoning_code:
-                guidance = (
-                    f"The zoning code ({known_zoning_code}) is already confirmed for this parcel "
-                    "from lookup_property_info — STATE IT PLAINLY. Its dimensional standards are "
-                    f"simply not yet indexed in the PlotLot database for {municipality}. Tell the "
-                    "user that and offer to ingest the ordinance. Do NOT say the zoning could not "
-                    "be retrieved, and NEVER fabricate phone numbers, office names, URLs, or "
-                    "numeric zoning values."
-                )
-            else:
-                guidance = (
-                    f"No indexed ordinance text for {municipality}. Report this honestly and offer "
-                    "to ingest the municipality's ordinance or run a web_search. NEVER fabricate "
-                    "phone numbers, office names, URLs, or numeric zoning values."
-                )
-            return json.dumps(
-                {
-                    "status": "no_results",
-                    "message": f"No ordinance sections found for '{query}' in {municipality}",
-                    "known_zoning_code": known_zoning_code,
-                    "presentation_guidance": guidance,
-                }
-            )
-
-        chunks = []
-        for r in results:
-            chunks.append(
-                {
-                    "section": r.section,
-                    "title": r.section_title,
-                    "zone_codes": r.zone_codes,
-                    "text": r.chunk_text,
-                }
-            )
-
-        span.set_outputs(
-            {
-                "result_count": len(results),
-                "status": "success",
-                "top_sections": [c["section"] for c in chunks[:5]],
-            }
-        )
-        return json.dumps({"status": "success", "results": chunks})
+    args = _indexed_zoning_args_from_session(
+        municipality=municipality,
+        query=query,
+        session_id=session_id,
+        limit=15,
+    )
+    payload = await execute_indexed_zoning_search(args)
+    return json.dumps(payload)
 
 
 def _round(value: float | None, ndigits: int = 0) -> float | None:
@@ -3057,59 +3344,91 @@ async def _execute_open_data_discovery(county: str, state: str, lat: float, lng:
 
 
 async def _execute_web_search(query: str) -> str:
-    """Search the web via Jina.ai Search API."""
-    if not settings.jina_api_key:
-        return json.dumps(
-            {
-                "status": "not_configured",
-                "message": "Web search is not available (JINA_API_KEY not set). Use search_zoning_ordinance for zoning questions.",
-            }
+    payload = await _execute_harness_chat_tool_payload(
+        "web_search",
+        {"query": query},
+        context=ToolContext(
+            workspace_id="default-workspace",
+            actor_user_id="chat_agent",
+            run_id="chat_web_search",
+            live_network_allowed=True,
+            risk_budget_cents=25,
+        ),
+        session_id="chat_web_search",
+    )
+    return json.dumps(payload)
+
+
+async def _execute_harness_chat_tool_payload(
+    tool_name: str,
+    args: dict[str, Any],
+    *,
+    context: ToolContext,
+    session_id: str,
+) -> dict[str, Any]:
+    raw_result = json.loads(
+        await execute_full_harness_chat_tool(
+            tool_name,
+            args,
+            context=context,
+            session_id=session_id,
         )
+    )
+    payload = raw_result.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.setdefault("status", raw_result.get("status", "error"))
+    if "message" not in payload and isinstance(raw_result.get("error"), dict):
+        error = raw_result["error"]
+        if isinstance(error.get("message"), str):
+            payload["message"] = error["message"]
+    return payload
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                f"https://s.jina.ai/{query}",
-                headers={
-                    "Authorization": f"Bearer {settings.jina_api_key}",
-                    "Accept": "application/json",
-                    "X-Retain-Images": "none",
-                },
-            )
-            if resp.status_code in (402, 429):
-                return json.dumps(
-                    {
-                        "status": "quota_exceeded",
-                        "message": "Web search quota exhausted. Use search_zoning_ordinance for zoning questions.",
-                    }
+
+def _normalize_dataset_chat_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    status = payload.get("status")
+
+    match tool_name:
+        case "search_properties":
+            if status == "success":
+                total_results = payload.get("total_results", 0)
+                payload["message"] = (
+                    f"Found {total_results} properties. Use filter_dataset to narrow down "
+                    "or export_dataset to create a spreadsheet."
                 )
-            if resp.status_code in (401, 403):
-                return json.dumps(
-                    {
-                        "status": "auth_error",
-                        "message": "Web search authentication failed (invalid JINA_API_KEY). Use search_zoning_ordinance for zoning questions.",
-                    }
-                )
-            resp.raise_for_status()
-            data = resp.json()
+        case "filter_dataset":
+            if status == "empty":
+                payload["status"] = "error"
+                payload["message"] = "No dataset in session. Use search_properties first."
+            elif (
+                status == "success" and "message" not in payload and not payload.get("summary_only")
+            ):
+                total_after_filter = payload.get("total_after_filter", 0)
+                payload["message"] = f"Filtered to {total_after_filter} properties."
+        case "get_dataset_info":
+            if status == "empty":
+                payload["message"] = "No dataset in session. Use search_properties first."
+        case "export_dataset":
+            if status == "empty":
+                payload["status"] = "error"
+                payload["message"] = "No dataset to export. Use search_properties first."
+            elif status == "success":
+                row_count = payload.get("row_count", 0)
+                title = payload.get("title", "Untitled Spreadsheet")
+                payload["message"] = f"Exported {row_count} properties to '{title}'"
+        case "create_spreadsheet":
+            if status == "success":
+                row_count = payload.get("row_count", 0)
+                title = payload.get("title", "Untitled Spreadsheet")
+                payload["message"] = f"Created spreadsheet '{title}' with {row_count} rows"
+        case "create_document":
+            if status == "success":
+                title = payload.get("title", "Untitled Document")
+                payload["message"] = f"Created document '{title}'"
+        case _:
+            return payload
 
-            # Extract relevant results
-            results = []
-            for item in data.get("data", [])[:5]:
-                results.append(
-                    {
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "description": item.get("description", "")[:300],
-                        "content": item.get("content", "")[:500],
-                    }
-                )
-
-            return json.dumps({"status": "success", "results": results})
-
-    except Exception as e:
-        logger.warning("Jina search failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Web search failed: {str(e)}"})
+    return payload
 
 
 async def _execute_create_spreadsheet(
@@ -3482,11 +3801,48 @@ async def _execute_export_dataset(session_id: str, args: dict) -> str:
         return json.dumps({"status": "error", "message": f"Failed to export dataset: {str(e)}"})
 
 
-async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
+async def _execute_tool(
+    name: str,
+    args: dict,
+    session_id: str = "",
+    context: ToolContext | None = None,
+) -> str:
     """Route a tool call to the appropriate handler."""
+    if name == "run_deal_analysis":
+        raw_result = json.loads(
+            await execute_full_harness_chat_tool(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+        )
+        _store_harness_analysis_context(session_id, raw_result)
+        return json.dumps(raw_result)
     if name == "geocode_address":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            geocode = payload.get("result")
+            if isinstance(geocode, dict) and session_id:
+                _sessions.set_geocode(session_id, geocode)
+            return json.dumps(payload)
         return await _execute_geocode(args.get("address", ""), session_id=session_id)
     elif name == "lookup_property_info":
+        if context is not None:
+            tool_args = _property_lookup_args_from_session(args, session_id)
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                tool_args,
+                context=context,
+                session_id=session_id,
+            )
+            _store_property_context_from_runtime_result(session_id, payload)
+            return json.dumps(payload)
         return await _execute_lookup_property(
             args.get("address", ""),
             args.get("county", ""),
@@ -3504,27 +3860,78 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
     elif name == "screen_properties":
         return await _execute_screen_properties(args)
     elif name == "search_zoning_ordinance":
+        if context is not None:
+            zoning_args = _indexed_zoning_args_from_session(
+                municipality=args.get("municipality", ""),
+                query=args.get("query", ""),
+                session_id=session_id,
+                limit=int(args.get("limit", 8) or 8),
+            )
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                zoning_args.model_dump(exclude_none=True),
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(payload)
         return await _execute_zoning_search(
             args.get("municipality", ""),
             args.get("query", ""),
             session_id=session_id,
         )
     elif name == "search_municode_live":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(payload)
         return await _execute_municode_live_search(
             args.get("municipality", ""),
             args.get("query", ""),
             session_id=session_id,
         )
     elif name == "discover_open_data_layers":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(payload)
         return await _execute_open_data_discovery(
             args.get("county", ""),
             args.get("state", ""),
             args.get("lat", 0.0),
             args.get("lng", 0.0),
         )
-    elif name == "web_search":
-        return await _execute_web_search(args.get("query", ""))
+    elif name == "generate_document":
+        if context is not None:
+            tool_args = dict(args)
+            if not tool_args.get("evidence_ids"):
+                accumulated = _sessions.get_evidence_ids(session_id)
+                if accumulated:
+                    tool_args["evidence_ids"] = accumulated
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                tool_args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(payload)
+        return await _execute_generate_document(session_id, args)
     elif name == "create_spreadsheet":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_create_spreadsheet(
             args.get("title", "Untitled"),
             args.get("headers", []),
@@ -3532,21 +3939,69 @@ async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
             approval_id=args.get("approval_id"),
         )
     elif name == "create_document":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_create_document(
             args.get("title", "Untitled"),
             args.get("content", ""),
             approval_id=args.get("approval_id"),
         )
-    elif name == "generate_document":
-        return await _execute_generate_document(session_id, args)
     elif name == "search_properties":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_search_properties(session_id, args)
     elif name == "filter_dataset":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_filter_dataset(session_id, args)
     elif name == "get_dataset_info":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_get_dataset_info(session_id)
     elif name == "export_dataset":
+        if context is not None:
+            payload = await _execute_harness_chat_tool_payload(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+            return json.dumps(_normalize_dataset_chat_payload(name, payload))
         return await _execute_export_dataset(session_id, args)
+    elif name in FULL_HARNESS_CHAT_TOOL_NAMES:
+        raw_result = json.loads(
+            await execute_full_harness_chat_tool(
+                name,
+                args,
+                context=context,
+                session_id=session_id,
+            )
+        )
+        return json.dumps(raw_result)
     else:
         return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
 
@@ -3599,24 +4054,90 @@ async def chat(request: ChatRequest, http_request: Request):
             # request.report_context means a deal question about the on-screen property
             # refreshes it. Cached per address: only the first deal question for a
             # parcel pays the latency; a non-resolvable address just falls through.
+            completed_forced_tools: set[str] = set()
+            forced_grounding_payload: dict[str, Any] | None = None
             if _needs_grounded_analysis(request.message):
                 _existing = _sessions.get_analysis(session_id)
                 _deal_addr = _resolve_deal_address(
                     request.message, session_id, _existing, request.report_context
                 )
                 if _deal_addr and not _analysis_covers_address(_existing, _deal_addr):
+                    grounding_tool = _forced_grounding_tool_name(
+                        _deal_addr,
+                        session_id,
+                        _existing,
+                        request.report_context,
+                    )
+                    tool_args = {"address": _deal_addr}
+                    if grounding_tool == "run_deal_analysis":
+                        tool_args["analysis_type"] = "acquisition_memo"
                     yield _sse_event(
                         "tool_use",
                         {
-                            "tool": "analyze_property",
-                            "args": {"address": _deal_addr},
+                            "tool": grounding_tool,
+                            "args": tool_args,
                             "message": "Running grounded deal analysis...",
                         },
                     )
                     try:
-                        await _execute_analyze_property(_deal_addr, session_id)
+                        if grounding_tool == "run_deal_analysis":
+                            forced_result = await _execute_tool(
+                                grounding_tool,
+                                tool_args,
+                                context=ToolContext(
+                                    workspace_id=request.workspace_id,
+                                    actor_user_id=_actor_user_id(http_request),
+                                    run_id=session_id,
+                                    risk_budget_cents=request.risk_budget_cents,
+                                    live_network_allowed=request.live_network_allowed,
+                                    approved_approval_ids=set(request.approved_approval_ids or []),
+                                ),
+                                session_id=session_id,
+                            )
+                            forced_grounding_payload = json.loads(forced_result)
+                        else:
+                            await _execute_analyze_property(_deal_addr, session_id)
+                        completed_forced_tools.add(grounding_tool)
+                        forced_run_succeeded = (
+                            forced_grounding_payload is None
+                            or forced_grounding_payload.get("ok") is True
+                            or forced_grounding_payload.get("status") == "success"
+                        )
+                        evaluation_blocked = (
+                            forced_grounding_payload is not None
+                            and forced_grounding_payload.get("evaluation_status") == "blocked"
+                        )
+                        yield _sse_event(
+                            "tool_result",
+                            {
+                                "tool": grounding_tool,
+                                "status": (
+                                    "blocked"
+                                    if evaluation_blocked
+                                    else ("complete" if forced_run_succeeded else "error")
+                                ),
+                                "message": (
+                                    "The harness collected partial evidence but cannot "
+                                    "support the requested evaluation."
+                                    if evaluation_blocked
+                                    else (
+                                        None
+                                        if forced_run_succeeded
+                                        else "The harness run completed with a failed result."
+                                    )
+                                ),
+                            },
+                        )
                     except Exception as exc:  # noqa: BLE001 — non-fatal; model can still answer
-                        logger.warning("Forced analyze_property failed: %s", exc)
+                        logger.warning("Forced grounded analysis failed: %s", exc)
+                        yield _sse_event(
+                            "tool_result",
+                            {
+                                "tool": grounding_tool,
+                                "status": "error",
+                                "message": str(exc)[:200],
+                            },
+                        )
 
             # Choose the AUTHORITATIVE grounding source for the prompt. A freshly
             # computed grounded analysis SUPERSEDES the frontend-supplied
@@ -3663,6 +4184,39 @@ async def chat(request: ChatRequest, http_request: Request):
                     system_content += "\n".join(ctx_lines)
 
             system_content += _build_intent_context(intent)
+            if "run_deal_analysis" in completed_forced_tools:
+                forced_run_succeeded = (
+                    forced_grounding_payload is None
+                    or forced_grounding_payload.get("ok") is True
+                    or forced_grounding_payload.get("status") == "success"
+                )
+                if forced_run_succeeded:
+                    system_content += (
+                        "\n\n## CURRENT TURN EXECUTION STATE — FULL HARNESS RUN COMPLETE\n"
+                        "The requested run_deal_analysis call has already completed successfully "
+                        "and its result is in ACTIVE HARNESS ANALYSIS above. Answer the user's "
+                        "request now from that recorded result. Do not say you will start, call, "
+                        "or run another tool. Do not emit function-call syntax or a plan for future "
+                        "analysis. Treat unsupported fields as unknown and state the recorded next "
+                        "verification need without inventing a URL, section number, or likely value. "
+                        "If an activity, permit, entitlement, source, or field is absent from the "
+                        "record, say it was not evaluated; absence is not evidence that none exists."
+                    )
+                else:
+                    error_payload = forced_grounding_payload.get("error") or {}
+                    warnings = forced_grounding_payload.get("warnings") or []
+                    system_content += (
+                        "\n\n## CURRENT TURN EXECUTION STATE — HARNESS RUN FAILED\n"
+                        f"Status: {forced_grounding_payload.get('status', 'failed')}\n"
+                        f"Source mode: {forced_grounding_payload.get('source_mode', 'unknown')}\n"
+                        f"Error code: {error_payload.get('code', 'unknown')}\n"
+                        f"Error message: {error_payload.get('message', 'No error detail recorded.')}\n"
+                        f"Warnings: {'; '.join(str(item) for item in warnings[:4]) or 'none recorded'}\n"
+                        "Evidence IDs: none recorded unless explicitly listed in the failed result.\n"
+                        "Report this terminal failure now. Do not claim another tool was invoked, "
+                        "do not promise a follow-up call, and do not invent parcel, zoning, source, "
+                        "contact, URL, or evidence details."
+                    )
 
             messages = [{"role": "system", "content": system_content}]
 
@@ -3704,6 +4258,39 @@ async def chat(request: ChatRequest, http_request: Request):
                 "thinking",
                 {"step": "intent", "thoughts": intent_thoughts},
             )
+
+            if (
+                "run_deal_analysis" in completed_forced_tools
+                and forced_grounding_payload is not None
+                and forced_grounding_payload.get("evaluation_status") == "blocked"
+            ):
+                blocked_answer = _build_blocked_evaluation_answer(
+                    forced_grounding_payload,
+                    _deal_addr,
+                )
+                yield _sse_event("token", {"content": blocked_answer})
+                memory.append({"role": "assistant", "content": blocked_answer})
+                if len(memory) > MAX_MEMORY_MESSAGES:
+                    del memory[:-MAX_MEMORY_MESSAGES]
+                yield _sse_event("done", {"full_content": blocked_answer})
+                return
+
+            if (
+                "run_deal_analysis" in completed_forced_tools
+                and forced_grounding_payload is not None
+                and forced_grounding_payload.get("ok") is not True
+                and forced_grounding_payload.get("status") != "success"
+            ):
+                failed_answer = _build_failed_harness_answer(
+                    forced_grounding_payload,
+                    _deal_addr,
+                )
+                yield _sse_event("token", {"content": failed_answer})
+                memory.append({"role": "assistant", "content": failed_answer})
+                if len(memory) > MAX_MEMORY_MESSAGES:
+                    del memory[:-MAX_MEMORY_MESSAGES]
+                yield _sse_event("done", {"full_content": failed_answer})
+                return
 
             # Deterministic source/citation echo. The citation is too high-stakes to
             # leave to the NIM narrator (it fabricated "§131.0445(a)" with an invented
@@ -3761,6 +4348,18 @@ async def chat(request: ChatRequest, http_request: Request):
             # Agent loop — may use tools before responding
             for turn in range(MAX_AGENT_TURNS):
                 turn_tools = _get_tools_for_turn(session_id, request.message, intent)
+                if "run_deal_analysis" in completed_forced_tools:
+                    # The full harness already performed parcel, ordinance, comp,
+                    # calculator, and report work. The narrator's only remaining job
+                    # is synthesis; exposing legacy tools here creates duplicate and
+                    # potentially contradictory trajectories.
+                    turn_tools = []
+                elif completed_forced_tools:
+                    turn_tools = [
+                        tool
+                        for tool in turn_tools
+                        if tool.get("function", {}).get("name") not in completed_forced_tools
+                    ]
                 response = await call_llm(messages, tools=turn_tools)
 
                 if not response:
@@ -3780,6 +4379,22 @@ async def chat(request: ChatRequest, http_request: Request):
                     # user (parseable blobs were already recovered + routed upstream).
                     if content and "<tool_call>" in content:
                         content = _TOOL_CALL_RESIDUE_RE.sub("", content).strip()
+                    if (
+                        content
+                        and active_analysis
+                        and active_analysis.get("analysis_origin") == "harness_run"
+                    ):
+                        allowed_evidence_ids = {
+                            str(evidence_id)
+                            for evidence_id in (
+                                list(active_analysis.get("evidence_ids") or [])
+                                + _sessions.get_evidence_ids(session_id)
+                            )
+                        }
+                        content = _sanitize_unrecorded_evidence_ids(
+                            content,
+                            allowed_evidence_ids=allowed_evidence_ids,
+                        )
                     if content:
                         yield _sse_event("token", {"content": content})
                         memory.append({"role": "assistant", "content": content})
@@ -3926,69 +4541,23 @@ async def chat(request: ChatRequest, http_request: Request):
                             if expected in context.approved_approval_ids:
                                 fn_args["approval_id"] = expected
 
-                        # Route core tools through the shared harness runtime.
-                        if fn_name in {
-                            "geocode_address",
-                            "lookup_property_info",
-                            "search_zoning_ordinance",
-                            "search_municode_live",
-                            "discover_open_data_layers",
-                            "generate_document",
-                        }:
-                            # For generate_document: inject accumulated session evidence IDs
-                            # when the agent didn't pass any (common case in chat-only flow).
-                            if fn_name == "generate_document" and not fn_args.get("evidence_ids"):
-                                accumulated = _sessions.get_evidence_ids(session_id)
-                                if accumulated:
-                                    fn_args = {**fn_args, "evidence_ids": accumulated}
-
-                            runtime = get_default_runtime()
-                            tool_result = await runtime.call_tool(
-                                tool_name=fn_name,
-                                tool_args=fn_args,
-                                context=context,
-                                approval_id=fn_args.get("approval_id"),
-                            )
-                            # Preserve chat session behaviors.
-                            if fn_name == "geocode_address" and tool_result.result:
-                                geocode = tool_result.result.get("result")
-                                if isinstance(geocode, dict) and session_id:
-                                    _sessions.set_geocode(session_id, geocode)
-                            if fn_name == "lookup_property_info" and tool_result.result:
-                                prop = tool_result.result.get("result")
-                                if isinstance(prop, dict) and session_id:
-                                    _sessions.set_property_context(
-                                        session_id,
-                                        {
-                                            "address": prop.get("address", ""),
-                                            "municipality": prop.get("municipality", ""),
-                                            "county": prop.get("county", ""),
-                                            "zoning_code": prop.get("zoning_code", ""),
-                                            "ordinance_district_code": prop.get(
-                                                "ordinance_district_code", ""
-                                            ),
-                                            "zoning_description": prop.get(
-                                                "zoning_description", ""
-                                            ),
-                                            "lot_size_sqft": prop.get("lot_size_sqft"),
-                                            "owner": prop.get("owner", ""),
-                                        },
-                                    )
-                            # Accumulate evidence IDs from every tool that returns them,
-                            # so generate_document can reference the full research chain.
-                            if tool_result.result and session_id:
-                                evidence_list = tool_result.result.get("evidence") or []
-                                if isinstance(evidence_list, list):
-                                    new_ids = [
-                                        ev["id"]
-                                        for ev in evidence_list
-                                        if isinstance(ev, dict) and ev.get("id")
-                                    ]
-                                    if new_ids:
-                                        _sessions.add_evidence_ids(session_id, new_ids)
-                            result = json.dumps(tool_result.result or {})
-                        else:
-                            result = await _execute_tool(fn_name, fn_args, session_id=session_id)
+                        result = await _execute_tool(
+                            fn_name,
+                            fn_args,
+                            session_id=session_id,
+                            context=context,
+                        )
+                        if session_id:
+                            parsed_result = json.loads(result)
+                            evidence_list = parsed_result.get("evidence") or []
+                            if isinstance(evidence_list, list):
+                                new_ids = [
+                                    ev["id"]
+                                    for ev in evidence_list
+                                    if isinstance(ev, dict) and ev.get("id")
+                                ]
+                                if new_ids:
+                                    _sessions.add_evidence_ids(session_id, new_ids)
                         yield _sse_event(
                             "tool_result",
                             {

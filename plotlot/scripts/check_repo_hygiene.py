@@ -69,7 +69,10 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
             continue
 
         suffix = PurePosixPath(normalized).suffix.lower()
-        if suffix in BANNED_MEDIA_SUFFIXES:
+        is_allowed_public_asset = any(
+            normalized.startswith(prefix) for prefix in ALLOWED_DIR_PREFIXES
+        )
+        if suffix in BANNED_MEDIA_SUFFIXES and not is_allowed_public_asset:
             violations.append((normalized, "tracked-media"))
 
     return violations

@@ -68,10 +68,13 @@ async def _ensure_engine():
             and current_loop_id is not None
             and _engine_loop_id != current_loop_id
         ):
-            try:
-                await _engine.dispose()
-            except Exception:
-                logger.warning("Failed to dispose stale async engine", exc_info=True)
+            logger.info(
+                "Resetting async engine for a new event loop without cross-loop disposal",
+                extra={
+                    "previous_loop_id": _engine_loop_id,
+                    "current_loop_id": current_loop_id,
+                },
+            )
             _engine = None
             _session_factory = None
             _engine_loop_id = None

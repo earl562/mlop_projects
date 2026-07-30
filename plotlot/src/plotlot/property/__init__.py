@@ -12,6 +12,8 @@ Adding a new county is three steps:
   3. Done — ``lookup_property`` routes to it automatically.
 """
 
+from typing import cast
+
 from plotlot.core.types import PropertyRecord
 from plotlot.property.base import PropertyProvider
 from plotlot.property.registry import get_provider, register_provider, registered_counties
@@ -81,35 +83,25 @@ async def lookup_property(
 ) -> PropertyRecord | None:
     """Look up property data via the registered provider for *county*.
 
-    This is the main entry point. It delegates to the appropriate
-    :class:`PropertyProvider` based on the county name. For counties
-    without a dedicated provider, falls back to the UniversalProvider
-    which discovers ArcGIS datasets dynamically via Hub.
+    This is the main entry point. It delegates to the shared retrieval
+    lookup so every import path uses the same retry policy, provider
+    fallback behavior, and address-confidence validation.
 
     Returns:
         PropertyRecord or None if no provider is registered or lookup fails.
     """
-    provider = get_provider(county)
-    if provider is None:
-        import logging
+    from plotlot.retrieval.property import lookup_property as retrieval_lookup_property
 
-        logging.getLogger(__name__).warning(
-            "No PropertyProvider registered for county: %s",
-            county,
-        )
-        return None
-
-    try:
-        return await provider.lookup(address, county, lat=lat, lng=lng, state=state)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception(
-            "PropertyProvider.lookup failed for %s (%s)",
+    return cast(
+        PropertyRecord | None,
+        await retrieval_lookup_property(
             address,
             county,
-        )
-        return None
+            lat=lat,
+            lng=lng,
+            state=state,
+        ),
+    )
 
 
 __all__ = [

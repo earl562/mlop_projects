@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from plotlot.core.types import PropertyRecord
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
 from plotlot.property.universal import UniversalProvider, _build_property_record
 
@@ -99,6 +100,37 @@ class TestUniversalProvider:
         """Should return None if lat/lng not provided."""
         result = await provider.lookup("123 Main St", "Test County")
         assert result is None
+
+    async def test_registered_authoritative_provider_precedes_dynamic_discovery(self, provider):
+        expected = PropertyRecord(
+            folio="74434321060170150",
+            address="623 4TH ST",
+            county="Palm Beach",
+        )
+        authoritative_provider = AsyncMock()
+        authoritative_provider.lookup.return_value = expected
+
+        with (
+            patch(
+                "plotlot.property.universal.get_registered_provider",
+                return_value=authoritative_provider,
+            ),
+            patch(
+                "plotlot.property.universal.discover_datasets",
+                new_callable=AsyncMock,
+            ) as discover,
+        ):
+            result = await provider.lookup(
+                "623 4TH ST, West Palm Beach, FL 33401",
+                "Palm Beach",
+                lat=26.717301,
+                lng=-80.057865,
+                state="FL",
+            )
+
+        assert result is expected
+        authoritative_provider.lookup.assert_awaited_once()
+        discover.assert_not_awaited()
 
     async def test_cache_hit_skips_discovery(self, provider):
         """Cached county data should skip Hub discovery."""

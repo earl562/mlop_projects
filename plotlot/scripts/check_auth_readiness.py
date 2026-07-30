@@ -117,8 +117,25 @@ def requirement_groups(values: dict[str, str]) -> list[RequirementGroup]:
         RequirementGroup(
             name="llm_agent",
             purpose="Live agent chat, LLM extraction fallback, and live eval tests.",
-            required_any=("OPENAI_API_KEY", "OPENAI_ACCESS_TOKEN", "NVIDIA_API_KEY", "GROQ_API_KEY", "ANTHROPIC_API_KEY"),
-            optional=("OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_ORGANIZATION", "OPENAI_PROJECT", "OPENAI_OAUTH_CLIENT_ID"),
+            required_any=(
+                "OPENROUTER_API_KEY",
+                "DEEPSEEK_API_KEY",
+                "OPENAI_API_KEY",
+                "OPENAI_ACCESS_TOKEN",
+                "NVIDIA_API_KEY",
+                "GROQ_API_KEY",
+                "ANTHROPIC_API_KEY",
+            ),
+            optional=(
+                "PLOTLOT_LLM_PROVIDER",
+                "OPENROUTER_BASE_URL",
+                "OPENROUTER_MODEL",
+                "OPENAI_BASE_URL",
+                "OPENAI_MODEL",
+                "OPENAI_ORGANIZATION",
+                "OPENAI_PROJECT",
+                "OPENAI_OAUTH_CLIENT_ID",
+            ),
             notes="Codex OAuth also counts when PLOTLOT_USE_CODEX_OAUTH=1 and PLOTLOT_CODEX_AUTH_FILE exists.",
         ),
         RequirementGroup(
@@ -130,23 +147,6 @@ def requirement_groups(values: dict[str, str]) -> list[RequirementGroup]:
             name="web_search",
             purpose="Agent web-search/live source lookup via Jina.",
             required_all=("JINA_API_KEY",),
-        ),
-        RequirementGroup(
-            name="google_workspace",
-            purpose="Google Docs/Sheets creation tools.",
-            required_all=("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"),
-            notes="Run `uv run python scripts/setup_google_auth.py` after creating OAuth credentials.",
-        ),
-        RequirementGroup(
-            name="google_rendering",
-            purpose="Building/concept rendering endpoints.",
-            required_all=("GOOGLE_API_KEY",),
-        ),
-        RequirementGroup(
-            name="google_maps_enhanced",
-            purpose="Optional Google Maps SDK enhancements (street-view/static imagery).",
-            optional=("NEXT_PUBLIC_GOOGLE_MAPS_KEY",),
-            notes="Without a key, frontend map previews fall back to OpenStreetMap/ArcGIS.",
         ),
         RequirementGroup(
             name="stripe_billing",

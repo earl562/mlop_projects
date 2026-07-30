@@ -14,12 +14,29 @@ All endpoints are public, no authentication required.
 import logging
 import re
 
+import anyio
 import httpx
 
 from plotlot.core.types import PropertyRecord
 from plotlot.observability.tracing import start_span, trace
 
 logger = logging.getLogger(__name__)
+PROPERTY_LOOKUP_MAX_ATTEMPTS = 3
+PROPERTY_LOOKUP_BASE_DELAY_SECONDS = 1.0
+
+
+def _is_transient_property_lookup_error(error: Exception) -> bool:
+    match error:
+        case httpx.TimeoutException():
+            return True
+        case httpx.NetworkError():
+            return True
+        case httpx.HTTPStatusError() as status_error:
+            return (
+                status_error.response.status_code == 429 or status_error.response.status_code >= 500
+            )
+        case _:
+            return False
 
 
 def _escape_where(value: str) -> str:
@@ -62,6 +79,13 @@ BROWARD_CITY_CODES: dict[str, str] = {
     "weston": "WM",
     "wilton manors": "WS",
 }
+_BROWARD_CODE_TO_CITY: dict[str, str] = {
+    value: key.title() for key, value in BROWARD_CITY_CODES.items()
+}
+_DIRECTION_TOKENS = frozenset({"N", "S", "E", "W", "NE", "NW", "SE", "SW"})
+_STREET_TYPE_TOKENS = frozenset(
+    {"BLVD", "AVE", "ST", "DR", "CT", "LN", "PL", "RD", "TER", "WAY", "CIR"}
+)
 
 # ---------------------------------------------------------------------------
 # Miami-Dade County
@@ -70,6 +94,10 @@ BROWARD_CITY_CODES: dict[str, str] = {
 MDC_PROPERTY_URL = (
     "https://services.arcgis.com/8Pc9XBTAsYuxx9Ny/ArcGIS/rest/services"
     "/PaGISView_gdb/FeatureServer/0/query"
+)
+MDC_PROPERTY_BOUNDARIES_URL = (
+    "https://gisweb.miamidade.gov/arcgis/rest/services/"
+    "LandManagement/MD_ZoningLandManagementViewer/MapServer/2/query"
 )
 MDC_MUNICIPAL_ZONING_URL = (
     "https://gisweb.miamidade.gov/arcgis/rest/services/LandManagement/MD_Zoning/MapServer/2/query"
@@ -150,6 +178,114 @@ def _extract_city_hint(address: str) -> str:
     return city.lower()
 
 
+def _decode_broward_city(value: str) -> str:
+    code = value.strip().upper()
+    if not code:
+        return ""
+    return _BROWARD_CODE_TO_CITY.get(code, value.strip())
+
+
+def _miami_dade_where_clauses(street: str) -> list[str]:
+    exact_clause = f"TRUE_SITE_ADDR='{_escape_where(street)}'"
+    house_number, _, remainder = street.partition(" ")
+    clauses = [exact_clause]
+    if remainder:
+        clauses.append(
+            " AND ".join(
+                [
+                    f"TRUE_SITE_ADDR LIKE '{_escape_where(house_number)} %'",
+                    f"TRUE_SITE_ADDR LIKE '%{_escape_where(remainder)}%'",
+                ]
+            )
+        )
+    clauses.append(f"TRUE_SITE_ADDR LIKE '%{_escape_where(street)}%'")
+    return clauses
+
+
+def _build_broward_where_clause(
+    *,
+    street_num: str,
+    street_direction: str,
+    street_name: str,
+    street_type: str,
+    city_code: str,
+    exact_name: bool,
+) -> str:
+    conditions = [f"SITUS_STREET_NUMBER='{_escape_where(street_num)}'"]
+    if street_direction:
+        conditions.append(f"SITUS_STREET_DIRECTION='{_escape_where(street_direction)}'")
+    if street_name:
+        operator = "=" if exact_name else "LIKE"
+        value = (
+            f"'{_escape_where(street_name)}'" if exact_name else f"'%{_escape_where(street_name)}%'"
+        )
+        conditions.append(f"SITUS_STREET_NAME {operator} {value}")
+    if street_type:
+        conditions.append(f"SITUS_STREET_TYPE='{_escape_where(street_type)}'")
+    if city_code:
+        conditions.append(f"SITUS_CITY='{_escape_where(city_code)}'")
+    return " AND ".join(conditions)
+
+
+def _address_components(address: str) -> tuple[str, str, str, str]:
+    normalized = _normalize_address(address)
+    tokens = normalized.split()
+    if not tokens:
+        return "", "", "", ""
+    house_number = tokens[0]
+    remaining = tokens[1:]
+    direction = ""
+    if remaining and remaining[0] in _DIRECTION_TOKENS:
+        direction = remaining[0]
+        remaining = remaining[1:]
+    street_type = ""
+    if remaining and remaining[-1] in _STREET_TYPE_TOKENS:
+        street_type = remaining[-1]
+        remaining = remaining[:-1]
+    street_name = " ".join(remaining).strip()
+    return house_number, direction, street_name, street_type
+
+
+def _addresses_confidently_match(candidate: str, target: str) -> bool:
+    candidate_number, candidate_direction, candidate_name, candidate_type = _address_components(
+        candidate
+    )
+    target_number, target_direction, target_name, target_type = _address_components(target)
+    if not candidate_number or not target_number or candidate_number != target_number:
+        return False
+    if candidate_direction and target_direction and candidate_direction != target_direction:
+        return False
+    if candidate_type and target_type and candidate_type != target_type:
+        return False
+    if not candidate_name or not target_name:
+        return False
+    if candidate_name == target_name:
+        return True
+    if candidate_name.isdigit() or target_name.isdigit():
+        return False
+    candidate_tokens = set(candidate_name.split())
+    target_tokens = set(target_name.split())
+    return candidate_tokens == target_tokens
+
+
+def _addresses_spatially_recover(candidate: str, target: str) -> bool:
+    candidate_number, candidate_direction, candidate_name, candidate_type = _address_components(
+        candidate
+    )
+    target_number, target_direction, target_name, target_type = _address_components(target)
+    if not candidate_number or not target_number or not candidate_name or not target_name:
+        return False
+    if (
+        candidate_direction != target_direction
+        or candidate_type != target_type
+        or candidate_name != target_name
+    ):
+        return False
+    if not candidate_number.isdigit() or not target_number.isdigit():
+        return False
+    return abs(int(candidate_number) - int(target_number)) <= 5
+
+
 def _distance_sq(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return (lat1 - lat2) ** 2 + (lng1 - lng2) ** 2
 
@@ -179,6 +315,10 @@ def _extract_parcel_rings(feature: dict) -> list[list[float]] | None:
     if rings and len(rings) > 0 and len(rings[0]) >= 3:
         return rings[0]  # type: ignore[no-any-return]
     return None
+
+
+def _street_only_address(address: str) -> str:
+    return address.split(",")[0].strip().upper()
 
 
 def _parse_lot_dimensions(legal: str) -> str:
@@ -342,14 +482,17 @@ async def _lookup_miami_dade(
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
         street = _normalize_address(address)
 
-        features = await _query_arcgis(
-            MDC_PROPERTY_URL,
-            where=f"TRUE_SITE_ADDR LIKE '%{_escape_where(street)}%'",
-            out_fields=MDC_PROPERTY_FIELDS,
-            extra_params={"outSR": "4326"},
-        )
+        features: list[dict] = []
+        for where_clause in _miami_dade_where_clauses(street):
+            features = await _query_arcgis(
+                MDC_PROPERTY_URL,
+                where=where_clause,
+                out_fields=MDC_PROPERTY_FIELDS,
+                extra_params={"outSR": "4326"},
+            )
+            if features:
+                break
         if not features:
-            # Try shorter match (first two tokens)
             tokens = street.split()
             if len(tokens) >= 2:
                 short = " ".join(tokens[:2])
@@ -360,10 +503,29 @@ async def _lookup_miami_dade(
                     extra_params={"outSR": "4326"},
                 )
         if not features:
-            span.set_outputs({"error": "no_features_found"})
-            return None
+            spatial_fallback = await _lookup_miami_dade_from_property_boundary(
+                address=address,
+                lat=lat,
+                lng=lng,
+            )
+            if spatial_fallback is None:
+                span.set_outputs({"error": "no_features_found"})
+                return None
+            span.set_outputs({"folio": spatial_fallback.folio, "fallback": "property_boundary"})
+            return spatial_fallback
 
         best_feature = _select_best_address_feature(features, street)
+        if not _addresses_confidently_match(
+            str(best_feature.get("attributes", {}).get("TRUE_SITE_ADDR") or ""), address
+        ):
+            spatial_fallback = await _lookup_miami_dade_from_property_boundary(
+                address=address,
+                lat=lat,
+                lng=lng,
+            )
+            if spatial_fallback is not None:
+                span.set_outputs({"folio": spatial_fallback.folio, "fallback": "property_boundary"})
+                return spatial_fallback
         attrs = best_feature.get("attributes", {})
         geom = best_feature.get("geometry", {})
 
@@ -424,6 +586,62 @@ async def _lookup_miami_dade(
         )
 
 
+async def _lookup_miami_dade_from_property_boundary(
+    *,
+    address: str,
+    lat: float | None,
+    lng: float | None,
+) -> PropertyRecord | None:
+    if lat is None or lng is None:
+        return None
+    parcel_features = await _query_arcgis(
+        MDC_PROPERTY_BOUNDARIES_URL,
+        where="1=1",
+        out_fields=("FOLIO,TRUE_SITE_ADDR,TRUE_SITE_CITY,TRUE_OWNER1,LEGAL,Shape.STArea()"),
+        extra_params={
+            "geometry": f"{lng},{lat}",
+            "geometryType": "esriGeometryPoint",
+            "inSR": "4326",
+            "spatialRel": "esriSpatialRelIntersects",
+            "outSR": "4326",
+        },
+        limit=1,
+    )
+    if not parcel_features:
+        return None
+
+    parcel_feature = parcel_features[0]
+    attrs = parcel_feature.get("attributes", {})
+    candidate_address = str(attrs.get("TRUE_SITE_ADDR") or "")
+    if not (
+        _addresses_confidently_match(candidate_address, address)
+        or _addresses_spatially_recover(candidate_address, address)
+    ):
+        return None
+
+    zoning_code, zoning_desc = await _spatial_query_zoning(MDC_MUNICIPAL_ZONING_URL, lat, lng)
+    if not zoning_code or zoning_code.upper() == "NONE":
+        zoning_code, zoning_desc = await _spatial_query_zoning(
+            MDC_UNINCORPORATED_ZONING_URL, lat, lng
+        )
+
+    return PropertyRecord(
+        folio=str(attrs.get("FOLIO") or ""),
+        address=candidate_address,
+        municipality=str(attrs.get("TRUE_SITE_CITY") or ""),
+        county="Miami-Dade",
+        owner=str(attrs.get("TRUE_OWNER1") or ""),
+        zoning_code=zoning_code,
+        zoning_description=zoning_desc,
+        lot_size_sqft=_safe_float(attrs.get("Shape.STArea()")),
+        lot_dimensions=_parse_lot_dimensions(str(attrs.get("LEGAL") or "")),
+        lot_size_source="geometry",
+        lat=lat,
+        lng=lng,
+        parcel_geometry=_extract_parcel_rings(parcel_feature),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Broward County lookup
 # ---------------------------------------------------------------------------
@@ -444,42 +662,91 @@ async def _lookup_broward(
             return None
 
         street_num = tokens[0]
-        # Join remaining as street name, removing directional prefixes and type suffixes
-        # Broward stores direction in SITUS_STREET_DIRECTION, not in SITUS_STREET_NAME
         remaining = tokens[1:]
-        # Strip leading directional (N, S, E, W, NE, NW, SE, SW)
+        street_direction = ""
         if remaining and remaining[0] in {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}:
+            street_direction = remaining[0]
             remaining = remaining[1:]
-        street_name = " ".join(remaining)
-        # Remove type suffixes for LIKE match
-        for suffix in ["BLVD", "AVE", "ST", "DR", "CT", "LN", "PL", "RD", "TER", "WAY", "CIR"]:
-            street_name = re.sub(rf"\b{suffix}\b", "", street_name).strip()
+        street_type = ""
+        if remaining and remaining[-1] in {
+            "BLVD",
+            "AVE",
+            "ST",
+            "DR",
+            "CT",
+            "LN",
+            "PL",
+            "RD",
+            "TER",
+            "WAY",
+            "CIR",
+        }:
+            street_type = remaining[-1]
+            remaining = remaining[:-1]
+        street_name = " ".join(remaining).strip()
+        exact_name = bool(street_name) and street_name.replace(" ", "").isdigit()
 
         city_hint = _extract_city_hint(address)
         city_code = BROWARD_CITY_CODES.get(
             city_hint, city_hint.upper() if len(city_hint) == 2 else ""
         )
-
-        where = f"SITUS_STREET_NUMBER='{street_num}' AND SITUS_STREET_NAME LIKE '%{street_name}%'"
+        where_clauses = [
+            _build_broward_where_clause(
+                street_num=street_num,
+                street_direction=street_direction,
+                street_name=street_name,
+                street_type=street_type,
+                city_code=city_code,
+                exact_name=exact_name,
+            ),
+            _build_broward_where_clause(
+                street_num=street_num,
+                street_direction=street_direction,
+                street_name=street_name,
+                street_type=street_type,
+                city_code=city_code,
+                exact_name=False,
+            ),
+        ]
         if city_code:
-            where += f" AND SITUS_CITY='{city_code}'"
+            where_clauses.append(
+                _build_broward_where_clause(
+                    street_num=street_num,
+                    street_direction=street_direction,
+                    street_name=street_name,
+                    street_type=street_type,
+                    city_code="",
+                    exact_name=exact_name,
+                )
+            )
 
-        features = await _query_arcgis(
-            BROWARD_PROPERTY_URL,
-            where=where,
-            out_fields=BROWARD_PROPERTY_FIELDS,
-            extra_params={"outSR": "4326", "returnGeometry": "true"},
-            limit=None,  # Broward MapServer errors on resultRecordCount without orderBy
-        )
-        if not features and city_code:
+        features: list[dict] = []
+        for where_clause in where_clauses:
             features = await _query_arcgis(
                 BROWARD_PROPERTY_URL,
-                where=f"SITUS_STREET_NUMBER='{_escape_where(street_num)}' AND SITUS_STREET_NAME LIKE '%{_escape_where(street_name)}%'",
+                where=where_clause,
                 out_fields=BROWARD_PROPERTY_FIELDS,
                 extra_params={"outSR": "4326", "returnGeometry": "true"},
                 limit=None,
             )
+            if features:
+                break
         if not features:
+            spatial_fallback = await _lookup_broward_from_parcel_geometry(
+                address=address,
+                city_hint=city_hint,
+                lat=lat,
+                lng=lng,
+            )
+            if spatial_fallback is not None:
+                span.set_outputs(
+                    {
+                        "folio": spatial_fallback.folio,
+                        "zoning_code": spatial_fallback.zoning_code,
+                        "fallback": "parcel_geometry",
+                    }
+                )
+                return spatial_fallback
             span.set_outputs({"error": "no_features_found"})
             return None
 
@@ -523,6 +790,22 @@ async def _lookup_broward(
             str(attrs.get("SITUS_STREET_TYPE") or ""),
         ]
         full_addr = " ".join(p for p in addr_parts if p).strip()
+        if not _addresses_confidently_match(full_addr, address):
+            spatial_fallback = await _lookup_broward_from_parcel_geometry(
+                address=address,
+                city_hint=city_hint,
+                lat=lat,
+                lng=lng,
+            )
+            if spatial_fallback is not None:
+                span.set_outputs(
+                    {
+                        "folio": spatial_fallback.folio,
+                        "zoning_code": spatial_fallback.zoning_code,
+                        "fallback": "parcel_geometry",
+                    }
+                )
+                return spatial_fallback
 
         # Extract coordinates from feature geometry as fallback (Miami-Dade pattern)
         geom = features[0].get("geometry", {})
@@ -564,7 +847,7 @@ async def _lookup_broward(
         return PropertyRecord(
             folio=folio,
             address=full_addr,
-            municipality=str(attrs.get("SITUS_CITY") or ""),
+            municipality=_decode_broward_city(str(attrs.get("SITUS_CITY") or "")),
             county="Broward",
             owner=str(attrs.get("NAME_LINE_1") or ""),
             zoning_code=zoning_code,
@@ -581,6 +864,54 @@ async def _lookup_broward(
         )
 
 
+async def _lookup_broward_from_parcel_geometry(
+    *,
+    address: str,
+    city_hint: str,
+    lat: float | None,
+    lng: float | None,
+) -> PropertyRecord | None:
+    if lat is None or lng is None:
+        return None
+    parcel_features = await _query_arcgis(
+        BROWARD_PARCELS_URL,
+        where="1=1",
+        out_fields="FOLIO,OBJECTID,SHAPE.STArea()",
+        extra_params={
+            "geometry": f"{lng},{lat}",
+            "geometryType": "esriGeometryPoint",
+            "inSR": "4326",
+            "spatialRel": "esriSpatialRelIntersects",
+            "outSR": "4326",
+        },
+        limit=1,
+    )
+    if not parcel_features:
+        return None
+
+    parcel_feature = parcel_features[0]
+    parcel_attrs = parcel_feature.get("attributes", {})
+    folio = str(parcel_attrs.get("FOLIO") or "").strip()
+    if not folio:
+        return None
+
+    zoning_code, zoning_desc = await _spatial_query_zoning(BROWARD_ZONING_URL, lat, lng)
+    municipality = city_hint.title() if city_hint else "Broward"
+    return PropertyRecord(
+        folio=folio,
+        address=_street_only_address(address),
+        municipality=municipality,
+        county="Broward",
+        zoning_code=zoning_code,
+        zoning_description=zoning_desc,
+        lot_size_sqft=_safe_float(parcel_attrs.get("SHAPE.STArea()")),
+        lot_size_source="geometry",
+        lat=lat,
+        lng=lng,
+        parcel_geometry=_extract_parcel_rings(parcel_feature),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Palm Beach County lookup
 # ---------------------------------------------------------------------------
@@ -592,19 +923,37 @@ async def _lookup_palm_beach(
     """Look up property in Palm Beach County."""
     with start_span(name="lookup_palm_beach", span_type="TOOL") as span:
         span.set_inputs({"address": address, "lat": lat, "lng": lng})
+        raw_street = _street_only_address(address)
         street = _normalize_address(address)
+        where_clauses = [f"SITE_ADDR_STR='{_escape_where(raw_street)}'"]
+        if street != raw_street:
+            where_clauses.append(f"SITE_ADDR_STR='{_escape_where(street)}'")
+        where_clauses.append(f"SITE_ADDR_STR LIKE '%{_escape_where(raw_street)}%'")
+        if street != raw_street:
+            where_clauses.append(f"SITE_ADDR_STR LIKE '%{_escape_where(street)}%'")
 
-        features = await _query_arcgis(
-            PBC_PROPERTY_URL,
-            where=f"SITE_ADDR_STR LIKE '%{_escape_where(street)}%'",
-            out_fields=PBC_PROPERTY_FIELDS,
-            extra_params={"outSR": "4326"},
-        )
+        features: list[dict] = []
+        for where_clause in where_clauses:
+            features = await _query_arcgis(
+                PBC_PROPERTY_URL,
+                where=where_clause,
+                out_fields=PBC_PROPERTY_FIELDS,
+                extra_params={"outSR": "4326"},
+            )
+            if features:
+                break
         if not features:
             span.set_outputs({"error": "no_features_found"})
             return None
 
-        attrs = features[0].get("attributes", {})
+        feature = max(
+            features,
+            key=lambda item: _score_address_match(
+                str(item.get("attributes", {}).get("SITE_ADDR_STR") or ""),
+                street,
+            ),
+        )
+        attrs = feature.get("attributes", {})
 
         acres = float(attrs.get("ACRES") or 0)
         lot_sqft = acres * 43560 if acres else 0.0
@@ -633,7 +982,7 @@ async def _lookup_palm_beach(
             )
 
         folio = str(attrs.get("PARCEL_NUMBER") or "")
-        parcel_geom = _extract_parcel_rings(features[0])
+        parcel_geom = _extract_parcel_rings(feature)
 
         span.set_outputs({"folio": folio, "zoning_code": zoning_code})
         return PropertyRecord(
@@ -646,6 +995,7 @@ async def _lookup_palm_beach(
             zoning_description=zoning_desc,
             land_use_code=str(attrs.get("PROPERTY_USE") or ""),
             lot_size_sqft=lot_sqft,
+            lot_size_source="assessor",
             year_built=year_built,
             assessed_value=float(attrs.get("ASSESSED_VAL") or 0),
             market_value=float(attrs.get("TOTAL_MARKET") or 0),
@@ -715,19 +1065,66 @@ async def lookup_property(
         provider = get_provider(county)
 
     if provider is not None:
-        try:
-            record = await provider.lookup(address, county, lat=lat, lng=lng, state=state)
-            if record:
-                logger.info(
-                    "Property found: folio=%s, zoning=%s, lot=%s sqft",
-                    record.folio,
-                    record.zoning_code or "N/A",
-                    record.lot_size_sqft,
-                )
-            return record
-        except Exception as e:
-            logger.error("Property lookup failed for %s (%s): %s", address, county, e)
-            return None
+        for attempt in range(1, PROPERTY_LOOKUP_MAX_ATTEMPTS + 1):
+            try:
+                record = await provider.lookup(address, county, lat=lat, lng=lng, state=state)
+                if record:
+                    if record.address:
+                        address_matches = _addresses_confidently_match(record.address, address)
+                        spatially_recovered = (
+                            record.lot_size_source == "geometry"
+                            and _addresses_spatially_recover(
+                                record.address,
+                                address,
+                            )
+                        )
+                        if not address_matches and not spatially_recovered:
+                            logger.warning(
+                                "Rejecting low-confidence property match for %s (%s): got %s",
+                                address,
+                                county,
+                                record.address,
+                            )
+                            return None
+                        if spatially_recovered and not address_matches:
+                            logger.warning(
+                                "Accepting spatially recovered property match for %s (%s): got %s",
+                                address,
+                                county,
+                                record.address,
+                            )
+                    else:
+                        logger.warning(
+                            "Property provider returned blank address for %s (%s); accepting record based on provider match",
+                            address,
+                            county,
+                        )
+                    logger.info(
+                        "Property found: folio=%s, zoning=%s, lot=%s sqft",
+                        record.folio,
+                        record.zoning_code or "N/A",
+                        record.lot_size_sqft,
+                    )
+                return record
+            except Exception as e:
+                if (
+                    _is_transient_property_lookup_error(e)
+                    and attempt < PROPERTY_LOOKUP_MAX_ATTEMPTS
+                ):
+                    delay = PROPERTY_LOOKUP_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Transient property lookup failure for %s (%s): %s (attempt %d/%d), retrying in %.1fs",
+                        address,
+                        county,
+                        e,
+                        attempt,
+                        PROPERTY_LOOKUP_MAX_ATTEMPTS,
+                        delay,
+                    )
+                    await anyio.sleep(delay)
+                    continue
+                logger.error("Property lookup failed for %s (%s): %s", address, county, e)
+                return None
 
     # Fallback to legacy handler map (should not happen once registry is populated)
     handler = _COUNTY_HANDLERS.get(county_key)

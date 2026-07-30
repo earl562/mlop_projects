@@ -101,16 +101,42 @@ test.describe("Harness lifecycle db lane", () => {
     const evidence = (await evidenceResp.json()) as Array<{ id: string }>;
     expect(evidence.length).toBeGreaterThan(0);
 
+    const documentRunId = `pw-doc-${Date.now()}`;
+    const documentRequest = {
+      tool_name: "generate_document",
+      arguments: { title: "PW Evidence Report", evidence_ids: tool.evidence_ids },
+      workspace_id: workspace.id,
+      project_id: project.id,
+      site_id: site.id,
+      analysis_id: analysis.id,
+      analysis_run_id: run.id,
+      run_id: documentRunId,
+    };
+    const pendingDocResp = await request.post(`${base}/api/v1/tools/call`, {
+      data: {
+        ...documentRequest,
+      },
+    });
+    expect(pendingDocResp.ok()).toBeTruthy();
+    const pendingDocTool = (await pendingDocResp.json()) as {
+      status: string;
+      decision: { approval_id?: string };
+    };
+    expect(pendingDocTool.status).toBe("pending_approval");
+    expect(pendingDocTool.decision.approval_id).toBeTruthy();
+
+    const approvalId = pendingDocTool.decision.approval_id as string;
+    const approvalResp = await request.post(
+      `${base}/api/v1/approvals/${encodeURIComponent(approvalId)}/approve`,
+      { data: { decided_by: "playwright" } },
+    );
+    expect(approvalResp.ok()).toBeTruthy();
+
     const docResp = await request.post(`${base}/api/v1/tools/call`, {
       data: {
-        tool_name: "generate_document",
-        arguments: { title: "PW Evidence Report", evidence_ids: tool.evidence_ids },
-        workspace_id: workspace.id,
-        project_id: project.id,
-        site_id: site.id,
-        analysis_id: analysis.id,
-        analysis_run_id: run.id,
-        run_id: `pw-doc-${Date.now()}`,
+        ...documentRequest,
+        approval_id: approvalId,
+        approved_approval_ids: [approvalId],
       },
     });
     expect(docResp.ok()).toBeTruthy();

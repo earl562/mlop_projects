@@ -26,8 +26,16 @@ class TestSourceAuthorityEnums:
     def test_provider_enum_covers_all_codifiers(self):
         # Master spec §5 provider list + §9 provider-agnostic rule.
         for p in (
-            "official_html", "official_pdf", "municode", "ecode360", "amlegal",
-            "codepublishing", "municipal_codes", "encodeplus", "arcgis", "manual",
+            "official_html",
+            "official_pdf",
+            "municode",
+            "ecode360",
+            "amlegal",
+            "codepublishing",
+            "municipal_codes",
+            "encodeplus",
+            "arcgis",
+            "manual",
         ):
             assert Provider(p)  # all valid
 
@@ -37,8 +45,13 @@ class TestSourceAuthorityEnums:
 
     def test_authority_scope_enum(self):
         for s in (
-            "zoning", "land_development", "code_of_ordinances", "gis_zoning",
-            "overlays", "comp_plan", "adopted_ordinances",
+            "zoning",
+            "land_development",
+            "code_of_ordinances",
+            "gis_zoning",
+            "overlays",
+            "comp_plan",
+            "adopted_ordinances",
         ):
             assert AuthorityScope(s)
 
@@ -52,7 +65,9 @@ class TestSourceAuthorityModel:
 
     def test_minimal_authority(self):
         a = JurisdictionSourceAuthority(
-            state="FL", county="Miami-Dade", municipality="Miami",
+            state="FL",
+            county="Miami-Dade",
+            municipality="Miami",
             jurisdiction_type=JurisdictionType.MUNICIPALITY,
             authority_scope=AuthorityScope.ZONING,
             provider=Provider.MUNICODE,
@@ -69,7 +84,9 @@ class TestSourceAuthorityModel:
     def test_rejects_empty_source_url(self):
         with pytest.raises((ValueError, Exception)):
             JurisdictionSourceAuthority(
-                state="FL", county="Broward", municipality="Davie",
+                state="FL",
+                county="Broward",
+                municipality="Davie",
                 jurisdiction_type=JurisdictionType.MUNICIPALITY,
                 authority_scope=AuthorityScope.ZONING,
                 provider=Provider.MUNICODE,
@@ -83,7 +100,9 @@ class TestSourceAuthorityModel:
     def test_south_fl_county_normalization(self):
         # Miami-Dade unincorporated is a separate authority (spec §5 special handling).
         a = JurisdictionSourceAuthority(
-            state="FL", county="Miami-Dade", municipality=None,  # unincorporated
+            state="FL",
+            county="Miami-Dade",
+            municipality=None,  # unincorporated
             jurisdiction_type=JurisdictionType.COUNTY,
             authority_scope=AuthorityScope.ZONING,
             provider=Provider.MUNICODE,
@@ -102,11 +121,13 @@ class TestSourceSnapshotModel:
 
     def test_content_hash_is_deterministic(self):
         s1 = OrdinanceSourceSnapshot(
-            source_authority_id="auth_1", source_url="https://x",
+            source_authority_id="auth_1",
+            source_url="https://x",
             content="<html>same</html>",
         )
         s2 = OrdinanceSourceSnapshot(
-            source_authority_id="auth_1", source_url="https://x",
+            source_authority_id="auth_1",
+            source_url="https://x",
             content="<html>same</html>",
         )
         assert s1.content_hash == s2.content_hash
@@ -114,9 +135,11 @@ class TestSourceSnapshotModel:
 
     def test_different_content_different_hash(self):
         s1 = OrdinanceSourceSnapshot(
-            source_authority_id="auth_1", source_url="https://x", content="A")
+            source_authority_id="auth_1", source_url="https://x", content="A"
+        )
         s2 = OrdinanceSourceSnapshot(
-            source_authority_id="auth_1", source_url="https://x", content="B")
+            source_authority_id="auth_1", source_url="https://x", content="B"
+        )
         assert s1.content_hash != s2.content_hash
 
 
@@ -127,8 +150,13 @@ class TestHarnessEventModel:
         e = HarnessEvent(
             type=IngestionEventType.SOURCE_FETCH_COMPLETED,
             severity="info",
-            payload={"authority_id": "auth_1", "snapshot_id": "snap_1",
-                     "http_status": 200, "content_hash": "abc", "bytes": 1234},
+            payload={
+                "authority_id": "auth_1",
+                "snapshot_id": "snap_1",
+                "http_status": 200,
+                "content_hash": "abc",
+                "bytes": 1234,
+            },
         )
         assert e.id  # auto-generated
         assert e.timestamp
@@ -145,5 +173,6 @@ class TestHarnessEventModel:
         with pytest.raises((ValueError, Exception)):
             HarnessEvent(
                 type=IngestionEventType.SOURCE_FETCH_COMPLETED,
-                severity="info", payload={"authority_id": "auth_1"},  # missing fields
+                severity="info",
+                payload={"authority_id": "auth_1"},  # missing fields
             )

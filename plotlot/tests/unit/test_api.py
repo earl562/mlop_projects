@@ -498,7 +498,6 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
         mock_settings.openai_organization = ""
         mock_settings.openai_project = ""
         mock_settings.groq_api_key = ""
-        mock_settings.openrouter_api_key = ""
 
         resp = await client.get("/debug/llm")
 
@@ -513,6 +512,58 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
     _, create_kwargs = mock_client.chat.completions.create.await_args
     assert create_kwargs["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     assert create_kwargs["messages"][0]["content"] == "/no_think"
+    assert "reasoning_effort" not in create_kwargs
+
+
+@pytest.mark.asyncio
+async def test_debug_llm_reports_selected_openrouter_provider(client):
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+    with (
+        patch("openai.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
+        patch("plotlot.api.main.settings") as mock_settings,
+    ):
+        mock_settings.llm_provider = "openrouter"
+        mock_settings.openrouter_api_key = "openrouter-key"
+        mock_settings.openrouter_base_url = "https://openrouter.ai/api/v1"
+        mock_settings.openrouter_model = "deepseek/deepseek-v4-flash"
+        mock_settings.openrouter_site_url = "https://plotlot.app"
+        mock_settings.openrouter_app_name = "PlotLot"
+        mock_settings.deepseek_api_key = ""
+        mock_settings.deepseek_base_url = "https://api.deepseek.com"
+        mock_settings.deepseek_model = "deepseek-v4-flash"
+        mock_settings.nvidia_api_key = "nv-key"
+        mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
+        mock_settings.nvidia_model = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+        mock_settings.openai_api_key = ""
+        mock_settings.openai_access_token = ""
+        mock_settings.openai_base_url = "https://api.openai.com/v1"
+        mock_settings.openai_model = "gpt-4.1"
+        mock_settings.openai_reasoning_effort = "medium"
+        mock_settings.openai_organization = ""
+        mock_settings.openai_project = ""
+        mock_settings.groq_api_key = ""
+
+        resp = await client.get("/debug/llm")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["providers"]["openrouter"]["status"] == "ok"
+    assert data["providers"]["openrouter"]["model"] == "deepseek/deepseek-v4-flash"
+    assert "nvidia" not in data["providers"]
+    _, client_kwargs = async_openai_ctor.call_args
+    assert client_kwargs["api_key"] == "openrouter-key"
+    assert client_kwargs["base_url"] == "https://openrouter.ai/api/v1"
+    assert client_kwargs["default_headers"] == {
+        "HTTP-Referer": "https://plotlot.app",
+        "X-OpenRouter-Title": "PlotLot",
+    }
+    _, create_kwargs = mock_client.chat.completions.create.await_args
+    assert create_kwargs["model"] == "deepseek/deepseek-v4-flash"
     assert "reasoning_effort" not in create_kwargs
 
 
@@ -586,6 +637,8 @@ async def test_chat_with_tool_use(client):
     }
     # Second call: LLM gives final answer after receiving tool results
     final_response = {"content": "The setback requirements are 25ft front...", "tool_calls": []}
+    fake_session = AsyncMock()
+    fake_session.close = AsyncMock()
 
     with (
         patch(
@@ -593,7 +646,12 @@ async def test_chat_with_tool_use(client):
             new_callable=AsyncMock,
             side_effect=[tool_response, final_response],
         ),
-        patch("plotlot.api.chat.hybrid_search", new_callable=AsyncMock, return_value=[]),
+        patch("plotlot.harness.ordinance_lookup.get_session", AsyncMock(return_value=fake_session)),
+        patch(
+            "plotlot.harness.ordinance_lookup.hybrid_search",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         resp = await client.post(
             "/api/v1/chat",
@@ -604,6 +662,232 @@ async def test_chat_with_tool_use(client):
     assert "tool_use" in body
     assert "tool_result" in body
     assert "setback" in body.lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_does_not_repeat_forced_deal_analysis_in_same_turn(client):
+    """A forced Florida harness run is the turn's full analysis, not a warm-up call."""
+    from plotlot.api.chat import _sessions
+
+    session_id = "forced-analysis-dedup"
+    _sessions.delete_session(session_id)
+    executions: list[str] = []
+    exposed_tool_sets: list[set[str]] = []
+    system_prompts: list[str] = []
+
+    async def fake_execute_tool(name, args, *, session_id="", context=None):
+        executions.append(name)
+        _sessions.set_analysis(
+            session_id,
+            {
+                "status": "success",
+                "analysis_origin": "harness_run",
+                "address": args["address"],
+                "zoning_code": "EU-1",
+                "by_right": {"max_units": None},
+                "warnings": ["Ordinance standards remain unknown."],
+            },
+        )
+        return json.dumps({"status": "success", "tool_name": name})
+
+    async def fake_call_llm(_messages, *, tools=None):
+        system_prompts.append(_messages[0]["content"])
+        exposed_names = {tool["function"]["name"] for tool in (tools or []) if tool.get("function")}
+        exposed_tool_sets.append(exposed_names)
+        if "run_deal_analysis" in exposed_names:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "duplicate_run",
+                        "function": {
+                            "name": "run_deal_analysis",
+                            "arguments": json.dumps(
+                                {
+                                    "address": "11925 SW 88th Ct, Miami, FL 33176",
+                                    "analysis_type": "acquisition_memo",
+                                }
+                            ),
+                        },
+                    }
+                ],
+            }
+        return {
+            "content": (
+                "The live analysis completed with ordinance fields left unknown. "
+                "Evidence: evt_not_recorded."
+            ),
+            "tool_calls": [],
+        }
+
+    with (
+        patch("plotlot.api.chat._execute_tool", new=fake_execute_tool),
+        patch("plotlot.api.chat.call_llm", new=fake_call_llm),
+    ):
+        resp = await client.post(
+            "/api/v1/chat",
+            json={
+                "message": (
+                    "Use run_deal_analysis with analysis_type acquisition_memo for "
+                    "11925 SW 88th Ct, Miami, FL 33176 and report unsupported zoning "
+                    "fields as unknown."
+                ),
+                "session_id": session_id,
+            },
+        )
+
+    assert resp.status_code == 200
+    assert executions == ["run_deal_analysis"]
+    assert exposed_tool_sets == [set()]
+    assert "FULL HARNESS RUN COMPLETE" in system_prompts[0]
+    assert "Do not emit function-call syntax" in system_prompts[0]
+    assert "absence is not evidence that none exists" in system_prompts[0]
+    assert resp.text.count("event: tool_use") == 1
+    assert resp.text.count("event: tool_result") == 1
+    assert '"status": "complete"' in resp.text
+    assert "ordinance fields left unknown" in resp.text
+    assert "evt_not_recorded" not in resp.text
+    assert "narrator-generated evidence identifiers" in resp.text
+    _sessions.delete_session(session_id)
+
+
+@pytest.mark.asyncio
+async def test_chat_surfaces_failed_forced_deal_analysis_without_fake_followup(client):
+    """A completed tool call can carry a failed run and must remain a terminal failure."""
+    from plotlot.api.chat import _sessions
+
+    session_id = "forced-analysis-failed"
+    _sessions.delete_session(session_id)
+    executions: list[str] = []
+
+    async def fake_execute_tool(name, _args, *, session_id="", context=None):
+        executions.append(name)
+        return json.dumps(
+            {
+                "status": "failed",
+                "ok": False,
+                "tool_name": name,
+                "source_mode": "live",
+                "evidence_ids": [],
+                "warnings": ["Official parcel record could not be resolved."],
+                "error": {
+                    "code": "property_not_found",
+                    "message": "No authoritative parcel matched the supplied address.",
+                },
+            }
+        )
+
+    with (
+        patch("plotlot.api.chat._execute_tool", new=fake_execute_tool),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("failed harness runs must bypass model narration"),
+        ),
+    ):
+        resp = await client.post(
+            "/api/v1/chat",
+            json={
+                "message": (
+                    "Use run_deal_analysis with source_mode live and analysis_type "
+                    "acquisition_memo for 623 4TH ST, West Palm Beach, FL 33401."
+                ),
+                "session_id": session_id,
+            },
+        )
+
+    assert resp.status_code == 200
+    assert executions == ["run_deal_analysis"]
+    assert '"status": "error"' in resp.text
+    assert "Analysis blocked" in resp.text
+    assert "property_not_found" in resp.text
+    assert "No evidence IDs were recorded" in resp.text
+    assert "Calling analyze_property" not in resp.text
+    _sessions.delete_session(session_id)
+
+
+@pytest.mark.asyncio
+async def test_chat_blocks_property_evaluation_when_required_data_is_missing(client):
+    from plotlot.api.chat import _sessions
+
+    session_id = "forced-analysis-data-gap"
+    _sessions.delete_session(session_id)
+
+    async def fake_execute_tool(name, args, *, session_id="", context=None):
+        active_analysis = {
+            "status": "blocked",
+            "analysis_origin": "harness_run",
+            "address": args["address"],
+            "folio": "74434321060170150",
+            "owner": "CANARY RE LLC",
+            "zoning_code": "NWD-R",
+            "lot_size_sqft": 7000.092000000001,
+            "lot_size_source": "assessor",
+            "evidence_ids": ["ev_verified_parcel", "ev_preliminary_zoning"],
+            "evaluation_readiness": {
+                "status": "blocked",
+                "can_recommend": False,
+                "reason": "Required development-capacity evidence is missing.",
+                "missing_requirements": [
+                    "official_dimensional_standards",
+                    "deterministic_feasibility",
+                    "verified_underwriting_inputs",
+                ],
+                "completed_requirements": ["authoritative_parcel_identity"],
+                "allowed_outputs": [
+                    "parcel_identity",
+                    "preliminary_zoning_context",
+                    "evidence_gap_plan",
+                ],
+                "next_steps": [
+                    "Retrieve the controlling municipal ordinance section.",
+                    "Run deterministic feasibility after the standards are verified.",
+                ],
+            },
+        }
+        _sessions.set_analysis(session_id, active_analysis)
+        return json.dumps(
+            {
+                "status": "success",
+                "ok": True,
+                "evaluation_status": "blocked",
+                "tool_name": name,
+                "source_mode": "live",
+                "active_analysis": active_analysis,
+                "evidence_ids": active_analysis["evidence_ids"],
+                "warnings": ["Official dimensional standards were not resolved."],
+            }
+        )
+
+    with (
+        patch("plotlot.api.chat._execute_tool", new=fake_execute_tool),
+        patch(
+            "plotlot.api.chat.call_llm",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("blocked evaluations must bypass model narration"),
+        ),
+    ):
+        resp = await client.post(
+            "/api/v1/chat",
+            json={
+                "message": (
+                    "Use run_deal_analysis with source_mode live and analysis_type "
+                    "acquisition_memo for 623 4TH ST, West Palm Beach, FL 33401."
+                ),
+                "session_id": session_id,
+            },
+        )
+
+    assert resp.status_code == 200
+    assert '"status": "blocked"' in resp.text
+    assert "Evaluation blocked" in resp.text
+    assert "No valuation or offer recommendation was produced" in resp.text
+    assert "7,000 sqft" in resp.text
+    assert "7000.092000000001" not in resp.text
+    assert "official_dimensional_standards" in resp.text
+    assert "$282,805" not in resp.text
+    assert "$653,589" not in resp.text
+    _sessions.delete_session(session_id)
 
 
 @pytest.mark.asyncio

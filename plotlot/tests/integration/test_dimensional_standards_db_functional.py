@@ -6,10 +6,21 @@ works, and live DB queries are real.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from plotlot.domain.dimensional_standard import VerificationStatus
 from plotlot.storage.dimensional_standards import get_dimensional_standard
 from plotlot.storage.db import init_db
+
+_LIVE = os.environ.get("PLOTLOT_LIVE_TESTS") == "1"
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _LIVE,
+        reason="set PLOTLOT_LIVE_TESTS=1 and seed the dimensional-standards database",
+    ),
+]
 
 
 @pytest.fixture(autouse=True)
@@ -21,9 +32,13 @@ class TestDimensionalStandardsDB:
     @pytest.mark.asyncio
     async def test_verified_ftl_row_returns_with_fixture_fallback_disabled(self):
         """Live DB returns verified FTL rows, not fixture."""
-        got = await get_dimensional_standard("Fort Lauderdale", "RS-8", allow_fixture_fallback=False)
+        got = await get_dimensional_standard(
+            "Fort Lauderdale", "RS-8", allow_fixture_fallback=False
+        )
         assert got is not None, "live DB must have verified FTL/RS-8"
-        assert got.verification_status == VerificationStatus.VERIFIED, f"FTL/RS-8 must be VERIFIED, got {got.verification_status}"
+        assert got.verification_status == VerificationStatus.VERIFIED, (
+            f"FTL/RS-8 must be VERIFIED, got {got.verification_status}"
+        )
         assert got.max_density_units_per_acre == 8.0
         assert got.setback_rear_ft == 15  # verified from Sec. 47-5.31
         assert got.is_verified_fact_source() is True
@@ -33,8 +48,12 @@ class TestDimensionalStandardsDB:
         got = await get_dimensional_standard("Miami", "R-4", allow_fixture_fallback=False)
         if got is None:
             pytest.skip("Miami/R-4 not in live DB")
-        assert got.verification_status != VerificationStatus.VERIFIED, "staged row must NOT be verified"
-        assert got.is_verified_fact_source() is False, "staged row must not be a verified_fact source"
+        assert got.verification_status != VerificationStatus.VERIFIED, (
+            "staged row must NOT be verified"
+        )
+        assert got.is_verified_fact_source() is False, (
+            "staged row must not be a verified_fact source"
+        )
 
     @pytest.mark.asyncio
     async def test_staged_hollywood_row_is_not_verified(self):
@@ -52,7 +71,9 @@ class TestDimensionalStandardsDB:
     @pytest.mark.asyncio
     async def test_fixture_fallback_disabled_does_not_return_fixture_only_data(self):
         """Even Fort Lauderdale RS-4.4 should come from DB (not fixture) when fallback is off."""
-        got = await get_dimensional_standard("Fort Lauderdale", "RS-4.4", allow_fixture_fallback=False)
+        got = await get_dimensional_standard(
+            "Fort Lauderdale", "RS-4.4", allow_fixture_fallback=False
+        )
         if got is None:
             pytest.skip("FTL/RS-4.4 not in live DB")
         assert got.max_density_units_per_acre == 4.4
@@ -61,7 +82,9 @@ class TestDimensionalStandardsDB:
     @pytest.mark.asyncio
     async def test_verified_row_produces_real_numeric_params(self):
         """A verified standard must convert to NumericZoningParams correctly."""
-        got = await get_dimensional_standard("Fort Lauderdale", "RS-8", allow_fixture_fallback=False)
+        got = await get_dimensional_standard(
+            "Fort Lauderdale", "RS-8", allow_fixture_fallback=False
+        )
         assert got is not None
         params = got.to_numeric_zoning_params()
         assert params.max_density_units_per_acre == 8.0

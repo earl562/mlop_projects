@@ -432,6 +432,8 @@ html:has(.coded-site) {
 }
 
 .analyze-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100dvh;
 }
 
@@ -574,6 +576,19 @@ html:has(.coded-site) {
 
 .analyze-stage-pill.idle {
   color: var(--coded-muted);
+}
+
+.analyze-stage-pill.attention,
+.analyze-tools span.blocked {
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+
+.analyze-tools span.error {
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: var(--danger-subtle);
+  color: var(--danger);
 }
 
 .analyze-plan-list {

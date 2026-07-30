@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plotlot.core.types import SearchResult
+from plotlot.harness.ordinance_lookup import _rerank_search_results
 from plotlot.retrieval.search import _hybrid_rrf, _keyword_only, hybrid_search
 
 
@@ -201,3 +203,32 @@ def test_chat_agent_prompt_does_not_hardcode_whole_area():
     # 'whole area' may appear as an example in context, but the rule itself
     # must cover ambiguous intent generically, not just this one phrase
     assert "ambiguous" in prompt.lower() or "unclear" in prompt.lower()
+
+
+def test_rerank_search_results_prefers_exact_municipality_and_zone_code():
+    results = [
+        SearchResult(
+            section="1",
+            section_title="Miami generic",
+            zone_codes=["R-1"],
+            chunk_text="generic",
+            score=0.99,
+            municipality="Miami",
+        ),
+        SearchResult(
+            section="2",
+            section_title="Miami Gardens exact",
+            zone_codes=["R-1"],
+            chunk_text="exact",
+            score=0.50,
+            municipality="Miami Gardens",
+        ),
+    ]
+
+    ranked = _rerank_search_results(
+        results,
+        municipality="Miami Gardens",
+        zone_code_boost="R-1",
+    )
+
+    assert ranked[0].municipality == "Miami Gardens"

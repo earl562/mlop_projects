@@ -384,6 +384,63 @@ class TestAnalyzeZoning:
         assert kwargs["messages"][0]["content"] == "/no_think"
 
     @pytest.mark.asyncio
+    async def test_openrouter_primary_is_selected_ahead_of_nvidia_in_auto_mode(self):
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content="ok",
+                    tool_calls=[],
+                ),
+            )
+        ]
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=2)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch(
+                "plotlot.retrieval.llm.AsyncOpenAI", return_value=mock_client
+            ) as async_openai_ctor,
+            patch("plotlot.retrieval.llm.settings") as mock_settings,
+        ):
+            mock_settings.llm_provider = "auto"
+            mock_settings.openrouter_api_key = "openrouter-key"
+            mock_settings.openrouter_base_url = "https://openrouter.ai/api/v1"
+            mock_settings.openrouter_model = "deepseek/deepseek-v4-flash"
+            mock_settings.openrouter_site_url = "https://plotlot.app"
+            mock_settings.openrouter_app_name = "PlotLot"
+            mock_settings.deepseek_api_key = ""
+            mock_settings.deepseek_base_url = "https://api.deepseek.com"
+            mock_settings.deepseek_model = "deepseek-v4-flash"
+            mock_settings.nvidia_api_key = "nv-key"
+            mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"
+            mock_settings.nvidia_model = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+            mock_settings.nvidia_fallback_model = "minimaxai/minimax-m2.5"
+            mock_settings.openai_api_key = ""
+            mock_settings.openai_access_token = ""
+            mock_settings.use_codex_oauth = False
+            mock_settings.openai_base_url = "https://api.openai.com/v1"
+            mock_settings.openai_model = "gpt-4.1"
+            mock_settings.openai_reasoning_effort = "medium"
+
+            result = await call_llm([{"role": "user", "content": "Reply with exactly ok"}])
+
+        assert result == {"content": "ok", "tool_calls": []}
+        _, client_kwargs = async_openai_ctor.call_args
+        assert client_kwargs["api_key"] == "openrouter-key"
+        assert client_kwargs["base_url"] == "https://openrouter.ai/api/v1"
+        assert client_kwargs["default_headers"] == {
+            "HTTP-Referer": "https://plotlot.app",
+            "X-OpenRouter-Title": "PlotLot",
+        }
+        _, kwargs = mock_client.chat.completions.create.await_args
+        assert kwargs["model"] == "deepseek/deepseek-v4-flash"
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["messages"] == [{"role": "user", "content": "Reply with exactly ok"}]
+
+    @pytest.mark.asyncio
     async def test_call_llm_recovers_text_emitted_tool_call(self):
         """A NIM model that prints <tool_call> as text → call_llm returns it
         structurally so the agent loop executes it (the Q4 leak fix)."""

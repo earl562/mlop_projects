@@ -1,4 +1,5 @@
 """PlotLot MCP server package.
 
-Entry point: `uv run plotlot-mcp`  (registered in pyproject.toml)
+Default entry point: `uv run plotlot-mcp` -> governed harness MCP server.
+Legacy entry point: `uv run plotlot-legacy-mcp`.
 """

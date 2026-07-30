@@ -1,4 +1,4 @@
-.PHONY: install install-local-tools auth-readiness auth-bootstrap live-agent-e2e mutation test verify-local verify-local-no-browser lint fmt discover ingest db-up db-down clean
+.PHONY: install install-local-tools auth-readiness auth-bootstrap live-agent-e2e btdi btdi-connected mutation test verify-local verify-local-no-browser lint fmt discover ingest db-up db-down clean
 
 install:  ## Install all dependencies (including dev)
 	uv sync --extra dev
@@ -14,6 +14,12 @@ auth-bootstrap:  ## Bootstrap live credentials into .env via CLIs (see script --
 
 live-agent-e2e:  ## Start/verify backend and run served frontend live agent Playwright E2E
 	bash scripts/run_live_agent_e2e.sh
+
+btdi:  ## Build and run desktop/mobile visual evidence loop
+	bash scripts/build_test_debug_iterate.sh
+
+btdi-connected:  ## Run the connected lookup visual evidence loop (API + DB must be healthy)
+	bash scripts/build_test_debug_iterate.sh --connected
 
 mutation:  ## Run backend mutation testing (mutmut) on critical harness/tool surfaces (slow)
 	uv run mutmut run

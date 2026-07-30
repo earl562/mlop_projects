@@ -173,6 +173,27 @@ _COUNTY_URL_PATTERNS: list[str] = [
     "https://{county}county.gov/arcgis/rest/services",
 ]
 
+_BROWARD_BCPA_MAPSERVER = (
+    "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer"
+)
+_BROWARD_PARCEL_FIELDS = (
+    "SHAPE",
+    "FOLIO",
+    "OBJECTID",
+    "PARCEL_TYPE",
+    "GLOBALID",
+    "SHAPE.STArea()",
+    "SHAPE.STLength()",
+)
+_BROWARD_ZONING_FIELDS = (
+    "FID",
+    "Shape",
+    "ZONE_NAME",
+    "ZONING",
+    "OBJECTID",
+    "Area_Acres",
+)
+
 # Sub-area indicators: district/neighborhood datasets cover only a small slice
 # of the county and will fail spatial queries for addresses outside that area.
 _SUB_AREA_PENALTY_KEYWORDS = {
@@ -237,6 +258,12 @@ async def _discover_pair(
     """Run the three-stage discovery cascade for both parcels and zoning."""
 
     async def find(dataset_type: str) -> DatasetInfo | None:
+        curated = _curated_county_dataset(county, state, dataset_type)
+        if curated is not None and (
+            not validate_coverage or await _has_coverage(curated, lat, lng)
+        ):
+            return curated
+
         # Stage 1: ArcGIS Hub
         result = await _search_hub(
             lat,
@@ -274,6 +301,41 @@ async def _discover_pair(
     parcels = await find("parcels")
     zoning = await find("zoning")
     return parcels, zoning
+
+
+def _curated_county_dataset(
+    county: str,
+    state: str,
+    dataset_type: str,
+) -> DatasetInfo | None:
+    county_key = " ".join(county.casefold().replace("-", " ").split())
+    state_key = state.casefold().strip()
+    if county_key != "broward" or state_key not in {"fl", "florida"}:
+        return None
+
+    match dataset_type:
+        case "parcels":
+            layer_id = 16
+            name = "Broward County Property Appraiser Parcels"
+            fields: tuple[str, ...] = _BROWARD_PARCEL_FIELDS
+        case "zoning":
+            layer_id = 9
+            name = "Broward County City Zoning Codes"
+            fields = _BROWARD_ZONING_FIELDS
+        case _:
+            return None
+
+    layer_url = f"{_BROWARD_BCPA_MAPSERVER}/{layer_id}"
+    return DatasetInfo(
+        dataset_id=layer_url,
+        name=name,
+        url=_BROWARD_BCPA_MAPSERVER,
+        layer_id=layer_id,
+        dataset_type=dataset_type,
+        county=county,
+        state=state,
+        fields=list(fields),
+    )
 
 
 async def _search_hub(
@@ -657,7 +719,10 @@ async def _probe_arcgis_server(
                 if not layer_data:
                     continue
 
-                fields = [f.get("name", "") for f in layer_data.get("fields", [])]
+                raw_fields = layer_data.get("fields")
+                if not isinstance(raw_fields, list):
+                    continue
+                fields = [field.get("name", "") for field in raw_fields if isinstance(field, dict)]
                 if not fields:
                     continue
 

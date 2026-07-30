@@ -6,12 +6,20 @@ These tests query the same addresses through both the legacy provider and
 the UniversalProvider, then compare field values within tolerance.
 """
 
+import os
+
 import pytest
 
 from plotlot.property.miami_dade import MiamiDadeProvider
 from plotlot.property.broward import BrowardProvider
 from plotlot.property.palm_beach import PalmBeachProvider
 from plotlot.property.universal import UniversalProvider
+
+_LIVE = os.environ.get("PLOTLOT_LIVE_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not _LIVE,
+    reason="set PLOTLOT_LIVE_TESTS=1 to query live county property endpoints",
+)
 
 
 VALIDATION_CASES = [

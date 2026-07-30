@@ -15,6 +15,7 @@ from typing import Any
 
 class Provider(str, Enum):
     """Where the ordinance text comes from. Master spec §5 provider priority."""
+
     OFFICIAL_HTML = "official_html"
     OFFICIAL_PDF = "official_pdf"
     MUNICODE = "municode"
@@ -35,6 +36,7 @@ class JurisdictionType(str, Enum):
 
 class AuthorityScope(str, Enum):
     """What kind of regulation the authority covers."""
+
     ZONING = "zoning"
     LAND_DEVELOPMENT = "land_development"
     CODE_OF_ORDINANCES = "code_of_ordinances"
@@ -46,6 +48,7 @@ class AuthorityScope(str, Enum):
 
 class OfficialStatus(str, Enum):
     """Master spec §5: official | publisher_copy | informational | unknown."""
+
     OFFICIAL = "official"
     PUBLISHER_COPY = "publisher_copy"
     INFORMATIONAL = "informational"
@@ -92,6 +95,9 @@ class JurisdictionSourceAuthority:
     source_version: str | None = None
     supplement_number: str | None = None
     effective_date: str | None = None
+    source_kind: str = (
+        "base_code"  # base_code | supplement | adopted_ordinance | overlay | gis_layer | manual
+    )
     ingestion_status: str = "pending"
     coverage_score: float | None = None
     metadata_json: dict[str, Any] = field(default_factory=dict)
@@ -104,13 +110,9 @@ class JurisdictionSourceAuthority:
                 "(no authority without a source)."
             )
         if not self.canonical_url or not self.canonical_url.strip():
-            raise ValueError(
-                "JurisdictionSourceAuthority requires a non-empty canonical_url."
-            )
+            raise ValueError("JurisdictionSourceAuthority requires a non-empty canonical_url.")
         if not self.source_title or not self.source_title.strip():
-            raise ValueError(
-                "JurisdictionSourceAuthority requires a non-empty source_title."
-            )
+            raise ValueError("JurisdictionSourceAuthority requires a non-empty source_title.")
         if not self.legal_caveat or not self.legal_caveat.strip():
             raise ValueError(
                 "JurisdictionSourceAuthority requires a legal_caveat "
@@ -126,6 +128,7 @@ class JurisdictionSourceAuthority:
 
 
 def _authority_id(a: JurisdictionSourceAuthority) -> str:
-    """Deterministic id: state-county-muni-scope-provider."""
+    """Deterministic id: state-county-muni-scope-provider-kind."""
     muni = (a.municipality or "unincorporated").lower().replace(" ", "_")
-    return f"auth_{a.state.lower()}_{a.county.lower().replace(' ','_')}_{muni}_{a.authority_scope.value}_{a.provider.value}"
+    kind = (a.source_kind or "base_code").lower().replace(" ", "_")
+    return f"auth_{a.state.lower()}_{a.county.lower().replace(' ', '_')}_{muni}_{a.authority_scope.value}_{a.provider.value}_{kind}"

@@ -19,7 +19,9 @@ from plotlot.core.types import PropertyRecord
 from plotlot.pipeline.comps import find_comparables
 
 _LIVE = os.environ.get("PLOTLOT_LIVE_TESTS") == "1"
-pytestmark = pytest.mark.skipif(not _LIVE, reason="set PLOTLOT_LIVE_TESTS=1 to run live comps tests")
+pytestmark = pytest.mark.skipif(
+    not _LIVE, reason="set PLOTLOT_LIVE_TESTS=1 to run live comps tests"
+)
 
 
 @pytest.mark.asyncio

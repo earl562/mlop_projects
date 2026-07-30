@@ -88,7 +88,6 @@ jobs:
     env:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
-      NEXT_PUBLIC_GOOGLE_MAPS_KEY: dummy-key
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dummy
       CLERK_SECRET_KEY: sk_test_dummy
       STRIPE_SECRET_KEY: sk_test_dummy
@@ -134,6 +133,38 @@ jobs:
             plotlot/frontend/playwright-report
             plotlot/frontend/test-results
           if-no-files-found: ignore
+          retention-days: 7
+
+  playwright-visual:
+    name: Playwright Visual Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [frontend-quality]
+    defaults:
+      run:
+        working-directory: plotlot/frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+      PLOTLOT_PLAYWRIGHT_OUTPUT_DIR: ../.artifacts/btdi/ci/test-results
+      PLOTLOT_PLAYWRIGHT_REPORT_DIR: ../.artifacts/btdi/ci/playwright-report
+      PLOTLOT_PLAYWRIGHT_JSON: ../.artifacts/btdi/ci/results.json
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: plotlot/frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:btdi
+      - name: Upload fresh visual evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-visual-evidence
+          path: plotlot/.artifacts/btdi/ci
+          if-no-files-found: error
           retention-days: 7
 
   playwright-db:

@@ -13,15 +13,17 @@ Broward's DB-qualified "SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT" and Miami-Dade's
 
 from __future__ import annotations
 
-from plotlot.pipeline.comps import _DATE_FIELDS, _PRICE_FIELDS, _find_field
+from plotlot.pipeline.comps import _ADDR_FIELDS, _DATE_FIELDS, _PRICE_FIELDS, _find_field
 from plotlot.pipeline.comps_sources import get_sales_source
 
 
 def test_miami_dade_price_and_date_fields_resolve():
     src = get_sales_source("FL", "Miami-Dade")
     assert src is not None
+    address = _find_field(list(src.fields), _ADDR_FIELDS)
     price = _find_field(list(src.fields), _PRICE_FIELDS)
     date = _find_field(list(src.fields), _DATE_FIELDS)
+    assert address is not None, f"address field not resolved for Miami-Dade from {src.fields}"
     assert price is not None, f"price field not resolved for Miami-Dade from {src.fields}"
     assert date is not None, f"date field not resolved for Miami-Dade from {src.fields}"
 

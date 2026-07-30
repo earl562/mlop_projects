@@ -54,7 +54,9 @@ async def test_infill_analyzer_runs_all_scenarios_per_lot():
         assert pr.lot_size_sqft and pr.lot_size_sqft > 0, f"no lot size for {address}"
 
         results = await analyze_residential_infill(
-            address=address, municipality=municipality, district_code=pr.zoning_code,
+            address=address,
+            municipality=municipality,
+            district_code=pr.zoning_code,
             lot_size_sqft=pr.lot_size_sqft,
             lot_width_ft=None,  # lot width parse is separate; scenarios degrade gracefully
             source_url="https://opendata/zoning-query",
@@ -64,8 +66,12 @@ async def test_infill_analyzer_runs_all_scenarios_per_lot():
 
         # Scenario names
         names = {r.scenario for r in results}
-        assert names == {"by_right_density", "lot_split_feasibility",
-                         "missing_middle_adu", "assemblage_potential"}
+        assert names == {
+            "by_right_density",
+            "lot_split_feasibility",
+            "missing_middle_adu",
+            "assemblage_potential",
+        }
 
         # Each claim is typed correctly
         for r in results:
@@ -96,8 +102,12 @@ async def test_by_right_density_is_deterministic_calculation():
     geo = await geocode_address(address)
     pr = await lookup_property(address, county, lat=geo["lat"], lng=geo["lng"])
     results = await analyze_residential_infill(
-        address=address, municipality=municipality, district_code=pr.zoning_code,
-        lot_size_sqft=pr.lot_size_sqft, source_url="test", allow_fixture_fallback=False,
+        address=address,
+        municipality=municipality,
+        district_code=pr.zoning_code,
+        lot_size_sqft=pr.lot_size_sqft,
+        source_url="test",
+        allow_fixture_fallback=False,
     )
     by_right = next(r for r in results if r.scenario == "by_right_density")
     # Fort Lauderdale has verified standards → calculation, not hypothesis.

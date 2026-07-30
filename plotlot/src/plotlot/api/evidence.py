@@ -7,14 +7,20 @@ execution.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
+from plotlot.harness.contracts import EvidenceId as HarnessEvidenceId
+from plotlot.harness.evidence_store import EvidenceNotFoundError, default_evidence_ledger
 from plotlot.storage.db import get_session
-from plotlot.storage.models import Document, EvidenceItem, Report
+from plotlot.storage.models import Document, EvidenceItem as StorageEvidenceItem, Report
 
 
 router = APIRouter(prefix="/api/v1", tags=["evidence"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/evidence")
@@ -29,16 +35,16 @@ async def list_evidence(
 ):
     session = await get_session()
     try:
-        q = select(EvidenceItem).where(EvidenceItem.workspace_id == workspace_id)
+        q = select(StorageEvidenceItem).where(StorageEvidenceItem.workspace_id == workspace_id)
         if project_id:
-            q = q.where(EvidenceItem.project_id == project_id)
+            q = q.where(StorageEvidenceItem.project_id == project_id)
         if site_id:
-            q = q.where(EvidenceItem.site_id == site_id)
+            q = q.where(StorageEvidenceItem.site_id == site_id)
         if analysis_id:
-            q = q.where(EvidenceItem.analysis_id == analysis_id)
+            q = q.where(StorageEvidenceItem.analysis_id == analysis_id)
         if analysis_run_id:
-            q = q.where(EvidenceItem.analysis_run_id == analysis_run_id)
-        q = q.order_by(EvidenceItem.retrieved_at.desc()).limit(limit).offset(offset)
+            q = q.where(StorageEvidenceItem.analysis_run_id == analysis_run_id)
+        q = q.order_by(StorageEvidenceItem.retrieved_at.desc()).limit(limit).offset(offset)
         result = await session.execute(q)
         rows = result.scalars().all()
         return [
@@ -68,9 +74,16 @@ async def list_evidence(
 async def get_evidence(evidence_id: str):
     session = await get_session()
     try:
-        row = await session.get(EvidenceItem, evidence_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Evidence not found")
+        row = await session.get(StorageEvidenceItem, evidence_id)
+    except (OSError, SQLAlchemyError):
+        logger.warning(
+            "Durable evidence store unavailable; reading replay ledger",
+            exc_info=True,
+        )
+        row = None
+    finally:
+        await session.close()
+    if row is not None:
         return {
             "id": row.id,
             "workspace_id": row.workspace_id,
@@ -92,8 +105,14 @@ async def get_evidence(evidence_id: str):
             "metadata_json": row.metadata_json,
             "retrieved_at": row.retrieved_at.isoformat(),
         }
-    finally:
-        await session.close()
+    try:
+        return (
+            default_evidence_ledger()
+            .get_evidence(HarnessEvidenceId(evidence_id))
+            .model_dump(mode="json")
+        )
+    except EvidenceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Evidence not found") from exc
 
 
 @router.get("/artifacts/reports")

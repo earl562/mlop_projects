@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlotLot Agentic Harness Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1e1e1e;
+        --muted: #5c6770;
+        --surface: #f8f9fa;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: #ffffff;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #e9ecef;
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .stage {
+        width: 100%;
+        min-height: calc(100vh - 58px);
+        overflow: auto;
+        background:
+          linear-gradient(#f1f3f5 1px, transparent 1px),
+          linear-gradient(90deg, #f1f3f5 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+
+      svg {
+        display: block;
+        width: 2440px;
+        height: 1220px;
+      }
+
+      text {
+        fill: var(--ink);
+        font-family:
+          "Virgil", "Comic Sans MS", Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .label {
+        fill: var(--muted);
+        font-size: 12px;
+      }
+
+      .shape {
+        filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.05));
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PlotLot Agentic Harness</h1>
+      <div class="meta">Local preview of plotlot-agentic-harness.excalidraw</div>
+    </header>
+    <main class="stage">
+      <svg id="canvas" viewBox="0 0 2440 1220" role="img" aria-label="PlotLot agentic harness Excalidraw preview">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#1e1e1e"></path>
+          </marker>
+        </defs>
+      </svg>
+    </main>
+    <script>
+      const svg = document.querySelector("#canvas");
+
+      function svgEl(name, attrs = {}) {
+        const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+        for (const [key, value] of Object.entries(attrs)) {
+          el.setAttribute(key, String(value));
+        }
+        return el;
+      }
+
+      function wrapText(text, maxChars) {
+        const lines = [];
+        for (const explicitLine of text.split("\n")) {
+          const words = explicitLine.split(/\s+/).filter(Boolean);
+          let line = "";
+          for (const word of words) {
+            const next = line ? `${line} ${word}` : word;
+            if (next.length > maxChars && line) {
+              lines.push(line);
+              line = word;
+            } else {
+              line = next;
+            }
+          }
+          lines.push(line);
+        }
+        return lines.filter((line) => line.length > 0);
+      }
+
+      function drawRectangle(element) {
+        svg.append(
+          svgEl("rect", {
+            class: "shape",
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+            rx: 12,
+            fill: element.backgroundColor || "transparent",
+            stroke: element.strokeColor || "#1e1e1e",
+            "stroke-width": element.strokeWidth || 2,
+          }),
+        );
+      }
+
+      function drawText(element) {
+        const fontSize = element.fontSize || 16;
+        const maxChars = Math.max(12, Math.floor(element.width / (fontSize * 0.58)));
+        const lines = wrapText(element.text || "", maxChars);
+        const textEl = svgEl("text", {
+          x: element.x,
+          y: element.y + fontSize,
+          "font-size": fontSize,
+          "font-weight": element.fontSize >= 24 ? 700 : 500,
+        });
+
+        const lineHeight = fontSize * (element.lineHeight || 1.25);
+        for (const [index, line] of lines.entries()) {
+          const tspan = svgEl("tspan", {
+            x: element.x,
+            dy: index === 0 ? 0 : lineHeight,
+          });
+          tspan.textContent = line;
+          textEl.append(tspan);
+        }
+        svg.append(textEl);
+      }
+
+      function drawArrow(element) {
+        if (!Array.isArray(element.points) || element.points.length < 2) return;
+        const points = element.points.map(([px, py]) => `${element.x + px},${element.y + py}`).join(" ");
+        svg.append(
+          svgEl("polyline", {
+            points,
+            fill: "none",
+            stroke: element.strokeColor || "#1e1e1e",
+            "stroke-width": element.strokeWidth || 2,
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "marker-end": element.endArrowhead ? "url(#arrowhead)" : "",
+          }),
+        );
+      }
+
+      async function render() {
+        const response = await fetch("./plotlot-agentic-harness.excalidraw");
+        const scene = await response.json();
+        for (const element of scene.elements.filter((item) => !item.isDeleted)) {
+          if (element.type === "rectangle") drawRectangle(element);
+          if (element.type === "arrow") drawArrow(element);
+        }
+        for (const element of scene.elements.filter((item) => !item.isDeleted)) {
+          if (element.type === "text") drawText(element);
+        }
+      }
+
+      render().catch((error) => {
+        const message = svgEl("text", { x: 80, y: 120, "font-size": 18 });
+        message.textContent = `Could not render Excalidraw preview: ${error.message}`;
+        svg.append(message);
+      });
+    </script>
+  </body>
+</html>

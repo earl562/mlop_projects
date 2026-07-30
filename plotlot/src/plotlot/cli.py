@@ -88,7 +88,11 @@ def _print_credit_summary(
 
 def _init_mlflow() -> None:
     """Initialize MLflow tracking for the current process."""
-    if not configure_mlflow(settings.mlflow_tracking_uri, settings.mlflow_experiment_name):
+    if not configure_mlflow(
+        settings.mlflow_tracking_uri,
+        settings.mlflow_experiment_name,
+        enable_tracing=settings.mlflow_tracing_enabled,
+    ):
         logging.getLogger(__name__).warning(
             "MLflow tracing unavailable — continuing without tracing"
         )

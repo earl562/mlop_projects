@@ -76,6 +76,32 @@ class TestDiscoverDatasets:
             ]
         }
 
+    async def test_broward_curated_layers_precede_hub_search(self):
+        with (
+            patch(
+                "plotlot.property.hub_discovery._has_coverage",
+                new=AsyncMock(return_value=True),
+            ),
+            patch(
+                "plotlot.property.hub_discovery._search_hub",
+                new=AsyncMock(
+                    side_effect=AssertionError("curated official layers must precede Hub search")
+                ),
+            ),
+        ):
+            parcels, zoning = await discover_datasets(
+                26.12,
+                -80.14,
+                "Broward",
+                "FL",
+            )
+
+        assert parcels is not None
+        assert parcels.layer_id == 16
+        assert "bcpa.net" in parcels.url
+        assert zoning is not None
+        assert zoning.layer_id == 9
+
     async def test_discover_returns_datasets(self, hub_response, fields_response):
         """Hub search + layer inspection → DatasetInfo."""
         layers_response = {

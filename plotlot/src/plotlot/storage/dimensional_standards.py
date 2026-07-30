@@ -32,7 +32,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard, VerificationStatus
 from plotlot.storage.db import get_session
 from plotlot.storage.models import DistrictDimensionalStandardORM
 
@@ -70,37 +70,64 @@ def _seed_fort_lauderdale_fixture() -> None:
         # (25 ft only when abutting a waterway), coverage 50% (≤7,500 sf tier),
         # FAR 0.75 (≤7,500 sf tier).
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RS-8",
-            min_lot_area_sqft=6000.0, min_lot_width_ft=50.0,
-            setback_front_ft=25.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=50.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RS-8",
+            min_lot_area_sqft=6000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=25.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=50.0,
+            far=0.75,
             max_density_units_per_acre=8.0,
             source_section_id="Sec. 47-5.31 (ordinance_chunks id=3755)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            verification_status=VerificationStatus.VERIFIED,
         ),
         # RS-4.4: Sec. 47-5.30 (ordinance_chunks id=3752). NOTE: the real code
         # is RS-4.4, NOT RS-4 (no RS-4 district exists). 4.4 du/net ac, min lot
         # 10,000 sf, height 35 ft, width 75 ft, front 25 ft, side 10 ft, rear
         # 15 ft, coverage 45%, FAR 0.75.
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RS-4.4",
-            min_lot_area_sqft=10000.0, min_lot_width_ft=75.0,
-            setback_front_ft=25.0, setback_side_ft=10.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RS-4.4",
+            min_lot_area_sqft=10000.0,
+            min_lot_width_ft=75.0,
+            setback_front_ft=25.0,
+            setback_side_ft=10.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=4.4,
             source_section_id="Sec. 47-5.30 (ordinance_chunks id=3752)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            verification_status=VerificationStatus.VERIFIED,
         ),
         # RM-15: Sec. 47-5.34 (ordinance_chunks id=3764). 15 du/net ac, min lot
         # 5,000 sf, height 35 ft, width 50 ft, front 25 ft, side 5 ft, rear 15 ft.
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RM-15",
-            min_lot_area_sqft=5000.0, min_lot_width_ft=50.0,
-            setback_front_ft=25.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RM-15",
+            min_lot_area_sqft=5000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=25.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=15.0,
             source_section_id="Sec. 47-5.34 (ordinance_chunks id=3764)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            verification_status=VerificationStatus.VERIFIED,
         ),
     ]
     for row in rows:
@@ -118,63 +145,160 @@ def _seed_multi_municipality_fixtures() -> None:
     """
     miami_rows = [
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-1", min_lot_area_sqft=7500.0, min_lot_width_ft=75.0,
-            setback_front_ft=25.0, setback_side_ft=7.5, setback_rear_ft=25.0,
-            max_height_ft=35.0, max_lot_coverage_pct=40.0, far=0.50,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-1",
+            min_lot_area_sqft=7500.0,
+            min_lot_width_ft=75.0,
+            setback_front_ft=25.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=25.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=40.0,
+            far=0.50,
             max_density_units_per_acre=5.8,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
+            verification_status=VerificationStatus.STAGED,
         ),
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-3", min_lot_area_sqft=5000.0, min_lot_width_ft=50.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=45.0, max_lot_coverage_pct=50.0, far=0.80,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-3",
+            min_lot_area_sqft=5000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=45.0,
+            max_lot_coverage_pct=50.0,
+            far=0.80,
             max_density_units_per_acre=17.4,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
+            verification_status=VerificationStatus.STAGED,
         ),
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-4", min_lot_area_sqft=3750.0, min_lot_width_ft=40.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=60.0, max_lot_coverage_pct=55.0, far=1.20,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-4",
+            min_lot_area_sqft=3750.0,
+            min_lot_width_ft=40.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=60.0,
+            max_lot_coverage_pct=55.0,
+            far=1.20,
             max_density_units_per_acre=43.5,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
+            verification_status=VerificationStatus.STAGED,
+        ),
+        DistrictDimensionalStandard(
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="CI-HD",
+            min_lot_area_sqft=10000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=10.0,
+            setback_side_ft=0.0,
+            setback_rear_ft=0.0,
+            max_height_ft=None,
+            max_lot_coverage_pct=80.0,
+            far=8.0,
+            max_density_units_per_acre=150.0,
+            source_section_id=(
+                "STAGED: Miami21 May 2015 Volume I Article 4 Table 2/Table 4; Article 5 Sec. 5.8"
+            ),
+            source_url="https://www.miami.gov/Planning-Zoning-Land-Use/View-City-of-Miami-Zoning-Code-Miami-21",
+            verification_status=VerificationStatus.STAGED,
+        ),
+    ]
+    miami_gardens_rows = [
+        DistrictDimensionalStandard(
+            municipality="Miami Gardens",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-1",
+            min_lot_area_sqft=7500.0,
+            min_lot_width_ft=75.0,
+            setback_front_ft=25.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=25.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=40.0,
+            far=None,
+            max_density_units_per_acre=6.0,
+            source_section_id=(
+                "STAGED: Miami Gardens R-1 single-family detached standards "
+                "(user-grounded municipal schedule; not yet ingested)"
+            ),
+            source_url="https://library.municode.com/fl/miami_gardens/codes/code_of_ordinances",
+            verification_status=VerificationStatus.STAGED,
         ),
     ]
     hollywood_rows = [
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RS-5", min_lot_area_sqft=7500.0, min_lot_width_ft=60.0,
-            setback_front_ft=25.0, setback_side_ft=7.5, setback_rear_ft=25.0,
-            max_height_ft=35.0, max_lot_coverage_pct=40.0, far=0.50,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RS-5",
+            min_lot_area_sqft=7500.0,
+            min_lot_width_ft=60.0,
+            setback_front_ft=25.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=25.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=40.0,
+            far=0.50,
             max_density_units_per_acre=5.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
+            verification_status=VerificationStatus.STAGED,
         ),
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RM-15", min_lot_area_sqft=3000.0, min_lot_width_ft=50.0,
-            setback_front_ft=20.0, setback_side_ft=7.5, setback_rear_ft=20.0,
-            max_height_ft=45.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RM-15",
+            min_lot_area_sqft=3000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=20.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=20.0,
+            max_height_ft=45.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=15.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
+            verification_status=VerificationStatus.STAGED,
         ),
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RM-25", min_lot_area_sqft=2000.0, min_lot_width_ft=40.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=65.0, max_lot_coverage_pct=55.0, far=1.50,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RM-25",
+            min_lot_area_sqft=2000.0,
+            min_lot_width_ft=40.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=65.0,
+            max_lot_coverage_pct=55.0,
+            far=1.50,
             max_density_units_per_acre=25.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
+            verification_status=VerificationStatus.STAGED,
         ),
     ]
-    for row in miami_rows + hollywood_rows:
+    for row in miami_rows + miami_gardens_rows + hollywood_rows:
         _fixture_store[(row.municipality, row.district_code)] = row
 
 
@@ -273,12 +397,18 @@ async def get_dimensional_standard(
     except SQLAlchemyError as exc:
         logger.warning(
             "Dimensional standard DB lookup failed for (%s, %s): %s — falling "
-            "back to in-memory fixture.", muni, code, exc,
+            "back to in-memory fixture.",
+            muni,
+            code,
+            exc,
         )
     except Exception as exc:  # noqa: BLE001 — DB unreachable in tests/offline
         logger.debug(
             "Dimensional standard DB lookup unavailable for (%s, %s): %s — "
-            "falling back to in-memory fixture.", muni, code, exc,
+            "falling back to in-memory fixture.",
+            muni,
+            code,
+            exc,
         )
 
     # ── Fallback: in-memory fixture (tests/offline dev / pre-extraction) ──
@@ -336,6 +466,7 @@ async def store_dimensional_standards(
                 existing.max_density_units_per_acre = row.max_density_units_per_acre
                 existing.source_section_id = row.source_section_id
                 existing.source_url = row.source_url
+                existing.verification_status = row.verification_status.value
             else:
                 session.add(
                     DistrictDimensionalStandardORM(

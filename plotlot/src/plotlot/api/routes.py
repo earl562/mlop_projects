@@ -21,7 +21,13 @@ from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
 from plotlot.pipeline.lookup import _agentic_analysis, GENERIC_ZONING_QUERY, PIPELINE_VERSION
-from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
+from plotlot.observability.tracing import (
+    start_otel_span,
+    start_run,
+    log_params,
+    log_metrics,
+    set_tag,
+)
 from plotlot.observability.prompts import log_prompt_to_run
 from plotlot.storage.db import get_session
 
@@ -30,6 +36,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
 PIPELINE_TIMEOUT = 120  # seconds
+PROPERTY_STEP_TIMEOUT = 20
+ANALYSIS_STEP_TIMEOUT = 30
+COMPS_STEP_TIMEOUT = 12
+SITE_RISK_STEP_TIMEOUT = 8
+LOCAL_OVERRIDE_STEP_TIMEOUT = 10
 
 
 def _apply_confidence_metadata(response: ZoningReportResponse) -> None:
@@ -125,7 +136,11 @@ async def analyze_stream(request: AnalyzeRequest):
         try:
             # Step 1: Geocode
             yield _sse_event("status", {"step": "geocoding", "message": "Resolving address..."})
-            geo = await geocode_address(request.address)
+            with start_otel_span(
+                "plotlot.analysis_stream.geocode",
+                attributes={"plotlot.address": request.address},
+            ):
+                geo = await geocode_address(request.address)
             if not geo:
                 yield _sse_event(
                     "error",
@@ -195,8 +210,8 @@ async def analyze_stream(request: AnalyzeRequest):
             )
             prop_record = None
             prop_lookup_error: Exception | None = None
-            for _tick in range(4):  # 4 × 10s = 40s max
-                done, _ = await asyncio.wait({prop_task}, timeout=10)
+            for _tick in range(2):
+                done, _ = await asyncio.wait({prop_task}, timeout=PROPERTY_STEP_TIMEOUT / 2)
                 if done:
                     try:
                         prop_record = prop_task.result()
@@ -372,8 +387,8 @@ async def analyze_stream(request: AnalyzeRequest):
                 )
 
                 report = None
-                for _tick in range(3):  # 3 × 15s = 45s max; leave room before client timeout
-                    done, _ = await asyncio.wait({analysis_task}, timeout=15)
+                for _tick in range(2):
+                    done, _ = await asyncio.wait({analysis_task}, timeout=ANALYSIS_STEP_TIMEOUT / 2)
                     if done:
                         try:
                             report = analysis_task.result()
@@ -557,10 +572,14 @@ async def analyze_stream(request: AnalyzeRequest):
                     from plotlot.pipeline.comps import find_comparables
 
                     state = geo.get("state", "FL")
-                    comp_result = await asyncio.wait_for(
-                        find_comparables(report.property_record, state=state),
-                        timeout=30,
-                    )
+                    with start_otel_span(
+                        "plotlot.analysis_stream.comps",
+                        attributes={"plotlot.state": state},
+                    ):
+                        comp_result = await asyncio.wait_for(
+                            find_comparables(report.property_record, state=state),
+                            timeout=COMPS_STEP_TIMEOUT,
+                        )
                     report.comp_analysis = comp_result
                     comp_msg = (
                         f"Found {len(comp_result.comparables)} comps"
@@ -651,10 +670,27 @@ async def analyze_stream(request: AnalyzeRequest):
                     )
                 except Exception as e:
                     logger.warning("Pro forma failed (non-blocking): %s", e)
+                    yield _sse_event(
+                        "status",
+                        {
+                            "step": "proforma",
+                            "message": "Pro forma unavailable",
+                            "complete": True,
+                        },
+                    )
             elif "proforma" in request.skip_steps:
                 yield _sse_event(
                     "status",
                     {"step": "proforma", "message": "Skipped", "complete": True},
+                )
+            else:
+                yield _sse_event(
+                    "status",
+                    {
+                        "step": "proforma",
+                        "message": "Pro forma unavailable until a buildable unit count is verified",
+                        "complete": True,
+                    },
                 )
 
             # Step 8: Site risk — FEMA flood zone + NWI wetlands (non-blocking)
@@ -669,10 +705,14 @@ async def analyze_stream(request: AnalyzeRequest):
                 try:
                     from plotlot.pipeline.site_risk import fetch_site_risk
 
-                    site_risk = await asyncio.wait_for(
-                        fetch_site_risk(lat, lng),
-                        timeout=15,
-                    )
+                    with start_otel_span(
+                        "plotlot.analysis_stream.site_risk",
+                        attributes={"plotlot.latitude": lat, "plotlot.longitude": lng},
+                    ):
+                        site_risk = await asyncio.wait_for(
+                            fetch_site_risk(lat, lng),
+                            timeout=SITE_RISK_STEP_TIMEOUT,
+                        )
                     report.site_risk = site_risk
                     risk_msg = (
                         f"Flood zone {site_risk.flood_zone.zone} — {site_risk.overall_risk} risk"
@@ -738,16 +778,23 @@ async def analyze_stream(request: AnalyzeRequest):
                 try:
                     from plotlot.pipeline.local_overrides import get_local_overrides
 
-                    await asyncio.wait_for(
-                        get_local_overrides(
-                            report.density_uplift,
-                            municipality,
-                            report.zoning_district,
-                            search_results,
-                            section=report.source_refs[0].section if report.source_refs else "",
-                        ),
-                        timeout=20,
-                    )
+                    with start_otel_span(
+                        "plotlot.analysis_stream.local_overrides",
+                        attributes={
+                            "plotlot.municipality": municipality,
+                            "plotlot.zoning_district": report.zoning_district,
+                        },
+                    ):
+                        await asyncio.wait_for(
+                            get_local_overrides(
+                                report.density_uplift,
+                                municipality,
+                                report.zoning_district,
+                                search_results,
+                                section=report.source_refs[0].section if report.source_refs else "",
+                            ),
+                            timeout=LOCAL_OVERRIDE_STEP_TIMEOUT,
+                        )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Local-override step skipped: %s", exc)
 

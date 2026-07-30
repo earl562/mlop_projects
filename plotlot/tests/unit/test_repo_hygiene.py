@@ -63,6 +63,17 @@ def test_allows_normal_source_and_docs_files():
     assert violations == []
 
 
+def test_allows_static_media_in_canonical_public_directory():
+    violations = repo_hygiene.find_violations(
+        [
+            "plotlot/frontend/public/plotlot-assets/hero-aerial-clean.png",
+            "plotlot/frontend/public/plotlot-assets/product-massing-clean.jpg",
+        ]
+    )
+
+    assert violations == []
+
+
 def test_flags_tracked_duplicate_frontend_roots():
     violations = repo_hygiene.find_violations(
         [

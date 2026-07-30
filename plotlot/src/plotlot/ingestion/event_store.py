@@ -24,7 +24,8 @@ def _redact_recursive(obj: object, depth: int = 0) -> object:
         return {
             k: (
                 "***REDACTED***"
-                if any(r in str(k).lower() for r in _REDACTED_KEYS) and not isinstance(v, (list, dict))
+                if any(r in str(k).lower() for r in _REDACTED_KEYS)
+                and not isinstance(v, (list, dict))
                 else _redact_recursive(v, depth + 1)
             )
             for k, v in obj.items()
@@ -37,16 +38,26 @@ def _redact_recursive(obj: object, depth: int = 0) -> object:
 async def persist_event(event: HarnessEvent) -> HarnessEventORM:
     """Persist one event to the DB. Returns the ORM row after commit."""
     redacted = _redact_recursive(event.payload)
-    ts = event.timestamp
-    if isinstance(ts, str):
-        ts = datetime.fromisoformat(ts)
+    event_timestamp = event.timestamp
+    ts = (
+        datetime.fromisoformat(event_timestamp)
+        if isinstance(event_timestamp, str)
+        else event_timestamp
+    )
     orm = HarnessEventORM(
-        id=event.id, type=event.type, timestamp=ts,
-        correlation_id=event.correlation_id, severity=event.severity,
-        workspace_id=event.workspace_id, project_id=event.project_id,
-        site_id=event.site_id, analysis_id=event.analysis_id,
-        analysis_run_id=event.analysis_run_id, ingestion_run_id=event.ingestion_run_id,
-        source_authority_id=event.source_authority_id, tool_run_id=event.tool_run_id,
+        id=event.id,
+        type=event.type,
+        timestamp=ts,
+        correlation_id=event.correlation_id,
+        severity=event.severity,
+        workspace_id=event.workspace_id,
+        project_id=event.project_id,
+        site_id=event.site_id,
+        analysis_id=event.analysis_id,
+        analysis_run_id=event.analysis_run_id,
+        ingestion_run_id=event.ingestion_run_id,
+        source_authority_id=event.source_authority_id,
+        tool_run_id=event.tool_run_id,
         payload=redacted if isinstance(redacted, dict) else {},
     )
     session = await get_session()
@@ -64,14 +75,24 @@ async def persist_events(events: list[HarnessEvent]) -> list[HarnessEventORM]:
         return []
     redacted_events = [
         HarnessEventORM(
-            id=e.id, type=e.type,
-            timestamp=datetime.fromisoformat(e.timestamp) if isinstance(e.timestamp, str) else e.timestamp,
-            correlation_id=e.correlation_id, severity=e.severity,
-            workspace_id=e.workspace_id, project_id=e.project_id,
-            site_id=e.site_id, analysis_id=e.analysis_id,
-            analysis_run_id=e.analysis_run_id, ingestion_run_id=e.ingestion_run_id,
-            source_authority_id=e.source_authority_id, tool_run_id=e.tool_run_id,
-            payload=_redact_recursive(e.payload) if isinstance(_redact_recursive(e.payload), dict) else {},
+            id=e.id,
+            type=e.type,
+            timestamp=datetime.fromisoformat(e.timestamp)
+            if isinstance(e.timestamp, str)
+            else e.timestamp,
+            correlation_id=e.correlation_id,
+            severity=e.severity,
+            workspace_id=e.workspace_id,
+            project_id=e.project_id,
+            site_id=e.site_id,
+            analysis_id=e.analysis_id,
+            analysis_run_id=e.analysis_run_id,
+            ingestion_run_id=e.ingestion_run_id,
+            source_authority_id=e.source_authority_id,
+            tool_run_id=e.tool_run_id,
+            payload=_redact_recursive(e.payload)
+            if isinstance(_redact_recursive(e.payload), dict)
+            else {},
         )
         for e in events
     ]
@@ -111,6 +132,8 @@ async def list_events_by_ingestion_run(ingestion_run_id: str) -> list[HarnessEve
 
 
 __all__ = [
-    "list_events_by_analysis_run", "list_events_by_ingestion_run",
-    "persist_event", "persist_events",
+    "list_events_by_analysis_run",
+    "list_events_by_ingestion_run",
+    "persist_event",
+    "persist_events",
 ]

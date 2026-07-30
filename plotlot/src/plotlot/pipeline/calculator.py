@@ -8,6 +8,7 @@ The governing constraint is whichever yields the fewest units.
 
 import math
 import re
+from typing import assert_never
 
 from plotlot.core.types import ConstraintResult, DensityAnalysis, NumericZoningParams
 from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
@@ -183,16 +184,45 @@ def calculate_max_units(
     # calculator's input type and mark the result local_authority (WIRE-1.1b).
     # A caller may either pass the standard here or convert it via
     # .to_numeric_zoning_params() and pass ``origin="local_authority"``.
-    from_typed_standard = isinstance(params, DistrictDimensionalStandard)
-    if isinstance(params, DistrictDimensionalStandard):
-        params = params.to_numeric_zoning_params()
-        # The typed row is source-verified by construction; its density +
-        # min-lot-area are the authority, so the verified-entitlement-governs
-        # logic activates and a contradiction resolves in their favor.
-        density_verified = True
-        min_lot_area_verified = True
+    #
+    # Slice 3.2 review: only VERIFIED rows produce local_authority /
+    # verified-entitlement density. STAGED/UNVERIFIED rows are assumption-
+    # grade and must NOT produce verified_fact density even though they are
+    # DistrictDimensionalStandard instances.
+    match params:
+        case DistrictDimensionalStandard() as standard:
+            typed_std: DistrictDimensionalStandard | None = standard
+            zoning_params = standard.to_numeric_zoning_params()
+        case NumericZoningParams() as standard_params:
+            typed_std = None
+            zoning_params = standard_params
+        case unreachable:
+            assert_never(unreachable)
+
+    if typed_std is not None:
+        if typed_std.is_verified_fact_source():
+            # The typed row is source-verified; its density + min-lot-area
+            # are the authority, so the verified-entitlement-governs logic
+            # activates and a contradiction resolves in their favor.
+            density_verified = True
+            min_lot_area_verified = True
+        else:
+            # STAGED/UNVERIFIED typed standard — must NOT be treated as verified.
+            density_verified = False
+            min_lot_area_verified = False
+    from_typed_standard = typed_std is not None
     provenance = (
-        origin if origin is not None else ("local_authority" if from_typed_standard else "unknown")
+        origin
+        if origin is not None
+        else (
+            "local_authority"
+            if (
+                from_typed_standard
+                and typed_std is not None
+                and typed_std.is_verified_fact_source()
+            )
+            else ("staged_assumption" if from_typed_standard else "unknown")
+        )
     )
 
     if lot_size_sqft <= 0:
@@ -210,8 +240,8 @@ def calculate_max_units(
 
     # Reconcile density (u/ac) vs min-lot-area (sqft/DU) — same limit, two forms.
     effective_density, effective_min_lot, density_note = _reconcile_density(
-        params.max_density_units_per_acre,
-        params.min_lot_area_per_unit_sqft,
+        zoning_params.max_density_units_per_acre,
+        zoning_params.min_lot_area_per_unit_sqft,
         density_verified=density_verified,
         min_lot_area_verified=min_lot_area_verified,
     )
@@ -247,22 +277,22 @@ def calculate_max_units(
 
     # ── Constraint 3: Floor Area Ratio ──
     if (
-        params.far is not None
-        and params.far > 0
-        and params.min_unit_size_sqft is not None
-        and params.min_unit_size_sqft > 0
+        zoning_params.far is not None
+        and zoning_params.far > 0
+        and zoning_params.min_unit_size_sqft is not None
+        and zoning_params.min_unit_size_sqft > 0
     ):
-        max_building_sqft = params.far * lot_size_sqft
-        raw = max_building_sqft / params.min_unit_size_sqft
+        max_building_sqft = zoning_params.far * lot_size_sqft
+        raw = max_building_sqft / zoning_params.min_unit_size_sqft
         constraints.append(
             ConstraintResult(
                 name="floor_area_ratio",
                 max_units=max(0, math.floor(raw)),
                 raw_value=raw,
                 formula=(
-                    f"FAR {params.far:g} x {lot_size_sqft:,.0f} sqft = "
+                    f"FAR {zoning_params.far:g} x {lot_size_sqft:,.0f} sqft = "
                     f"{max_building_sqft:,.0f} sqft / "
-                    f"{params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
+                    f"{zoning_params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
                 ),
             )
         )
@@ -271,20 +301,20 @@ def calculate_max_units(
     buildable_sqft = _calc_buildable_area(
         lot_width_ft,
         lot_depth_ft,
-        params,
+        zoning_params,
         notes,
     )
     if (
         buildable_sqft is not None
         and buildable_sqft > 0
-        and params.min_unit_size_sqft is not None
-        and params.min_unit_size_sqft > 0
+        and zoning_params.min_unit_size_sqft is not None
+        and zoning_params.min_unit_size_sqft > 0
     ):
-        stories, story_note = _effective_stories(params, height_limit_ft, story_height_ft)
+        stories, story_note = _effective_stories(zoning_params, height_limit_ft, story_height_ft)
         if story_note:
             notes.append(story_note)
         total_floor_area = buildable_sqft * stories
-        raw = total_floor_area / params.min_unit_size_sqft
+        raw = total_floor_area / zoning_params.min_unit_size_sqft
         constraints.append(
             ConstraintResult(
                 name="buildable_envelope",
@@ -292,7 +322,7 @@ def calculate_max_units(
                 raw_value=raw,
                 formula=(
                     f"({buildable_sqft:,.0f} sqft buildable x {stories} stories) / "
-                    f"{params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
+                    f"{zoning_params.min_unit_size_sqft:,.0f} sqft/unit = {raw:.2f}"
                 ),
             )
         )

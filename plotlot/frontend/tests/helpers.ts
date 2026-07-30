@@ -119,10 +119,14 @@ export async function runLookupFlow(
   const sendButton = page.getByTestId("send-button");
 
   // In some environments the page can hydrate after the first fill, wiping the input value.
-  // Retry until the controlled value "sticks" before attempting to submit.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     await input.fill(address);
-    if ((await input.inputValue().catch(() => "")) === address) break;
+    if (
+      (await input.inputValue().catch(() => "")) === address &&
+      (await sendButton.isEnabled().catch(() => false))
+    ) {
+      break;
+    }
     await page.waitForTimeout(150);
   }
 
@@ -171,6 +175,8 @@ interface StubAgentChatOptions {
   sessionId?: string;
   toolMessage?: string;
   toolName?: string;
+  toolResultMessage?: string;
+  toolStatus?: "complete" | "error" | "blocked" | "approval_required";
 }
 
 export async function stubAgentChatErrorSse(
@@ -199,6 +205,8 @@ export async function stubAgentChatSse(
     sessionId = "test-session",
     toolMessage = "Using report context",
     toolName = "report_context",
+    toolResultMessage,
+    toolStatus = "complete",
   }: StubAgentChatOptions,
 ) {
   const tokens = fullContent.split(/(\s+)/).filter(Boolean);
@@ -208,7 +216,11 @@ export async function stubAgentChatSse(
     ...tokens.map(
       (token) => `event: token\ndata: ${JSON.stringify({ content: token })}\n\n`,
     ),
-    `event: tool_result\ndata: ${JSON.stringify({ tool: toolName })}\n\n`,
+    `event: tool_result\ndata: ${JSON.stringify({
+      tool: toolName,
+      status: toolStatus,
+      message: toolResultMessage,
+    })}\n\n`,
     `event: done\ndata: ${JSON.stringify({ full_content: fullContent })}\n\n`,
   ].join("");
 

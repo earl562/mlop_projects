@@ -152,3 +152,44 @@ async def test_search_municode_live_returns_empty_for_stale_upstream_node():
         )
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_search_municode_live_discovers_authority_when_cache_is_empty():
+    config = MunicodeConfig(
+        municipality="Miami Gardens",
+        county="miami-dade",
+        client_id=11,
+        product_id=22,
+        job_id=33,
+        zoning_node_id="root",
+        state="FL",
+    )
+
+    with (
+        patch(
+            "plotlot.land_use.ordinances.service.get_municode_configs",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "plotlot.land_use.ordinances.service.discover_municode_authority_for_name",
+            new=AsyncMock(return_value=config),
+        ) as discover_mock,
+        patch("plotlot.land_use.ordinances.service.MunicodeScraper", _FakeScraper),
+    ):
+        results = await search_municode_live(
+            OrdinanceSearchArgs(
+                jurisdiction=OrdinanceJurisdiction(
+                    state="FL",
+                    municipality="Miami Gardens",
+                    county="Miami-Dade",
+                ),
+                query="parking",
+                limit=1,
+            )
+        )
+
+    discover_mock.assert_awaited_once_with("Miami Gardens", "FL", county="Miami-Dade")
+    assert len(results) == 1
+    assert results[0].heading == "Parking Requirements"
+    assert results[0].citation.jurisdiction == "Miami Gardens, FL"

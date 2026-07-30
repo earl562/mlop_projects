@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 SOUTH_FL_PROBES = [
     # Fort Lauderdale — verified against Sec. 47-5.31 / 47-5.30 / 47-5.34
     ("Fort Lauderdale", "RS-8", 8.0),
-    ("Fort Lauderdale", "RS-4.4", 4.4),   # NOTE: real code is RS-4.4, not RS-4
+    ("Fort Lauderdale", "RS-4.4", 4.4),  # NOTE: real code is RS-4.4, not RS-4
     ("Fort Lauderdale", "RM-15", 15.0),
     # Miami — STAGED (not yet verified against ingested text)
     ("Miami", "R-1", 5.8),
@@ -51,9 +51,14 @@ SOUTH_FL_PROBES = [
 ]
 
 NUMERIC_FIELDS = (
-    "min_lot_area_sqft", "min_lot_width_ft",
-    "setback_front_ft", "setback_side_ft", "setback_rear_ft",
-    "max_height_ft", "max_lot_coverage_pct", "far",
+    "min_lot_area_sqft",
+    "min_lot_width_ft",
+    "setback_front_ft",
+    "setback_side_ft",
+    "setback_rear_ft",
+    "max_height_ft",
+    "max_lot_coverage_pct",
+    "far",
     "max_density_units_per_acre",
 )
 
@@ -63,7 +68,9 @@ async def test_live_db_serves_verified_south_fl_dimensional_standards():
     """The live district_dimensional_standards table returns the verified rows
     for all 3 South FL municipalities with real density values."""
     for municipality, district_code, expected_density in SOUTH_FL_PROBES:
-        got = await get_dimensional_standard(municipality, district_code, allow_fixture_fallback=False)
+        got = await get_dimensional_standard(
+            municipality, district_code, allow_fixture_fallback=False
+        )
         assert got is not None, f"live DB miss for {municipality}/{district_code}"
         assert isinstance(got, DistrictDimensionalStandard)
         assert got.municipality == municipality

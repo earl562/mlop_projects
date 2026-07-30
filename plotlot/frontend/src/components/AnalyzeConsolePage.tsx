@@ -131,6 +131,9 @@ function toolMode(tool: string) {
 
 function computerActionLabel(activity: ToolActivity | undefined) {
   if (!activity) return "Standing by for browser, source, and ordinance work";
+  if (activity.status === "blocked") return `Blocked ${toolLabel(activity.tool)}`;
+  if (activity.status === "error") return `Failed ${toolLabel(activity.tool)}`;
+  if (activity.status === "complete") return `Completed ${toolLabel(activity.tool)}`;
   const mode = toolMode(activity.tool);
   if (mode === "browser") return "Browsing source material";
   if (mode === "ordinance") return "Searching ordinance context";
@@ -225,7 +228,10 @@ function latestToolStatus(message: ConsoleMessage | undefined) {
     }
   }
   const completed = message.toolActivity[message.toolActivity.length - 1];
-  return completed ? `Completed ${toolLabel(completed.tool)}` : null;
+  if (!completed) return null;
+  if (completed.status === "blocked") return `Blocked ${toolLabel(completed.tool)}`;
+  if (completed.status === "error") return `Failed ${toolLabel(completed.tool)}`;
+  return `Completed ${toolLabel(completed.tool)}`;
 }
 
 function readStoredSessions(): AgentSession[] {
@@ -405,6 +411,7 @@ export default function AnalyzeConsolePage() {
     );
 
     let streamedContent = "";
+    let turnOutcome: ToolActivity["status"] = "complete";
 
     await streamChat(
       messageText,
@@ -424,9 +431,15 @@ export default function AnalyzeConsolePage() {
       },
       (fullContent) => {
         streamedContent = fullContent;
+        const evaluationBlocked = turnOutcome === "blocked";
+        const evaluationFailed = turnOutcome === "error";
         updateActiveSession((session) => ({
           ...session,
-          subtitle: "Latest analysis complete",
+          subtitle: evaluationBlocked
+            ? "Evaluation blocked"
+            : evaluationFailed
+              ? "Needs attention"
+              : "Latest analysis complete",
           updatedAt: Date.now(),
           messages: session.messages.map((message) =>
             message.id === assistantId
@@ -437,9 +450,13 @@ export default function AnalyzeConsolePage() {
             {
               id: createId("event"),
               kind: "done" as const,
-              title: "Response complete",
-              detail: "The agent finished the current land-use reasoning turn.",
-              status: "complete" as const,
+              title: evaluationBlocked ? "Evaluation blocked" : "Response complete",
+              detail: evaluationBlocked
+                ? "The evidence run finished, but required data is still missing."
+                : "The agent finished the current land-use reasoning turn.",
+              status: evaluationBlocked || evaluationFailed
+                ? ("attention" as const)
+                : ("complete" as const),
               createdAt: Date.now(),
             },
             ...session.events.map((item) =>
@@ -544,6 +561,7 @@ export default function AnalyzeConsolePage() {
             : rawStatus === "blocked" || rawStatus === "approval_required"
               ? "blocked"
               : "complete";
+        turnOutcome = nextStatus;
 
         updateActiveSession((session) => ({
           ...session,
@@ -554,7 +572,11 @@ export default function AnalyzeConsolePage() {
                   ...message,
                   toolActivity: (message.toolActivity ?? []).map((activity) =>
                     activity.tool === tool && activity.status === "running"
-                      ? { ...activity, status: nextStatus }
+                      ? {
+                          ...activity,
+                          status: nextStatus,
+                          message: toolResult.message || activity.message,
+                        }
                       : activity,
                   ),
                 }
@@ -562,12 +584,24 @@ export default function AnalyzeConsolePage() {
           ),
           events: session.events.map((item) =>
             item.kind === "tool" && item.title.includes(toolLabel(tool))
-              ? { ...item, status: nextStatus === "complete" ? ("complete" as const) : ("attention" as const) }
+              ? {
+                  ...item,
+                  detail: toolResult.message || item.detail,
+                  status: nextStatus === "complete"
+                    ? ("complete" as const)
+                    : ("attention" as const),
+                }
               : item,
           ),
           tasks: (session.tasks ?? []).map((task) =>
             task.title.includes(toolLabel(tool)) && task.status === "running"
-              ? { ...task, status: nextStatus === "complete" ? ("complete" as const) : ("attention" as const) }
+              ? {
+                  ...task,
+                  detail: toolResult.message || task.detail,
+                  status: nextStatus === "complete"
+                    ? ("complete" as const)
+                    : ("attention" as const),
+                }
               : task,
           ),
         }));
@@ -671,6 +705,9 @@ export default function AnalyzeConsolePage() {
   const completedTools = messages
     .flatMap((message) => message.toolActivity ?? [])
     .filter((activity) => activity.status === "complete");
+  const evidenceTools = messages
+    .flatMap((message) => message.toolActivity ?? [])
+    .filter((activity) => activity.status === "complete" || activity.status === "blocked");
   const visibleTasks = (activeSession?.tasks ?? []).slice(0, 8);
   const latestBrowserAction = (activeSession?.browserActions ?? [])[0];
   const allToolActivity = messages.flatMap((message) => message.toolActivity ?? []);
@@ -680,6 +717,7 @@ export default function AnalyzeConsolePage() {
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
   const toolStatus = latestToolStatus(latestAssistant);
+  const latestToolOutcome = latestAssistant?.toolActivity?.at(-1)?.status;
   const computerEvents = (activeSession?.events ?? [])
     .filter((eventItem) => ["thinking", "tool", "evidence", "done", "error"].includes(eventItem.kind))
     .slice(0, 5);
@@ -689,7 +727,19 @@ export default function AnalyzeConsolePage() {
         detail: "PlotLot is streaming tool activity and reasoning through the current turn.",
         tone: "active",
       }
-    : latestAssistant && latestAssistant.id !== "welcome"
+    : latestToolOutcome === "blocked"
+      ? {
+          label: "Needs data",
+          detail: "The evidence run finished, but required inputs still block evaluation.",
+          tone: "attention",
+        }
+      : latestToolOutcome === "error"
+        ? {
+            label: "Needs attention",
+            detail: "The latest harness run failed before it could support an evaluation.",
+            tone: "attention",
+          }
+        : latestAssistant && latestAssistant.id !== "welcome"
       ? {
           label: "Follow-up ready",
           detail: "The latest answer is ready for citations, scenario testing, or a memo-quality rewrite.",
@@ -798,12 +848,13 @@ export default function AnalyzeConsolePage() {
                     {message.toolActivity && message.toolActivity.length > 0 && (
                       <div className="analyze-tools">
                         {message.toolActivity.map((activity) => (
-                          <span
-                            className={activity.status === "complete" ? "complete" : ""}
-                            key={activity.id}
-                          >
+                          <span className={activity.status} key={activity.id}>
                             {activity.status === "complete"
                               ? `Used ${activity.tool}`
+                              : activity.status === "blocked"
+                                ? `Blocked ${toolLabel(activity.tool)}`
+                                : activity.status === "error"
+                                  ? `Failed ${toolLabel(activity.tool)}`
                               : activity.message || `Using ${toolLabel(activity.tool)}`}
                           </span>
                         ))}
@@ -1003,10 +1054,10 @@ export default function AnalyzeConsolePage() {
 
             <section className="analyze-rail-card" data-testid="analyze-evidence-card">
               <p className="coded-kicker">Evidence</p>
-              <h3>{completedTools.length > 0 ? "Sources touched" : "Awaiting sources"}</h3>
+              <h3>{evidenceTools.length > 0 ? "Evidence runs" : "Awaiting sources"}</h3>
               <div className="analyze-evidence-list">
-                {completedTools.length > 0 ? (
-                  completedTools.slice(-4).map((activity) => (
+                {evidenceTools.length > 0 ? (
+                  evidenceTools.slice(-4).map((activity) => (
                     <div key={activity.id}>
                       <strong>{toolLabel(activity.tool)}</strong>
                       <span>{activity.message || "Tool result captured for this turn."}</span>

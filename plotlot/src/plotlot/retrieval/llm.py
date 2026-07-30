@@ -40,6 +40,117 @@ OPENAI_TIMEOUT_SECONDS = 60.0
 DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
+@dataclass(frozen=True)
+class PrimaryLLMProvider:
+    """Resolved primary provider configuration for one runtime."""
+
+    slug: str
+    display_name: str
+    api_key: str
+    base_url: str
+    model: str
+    supports_reasoning_effort: bool = False
+    nvidia_compat: bool = False
+
+
+def _text_setting(name: str, default: str = "", *, config: Any = None) -> str:
+    active_config = settings if config is None else config
+    value = getattr(active_config, name, default)
+    return value.strip() if isinstance(value, str) else default
+
+
+def _legacy_openai_config_is_deepseek(*, config: Any = None) -> bool:
+    base_url = _text_setting("openai_base_url", config=config)
+    return "api.deepseek.com" in base_url and bool(_text_setting("openai_api_key", config=config))
+
+
+def _get_primary_provider(config: Any = None) -> PrimaryLLMProvider:
+    """Resolve a configured provider without silently overriding an explicit choice."""
+
+    requested = _text_setting("llm_provider", "auto", config=config).lower() or "auto"
+    openrouter = PrimaryLLMProvider(
+        slug="openrouter",
+        display_name="OpenRouter",
+        api_key=_text_setting("openrouter_api_key", config=config),
+        base_url=_text_setting(
+            "openrouter_base_url",
+            "https://openrouter.ai/api/v1",
+            config=config,
+        ),
+        model=_text_setting(
+            "openrouter_model",
+            "deepseek/deepseek-v4-flash",
+            config=config,
+        ),
+    )
+    deepseek_key = _text_setting("deepseek_api_key", config=config)
+    deepseek_base_url = _text_setting(
+        "deepseek_base_url", "https://api.deepseek.com", config=config
+    )
+    deepseek_model = _text_setting("deepseek_model", "deepseek-v4-flash", config=config)
+
+    # Backward compatibility for deployments that used OPENAI_* with DeepSeek's
+    # OpenAI-compatible endpoint before dedicated settings existed.
+    if not deepseek_key and _legacy_openai_config_is_deepseek(config=config):
+        deepseek_key = _text_setting("openai_api_key", config=config)
+        deepseek_base_url = _text_setting("openai_base_url", deepseek_base_url, config=config)
+        deepseek_model = _text_setting("openai_model", deepseek_model, config=config)
+
+    deepseek = PrimaryLLMProvider(
+        slug="deepseek",
+        display_name="DeepSeek",
+        api_key=deepseek_key,
+        base_url=deepseek_base_url,
+        model=deepseek_model,
+    )
+    nvidia = PrimaryLLMProvider(
+        slug="nvidia",
+        display_name="NVIDIA",
+        api_key=_text_setting("nvidia_api_key", config=config),
+        base_url=_text_setting(
+            "nvidia_base_url",
+            "https://integrate.api.nvidia.com/v1",
+            config=config,
+        ),
+        model=_text_setting(
+            "nvidia_model",
+            "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+            config=config,
+        ),
+        nvidia_compat=True,
+    )
+    openai = PrimaryLLMProvider(
+        slug="openai",
+        display_name="OpenAI",
+        api_key=_text_setting("openai_api_key", config=config)
+        or _text_setting("openai_access_token", config=config),
+        base_url=_text_setting("openai_base_url", "https://api.openai.com/v1", config=config),
+        model=_text_setting("openai_model", DEFAULT_OPENAI_MODEL, config=config),
+        supports_reasoning_effort=True,
+    )
+
+    providers = {
+        "openrouter": openrouter,
+        "deepseek": deepseek,
+        "nvidia": nvidia,
+        "openai": openai,
+    }
+    if requested != "auto":
+        return providers.get(requested, openrouter)
+    if openrouter.api_key:
+        return openrouter
+    if deepseek.api_key:
+        return deepseek
+    if nvidia.api_key:
+        return nvidia
+    return openai
+
+
+def _primary_provider_name() -> str:
+    provider = _get_primary_provider()
+    return f"{provider.display_name}/{provider.model}"
+
+
 # ---------------------------------------------------------------------------
 # Circuit Breaker — contain failures without thrashing the upstream gateway.
 # ---------------------------------------------------------------------------
@@ -207,20 +318,23 @@ def _convert_messages_for_anthropic(messages: list[dict]) -> tuple[str, list[dic
 
 
 def _has_openai_credentials() -> bool:
-    """Whether PlotLot has any viable OpenAI auth path configured."""
-    if settings.openai_api_key or settings.openai_access_token:
+    """Whether PlotLot has credentials for its selected primary provider."""
+    provider = _get_primary_provider()
+    if provider.api_key:
         return True
-    if settings.use_codex_oauth:
+    if provider.slug == "openai" and settings.use_codex_oauth:
         from pathlib import Path
 
         return has_saved_tokens(Path(settings.codex_auth_file).expanduser())
-    if settings.nvidia_api_key:
-        return True
     return False
 
 
 def _using_nvidia_mainline() -> bool:
-    return bool(settings.nvidia_api_key)
+    return _get_primary_provider().nvidia_compat
+
+
+def _using_deepseek_mainline() -> bool:
+    return _get_primary_provider().slug == "deepseek"
 
 
 async def _get_codex_oauth_token() -> str:
@@ -238,9 +352,7 @@ async def _get_codex_oauth_token() -> str:
 
 
 def _get_openai_model() -> str:
-    if _using_nvidia_mainline():
-        return settings.nvidia_model or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    return settings.openai_model or DEFAULT_OPENAI_MODEL
+    return _get_primary_provider().model
 
 
 def _get_groq_token() -> str:
@@ -260,28 +372,38 @@ def _usable_response(result: dict | None) -> bool:
 
 
 def _get_openai_client() -> AsyncOpenAI:
-    if _using_nvidia_mainline():
-        api_key: str | Any = settings.nvidia_api_key
-    elif settings.openai_api_key:
-        api_key = settings.openai_api_key
-    elif settings.use_codex_oauth:
+    provider = _get_primary_provider()
+    api_key: str | Any = provider.api_key
+    if provider.slug == "openai" and not api_key and settings.use_codex_oauth:
         api_key = _get_codex_oauth_token
-    else:
-        api_key = settings.openai_access_token
 
     kwargs: dict = {
         "api_key": api_key,
         "timeout": OPENAI_TIMEOUT_SECONDS,
     }
-    if _using_nvidia_mainline():
-        kwargs["base_url"] = settings.nvidia_base_url
-    elif settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    if settings.openai_organization and not _using_nvidia_mainline():
+    if provider.base_url:
+        kwargs["base_url"] = provider.base_url
+    if provider.slug == "openrouter":
+        headers = {
+            "HTTP-Referer": _text_setting("openrouter_site_url", "https://plotlot.app"),
+            "X-OpenRouter-Title": _text_setting("openrouter_app_name", "PlotLot"),
+        }
+        kwargs["default_headers"] = {key: value for key, value in headers.items() if value}
+    if settings.openai_organization and provider.slug == "openai":
         kwargs["organization"] = settings.openai_organization
-    if settings.openai_project and not _using_nvidia_mainline():
+    if settings.openai_project and provider.slug == "openai":
         kwargs["project"] = settings.openai_project
     return AsyncOpenAI(**kwargs)
+
+
+def _apply_primary_request_options(kwargs: dict[str, Any]) -> None:
+    provider = _get_primary_provider()
+    if provider.slug == "deepseek":
+        kwargs["extra_body"] = {
+            "thinking": {"type": "enabled" if settings.deepseek_thinking is True else "disabled"}
+        }
+    elif provider.supports_reasoning_effort:
+        kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
 
 
 def _prepare_primary_messages(messages: list[dict]) -> list[dict]:
@@ -456,8 +578,7 @@ async def _call_openai(
                         "max_completion_tokens": max_completion_tokens,
                         "parallel_tool_calls": False,
                     }
-                    if not _using_nvidia_mainline():
-                        kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
+                    _apply_primary_request_options(kwargs)
                     if tools:
                         kwargs["tools"] = tools
                         kwargs["tool_choice"] = "auto"
@@ -475,7 +596,7 @@ async def _call_openai(
                         if recovered:
                             tool_calls = recovered
                     prompt_tokens, completion_tokens = _log_usage(
-                        "nvidia" if _using_nvidia_mainline() else "openai",
+                        _get_primary_provider().slug,
                         response.usage,
                     )
 
@@ -715,7 +836,7 @@ async def call_llm(
         tools=tools,
         max_completion_tokens=4000,
         temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        openai_provider_name=_primary_provider_name(),
         groq_provider_name=f"Groq/{_get_groq_model()}",
     )
 
@@ -747,9 +868,7 @@ async def call_llm_stream(messages: list[dict]):
 
     # Primary: OpenAI
     if _has_openai_credentials():
-        provider_name = (
-            f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}"
-        )
+        provider_name = _primary_provider_name()
         breaker = _get_breaker(provider_name)
         if breaker.allow_request():
             try:
@@ -761,8 +880,7 @@ async def call_llm_stream(messages: list[dict]):
                     "max_completion_tokens": 2000,
                     "stream": True,
                 }
-                if not _using_nvidia_mainline():
-                    kwargs["reasoning_effort"] = cast(Any, settings.openai_reasoning_effort)
+                _apply_primary_request_options(kwargs)
                 stream = await client.chat.completions.create(**kwargs)
                 async for chunk in stream:
                     for choice in chunk.choices:
@@ -926,7 +1044,7 @@ async def analyze_zoning(
         response_format={"type": "json_object"},
         max_completion_tokens=2000,
         temperature=0.1,
-        openai_provider_name=f"{'NVIDIA' if _using_nvidia_mainline() else 'OpenAI'}/{_get_openai_model()}",
+        openai_provider_name=_primary_provider_name(),
         groq_provider_name=f"Groq/{_get_groq_model()}",
     )
     if not result or not result.get("content"):

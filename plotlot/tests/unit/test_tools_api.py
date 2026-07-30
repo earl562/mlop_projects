@@ -14,6 +14,9 @@ class FakeSession:
         self.rolled_back = False
 
     async def get(self, model, key):  # noqa: ANN001
+        for obj in reversed(self.added):
+            if isinstance(obj, model) and getattr(obj, "id", None) == key:
+                return obj
         return None
 
     def add(self, obj):  # noqa: ANN001
@@ -208,7 +211,8 @@ async def test_tools_call_search_zoning_ordinance_records_evidence_and_matches_m
     with (
         patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_api_session)),
         patch("plotlot.storage.db.get_session", new=_fake_get_session_for_search),
-        patch("plotlot.retrieval.search.hybrid_search", new=_fake_hybrid_search),
+        patch("plotlot.harness.ordinance_lookup.get_session", new=_fake_get_session_for_search),
+        patch("plotlot.harness.ordinance_lookup.hybrid_search", new=_fake_hybrid_search),
     ):
         run_id = "run_test_4"
         resp = await client.post(
@@ -247,6 +251,128 @@ async def test_tools_call_search_zoning_ordinance_records_evidence_and_matches_m
 
 
 @pytest.mark.asyncio
+async def test_tools_call_full_harness_search_municode_matches_harness_router(client):
+    fake_session = FakeSession()
+    with patch(
+        "plotlot.api.tools.get_session",
+        new=AsyncMock(return_value=fake_session),
+    ):
+        response = await client.post(
+            "/api/v1/tools/call",
+            json={
+                "tool_name": "search_municode",
+                "arguments": {"jurisdiction": "miami", "query": "parking"},
+                "workspace_id": "ws_test",
+                "run_id": "run_test_harness_rest_bridge",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["tool_name"] == "search_municode"
+    assert payload["result"]["results"][0]["section_id"] == "municode_miami_parking_fixture"
+    assert payload["decision"]["approval_required"] is False
+    assert [event["type"] for event in payload["events"]] == [
+        "tool.requested",
+        "tool.policy_checked",
+        "tool.started",
+        "tool.completed",
+    ]
+    assert payload["source_mode"] == "fixture"
+
+
+@pytest.mark.asyncio
+async def test_tools_call_full_harness_success_persists_tool_run(client):
+    from plotlot.storage.models import ToolRun
+
+    fake_session = FakeSession()
+    with patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_session)):
+        response = await client.post(
+            "/api/v1/tools/call",
+            json={
+                "tool_name": "search_municode",
+                "arguments": {"jurisdiction": "miami", "query": "parking"},
+                "workspace_id": "ws_test",
+                "run_id": "run_test_harness_rest_bridge_commit",
+                "source_mode": "fixture",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    tool_runs = [obj for obj in fake_session.added if isinstance(obj, ToolRun)]
+    assert len(tool_runs) == 1
+    assert payload["tool_run_id"] == str(tool_runs[0].id)
+    assert tool_runs[0].tool_name == "search_municode"
+    assert tool_runs[0].status == "ok"
+    assert fake_session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_tools_call_full_harness_export_report_requires_approval(client):
+    fake_session = FakeSession()
+    with patch(
+        "plotlot.api.tools.get_session",
+        new=AsyncMock(return_value=fake_session),
+    ):
+        response = await client.post(
+            "/api/v1/tools/call",
+            json={
+                "tool_name": "export_report",
+                "arguments": {"report_id": "report_fixture"},
+                "workspace_id": "ws_test",
+                "run_id": "run_test_harness_export",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pending_approval"
+    assert payload["tool_name"] == "export_report"
+    assert payload["decision"]["approval_required"] is True
+    assert [event["type"] for event in payload["events"]] == [
+        "tool.requested",
+        "tool.policy_checked",
+        "tool.approval_required",
+    ]
+    assert payload["source_mode"] == "fixture"
+
+
+@pytest.mark.asyncio
+async def test_tools_call_full_harness_approval_persists_tool_run_and_approval(client):
+    from plotlot.storage.models import ApprovalRequest, ToolRun
+
+    fake_session = FakeSession()
+    with patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_session)):
+        response = await client.post(
+            "/api/v1/tools/call",
+            json={
+                "tool_name": "export_report",
+                "arguments": {"report_id": "report_fixture"},
+                "workspace_id": "ws_test",
+                "run_id": "run_test_harness_export_commit",
+                "source_mode": "fixture",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pending_approval"
+    tool_runs = [obj for obj in fake_session.added if isinstance(obj, ToolRun)]
+    approvals = [obj for obj in fake_session.added if isinstance(obj, ApprovalRequest)]
+    assert len(tool_runs) == 1
+    assert payload["tool_run_id"] == str(tool_runs[0].id)
+    assert tool_runs[0].tool_name == "export_report"
+    assert tool_runs[0].status == "pending_approval"
+    assert len(approvals) == 1
+    assert approvals[0].action_name == "export_report"
+    assert approvals[0].status == "pending"
+    assert fake_session.committed is True
+
+
+@pytest.mark.asyncio
 async def test_tools_call_generate_document_persists_artifacts(client):
     fake_session = FakeSession()
     with patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_session)):
@@ -264,9 +390,9 @@ async def test_tools_call_generate_document_persists_artifacts(client):
         )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "ok"
-    assert "report_id" in data["artifact_ids"]
-    assert "document_id" in data["artifact_ids"]
+    assert data["status"] == "pending_approval"
+    assert data["decision"]["approval_required"] is True
+    assert data["decision"]["approval_id"]
 
 
 @pytest.mark.asyncio
@@ -321,3 +447,51 @@ async def test_tools_call_gmail_send_draft_requires_approval_before_connector_ex
     assert len(approvals) == 1
     assert approvals[0].action_name == "gmail_send_draft"
     assert fake_session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_tools_call_web_search_synthesizes_and_persists_evidence(client):
+    from unittest.mock import AsyncMock, patch
+
+    from plotlot.harness.web_lookup import WebLookupStatus, WebSearchResult, WebSearchResultItem
+
+    fake_session = FakeSession()
+    search_result = WebSearchResult(
+        status=WebLookupStatus.SUCCESS,
+        results=[
+            WebSearchResultItem(
+                title="RM-3-7 setbacks",
+                url="https://example.com/rm-3-7",
+                description="Setback summary",
+                content="Front setback 15 feet.",
+            )
+        ],
+    )
+
+    with (
+        patch("plotlot.api.tools.get_session", new=AsyncMock(return_value=fake_session)),
+        patch(
+            "plotlot.harness.tool_router_handlers.execute_web_search",
+            new=AsyncMock(return_value=search_result),
+        ),
+    ):
+        resp = await client.post(
+            "/api/v1/tools/call",
+            json={
+                "tool_name": "web_search",
+                "arguments": {"query": "RM-3-7 setbacks"},
+                "workspace_id": "ws_test",
+                "run_id": "run_test_web_search_1",
+                "risk_budget_cents": 100,
+                "live_network_allowed": True,
+            },
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["status"] == "ok"
+    assert len(payload["evidence_ids"]) == 1
+    result_item = payload["result"]["results"][0]
+    assert result_item["evidence_id"] == payload["evidence_ids"][0]
+    assert result_item["citation"]["url"] == "https://example.com/rm-3-7"
+    assert payload["result"]["evidence"][0]["tool_name"] == "web_search"

@@ -7,7 +7,13 @@ from plotlot.core.types import PropertyRecord
 from plotlot.property.california import CaliforniaProvider
 from plotlot.retrieval.property import (
     BROWARD_CITY_CODES,
+    _address_components,
+    _addresses_confidently_match,
+    _addresses_spatially_recover,
+    _build_broward_where_clause,
+    _decode_broward_city,
     _extract_city_hint,
+    _miami_dade_where_clauses,
     _normalize_address,
     _parse_lot_dimensions,
     _safe_float,
@@ -44,6 +50,57 @@ class TestBrowardHelpers:
 
     def test_broward_city_code_map_contains_fort_lauderdale(self):
         assert BROWARD_CITY_CODES["fort lauderdale"] == "FL"
+
+    def test_decode_broward_city_code(self):
+        assert _decode_broward_city("FL") == "Fort Lauderdale"
+
+
+class TestCountyWhereClauses:
+    def test_miami_dade_tries_exact_before_like(self):
+        clauses = _miami_dade_where_clauses("1600 NW 7 AVE")
+        assert clauses[0] == "TRUE_SITE_ADDR='1600 NW 7 AVE'"
+        assert "LIKE '1600 %'" in clauses[1]
+
+    def test_broward_numeric_street_name_uses_exact_match(self):
+        clause = _build_broward_where_clause(
+            street_num="1234",
+            street_direction="NW",
+            street_name="15",
+            street_type="ST",
+            city_code="FL",
+            exact_name=True,
+        )
+        assert "SITUS_STREET_NAME = '15'" in clause
+        assert "SITUS_STREET_DIRECTION='NW'" in clause
+        assert "SITUS_STREET_TYPE='ST'" in clause
+        assert "SITUS_CITY='FL'" in clause
+
+
+class TestAddressConfidence:
+    def test_address_components_split_direction_name_and_type(self):
+        assert _address_components("1234 NW 15th St, Fort Lauderdale, FL 33311") == (
+            "1234",
+            "NW",
+            "15",
+            "ST",
+        )
+
+    def test_addresses_confidently_match_exact_numeric_street(self):
+        assert _addresses_confidently_match("1234 NW 15 ST", "1234 NW 15th St, Fort Lauderdale, FL")
+
+    def test_addresses_confidently_match_rejects_house_number_substring(self):
+        assert not _addresses_confidently_match("11600 NW 7 AVE", "1600 NW 7th Ave, Miami, FL")
+
+    def test_addresses_confidently_match_rejects_numeric_street_mismatch(self):
+        assert not _addresses_confidently_match(
+            "101 SE 16 AVE", "101 SE 1st Ave, Fort Lauderdale, FL"
+        )
+
+    def test_addresses_spatially_recover_allows_same_corridor_small_house_number_delta(self):
+        assert _addresses_spatially_recover("1603 NW 7 AVE", "1600 NW 7th Ave, Miami, FL")
+
+    def test_addresses_spatially_recover_rejects_large_house_number_delta(self):
+        assert not _addresses_spatially_recover("11600 NW 7 AVE", "1600 NW 7th Ave, Miami, FL")
 
 
 class TestParseLotDimensions:
@@ -248,7 +305,52 @@ class TestLookupProperty:
         assert isinstance(result, PropertyRecord)
         assert result.folio == "74434316090000100"
         assert result.lot_size_sqft == pytest.approx(21780.0, rel=0.01)
+        assert result.lot_size_source == "assessor"
         assert result.year_built == 1990
+
+    @pytest.mark.asyncio
+    async def test_palm_beach_preserves_ordinal_suffix_for_live_address_match(self):
+        """The county layer stores `9TH`, so querying normalized `9` misses the parcel."""
+        queries: list[str] = []
+        ordinal_feature = {
+            "attributes": {
+                "PARCEL_NUMBER": "74434316010120080",
+                "SITE_ADDR_STR": "719 9TH ST",
+                "MUNICIPALITY": "WEST PALM BEACH",
+                "OWNER_NAME1": "OWNER OF RECORD",
+                "PROPERTY_USE": "0100",
+                "YRBLT": "1925",
+                "ACRES": 0.155,
+                "ASSESSED_VAL": 250000.0,
+                "TOTAL_MARKET": 300000.0,
+                "PRICE": 200000.0,
+                "SALE_DATE": None,
+                "LEGAL1": "LOT 8 BLK 12",
+            }
+        }
+
+        async def fake_query(_url, where, **_kwargs):
+            queries.append(where)
+            return [ordinal_feature] if "719 9TH ST" in where else []
+
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=fake_query),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("R-M", "Residential Multifamily"),
+            ),
+        ):
+            result = await lookup_property(
+                "719 9TH ST, West Palm Beach, FL 33401",
+                county="Palm Beach",
+                lat=26.72,
+                lng=-80.06,
+            )
+
+        assert isinstance(result, PropertyRecord)
+        assert result.folio == "74434316010120080"
+        assert result.lot_size_source == "assessor"
+        assert queries[0] == "SITE_ADDR_STR='719 9TH ST'"
 
     @pytest.mark.asyncio
     async def test_broward_prefers_city_filtered_match_when_multiple_features(self):
@@ -341,6 +443,150 @@ class TestLookupProperty:
         assert result is None
         assert captured_wheres
         assert "SITUS_CITY='FL'" in captured_wheres[0]
+        assert "SITUS_STREET_NAME = '5'" in captured_wheres[0]
+
+    @pytest.mark.asyncio
+    async def test_broward_lookup_decodes_city_code_to_municipality_name(self):
+        property_features = [
+            {
+                "attributes": {
+                    "FOLIO_NUMBER": "494234120010",
+                    "SITUS_STREET_NUMBER": "1517",
+                    "SITUS_STREET_DIRECTION": "NE",
+                    "SITUS_STREET_NAME": "5",
+                    "SITUS_STREET_TYPE": "CT",
+                    "SITUS_CITY": "FL",
+                    "NAME_LINE_1": "RIGHT MATCH LLC",
+                    "USE_CODE": "01",
+                    "BLDG_YEAR_BUILT": 1954,
+                    "BLDG_ADJ_SQ_FOOTAGE": 1450.0,
+                    "UNDER_AIR_SQFT": "1300",
+                    "JUST_BUILDING_VALUE": 250000,
+                },
+                "geometry": {"x": -80.128145, "y": 26.129402},
+            },
+        ]
+        parcel_features = [{"attributes": {"FOLIO": "494234120010", "SHAPE.STArea()": 8000.0}}]
+
+        async def mock_arcgis(url, **kwargs):
+            if "MapServer/16" in url:
+                return parcel_features
+            return property_features
+
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_arcgis),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("RS-8", "Residential Single Family"),
+            ),
+        ):
+            result = await lookup_property(
+                "1517 NE 5th Ct, Fort Lauderdale, FL 33301",
+                county="Broward",
+                lat=26.129402,
+                lng=-80.128145,
+            )
+
+        assert result is not None
+        assert result.municipality == "Fort Lauderdale"
+
+    @pytest.mark.asyncio
+    async def test_broward_falls_back_to_spatial_parcel_record_when_address_record_missing(self):
+        property_features: list[dict] = []
+        parcel_features = [
+            {
+                "attributes": {
+                    "FOLIO": "494233281490",
+                    "SHAPE.STArea()": 10687.23,
+                },
+                "geometry": {
+                    "rings": [
+                        [[-80.16, 26.145], [-80.159, 26.145], [-80.159, 26.146], [-80.16, 26.145]]
+                    ]
+                },
+            }
+        ]
+
+        async def mock_arcgis(url, **kwargs):
+            if "MapServer/16" in url:
+                return parcel_features
+            return property_features
+
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_arcgis),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("RS-8", "Residential Single Family"),
+            ),
+        ):
+            result = await lookup_property(
+                "1234 NW 15th St, Fort Lauderdale, FL 33311",
+                county="Broward",
+                lat=26.145103,
+                lng=-80.159491,
+            )
+
+        assert result is not None
+        assert result.folio == "494233281490"
+        assert result.address == "1234 NW 15TH ST"
+        assert result.municipality == "Fort Lauderdale"
+        assert result.zoning_code == "RS-8"
+        assert result.lot_size_sqft == pytest.approx(10687.23)
+        assert result.lot_size_source == "geometry"
+
+    @pytest.mark.asyncio
+    async def test_broward_falls_back_to_spatial_parcel_record_when_text_match_is_wrong(self):
+        property_features = [
+            {
+                "attributes": {
+                    "FOLIO_NUMBER": "504210060000",
+                    "SITUS_STREET_NUMBER": "101",
+                    "SITUS_STREET_DIRECTION": "SE",
+                    "SITUS_STREET_NAME": "15",
+                    "SITUS_STREET_TYPE": "AVE",
+                    "SITUS_CITY": "FL",
+                },
+                "geometry": {"x": -80.14231, "y": 26.121551},
+            }
+        ]
+        parcel_features = [
+            {
+                "attributes": {
+                    "FOLIO": "504210060000",
+                    "SHAPE.STArea()": 26244.77,
+                },
+                "geometry": {
+                    "rings": [
+                        [[-80.143, 26.121], [-80.142, 26.121], [-80.142, 26.122], [-80.143, 26.121]]
+                    ]
+                },
+            }
+        ]
+
+        async def mock_arcgis(url, **kwargs):
+            if "MapServer/16" in url:
+                return parcel_features
+            return property_features
+
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_arcgis),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("RAC-CC", ""),
+            ),
+        ):
+            result = await lookup_property(
+                "101 SE 1st Ave, Fort Lauderdale, FL 33301",
+                county="Broward",
+                lat=26.121551,
+                lng=-80.14231,
+            )
+
+        assert result is not None
+        assert result.address == "101 SE 1ST AVE"
+        assert result.municipality == "Fort Lauderdale"
+        assert result.zoning_code == "RAC-CC"
+        assert result.lot_size_source == "geometry"
 
     @pytest.mark.asyncio
     async def test_not_found(self):
@@ -448,6 +694,69 @@ class TestLookupProperty:
         assert result is not None
         assert result.zoning_code == "RU-1"
         assert result.zoning_description == "Single Family Residential"
+
+    @pytest.mark.asyncio
+    async def test_lookup_recovers_miami_dade_false_positive_with_spatial_boundary_fallback(self):
+        point_features = [
+            {
+                "attributes": {
+                    "FOLIO": "3021350080310",
+                    "TRUE_SITE_ADDR": "11600 NW 7 AVE",
+                    "TRUE_SITE_CITY": "UNINCORPORATED",
+                    "TRUE_OWNER1": "OWNER",
+                    "LOT_SIZE": 14175.0,
+                    "YEAR_BUILT": 1957,
+                    "LEGAL": "",
+                },
+                "geometry": {"x": -80.20681, "y": 25.790642},
+            }
+        ]
+        polygon_features = [
+            {
+                "attributes": {
+                    "FOLIO": "0131360600010",
+                    "TRUE_SITE_ADDR": "1603 NW 7 AVE",
+                    "TRUE_SITE_CITY": "Miami",
+                    "TRUE_OWNER1": "OWNER",
+                    "LEGAL": "",
+                    "Shape.STArea()": 149287.34,
+                },
+                "geometry": {
+                    "rings": [
+                        [
+                            [-80.2061, 25.7914],
+                            [-80.2061, 25.7901],
+                            [-80.2060, 25.7901],
+                            [-80.2061, 25.7914],
+                        ]
+                    ]
+                },
+            }
+        ]
+
+        async def mock_query(url, where, out_fields="*", extra_params=None, limit=5):
+            if "MD_ZoningLandManagementViewer/MapServer/2/query" in url:
+                return polygon_features
+            return point_features
+
+        with (
+            patch("plotlot.retrieval.property._query_arcgis", side_effect=mock_query),
+            patch(
+                "plotlot.retrieval.property._spatial_query_zoning",
+                return_value=("CI-HD", ""),
+            ),
+        ):
+            result = await lookup_property(
+                "1600 NW 7th Ave, Miami, FL 33136",
+                county="Miami-Dade",
+                lat=25.790642,
+                lng=-80.20681,
+            )
+
+        assert result is not None
+        assert result.folio == "0131360600010"
+        assert result.address == "1603 NW 7 AVE"
+        assert result.lot_size_source == "geometry"
 
 
 class TestCaliforniaCountyRouting:

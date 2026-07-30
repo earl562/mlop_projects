@@ -432,6 +432,7 @@ export default function Home() {
               role: "assistant",
               content: errorContent,
               errorType: isTimeout ? "timeout" : isBadAddress ? "bad_address" : isBackendUnavailable ? "backend_unavailable" : "generic",
+              pipelineSteps: undefined,
               retryAddress: address,
             } as Partial<DisplayMessage>);
           },

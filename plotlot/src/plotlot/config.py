@@ -90,6 +90,17 @@ class Settings(BaseSettings):
     nvidia_fallback_model: str = "minimaxai/minimax-m2.5"
     anthropic_api_key: str = ""
     google_api_key: str = ""
+    llm_provider: str = Field(default="auto", validation_alias="PLOTLOT_LLM_PROVIDER")
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "deepseek/deepseek-v4-flash"
+    openrouter_site_url: str = "https://plotlot.app"
+    openrouter_app_name: str = "PlotLot"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-flash"
+    # The current tool loop does not replay DeepSeek reasoning_content yet.
+    deepseek_thinking: bool = False
     openai_api_key: str = ""
     openai_access_token: str = ""  # OAuth-provided bearer token
     openai_base_url: str = "https://api.openai.com/v1"
@@ -120,11 +131,11 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-    # Jina.ai search
     jina_api_key: str = ""
+    exa_api_key: str = ""
+    browser_comp_runner_command: str = ""
+    browser_comp_runner_timeout_seconds: float = 45.0
 
-    # RentCast — keyed comparable-sales API (fallback comps where no open GIS
-    # sales layer exists, e.g. San Diego). Free tier ~50 req/mo.
     rentcast_api_key: str = ""
 
     # Sentry
@@ -142,9 +153,19 @@ class Settings(BaseSettings):
             "nvidia_fallback_model",
             "anthropic_api_key",
             "google_api_key",
+            "llm_provider",
+            "openrouter_api_key",
+            "openrouter_base_url",
+            "openrouter_model",
+            "openrouter_site_url",
+            "openrouter_app_name",
+            "deepseek_api_key",
+            "deepseek_base_url",
+            "deepseek_model",
             "openai_api_key",
             "openai_access_token",
             "jina_api_key",
+            "exa_api_key",
             "rentcast_api_key",
             "stripe_secret_key",
             "stripe_webhook_secret",
@@ -161,11 +182,24 @@ class Settings(BaseSettings):
             "openai_oauth_token_url",
             "openai_oauth_redirect_uri",
             "openai_oauth_scope",
+            "exa_api_key",
+            "browser_comp_runner_command",
             "connector_encryption_key",
         ):
             val = getattr(self, field)
             if val and val != val.strip():
                 setattr(self, field, val.strip())
+        self.llm_provider = self.llm_provider.lower()
+        if self.llm_provider not in {
+            "auto",
+            "openrouter",
+            "deepseek",
+            "nvidia",
+            "openai",
+        }:
+            raise ValueError(
+                "PLOTLOT_LLM_PROVIDER must be one of: auto, openrouter, deepseek, nvidia, openai"
+            )
         return self
 
     @model_validator(mode="after")
@@ -205,6 +239,11 @@ class Settings(BaseSettings):
     # falls back to local SQLite for development.
     mlflow_tracking_uri: str = "sqlite:///mlruns/mlflow.db"
     mlflow_experiment_name: str = "plotlot-rag"
+    mlflow_tracing_enabled: bool = False
+
+    otel_service_name: str = "plotlot"
+    otel_service_version: str = "2.0.0"
+    otel_console_exporter: bool = False
 
     # GCP / Firestore
     gcp_project_id: str = ""

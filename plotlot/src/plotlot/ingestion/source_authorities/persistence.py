@@ -13,7 +13,9 @@ from plotlot.storage.db import get_session
 from plotlot.storage.models import JurisdictionSourceAuthorityORM
 
 
-async def upsert_source_authority(authority: JurisdictionSourceAuthority) -> JurisdictionSourceAuthorityORM:
+async def upsert_source_authority(
+    authority: JurisdictionSourceAuthority,
+) -> JurisdictionSourceAuthorityORM:
     session = await get_session()
     try:
         existing = (
@@ -22,7 +24,8 @@ async def upsert_source_authority(authority: JurisdictionSourceAuthority) -> Jur
                     JurisdictionSourceAuthorityORM.state == authority.state,
                     JurisdictionSourceAuthorityORM.county == authority.county,
                     JurisdictionSourceAuthorityORM.municipality == authority.municipality,
-                    JurisdictionSourceAuthorityORM.authority_scope == authority.authority_scope.value,
+                    JurisdictionSourceAuthorityORM.authority_scope
+                    == authority.authority_scope.value,
                     JurisdictionSourceAuthorityORM.provider == authority.provider.value,
                 )
             )
@@ -38,12 +41,18 @@ async def upsert_source_authority(authority: JurisdictionSourceAuthority) -> Jur
         else:
             orm = JurisdictionSourceAuthorityORM(
                 id=authority.id,
-                state=authority.state, county=authority.county, municipality=authority.municipality,
+                state=authority.state,
+                county=authority.county,
+                municipality=authority.municipality,
                 jurisdiction_type=authority.jurisdiction_type_value,
-                authority_scope=authority.authority_scope_value, provider=authority.provider_value,
-                canonical_url=authority.canonical_url, source_url=authority.source_url,
-                source_title=authority.source_title, official_status=authority.official_status_value,
-                legal_caveat=authority.legal_caveat, metadata_json=authority.metadata_json,
+                authority_scope=authority.authority_scope_value,
+                provider=authority.provider_value,
+                canonical_url=authority.canonical_url,
+                source_url=authority.source_url,
+                source_title=authority.source_title,
+                official_status=authority.official_status_value,
+                legal_caveat=authority.legal_caveat,
+                metadata_json=authority.metadata_json,
             )
             session.add(orm)
         await session.commit()
@@ -53,7 +62,9 @@ async def upsert_source_authority(authority: JurisdictionSourceAuthority) -> Jur
 
 
 async def list_source_authorities(
-    *, state: str | None = None, authority_scope: str | None = None,
+    *,
+    state: str | None = None,
+    authority_scope: str | None = None,
 ) -> list[JurisdictionSourceAuthorityORM]:
     session = await get_session()
     try:
@@ -62,7 +73,11 @@ async def list_source_authorities(
             stmt = stmt.where(JurisdictionSourceAuthorityORM.state == state)
         if authority_scope:
             stmt = stmt.where(JurisdictionSourceAuthorityORM.authority_scope == authority_scope)
-        result = await session.execute(stmt.order_by(JurisdictionSourceAuthorityORM.county, JurisdictionSourceAuthorityORM.municipality))
+        result = await session.execute(
+            stmt.order_by(
+                JurisdictionSourceAuthorityORM.county, JurisdictionSourceAuthorityORM.municipality
+            )
+        )
         return list(result.scalars().all())
     finally:
         await session.close()
@@ -71,6 +86,7 @@ async def list_source_authorities(
 async def seed_and_persist_south_florida_authorities() -> int:
     """Seed + persist; returns count."""
     from plotlot.ingestion.source_authorities.south_florida import seed_south_florida_authorities
+
     auths = seed_south_florida_authorities()
     n = 0
     for a in auths:
@@ -79,4 +95,8 @@ async def seed_and_persist_south_florida_authorities() -> int:
     return n
 
 
-__all__ = ["list_source_authorities", "seed_and_persist_south_florida_authorities", "upsert_source_authority"]
+__all__ = [
+    "list_source_authorities",
+    "seed_and_persist_south_florida_authorities",
+    "upsert_source_authority",
+]

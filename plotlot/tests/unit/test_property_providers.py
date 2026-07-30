@@ -7,6 +7,7 @@ Verifies:
   - Each concrete provider delegates to the correct internal function
 """
 
+import httpx
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -216,6 +217,56 @@ class TestPropertyPackageLookup:
             )
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_retries_transient_provider_failure_before_success(self):
+        from plotlot.property import lookup_property
+
+        recovered_record = PropertyRecord(folio="MDC-RETRY-001", county="Miami-Dade")
+        transport_request = httpx.Request("GET", "https://example.test/property")
+        transient_error = httpx.ReadTimeout("timed out", request=transport_request)
+
+        with (
+            patch(
+                "plotlot.property.miami_dade._lookup_miami_dade",
+                new_callable=AsyncMock,
+                side_effect=[transient_error, recovered_record],
+            ) as lookup_mock,
+            patch("plotlot.retrieval.property.anyio.sleep", new=AsyncMock()) as sleep_mock,
+        ):
+            result = await lookup_property(
+                "171 NE 209th Ter",
+                "Miami-Dade",
+                lat=25.9,
+                lng=-80.2,
+            )
+
+        assert result is recovered_record
+        assert lookup_mock.await_count == 2
+        sleep_mock.assert_awaited_once_with(1.0)
+
+    @pytest.mark.asyncio
+    async def test_non_transient_provider_failure_does_not_retry(self):
+        from plotlot.property import lookup_property
+
+        with (
+            patch(
+                "plotlot.property.miami_dade._lookup_miami_dade",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("bad parser state"),
+            ) as lookup_mock,
+            patch("plotlot.retrieval.property.anyio.sleep", new=AsyncMock()) as sleep_mock,
+        ):
+            result = await lookup_property(
+                "171 NE 209th Ter",
+                "Miami-Dade",
+                lat=25.9,
+                lng=-80.2,
+            )
+
+        assert result is None
+        assert lookup_mock.await_count == 1
+        sleep_mock.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

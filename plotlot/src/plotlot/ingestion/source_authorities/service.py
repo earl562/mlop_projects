@@ -7,7 +7,7 @@ from plotlot.ingestion.source_authorities.south_florida import seed_south_florid
 
 # Master spec §5 provider priority (lower = higher priority).
 _PROVIDER_PRIORITY: dict[Provider, int] = {
-    Provider.OFFICIAL_HTML: 1,    # official API / machine-readable / HTML
+    Provider.OFFICIAL_HTML: 1,  # official API / machine-readable / HTML
     Provider.OFFICIAL_PDF: 2,
     Provider.MUNICODE: 3,
     Provider.ECODE360: 4,
@@ -15,7 +15,7 @@ _PROVIDER_PRIORITY: dict[Provider, int] = {
     Provider.CODEPUBLISHING: 6,
     Provider.MUNICIPAL_CODES: 7,
     Provider.ENCODEPLUS: 8,
-    Provider.ARCGIS: 9,            # gis_zoning, not ordinance text
+    Provider.ARCGIS: 9,  # gis_zoning, not ordinance text
     Provider.MANUAL: 10,
 }
 
@@ -31,5 +31,7 @@ def best_provider(providers: list[Provider]) -> Provider:
 
 
 __all__ = [
-    "best_provider", "resolve_provider_priority", "seed_south_florida_authorities",
+    "best_provider",
+    "resolve_provider_priority",
+    "seed_south_florida_authorities",
 ]

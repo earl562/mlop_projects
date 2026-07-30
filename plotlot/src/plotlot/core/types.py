@@ -727,6 +727,19 @@ class ComparableSale:
 
 
 @dataclass
+class ComparableListingCandidate:
+    title: str = ""
+    url: str = ""
+    address_hint: str = ""
+    source_domain: str = ""
+    query: str = ""
+    description: str = ""
+    candidate_kind: str = "listing_candidate"
+    classification: str = "unknown"
+    confidence: float = 0.0
+
+
+@dataclass
 class CompAnalysis:
     """Comparable sales analysis results."""
 
@@ -747,8 +760,14 @@ class CompAnalysis:
     adv_per_unit_low: float | None = None
     adv_per_unit_high: float | None = None
     adv_source: str = ""  # "comps" | "" (empty when no improved sales found)
+    sales_source_type: str = ""
+    exit_comp_source_type: str = ""
     # Exit comps — improved/finished sales used to derive ADV per unit.
     unit_comparables: list[ComparableSale] = field(default_factory=list)
+    rejected_land_comparables: list[ComparableSale] = field(default_factory=list)
+    web_listing_candidates: list[ComparableListingCandidate] = field(default_factory=list)
+    used_relaxed_land_comps: bool = False
+    used_relaxed_unit_comps: bool = False
 
     confidence: float = 0.0  # 0.0-1.0 based on comp count and recency
     notes: list[str] = field(default_factory=list)

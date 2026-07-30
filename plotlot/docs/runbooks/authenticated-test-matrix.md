@@ -49,12 +49,9 @@ bash scripts/verify_local_success.sh --strict-auth --skip-browser --skip-build
 | Group | Purpose | Required values |
 | --- | --- | --- |
 | `database_backed_e2e` | DB-backed frontend e2e and backend smoke tests | `DATABASE_URL` plus reachable Postgres (`make db-up` for local Docker DB) |
-| `llm_agent` | Live chat, LLM extraction fallback, live evals | one of `OPENAI_API_KEY`, `OPENAI_ACCESS_TOKEN`, `NVIDIA_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or Codex OAuth with `PLOTLOT_USE_CODEX_OAUTH=1` and an existing `PLOTLOT_CODEX_AUTH_FILE` |
+| `llm_agent` | Live chat, LLM extraction fallback, live evals | one of `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `OPENAI_ACCESS_TOKEN`, `NVIDIA_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or Codex OAuth with `PLOTLOT_USE_CODEX_OAUTH=1` and an existing `PLOTLOT_CODEX_AUTH_FILE` |
 | `geocoding` | Live Geocodio address lookup | `GEOCODIO_API_KEY` |
 | `web_search` | Agent web-source search through Jina | `JINA_API_KEY` |
-| `google_workspace` | Google Docs/Sheets creation tools | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
-| `google_rendering` | Building/concept rendering endpoints | `GOOGLE_API_KEY` |
-| `google_maps_enhanced` | Optional Google Maps SDK imagery/street-view enhancements | optional `NEXT_PUBLIC_GOOGLE_MAPS_KEY` (fallback exists without key) |
 | `stripe_billing` | Checkout and webhook verification | `STRIPE_SECRET_KEY`, `STRIPE_PRO_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` |
 | `clerk_auth` | Real authenticated sessions/JWT verification | `CLERK_JWKS_URL` when `AUTH_ENABLED=true`; frontend sign-in also needs `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` |
 | `fal_video` | Video generation API route | `FAL_KEY` |
@@ -93,11 +90,8 @@ bash scripts/verify_local_success.sh --strict-auth --skip-browser --skip-build
    uv run pytest tests/eval/test_eval_live.py -m "eval and e2e" -v
    ```
 
-7. For Google Workspace, run the OAuth helper before live Docs/Sheets tests:
-
-   ```bash
-   uv run python scripts/setup_google_auth.py
-   ```
+7. PlotLot does not use Google APIs. Maps use ArcGIS/OpenStreetMap, and generated
+   artifacts use PlotLot's local report/document exports.
 
 ## Safety rules
 

@@ -20,27 +20,15 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from plotlot.api.auth import get_current_user
-from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
-from plotlot.api.chat import router as chat_router
-from plotlot.api.approvals import router as approvals_router
-from plotlot.api.workspaces import router as workspaces_router
-from plotlot.api.analyses import router as analyses_router
-from plotlot.api.tools import router as tools_router
-from plotlot.api.evidence import router as evidence_router
-from plotlot.api.mcp import router as mcp_router
-from plotlot.api.geometry import router as geometry_router
 from plotlot.api.middleware import rate_limiter
-from plotlot.api.ordinance import router as ordinance_router
-from plotlot.api.portfolio import router as portfolio_router
-from plotlot.api.render import router as render_router
-from plotlot.api.routes import router
-from plotlot.api.screening import router as screening_router
+from plotlot.api.auth import get_current_user
+from plotlot.api.router_registry import register_routers
 from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
-from plotlot.observability.tracing import configure_mlflow
+from plotlot.observability.tracing import configure_mlflow, configure_otel
 from plotlot.oauth.openai_auth import has_saved_tokens
 from plotlot.retrieval.geocode import geocode_address
+from plotlot.retrieval.llm import _get_primary_provider
 from plotlot.storage.db import get_session, init_db
 
 logger = logging.getLogger(__name__)
@@ -58,7 +46,7 @@ _runtime_health: _RuntimeHealth = {
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Initialize DB on startup, cleanup on shutdown."""
     setup_logging(json_format=settings.log_json, level=settings.log_level)
     _runtime_health["startup_mode"] = "healthy"
@@ -78,9 +66,22 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Sentry init failed: %s", e)
 
-    # Initialize MLflow tracing
-    if configure_mlflow(settings.mlflow_tracking_uri, settings.mlflow_experiment_name):
-        logger.info("MLflow tracing enabled: %s", settings.mlflow_tracking_uri)
+    if configure_otel(
+        settings.otel_service_name,
+        settings.otel_service_version,
+        console_exporter=settings.otel_console_exporter,
+    ):
+        logger.info("OpenTelemetry tracing enabled for service %s", settings.otel_service_name)
+    else:
+        logger.warning("OpenTelemetry tracing unavailable — spans will no-op")
+        _runtime_health["startup_warnings"].append("otel_unavailable")
+
+    if configure_mlflow(
+        settings.mlflow_tracking_uri,
+        settings.mlflow_experiment_name,
+        enable_tracing=settings.mlflow_tracing_enabled,
+    ):
+        logger.info("MLflow tracking enabled: %s", settings.mlflow_tracking_uri)
     else:
         logger.warning("MLflow tracing unavailable — API will start in degraded mode")
         _runtime_health["startup_mode"] = "degraded"
@@ -196,25 +197,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
-app.include_router(billing_router)
-app.include_router(chat_router)
-app.include_router(approvals_router)
-app.include_router(workspaces_router)
-app.include_router(analyses_router)
-app.include_router(tools_router)
-app.include_router(evidence_router)
-app.include_router(mcp_router)
-app.include_router(portfolio_router)
-app.include_router(geometry_router)
-app.include_router(ordinance_router)
-app.include_router(render_router)
-app.include_router(screening_router)
-
-# Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)
-from plotlot.api.documents import router as documents_router  # noqa: E402
-
-app.include_router(documents_router)
+register_routers(app)
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +345,8 @@ async def health():
     agent_chat_ready = bool(
         _has_text_setting("openai_access_token")
         or _has_text_setting("openai_api_key")
+        or _has_text_setting("openrouter_api_key")
+        or _has_text_setting("deepseek_api_key")
         or _has_text_setting("nvidia_api_key")
         or _has_text_setting("groq_api_key")
         # Legacy compatibility for tests/deployments that still use the old
@@ -466,65 +451,69 @@ async def debug_llm():
 
     diag: dict = {"providers": {}}
 
-    using_nvidia = bool(settings.nvidia_api_key)
-    token = (
-        settings.nvidia_api_key
-        if using_nvidia
-        else (settings.openai_access_token or settings.openai_api_key)
-    )
+    provider = _get_primary_provider(settings)
+    token = provider.api_key
     if token:
         t0 = time.monotonic()
         try:
             client_kwargs = {"api_key": token, "timeout": 15.0}
-            base_url = settings.nvidia_base_url if using_nvidia else settings.openai_base_url
+            base_url = provider.base_url
             if base_url:
                 client_kwargs["base_url"] = base_url
-            if settings.openai_organization and not using_nvidia:
+            if provider.slug == "openrouter":
+                headers = {
+                    "HTTP-Referer": settings.openrouter_site_url,
+                    "X-OpenRouter-Title": settings.openrouter_app_name,
+                }
+                client_kwargs["default_headers"] = {
+                    key: value for key, value in headers.items() if value
+                }
+            if settings.openai_organization and provider.slug == "openai":
                 client_kwargs["organization"] = settings.openai_organization
-            if settings.openai_project and not using_nvidia:
+            if settings.openai_project and provider.slug == "openai":
                 client_kwargs["project"] = settings.openai_project
             client = AsyncOpenAI(**client_kwargs)
             kwargs = {
-                "model": settings.nvidia_model
-                if using_nvidia
-                else (settings.openai_model or "gpt-4.1"),
+                "model": provider.model,
                 "messages": (
                     [
                         {"role": "system", "content": "/no_think"},
                         {"role": "user", "content": "Say 'ok' in one word."},
                     ]
-                    if using_nvidia
+                    if provider.nvidia_compat
                     else [{"role": "user", "content": "Say 'ok' in one word."}]
                 ),
                 "max_completion_tokens": 8,
                 "temperature": 0,
             }
-            if not using_nvidia:
+            if provider.slug == "deepseek":
+                kwargs["extra_body"] = {
+                    "thinking": {
+                        "type": "enabled" if settings.deepseek_thinking is True else "disabled"
+                    }
+                }
+            elif provider.supports_reasoning_effort:
                 kwargs["reasoning_effort"] = settings.openai_reasoning_effort
             resp = await client.chat.completions.create(**kwargs)
             elapsed = round(time.monotonic() - t0, 2)
             text = resp.choices[0].message.content or ""
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider.slug] = {
                 "status": "ok",
-                "model": settings.nvidia_model
-                if using_nvidia
-                else (settings.openai_model or "gpt-4.1"),
+                "model": provider.model,
                 "base_url": base_url,
                 "latency_s": elapsed,
                 "response": text[:100],
             }
         except Exception as e:
             elapsed = round(time.monotonic() - t0, 2)
-            diag["providers"]["nvidia" if using_nvidia else "openai"] = {
+            diag["providers"][provider.slug] = {
                 "status": "error",
-                "model": settings.nvidia_model
-                if using_nvidia
-                else (settings.openai_model or "gpt-4.1"),
+                "model": provider.model,
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }
     else:
-        diag["providers"]["nvidia" if using_nvidia else "openai"] = {"status": "no_credentials"}
+        diag["providers"][provider.slug] = {"status": "no_credentials"}
 
     # --- Groq (fallback) ---
     if settings.groq_api_key:

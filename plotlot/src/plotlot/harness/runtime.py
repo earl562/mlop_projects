@@ -16,6 +16,7 @@ from plotlot.harness.events import EventKind, HarnessEvent
 from plotlot.harness.policy import HarnessPolicyEngine
 from plotlot.harness.tool_registry import tool_exists
 from plotlot.land_use.models import PolicyDecision, ToolContext
+from plotlot.observability.tracing import start_otel_span
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[dict[str, Any]]]
 
@@ -167,31 +168,42 @@ class HarnessRuntime:
             )
             return result
 
-        try:
-            handler_result = await handler(tool_args, context)
-        except Exception as exc:
+        with start_otel_span(
+            "plotlot.harness.tool_call",
+            attributes={
+                "plotlot.tool.name": tool_name,
+                "plotlot.run_id": context.run_id,
+                "plotlot.approval_id": approval_id,
+                "plotlot.tool.arg_count": len(arg_keys),
+            },
+        ) as span:
+            try:
+                handler_result = await handler(tool_args, context)
+            except Exception as exc:
+                span.set_attribute("plotlot.tool.status", "error")
+                out = ToolCallResult(
+                    tool_name=tool_name,
+                    decision=decision,
+                    status="error",
+                    message=f"{type(exc).__name__}: {exc}",
+                )
+                self._emit(
+                    kind="tool_result",
+                    payload={
+                        "tool_name": tool_name,
+                        "status": out.status,
+                        "message": out.message,
+                    },
+                    buffer=events,
+                )
+                return out
+            span.set_attribute("plotlot.tool.status", "ok")
             out = ToolCallResult(
                 tool_name=tool_name,
                 decision=decision,
-                status="error",
-                message=f"{type(exc).__name__}: {exc}",
+                status="ok",
+                result=handler_result,
             )
-            self._emit(
-                kind="tool_result",
-                payload={
-                    "tool_name": tool_name,
-                    "status": out.status,
-                    "message": out.message,
-                },
-                buffer=events,
-            )
-            return out
-        out = ToolCallResult(
-            tool_name=tool_name,
-            decision=decision,
-            status="ok",
-            result=handler_result,
-        )
         self._emit(
             kind="tool_result",
             payload={"tool_name": tool_name, "status": out.status},

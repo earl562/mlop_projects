@@ -14,6 +14,7 @@
     "test:e2e:vc": "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000} npx playwright test tests/vc-readiness.no-db.spec.ts --project=chromium",
     "test:e2e:db": "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000} npx playwright test tests/lookup.db.spec.ts tests/agent.db.spec.ts tests/cross-mode.spec.ts tests/harness-lifecycle.db.spec.ts --project=chromium",
     "test:e2e:visual": "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000} npx playwright test tests/visual-walkthrough.spec.ts --project=chromium",
+    "test:e2e:btdi": "npx playwright test tests/btdi.visual.spec.ts --project=chromium --project=mobile-chrome",
     "test:e2e:live-agent": "PLOTLOT_LIVE_AGENT_E2E=1 NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://127.0.0.1:8000} npx playwright test tests/agent-live.e2e.spec.ts --project=chromium",
     "verify:local": "npm run lint && npx tsc --noEmit && npm run test:ui && npx playwright test tests/design-system.spec.ts --project=chromium && npm run build",
     "verify:tdd": "npm run lint && npx tsc --noEmit && npm run test:ui"

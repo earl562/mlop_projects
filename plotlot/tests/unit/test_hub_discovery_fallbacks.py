@@ -134,6 +134,41 @@ async def test_probe_arcgis_server_finds_parcel_layer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_probe_arcgis_server_skips_layer_with_null_fields() -> None:
+    root_data = {
+        "folders": [],
+        "services": [{"name": "BrokenParcels", "type": "MapServer"}],
+    }
+    service_data = {"layers": [{"id": 0, "name": "Broken Parcels", "type": "Feature Layer"}]}
+    layer_data = {"name": "Broken Parcels", "fields": None}
+
+    def _get_response(url: str, params: dict | None = None):
+        if url.split("/")[-1].isdigit():
+            return _json_resp(layer_data)
+        if "BrokenParcels/MapServer" in url:
+            return _json_resp(service_data)
+        return _json_resp(root_data)
+
+    with patch("plotlot.property.hub_discovery.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=_get_response)
+        mock_cls.return_value = mock_client
+
+        result = await _probe_arcgis_server(
+            "https://example.gov/arcgis/rest/services",
+            _COUNTY,
+            _STATE,
+            "parcels",
+            _LAT,
+            _LNG,
+        )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_probe_arcgis_server_skips_no_coverage() -> None:
     """Candidate layers that fail coverage check are skipped."""
     root_data = {"folders": [], "services": [{"name": "ParcelsService", "type": "MapServer"}]}

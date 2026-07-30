@@ -34,9 +34,10 @@ class VerificationStatus(str, Enum):
     UNVERIFIED is the default for rows from new ingestion runs before QC.
     """
 
-    VERIFIED = "verified"      # cross-checked against ingested source text — production-ready
-    STAGED = "staged"           # assumption-grade, pending QC — never becomes verified_fact
-    UNVERIFIED = "unverified"   # from a fresh ingestion run, not yet QC'd
+    VERIFIED = "verified"  # cross-checked against ingested source text — production-ready
+    STAGED = "staged"  # assumption-grade, pending QC — never becomes verified_fact
+    UNVERIFIED = "unverified"  # from a fresh ingestion run, not yet QC'd
+
 
 # District code: 1-4 uppercase letters, optional hyphen/digits/suffix.
 # Matches RS-1, RM-15, T6-80, RMM-25, B-2, etc.

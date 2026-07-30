@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from plotlot.core.types import MunicodeConfig
 from plotlot.harness import HarnessRuntime
 from plotlot.harness.default_runtime import _is_pdf_scraped, _handle_search_municode_live
 from plotlot.land_use import ToolContext
@@ -110,6 +111,9 @@ async def test_search_municode_live_returns_indexed_content_for_san_diego():
     assert result["status"] == "success"
     assert result["results"]
     assert result["source"] == "indexed"
+    assert result["authority_source_type"] == "indexed_ordinance"
+    assert result["authority_confidence"] == "indexed_official_reference"
+    assert result["requires_official_verification"] is True
     assert "indexed" in result["message"].lower()
 
 
@@ -130,3 +134,84 @@ async def test_search_municode_live_san_diego_degrades_honestly_when_unindexed()
     assert result["results"] == []
     assert "search_zoning_ordinance" in result["message"]
     assert "fabricate" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_search_municode_live_never_runs_nationwide_discovery_for_one_authority():
+    """An interactive lookup must use bounded authority resolution."""
+    no_results = {
+        "status": "no_results",
+        "results": [],
+        "evidence": [],
+        "message": "No indexed ordinance text.",
+    }
+    with (
+        patch(
+            "plotlot.ingestion.discovery.get_municode_configs",
+            new=AsyncMock(side_effect=AssertionError("nationwide discovery is forbidden")),
+        ) as broad_discovery,
+        patch(
+            "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+            new=AsyncMock(return_value=None),
+        ) as targeted_discovery,
+        patch(
+            "plotlot.harness.default_runtime._indexed_ordinance_fallback",
+            new=AsyncMock(return_value=no_results),
+        ),
+    ):
+        result = await _handle_search_municode_live(
+            {
+                "municipality": "Unincorporated County",
+                "state": "FL",
+                "query": "EU-1 setbacks density",
+            },
+            _ctx(),
+        )
+
+    broad_discovery.assert_not_awaited()
+    targeted_discovery.assert_awaited_once_with("Unincorporated County", "FL")
+    assert result["status"] == "no_results"
+
+
+@pytest.mark.asyncio
+async def test_search_municode_live_reuses_targeted_config_during_section_search():
+    """The section search must not resolve the same authority a second time."""
+    config = MunicodeConfig(
+        municipality="Miami Gardens",
+        county="miami-dade",
+        client_id=11,
+        product_id=22,
+        job_id=33,
+        zoning_node_id="root",
+        state="FL",
+    )
+    with (
+        patch(
+            "plotlot.ingestion.discovery.get_municode_configs",
+            new=AsyncMock(side_effect=AssertionError("nationwide discovery is forbidden")),
+        ) as broad_discovery,
+        patch(
+            "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+            new=AsyncMock(return_value=config),
+        ),
+        patch(
+            "plotlot.land_use.ordinances.service.search_municode_live",
+            new=AsyncMock(return_value=[]),
+        ) as section_search,
+        patch(
+            "plotlot.land_use.ordinances.live_rules.extract_live_municode_rules",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = await _handle_search_municode_live(
+            {
+                "municipality": "Miami Gardens",
+                "state": "FL",
+                "query": "R-1 setbacks density",
+            },
+            _ctx(),
+        )
+
+    broad_discovery.assert_not_awaited()
+    assert section_search.await_args.kwargs["config"] == config
+    assert result["status"] == "success"

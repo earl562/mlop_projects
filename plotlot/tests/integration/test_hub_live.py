@@ -4,10 +4,18 @@ These tests hit the real ArcGIS Hub API and county endpoints.
 Run with: uv run pytest tests/integration/test_hub_live.py -v -m live
 """
 
+import os
+
 import pytest
 
 from plotlot.property.hub_discovery import discover_datasets
 from plotlot.property.field_mapper import map_fields_heuristic
+
+_LIVE = os.environ.get("PLOTLOT_LIVE_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not _LIVE,
+    reason="set PLOTLOT_LIVE_TESTS=1 to query live ArcGIS Hub and county endpoints",
+)
 
 
 @pytest.mark.live

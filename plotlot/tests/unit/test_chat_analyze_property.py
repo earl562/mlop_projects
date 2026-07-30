@@ -1164,6 +1164,47 @@ class TestForcedGrounding:
             == "456 Main Street, Austin, TX, 78701"
         )
 
+    def test_forced_grounding_prefers_harness_for_florida_address(self):
+        from plotlot.api.chat import _forced_grounding_tool_name
+
+        assert (
+            _forced_grounding_tool_name(
+                "45 NW 209 ST, Miami Gardens, FL 33169",
+                "s",
+                None,
+            )
+            == "run_deal_analysis"
+        )
+
+    def test_forced_grounding_prefers_harness_from_florida_context(self):
+        from plotlot.api.chat import _forced_grounding_tool_name
+
+        chat_mod._sessions.set_property_context(
+            "fl-session",
+            {
+                "address": "45 NW 209 ST, Miami Gardens, FL 33169",
+                "county": "Miami-Dade",
+                "state": "FL",
+            },
+        )
+
+        assert (
+            _forced_grounding_tool_name("45 NW 209 ST", "fl-session", None) == "run_deal_analysis"
+        )
+        chat_mod._sessions.delete_session("fl-session")
+
+    def test_forced_grounding_keeps_legacy_tool_outside_florida(self):
+        from plotlot.api.chat import _forced_grounding_tool_name
+
+        assert (
+            _forced_grounding_tool_name(
+                "1233 Hueneme St, San Diego, CA 92110",
+                "s",
+                None,
+            )
+            == "analyze_property"
+        )
+
     def test_analysis_covers_address_normalizes(self):
         from plotlot.api.chat import _analysis_covers_address
 

@@ -64,7 +64,19 @@ class TestHealthEndpoint:
 
         _runtime_health["startup_mode"] = "degraded"
         _runtime_health["startup_warnings"] = ["database_unavailable"]
-        with patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")):
+        with (
+            patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")),
+            patch("plotlot.api.main.settings") as mock_settings,
+        ):
+            mock_settings.database_url = (
+                "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+            )
+            mock_settings.database_require_ssl = False
+            mock_settings.nvidia_api_key = ""
+            mock_settings.openai_api_key = ""
+            mock_settings.openai_access_token = ""
+            mock_settings.openrouter_api_key = ""
+            mock_settings.use_codex_oauth = False
             result = await health()
 
         assert result["status"] == "degraded"

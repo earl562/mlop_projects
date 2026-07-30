@@ -37,18 +37,22 @@ class TestFreshnessDerivation:
 
     def test_stale_chunk_yields_stale_freshness(self):
         # Ordinance amended 2026-06-01, scraped 2026-01-01 → stale.
-        claim = _verified_zoning_claim({
-            "amended_date": "2026-06-01T00:00:00",
-            "scraped_at": "2026-01-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "2026-06-01T00:00:00",
+                "scraped_at": "2026-01-01T00:00:00",
+            }
+        )
         assert claim.freshness is ClaimFreshness.STALE
 
     def test_fresh_chunk_yields_fresh_freshness(self):
         # Ordinance amended 2026-01-01, scraped 2026-06-01 → fresh.
-        claim = _verified_zoning_claim({
-            "amended_date": "2026-01-01T00:00:00",
-            "scraped_at": "2026-06-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "2026-01-01T00:00:00",
+                "scraped_at": "2026-06-01T00:00:00",
+            }
+        )
         assert claim.freshness is ClaimFreshness.FRESH
 
     def test_no_dates_yields_unknown_freshness(self):
@@ -61,17 +65,21 @@ class TestFreshnessDerivation:
 
     def test_equal_dates_yield_fresh(self):
         # amended == scraped → we have the current version.
-        claim = _verified_zoning_claim({
-            "amended_date": "2026-06-01T00:00:00",
-            "scraped_at": "2026-06-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "2026-06-01T00:00:00",
+                "scraped_at": "2026-06-01T00:00:00",
+            }
+        )
         assert claim.freshness is ClaimFreshness.FRESH
 
     def test_malformed_dates_fall_back_to_unknown(self):
-        claim = _verified_zoning_claim({
-            "amended_date": "not-a-date",
-            "scraped_at": "2026-01-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "not-a-date",
+                "scraped_at": "2026-01-01T00:00:00",
+            }
+        )
         assert claim.freshness is ClaimFreshness.UNKNOWN
 
 
@@ -80,17 +88,21 @@ class TestVerifiedFactPrerequisite:
     prerequisite; the planner/guardrail blocks it."""
 
     def test_fresh_verified_fact_satisfies_prerequisite(self):
-        claim = _verified_zoning_claim({
-            "amended_date": "2026-01-01T00:00:00",
-            "scraped_at": "2026-06-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "2026-01-01T00:00:00",
+                "scraped_at": "2026-06-01T00:00:00",
+            }
+        )
         assert claim.satisfies_verified_fact_prerequisite() is True
 
     def test_stale_verified_fact_does_not_satisfy_prerequisite(self):
-        claim = _verified_zoning_claim({
-            "amended_date": "2026-06-01T00:00:00",
-            "scraped_at": "2026-01-01T00:00:00",
-        })
+        claim = _verified_zoning_claim(
+            {
+                "amended_date": "2026-06-01T00:00:00",
+                "scraped_at": "2026-01-01T00:00:00",
+            }
+        )
         assert claim.freshness is ClaimFreshness.STALE
         # A stale verified_fact cannot satisfy the prerequisite — the planner
         # must block step 5 (residual land value) until re-ingested.

@@ -79,9 +79,21 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
             "/PaGISView_gdb/FeatureServer/0"
         ),
         fields=(
-            "FOLIO", "PRICE_1", "DATEOFSALE_UTC", "LOT_SIZE", "USE_CODE",
-            "BEDROOMS", "BATHROOMS", "LIVING_AREA", "YEAR_BUILT",
-            "ZIP_CODE", "MUNICIPALITY",
+            "FOLIO",
+            "TRUE_SITE_ADDR",
+            "TRUE_SITE_CITY",
+            "TRUE_SITE_ZIP_CODE",
+            "PRICE_1",
+            "DATEOFSALE_UTC",
+            "DOS_1",
+            "LOT_SIZE",
+            "DOR_CODE_CUR",
+            "BEDROOM_COUNT",
+            "BATHROOM_COUNT",
+            "BUILDING_ACTUAL_AREA",
+            "BUILDING_HEATED_AREA",
+            "UNIT_COUNT",
+            "YEAR_BUILT",
         ),
         source="Miami-Dade County Property Appraiser PaGISView, verified 2026-06-26",
         note="Sale price + date on the parcel feature; 0-3 mi radius query.",
@@ -91,12 +103,12 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
     # Verified fields: SALE_AMOUNT, SALE_DATE, FOLIO_NUMBER (DB-qualified names).
     ("FL", "broward"): SalesSource(
         layer_url=(
-            "https://gisweb-adapters.bcpa.net/arcgis/rest/services"
-            "/BCPA_EXTERNAL_JAN26/MapServer/18"
+            "https://gisweb-adapters.bcpa.net/arcgis/rest/services/BCPA_EXTERNAL_JAN26/MapServer/18"
         ),
         fields=(
             "SQLGIS02.DATALAYER.Parcel_Polygons.FOLIO",
             "SQLGIS02.DATALAYER.Parcel_Polygons.PARCEL_TYPE",
+            "SQLGIS02.DATALAYER.Parcel_Polygons.SHAPE.STArea()",
             "SQLGIS02.dbo.BCPA_SALES.FOLIO_NUMBER",
             "SQLGIS02.dbo.BCPA_SALES.SALE_DATE",
             "SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT",
@@ -118,8 +130,15 @@ _SALES_SOURCES: dict[tuple[str, str], SalesSource] = {
             "/Parcels_and_Property_Details_WebMercator/FeatureServer/0"
         ),
         fields=(
-            "PARCEL_NUMBER", "PRICE", "SALE_DATE", "MONTHS_SINCE_SALE", "SALEKEY",
-            "PROPERTY_USE", "ACRES", "YEAR_ADDED", "AG_USE_VAL",
+            "PARCEL_NUMBER",
+            "PRICE",
+            "SALE_DATE",
+            "MONTHS_SINCE_SALE",
+            "SALEKEY",
+            "PROPERTY_USE",
+            "ACRES",
+            "YEAR_ADDED",
+            "AG_USE_VAL",
         ),
         source="Palm Beach County Property Appraiser Parcels, verified 2026-06-26",
         note="Sale price + date on the parcel feature; 0-3 mi radius query.",

@@ -390,6 +390,7 @@ async def get_comparable_sales(
         "lng": lng,
         "county": county.strip(),
         "state": state,
+        "radius_miles": radius_miles,
         "comparable_count": len(result.comparables),
         "median_price_per_acre": comp_data.get("median_price_per_acre"),
         "price_per_acre_low": comp_data.get("price_per_acre_low"),

@@ -22,6 +22,7 @@ from plotlot.property.base import PropertyProvider
 from plotlot.property.field_mapper import ACRES_TO_SQFT, SQ_METERS_TO_SQFT, map_fields
 from plotlot.property.hub_discovery import discover_datasets
 from plotlot.property.models import CountyCache, DatasetInfo, FieldMapping
+from plotlot.property.registry import get_registered_provider
 from plotlot.property.schemas import (
     get_county_cache,
     get_field_mapping,
@@ -53,6 +54,16 @@ class UniversalProvider(PropertyProvider):
         4. Query zoning dataset (spatial)
         5. Map fields to PropertyRecord
         """
+        authoritative_provider = get_registered_provider(county)
+        if authoritative_provider is not None and authoritative_provider is not self:
+            return await authoritative_provider.lookup(
+                address,
+                county,
+                lat=lat,
+                lng=lng,
+                state=state,
+            )
+
         if lat is None or lng is None:
             logger.warning("UniversalProvider requires lat/lng for discovery")
             return None

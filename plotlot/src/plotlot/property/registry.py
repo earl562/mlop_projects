@@ -40,12 +40,15 @@ def get_provider(county: str) -> PropertyProvider | None:
     Lookup is case-insensitive and strips whitespace. Falls back to the
     UniversalProvider for counties without a dedicated provider.
     """
-    _ensure_registered()
-    key = county.lower().strip()
-    provider = _PROVIDERS.get(key)
+    provider = get_registered_provider(county)
     if provider is None:
         return _get_universal_fallback()
     return provider
+
+
+def get_registered_provider(county: str) -> PropertyProvider | None:
+    _ensure_registered()
+    return _PROVIDERS.get(county.lower().strip())
 
 
 def _get_universal_fallback() -> PropertyProvider:

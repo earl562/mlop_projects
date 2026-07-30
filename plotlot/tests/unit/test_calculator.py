@@ -1,7 +1,7 @@
 """Tests for the max-allowable-units calculator."""
 
 from plotlot.core.types import NumericZoningParams
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard, VerificationStatus
 from plotlot.pipeline.calculator import (
     _effective_stories,
     _reconcile_density,
@@ -659,6 +659,7 @@ class TestDistrictDimensionalStandardWiring:
             "max_density_units_per_acre": 8.0,
             "source_section_id": "sandbox_rs8_dim_table",
             "source_url": "https://example.gov/zoning/rs8",
+            "verification_status": VerificationStatus.VERIFIED,
         }
         base.update(overrides)
         return DistrictDimensionalStandard(**base)
@@ -681,9 +682,7 @@ class TestDistrictDimensionalStandardWiring:
         # Criterion 3: the LLM-extracted NumericZoningParams path still works and
         # is labeled assumption grade (origin=unknown).
         equiv = self._rs8_standard().to_numeric_zoning_params()
-        result = calculate_max_units(
-            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6
-        )
+        result = calculate_max_units(43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6)
         assert result.max_units == 8
         assert result.origin == "unknown"
 
@@ -692,12 +691,8 @@ class TestDistrictDimensionalStandardWiring:
         # max_units as its .to_numeric_zoning_params() equivalent.
         standard = self._rs8_standard()
         equiv = standard.to_numeric_zoning_params()
-        r_standard = calculate_max_units(
-            43560.0, standard, lot_width_ft=100.0, lot_depth_ft=435.6
-        )
-        r_equiv = calculate_max_units(
-            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6
-        )
+        r_standard = calculate_max_units(43560.0, standard, lot_width_ft=100.0, lot_depth_ft=435.6)
+        r_equiv = calculate_max_units(43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6)
         assert r_standard.max_units == r_equiv.max_units == 8
         assert r_standard.governing_constraint == r_equiv.governing_constraint
 
@@ -707,7 +702,10 @@ class TestDistrictDimensionalStandardWiring:
         # local_authority via the origin override.
         equiv = self._rs8_standard().to_numeric_zoning_params()
         result = calculate_max_units(
-            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6,
+            43560.0,
+            equiv,
+            lot_width_ft=100.0,
+            lot_depth_ft=435.6,
             origin="local_authority",
         )
         assert result.origin == "local_authority"
@@ -717,7 +715,10 @@ class TestDistrictDimensionalStandardWiring:
         # An explicit origin override takes precedence over the inferred label —
         # the caller owns the provenance claim when it bypasses the standard.
         forced_unknown = calculate_max_units(
-            43560.0, self._rs8_standard(), lot_width_ft=100.0, lot_depth_ft=435.6,
+            43560.0,
+            self._rs8_standard(),
+            lot_width_ft=100.0,
+            lot_depth_ft=435.6,
             origin="unknown",
         )
         assert forced_unknown.origin == "unknown"

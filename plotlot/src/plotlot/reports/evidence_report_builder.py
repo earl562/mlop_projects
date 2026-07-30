@@ -16,6 +16,7 @@ from typing import Literal
 @dataclass
 class ReportClaim:
     """One claim in a report (master spec §12)."""
+
     key: str
     text: str
     material: bool
@@ -64,8 +65,11 @@ class EvidenceReportBuilder:
             "report_id": f"rpt_{self.analysis_run_id}",
             "claims": [
                 {
-                    "key": c.key, "text": c.text, "material": c.material,
-                    "evidence_ids": c.evidence_ids, "confidence": c.confidence,
+                    "key": c.key,
+                    "text": c.text,
+                    "material": c.material,
+                    "evidence_ids": c.evidence_ids,
+                    "confidence": c.confidence,
                     "needs_verification": c.needs_verification,
                     "source_caveat": c.source_caveat,
                 }

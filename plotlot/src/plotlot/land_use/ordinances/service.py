@@ -11,7 +11,7 @@ from plotlot.ingestion.discovery import (
     get_municode_configs,
     resolve_municode_config,
 )
-from plotlot.core.types import TocNode
+from plotlot.core.types import MunicodeConfig, TocNode
 from plotlot.ingestion.scraper import MunicodeScraper
 from plotlot.land_use.citations import ordinance_citation
 from plotlot.land_use.models import OrdinanceSearchArgs, OrdinanceSearchResult
@@ -19,13 +19,18 @@ from plotlot.land_use.models import OrdinanceSearchArgs, OrdinanceSearchResult
 _TOC_CACHE: dict[tuple[int, int, str], list[TocNode]] = {}
 
 
-async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearchResult]:
+async def search_municode_live(
+    args: OrdinanceSearchArgs,
+    *,
+    config: MunicodeConfig | None = None,
+) -> list[OrdinanceSearchResult]:
     """Search Municode for ordinance sections and return cited results."""
 
-    configs = await get_municode_configs()
     muni_key = args.jurisdiction.municipality or args.jurisdiction.county or ""
     state = args.jurisdiction.state or None
-    config = resolve_municode_config(configs, muni_key, state=state)
+    if config is None:
+        configs = await get_municode_configs()
+        config = resolve_municode_config(configs, muni_key, state=state)
     if config is None and state and muni_key:
         config = await discover_municode_authority_for_name(
             muni_key,
@@ -62,6 +67,11 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
         ranked.sort(key=lambda item: item[0], reverse=True)
 
         results: list[OrdinanceSearchResult] = []
+        citation_jurisdiction = (
+            f"{config.municipality}, {config.state}"
+            if config.municipality and config.state
+            else args.jurisdiction.label()
+        )
         for _, node in ranked[: args.limit]:
             heading = node.heading or ""
             parent = node.parent_heading or ""
@@ -75,7 +85,7 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
             citation = ordinance_citation(
                 title=heading or "Ordinance section",
                 url=url,
-                jurisdiction=args.jurisdiction.label(),
+                jurisdiction=citation_jurisdiction,
                 path=[p for p in [parent, heading] if p],
                 raw_text_for_hash=f"{config.municipality}:{node.node_id}:{heading}:{snippet}",
             )
