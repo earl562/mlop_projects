@@ -64,7 +64,8 @@ interface DisplayMessage {
 
 const FL_PATTERNS = /\b(miami|fort lauderdale|hollywood|hialeah|pembroke|miramar|coral|doral|homestead|aventura|boca|delray|boynton|west palm|palm beach|broward|dade|FL|florida)\b/i;
 const ADDRESS_PATTERN = /\d+\s+(?:\w+\s+)+(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ter|terrace|ct|court|ln|lane|way|pl|place|cir|circle|pkwy|parkway|hwy|highway|trl|trail|real|path)\b/i;
-const DIRECT_TOOL_PROMPT_PATTERN = /Use the tool `(?:search_municode_live|discover_open_data_layers)` with:/i;
+const DIRECT_TOOL_PROMPT_PATTERN =
+  /\buse\s+(?:the\s+)?(?:tool\s+)?`?(?:search_municode_live|discover_open_data_layers|run_deal_analysis)`?(?:\s+tool)?\b/i;
 // Broader fallback: "123 Something, City, FL 33xxx" pattern (number + comma + FL indicator + zip)
 const ADDRESS_WITH_ZIP = /\d+\s+[\w\s]+,\s*[\w\s]+,\s*FL\s+\d{5}/i;
 

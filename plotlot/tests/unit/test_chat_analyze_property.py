@@ -908,6 +908,80 @@ def test_active_analysis_context_renders_grounded_numbers():
     assert "ingesting" in block
 
 
+def test_active_analysis_context_renders_ready_harness_numbers():
+    block = _build_active_analysis_context(
+        {
+            "status": "ready",
+            "analysis_origin": "harness_run",
+            "address": "623 4TH ST, West Palm Beach, FL 33401",
+            "zoning_code": "NWD-R (city)",
+            "source_mode": "live",
+            "verification_status": "verified",
+            "lot_size_sqft": 7000.092,
+            "lot_size_source": "assessor",
+            "by_right": {
+                "max_units": 2,
+                "governing_constraint": "lot coverage",
+                "verification": "verified",
+            },
+            "valuation": {
+                "adv_per_unit": 470000.0,
+                "adv_source": "Palm Beach County official sales",
+                "max_land_price_residual": 196000.0,
+                "recommended_offer": 0.0,
+                "recommended_action": "insufficient_support",
+                "requires_market_signal_validation": True,
+            },
+        }
+    )
+
+    assert "ACTIVE HARNESS ANALYSIS" in block
+    assert "NWD-R (city)" in block
+    assert "Feasibility units: 2" in block
+    assert "Exit value per unit: $470,000" in block
+    assert "Max land price (residual): $196,000" in block
+
+
+def test_ready_harness_answer_renders_recorded_analysis_without_model_narration():
+    answer = chat_mod._build_ready_harness_answer(
+        {
+            "status": "ready",
+            "address": "623 4TH ST, West Palm Beach, FL 33401",
+            "folio": "74434321060170150",
+            "zoning_code": "NWD-R (city)",
+            "lot_size_sqft": 7000.092,
+            "lot_size_source": "assessor",
+            "by_right": {
+                "max_units": 2,
+                "governing_constraint": "lot coverage",
+                "verification": "verified",
+            },
+            "valuation": {
+                "adv_per_unit": 470000.0,
+                "adv_source": "Palm Beach County official sales",
+                "max_land_price_residual": 196000.0,
+                "recommended_offer": 0.0,
+                "recommended_action": "insufficient_support",
+                "requires_market_signal_validation": True,
+            },
+            "evidence_ids": ["ev_parcel", "ev_zoning", "ev_comps"],
+            "warnings": ["Confirm frontage with a survey."],
+        }
+    )
+
+    assert "Analysis ready" in answer
+    assert "NWD-R (city)" in answer
+    assert "2" in answer
+    assert "$470,000" in answer
+    assert "$196,000" in answer
+    assert "Recommended offer: **$0**" not in answer
+    assert "insufficient support" in answer
+    assert "market signal validation" in answer.lower()
+    assert "`ev_parcel`" in answer
+    assert "Confirm frontage with a survey." in answer
+    assert "<function_calls>" not in answer
+
+
 def test_active_analysis_context_empty_for_bad_payload():
     assert _build_active_analysis_context({}) == ""
     assert _build_active_analysis_context({"status": "error"}) == ""

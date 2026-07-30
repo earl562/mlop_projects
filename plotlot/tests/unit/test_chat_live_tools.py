@@ -22,6 +22,7 @@ from plotlot.api.chat import (
     _execute_tool,
     _execute_web_search,
     _execute_zoning_search,
+    _store_harness_analysis_context,
 )
 from plotlot.core.types import CompAnalysis, ComparableSale, MunicodeConfig, PropertyRecord, TocNode
 from plotlot.harness.default_runtime import _RUNTIME_DATASETS, _RuntimeDataset, get_default_runtime
@@ -283,6 +284,49 @@ async def test_execute_tool_run_deal_analysis_stores_harness_analysis_in_session
     assert property_context["zoning_code"] == "R-1"
     assert _sessions.get_evidence_ids(session_id) == ["ev_1", "ev_2"]
 
+    _sessions.delete_session(session_id)
+
+
+def test_ready_harness_analysis_replaces_stale_blocked_session_analysis() -> None:
+    session_id = "sess-ready-replaces-blocked"
+    _sessions.delete_session(session_id)
+    _sessions.set_analysis(
+        session_id,
+        {
+            "status": "blocked",
+            "address": "623 4TH ST, West Palm Beach, FL 33401",
+            "evaluation_readiness": {"status": "blocked"},
+        },
+    )
+    ready_analysis = {
+        "status": "ready",
+        "analysis_origin": "harness_run",
+        "address": "623 4TH ST, West Palm Beach, FL 33401",
+        "zoning_code": "NWD-R (city)",
+        "by_right": {"max_units": 2},
+        "valuation": {"recommended_offer": 196000.0},
+        "evaluation_readiness": {"status": "ready"},
+    }
+
+    _store_harness_analysis_context(
+        session_id,
+        {
+            "evidence_ids": ["ev_parcel", "ev_zoning"],
+            "active_analysis": ready_analysis,
+            "payload": {
+                "artifacts": {
+                    "property_record": {
+                        "address": "623 4TH ST, West Palm Beach, FL 33401",
+                        "municipality": "West Palm Beach",
+                        "county": "Palm Beach",
+                        "zoning_code": "NWD-R (city)",
+                    }
+                }
+            },
+        },
+    )
+
+    assert _sessions.get_analysis(session_id) == ready_analysis
     _sessions.delete_session(session_id)
 
 

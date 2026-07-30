@@ -1,9 +1,10 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { gotoHome, switchToAgent } from "./helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const LIVE_PROMPT =
   process.env.PLOTLOT_LIVE_AGENT_PROMPT ??
-  "Say hello in one short sentence and identify what product you are.";
+  "Use the run_deal_analysis tool with source_mode live and analysis_type acquisition_memo for 623 4TH ST, West Palm Beach, FL 33401. This is a ByRight lead-list acceptance test. Do not substitute fixture data.";
 
 interface AgentReadiness {
   ready: boolean;
@@ -93,16 +94,14 @@ test.describe("live served PlotLot agent", () => {
   test("served frontend streams a real backend agent response", async ({ page }) => {
     expect(readiness.ready, readiness.reason).toBe(true);
 
+    await gotoHome(page);
+    await switchToAgent(page);
+
+    await page.getByTestId("agent-input").fill(LIVE_PROMPT);
     const chatResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/v1/chat",
       { timeout: 30_000 },
     );
-
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Agent" }).click();
-    await expect(page.getByTestId("agent-input")).toBeVisible();
-
-    await page.getByTestId("agent-input").fill(LIVE_PROMPT);
     await page.getByTestId("send-button").click();
 
     const log = page.getByRole("log", { name: "Analysis conversation" });
@@ -121,7 +120,18 @@ test.describe("live served PlotLot agent", () => {
     const doneEvent = events.find((event) => event.event === "done");
     const fullContent = String(doneEvent?.data.full_content ?? "").trim();
     expect(fullContent.length, rawSse).toBeGreaterThan(8);
-    await expect(log).toContainText(fullContent.slice(0, Math.min(40, fullContent.length)), {
+    expect(fullContent).toMatch(/623 4TH ST/i);
+    expect(fullContent).toMatch(/NWD-R/i);
+    expect(fullContent).toMatch(/\b2\s+(?:by-right\s+)?units?\b|\bmax(?:imum)?\s+units?:?\s*2\b/i);
+    expect(fullContent).toMatch(/\$470,?000/);
+    expect(fullContent).toMatch(/\$196,?000/);
+    expect(fullContent).not.toMatch(/recommended offer:\s*\*{0,2}\$0/i);
+    expect(fullContent).not.toMatch(
+      /dimensional standards are missing|no comps found|cannot be calculated/i,
+    );
+
+    const visiblePrefix = fullContent.replace(/[`*_#]/g, "").slice(0, 40);
+    await expect(log).toContainText(visiblePrefix, {
       timeout: 90_000,
     });
     await expect(log).not.toContainText(/Chat is temporarily unavailable|Error:/i);

@@ -387,9 +387,11 @@ async def test_compact_harness_active_analysis_surfaces_harness_comp_trust_field
     artifacts["acquisition_guidance"] = {
         "recommended_action": "insufficient_support",
         "recommended_offer": 0.0,
+        "max_supportable_land_price": 196000.0,
         "requires_market_signal_validation": True,
         "recommendation_confidence": "low",
     }
+    artifacts.pop("residual_land_value", None)
     artifacts["comp_search_strategy"] = {
         "public_listing_signal_tier": "contextual_verified",
         "land_signal_tier": "contextual_public_listing",
@@ -439,6 +441,7 @@ async def test_compact_harness_active_analysis_surfaces_harness_comp_trust_field
     assert payload["active_analysis"]["lot_size_source"] == "assessor"
     assert valuation["recommended_action"] == "insufficient_support"
     assert valuation["recommended_offer"] == 0.0
+    assert valuation["max_land_price_residual"] == 196000.0
     assert valuation["requires_market_signal_validation"] is True
     assert valuation["recommendation_confidence"] == "low"
     assert valuation["public_listing_signal_tier"] == "contextual_verified"

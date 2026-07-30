@@ -297,7 +297,11 @@ def compact_harness_active_analysis(payload: JsonObject) -> JsonObject | None:
             else None,
             "max_land_price_residual": residual.get("max_supportable_land_price")
             if isinstance(residual, dict)
-            else None,
+            else (
+                acquisition_guidance.get("max_supportable_land_price")
+                if isinstance(acquisition_guidance, dict)
+                else None
+            ),
             "recommended_offer": acquisition_guidance.get("recommended_offer")
             if isinstance(acquisition_guidance, dict)
             else None,

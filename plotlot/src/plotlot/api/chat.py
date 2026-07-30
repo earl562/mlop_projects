@@ -1586,7 +1586,7 @@ def _build_active_analysis_context(payload: dict) -> str:
     Promoting the verified numbers into the system prompt — and ordering it to
     answer follow-ups from them — is what keeps the whole conversation grounded.
     """
-    if not payload or payload.get("status") != "success":
+    if not payload or payload.get("status") not in {"ready", "success"}:
         return ""
     if payload.get("analysis_origin") == "harness_run":
         harness_lines = [
@@ -2148,6 +2148,70 @@ def _build_blocked_evaluation_answer(payload: dict[str, Any], address: str) -> s
     return "\n".join(lines)
 
 
+def _build_ready_harness_answer(analysis: dict[str, Any]) -> str:
+    by_right_value = analysis.get("by_right")
+    by_right = by_right_value if isinstance(by_right_value, dict) else {}
+    valuation_value = analysis.get("valuation")
+    valuation = valuation_value if isinstance(valuation_value, dict) else {}
+    evidence_ids = [str(item) for item in (analysis.get("evidence_ids") or []) if item]
+    warnings = [str(item) for item in (analysis.get("warnings") or []) if item]
+
+    lot_size = analysis.get("lot_size_sqft")
+    lot_size_label = (
+        f"{lot_size:,.0f} sqft"
+        if isinstance(lot_size, (int, float)) and not isinstance(lot_size, bool)
+        else "unknown"
+    )
+    lines = [
+        "## Analysis ready",
+        f"**Address:** {analysis.get('address') or 'unknown'}",
+        f"**Parcel ID:** {analysis.get('folio') or 'unknown'}",
+        f"**Zoning district:** {analysis.get('zoning_code') or 'unknown'}",
+        f"**Lot size:** {lot_size_label} (source: {analysis.get('lot_size_source') or 'unknown'})",
+        f"**By-right capacity:** {by_right.get('max_units') or 'unknown'} units",
+        f"**Governing constraint:** {by_right.get('governing_constraint') or 'unknown'}",
+        "",
+        "### Valuation",
+    ]
+    valuation_start = len(lines)
+
+    adv_per_unit = valuation.get("adv_per_unit")
+    if isinstance(adv_per_unit, (int, float)) and not isinstance(adv_per_unit, bool):
+        lines.append(
+            f"- Exit value per unit: **${adv_per_unit:,.0f}** "
+            f"(source: {valuation.get('adv_source') or 'unknown'})"
+        )
+    max_land_price = valuation.get("max_land_price_residual")
+    if isinstance(max_land_price, (int, float)) and not isinstance(max_land_price, bool):
+        lines.append(f"- Max supportable land price: **${max_land_price:,.0f}**")
+    recommended_offer = valuation.get("recommended_offer")
+    if (
+        isinstance(recommended_offer, (int, float))
+        and not isinstance(recommended_offer, bool)
+        and recommended_offer > 0
+    ):
+        lines.append(f"- Recommended offer: **${recommended_offer:,.0f}**")
+    else:
+        recommended_action = str(valuation.get("recommended_action") or "").replace("_", " ")
+        if recommended_action:
+            lines.append(f"- Recommendation: **{recommended_action}**")
+        if valuation.get("requires_market_signal_validation") is True:
+            lines.append("- Market signal validation is required before issuing an offer.")
+    if len(lines) == valuation_start:
+        lines.append("- No valuation output was recorded.")
+
+    lines.extend(["", "### Recorded evidence"])
+    lines.extend(f"- `{evidence_id}`" for evidence_id in evidence_ids)
+    if not evidence_ids:
+        lines.append("- No evidence IDs were recorded.")
+
+    lines.extend(["", "### Warnings and next verification"])
+    lines.extend(f"- {warning}" for warning in warnings)
+    if not warnings:
+        lines.append("- No unresolved warnings were recorded.")
+    return "\n".join(lines)
+
+
 def _build_source_answer(payload: dict) -> str | None:
     """Deterministic answer to 'what's the source / can I trust this?'.
 
@@ -2541,7 +2605,7 @@ def _store_harness_analysis_context(
             [str(value) for value in evidence_ids if isinstance(value, str) and value],
         )
     active_analysis = raw_result.get("active_analysis")
-    if isinstance(active_analysis, dict) and active_analysis.get("status") == "success":
+    if isinstance(active_analysis, dict) and active_analysis.get("status") in {"ready", "success"}:
         _sessions.set_analysis(session_id, active_analysis)
     payload = raw_result.get("payload")
     if not isinstance(payload, dict):
@@ -4290,6 +4354,19 @@ async def chat(request: ChatRequest, http_request: Request):
                 if len(memory) > MAX_MEMORY_MESSAGES:
                     del memory[:-MAX_MEMORY_MESSAGES]
                 yield _sse_event("done", {"full_content": failed_answer})
+                return
+
+            if (
+                "run_deal_analysis" in completed_forced_tools
+                and active_analysis is not None
+                and active_analysis.get("status") == "ready"
+            ):
+                ready_answer = _build_ready_harness_answer(active_analysis)
+                yield _sse_event("token", {"content": ready_answer})
+                memory.append({"role": "assistant", "content": ready_answer})
+                if len(memory) > MAX_MEMORY_MESSAGES:
+                    del memory[:-MAX_MEMORY_MESSAGES]
+                yield _sse_event("done", {"full_content": ready_answer})
                 return
 
             # Deterministic source/citation echo. The citation is too high-stakes to
