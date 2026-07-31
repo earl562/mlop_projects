@@ -1,0 +1,51 @@
+{
+  "claim": "Direction B design packet is complete as a written, redacted, parcel-first interface contract with one generated visual reference.",
+  "scope": {
+    "included": [
+      "interface signature and usage",
+      "route map, task flow, panel hierarchy, and replay behavior",
+      "semantic state matrix",
+      "responsive specifications for 1440x900, 768x1024, and 390x844",
+      "coverage truth for Miami-Dade private beta, municipality-conditional Broward/Palm Beach, and planned/not-enabled San Diego",
+      "zoning, setbacks, constraints, survey/plat, capacity/max-units, comps, purchase-ceiling, evidence/replay, and grounded-LLM abstention contracts",
+      "accessibility, overflow, focus, and reduced-motion self-audit",
+      "single built-in ImageGen visual reference with prompt/output/fixture hash binding"
+    ],
+    "excluded": [
+      "runtime implementation",
+      "live source retrieval or legal/engineering/valuation validation",
+      "live browser visual QA, which applies only after a UI implementation exists"
+    ]
+  },
+  "success_criteria_evidence": [
+    {
+      "scenario": "Open the documentation packet and trace parcel selection through source-backed feasibility abstention.",
+      "invocation": "rg -n 'ParcelLocator|EvidenceReplay|Capacity unavailable|Purchase ceiling unavailable|GroundedBrief' artifacts/design/direction-b",
+      "binary_observable": "All required concepts are present in the owned packet and capacity/ceiling abstention is explicitly specified.",
+      "artifact_path": "artifacts/design/direction-b/CONTENT_FIXTURES_AND_GROUNDING.md"
+    },
+    {
+      "scenario": "Parse the deterministic redacted fixture and verify incomplete inputs do not become numeric conclusions.",
+      "invocation": "node -e \"const fs=require('fs'); const d=JSON.parse(fs.readFileSync('artifacts/design/direction-b/fixture-direction-b-v1.json','utf8')); if(d.capacity.result!==null||d.underwriting.purchase_ceiling!==null||d.capacity.status!=='needs_verification') process.exit(2); console.log('fixture JSON valid; abstention invariants hold')\"",
+      "binary_observable": "exit 0 and exact output: fixture JSON valid; abstention invariants hold",
+      "artifact_path": "artifacts/design/direction-b/fixture-direction-b-v1.json"
+    },
+    {
+      "scenario": "Verify the sole image reference is copied, a valid PNG, and hash-bound to its versioned prompt.",
+      "invocation": "file artifacts/design/direction-b/reference-direction-b-v1.png && shasum -a 256 artifacts/design/direction-b/reference-direction-b-v1.png artifacts/design/direction-b.prompt.md artifacts/design/direction-b/fixture-direction-b-v1.json",
+      "binary_observable": "PNG signature reports 1586 x 992 RGB and SHA-256 values match imagegen.metadata.json/checksums.sha256.",
+      "artifact_path": "artifacts/design/direction-b/imagegen.metadata.json"
+    },
+    {
+      "scenario": "Review responsive, accessibility, overflow, focus, and reduced-motion acceptance criteria.",
+      "invocation": "sed -n '1,$p' artifacts/design/direction-b/RESPONSIVE_WIREFRAMES.md artifacts/design/direction-b/SELF_AUDIT.md",
+      "binary_observable": "All three specified viewports and audit checks are documented; no runtime UI is falsely claimed tested.",
+      "artifact_path": "artifacts/design/direction-b/SELF_AUDIT.md"
+    }
+  ],
+  "manual_document_qa": {
+    "result": "pass",
+    "artifact": "artifacts/design/direction-b/SELF_AUDIT.md",
+    "limitation": "This is a design-only artifact; browser visual QA is intentionally deferred until implementation."
+  }
+}

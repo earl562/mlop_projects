@@ -107,7 +107,7 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Main content */}
-        <main className="relative z-0 flex-1 overflow-y-auto">{children}</main>
+        <div className="relative z-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

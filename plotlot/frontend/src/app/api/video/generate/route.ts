@@ -1,12 +1,19 @@
 import { fal } from "@fal-ai/client";
 
-export async function POST(req: Request) {
+import { connectorAuthorizationFailure } from "@/lib/connector-authorization";
+
+export async function POST(req: Request): Promise<Response> {
+  const authorizationFailure = await connectorAuthorizationFailure(req, "connectors:manage");
+  if (authorizationFailure !== null) {
+    return authorizationFailure;
+  }
+
   const falKey = process.env.FAL_KEY;
   if (!falKey) {
     return Response.json({ error: "FAL_KEY not configured" }, { status: 503 });
   }
 
-  const { address, lat, lng, municipality } = await req.json();
+  const { address, municipality } = await req.json();
 
   if (!address || !municipality) {
     return Response.json({ error: "address and municipality are required" }, { status: 400 });

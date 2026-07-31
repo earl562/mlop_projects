@@ -1,0 +1,81 @@
+{
+  "DoneClaim": {
+    "task": "Todo5 design synthesis and production workbench selection",
+    "changed_files": [
+      "plotlot/artifacts/design/direction-a.prompt.md",
+      "plotlot/artifacts/design/direction-a/**",
+      "plotlot/artifacts/design/direction-b.prompt.md",
+      "plotlot/artifacts/design/direction-b/**",
+      "plotlot/artifacts/design/direction-c.prompt.md",
+      "plotlot/artifacts/design/direction-c/**",
+      "plotlot/artifacts/design/selection/**",
+      "plotlot/DESIGN.md",
+      "plotlot/docs/adr/0019-select-operational-intelligence-workbench.md",
+      ".omo/evidence/todo5-design-selection/**"
+    ],
+    "tests": [
+      {
+        "scenario": "direction manifests, scoring determinism, coverage, required matrices, raster provenance, and evidence counts",
+        "invocation": ".omo/evidence/todo5-design-selection/verify-todo5.sh",
+        "observable": "exit 0 and TODO5_VERIFICATION: PASS",
+        "artifact": ".omo/evidence/todo5-design-selection/verification.txt"
+      }
+    ],
+    "manual_qa": [
+      {
+        "scenario": "current app baseline: landing/workspace/Lookup/Agent at 1440x900, 768x1024, and 390x844",
+        "invocation": "Playwright Chromium isolated-context matrix against production Next.js server",
+        "observable": "12 HTTP 200 screenshots with matching ARIA/DOM/console/network records",
+        "artifact": ".omo/evidence/todo5-design-selection/browser-baseline"
+      },
+      {
+        "scenario": "known 375px Lookup placeholder clipping",
+        "invocation": "Playwright Chromium 375x844 capture",
+        "observable": "126px input with clipped placeholder and no document horizontal overflow",
+        "artifact": ".omo/evidence/todo5-design-selection/browser-baseline/diagnostic-375x844--lookup-placeholder.png"
+      },
+      {
+        "scenario": "visual and OCR inspection of the privacy-safe Direction A v4 reference",
+        "invocation": "open original-resolution PNG and run macOS Vision accurate text recognition",
+        "observable": "only five allowlisted opaque DEAL-* IDs; no address-like text, folio, APN, owner, phone, email, coordinates, or URL; both decision outputs remain abstained",
+        "artifact": "plotlot/artifacts/design/direction-a/reference-direction-a-v4.png; .omo/evidence/todo5-design-selection/v4-vision-ocr.txt"
+      },
+      {
+        "scenario": "Direction A v4 built-in ImageGen privacy correction",
+        "invocation": "exactly one fresh image_gen.imagegen call using canonical prompt direction-a/v1.2.0",
+        "observable": "tool-scoped output call_rvzv9UecapZkYRet64S9f95J.png copied as reference-direction-a-v4.png; prompt/output/truth-contract hashes, dimensions, privacy allowlist, and abstained rail labels bind in metadata",
+        "artifact": ".omo/evidence/todo5-design-selection/direction-a-v4-privacy-correction.json"
+      },
+      {
+        "scenario": "machine-consumed design truth validation",
+        "invocation": ".omo/evidence/todo5-design-selection/verify-todo5.sh parses design-truth-contract.json",
+        "observable": "versioned state IDs, parking dependencies, abstained current values, conditional scenarios, coverage IDs, and privacy data classes pass without prompt.includes or other prompt-prose assertions",
+        "artifact": "plotlot/artifacts/design/direction-a/design-truth-contract.json"
+      },
+      {
+        "scenario": "exact immutable content-commit binding",
+        "invocation": "git object identity, tree, parent, scope, and per-blob audit of content commit 24c351ab403aa5b55a9874f54f615849d1853eed",
+        "observable": "13 content blobs match CONTENT_COMMIT_BINDING.json; no frontend source; full verifier passes",
+        "artifact": ".omo/evidence/todo5-design-selection/CONTENT_COMMIT_BINDING.json; .omo/evidence/todo5-design-selection/content-commit-verification.txt"
+      }
+    ],
+    "cleanup": [
+      {
+        "observable": "owned server stopped; port 3215 rejects connections with exit 7",
+        "artifact": ".omo/evidence/todo5-design-selection/server-cleanup.txt"
+      }
+    ],
+    "selection": {
+      "winner": "Direction A — Operational Intelligence Workbench",
+      "score": 100.0,
+      "runner_up": "Direction C — Preconstruction Deal Room / Stage-Gate Binder",
+      "runner_up_score": 83.2,
+      "blockers": []
+    },
+    "risks": [
+      "Todo5 is a design contract only; runtime conformance remains for Todo21.",
+      "All generated references, including the selected privacy-safe Direction A v4 output, are 1586x992 rather than the requested 1440x900 and remain non-authoritative.",
+      "The known 375px placeholder defect is present in the current app and is explicitly not claimed as passed."
+    ]
+  }
+}

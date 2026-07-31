@@ -21,7 +21,6 @@ revision 009_merge_harness_phase6.
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "007_phase6"

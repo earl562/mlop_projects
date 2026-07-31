@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 
 from plotlot.storage.db import get_session
 from plotlot.storage.models import ReportCache
+from plotlot.security.context import current_tenant_id
 
 CACHE_TTL_HOURS = 24
 
@@ -38,10 +39,12 @@ async def get_cached_report(address: str, analysis_type: str = "residential") ->
     hit_count on cache hit for observability.
     """
     normalized = normalize_address(address)
+    workspace_id = current_tenant_id()
     session = await get_session()
     try:
         result = await session.execute(
             select(ReportCache).where(
+                ReportCache.workspace_id == workspace_id,
                 ReportCache.address_normalized == normalized,
                 ReportCache.analysis_type == analysis_type,
                 ReportCache.expires_at > datetime.now(timezone.utc),
@@ -99,10 +102,12 @@ async def cache_report(address: str, report: dict, analysis_type: str = "residen
         return
 
     normalized = normalize_address(address)
+    workspace_id = current_tenant_id()
     session = await get_session()
     try:
         existing = await session.execute(
             select(ReportCache).where(
+                ReportCache.workspace_id == workspace_id,
                 ReportCache.address_normalized == normalized,
                 ReportCache.analysis_type == analysis_type,
             )
@@ -115,6 +120,7 @@ async def cache_report(address: str, report: dict, analysis_type: str = "residen
         else:
             session.add(
                 ReportCache(
+                    workspace_id=workspace_id,
                     address=address,
                     address_normalized=normalized,
                     analysis_type=analysis_type,

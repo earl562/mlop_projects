@@ -1,0 +1,347 @@
+[
+  {
+    "viewport": "desktop-1440x900",
+    "state": "landing",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 2,
+    "badResponses": 0,
+    "placeholders": []
+  },
+  {
+    "viewport": "desktop-1440x900",
+    "state": "workspace",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": 12,
+        "width": 295,
+        "right": 307,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 453,
+        "width": 675.078125,
+        "right": 1128.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "desktop-1440x900",
+    "state": "lookup",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": 12,
+        "width": 295,
+        "right": 307,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 453,
+        "width": 675.078125,
+        "right": 1128.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "desktop-1440x900",
+    "state": "agent",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": 12,
+        "width": 295,
+        "right": 307,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "Ask about zoning, density, or property data...",
+        "x": 453,
+        "width": 675.078125,
+        "right": 1128.078125,
+        "visible": true,
+        "fontSize": "17px",
+        "whiteSpace": "pre-wrap",
+        "overflow": "auto",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "tablet-768x1024",
+    "state": "landing",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 1,
+    "badResponses": 0,
+    "placeholders": []
+  },
+  {
+    "viewport": "tablet-768x1024",
+    "state": "workspace",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 45,
+        "width": 499.078125,
+        "right": 544.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "tablet-768x1024",
+    "state": "lookup",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 45,
+        "width": 499.078125,
+        "right": 544.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "tablet-768x1024",
+    "state": "agent",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "Ask about zoning, density, or property data...",
+        "x": 45,
+        "width": 499.078125,
+        "right": 544.078125,
+        "visible": true,
+        "fontSize": "17px",
+        "whiteSpace": "pre-wrap",
+        "overflow": "auto",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "mobile-390x844",
+    "state": "landing",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": []
+  },
+  {
+    "viewport": "mobile-390x844",
+    "state": "workspace",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 33,
+        "width": 141.078125,
+        "right": 174.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "mobile-390x844",
+    "state": "lookup",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "INPUT",
+        "placeholder": "Enter a property address...",
+        "x": 33,
+        "width": 141.078125,
+        "right": 174.078125,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      }
+    ]
+  },
+  {
+    "viewport": "mobile-390x844",
+    "state": "agent",
+    "httpStatus": 200,
+    "horizontalOverflow": false,
+    "consoleErrors": 0,
+    "requestFailures": 0,
+    "badResponses": 0,
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "Ask about zoning, density, or property data...",
+        "x": 33,
+        "width": 141.078125,
+        "right": 174.078125,
+        "visible": true,
+        "fontSize": "16px",
+        "whiteSpace": "pre-wrap",
+        "overflow": "auto",
+        "textOverflow": "clip"
+      }
+    ]
+  }
+]

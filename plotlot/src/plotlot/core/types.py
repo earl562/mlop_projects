@@ -6,6 +6,10 @@ domain model. Every other module imports from here.
 """
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # avoid runtime cycle; Claim is defined in plotlot.domain.claims
+    from plotlot.domain.claims import Claim
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +32,15 @@ class MunicodeConfig:
 
 @dataclass
 class RawSection:
-    """A raw section of ordinance text scraped from Municode."""
+    """A raw section of ordinance text scraped from Municode.
+
+    `path` is an optional explicit breadcrumb (the full ancestor heading chain,
+    root-first). When absent the chunker synthesizes a path from
+    `parent_heading` + `heading`. Slice 3.1 populates path/cross_refs at chunk
+    time so every section carries a hierarchical location + its outbound
+    references (the foundation for the `OrdinanceSection` index + AgenticRAG
+    cross-ref traversal in Phase 8).
+    """
 
     municipality: str
     county: str
@@ -37,6 +49,7 @@ class RawSection:
     parent_heading: str | None
     html_content: str
     depth: int
+    path: list[str] | None = None
 
 
 @dataclass
@@ -58,7 +71,16 @@ class TocNode:
 
 @dataclass
 class ChunkMetadata:
-    """Metadata attached to each text chunk for filtering and retrieval."""
+    """Metadata attached to each text chunk for filtering and retrieval.
+
+    `path` is the section's hierarchical breadcrumb (root-first, e.g.
+    ["Chapter 47", "Sec. 47-5.60"]); all chunks of one section share it.
+    `cross_refs` are outbound section-number references found in the section
+    text (e.g. ["47-24.3", "47-5.601"]). `section_type` classifies the section
+    (regulation | definition | schedule | dimensional_table | use_regulation).
+    These three are populated by the chunker (Slice 3.1) and feed the
+    `OrdinanceSection` index used for cross-ref traversal + freshness checks.
+    """
 
     municipality: str
     county: str
@@ -68,6 +90,9 @@ class ChunkMetadata:
     zone_codes: list[str]
     chunk_index: int
     municode_node_id: str
+    path: list[str] = field(default_factory=list)
+    cross_refs: list[str] = field(default_factory=list)
+    section_type: str = "regulation"
 
 
 @dataclass
@@ -411,6 +436,15 @@ class DensityAnalysis:
     lot_depth_ft: float | None = None
     max_gla_sqft: float | None = None  # commercial: max gross leasable area
     confidence: str = "low"
+    # Provenance of the zoning params that fed this calculation.
+    # "local_authority" — params came from a typed DistrictDimensionalStandard
+    #   (a verified-fact row extracted from the ordinance's Schedule of District
+    #   Regulations at ingestion time), so the resulting count is verified-fact
+    #   grade, not LLM-extracted.
+    # "unknown" — params came from LLM extraction over retrieved ordinance text
+    #   (the legacy path); the count is assumption-grade until verified.
+    # Mirrors the Claim origin taxonomy (claims.py: ClaimOrigin).
+    origin: str = "unknown"
     notes: list[str] = field(default_factory=list)
 
 
@@ -558,6 +592,17 @@ class ZoningReport:
 
     # Neighbor/political opposition risk — qualitative heuristic assessment
     opposition_risk: "OppositionRiskAssessment | None" = None
+
+    # Typed, provenanced claims emitted by _agentic_analysis (WIRE-2.1b).
+    # Each Claim carries its kind (epistemic status) + origin (source boundary).
+    # zoning.* claims are local_authority/verified_fact (grounded in ordinance
+    # text or the GIS zone code); ungrounded LLM district assertions live under
+    # the `assumed_zoning` namespace (origin=unknown, kind=assumption) because
+    # the Claim invariant forbids zoning.* with non-local-authority origin.
+    # standards.* claims carry origin per grounding. cost.*/financing.* are
+    # never verified_fact (constructor-enforced). No ClaimLog storage yet
+    # (Phase 6) — these are in-memory for downstream consumers.
+    claims: list["Claim"] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

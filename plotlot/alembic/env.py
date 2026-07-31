@@ -13,9 +13,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from plotlot.config import settings
-from plotlot.storage.models import Base  # noqa: F401 — registers all models
+from plotlot.storage.models import Base  # noqa: F401
 
-# Alembic Config object — provides access to alembic.ini values
+# Alembic Config object provides access to alembic.ini values.
 config = context.config
 
 # Override sqlalchemy.url from application settings (asyncpg driver)
@@ -80,7 +80,7 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Entry point for online migrations — delegates to async runner."""
+    """Delegate online migration execution to the async runner."""
     asyncio.run(run_async_migrations())
 
 

@@ -8,26 +8,43 @@ processes may create fresh loops between calls, so we rebuild the engine when
 the active loop changes instead of reusing a stale pooled connection.
 """
 
-import asyncio
 import logging
 
-from sqlalchemy import text
+import anyio
+from sqlalchemy import event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, SessionTransaction
 
 from plotlot.config import settings
-from plotlot.storage.models import Base
+from plotlot.security.context import current_tenant_id
+from plotlot.storage.model_base import Base
 
 logger = logging.getLogger(__name__)
 
 _engine = None
 _session_factory = None
 _engine_loop_id = None
-_engine_lock: asyncio.Lock = asyncio.Lock()
+_engine_lock = anyio.Lock()
+
+
+@event.listens_for(Session, "after_begin")
+def _set_transaction_tenant(
+    _session: Session,
+    _transaction: SessionTransaction,
+    connection: Connection,
+) -> None:
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": tenant_id},
+        )
 
 
 def _current_loop_id() -> int | None:
     try:
-        return id(asyncio.get_running_loop())
+        return id(anyio.lowlevel.current_token())
     except RuntimeError:
         return None
 
@@ -116,56 +133,20 @@ def _detect_schema_drift(sync_conn) -> list[str]:
 
 
 async def init_db() -> None:
-    """Create all tables and install triggers if they don't exist.
+    """Verify database connectivity after externally managed migrations.
 
-    NOTE: `alembic upgrade head` is the authoritative schema mechanism; the
-    create_all below only bootstraps a brand-new database. Anything that
-    changes an EXISTING table must ship as a migration — see the drift check
-    at the end of this function.
+    Schema is owned by Alembic (`alembic upgrade head`), not by this function —
+    creating tables here would silently diverge from the migration history. The
+    drift check below is the guard for exactly that: it reports, without ever
+    blocking startup, any table or column the models declare that the live
+    database lacks, which is the signature of a migration that was never run.
     """
     engine = await _ensure_engine()
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        await conn.run_sync(Base.metadata.create_all)
+    async with engine.connect() as conn:
+        logger.info("Database connection verified")
 
-        # Auto-populate search_vector on INSERT/UPDATE via trigger
-        await conn.execute(
-            text("""
-            CREATE OR REPLACE FUNCTION ordinance_chunks_search_vector_update()
-            RETURNS trigger AS $$
-            BEGIN
-                NEW.search_vector := to_tsvector('english', COALESCE(NEW.chunk_text, ''));
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
-        )
-        await conn.execute(
-            text("""
-            DO $$ BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_search_vector_update'
-                ) THEN
-                    CREATE TRIGGER trg_search_vector_update
-                    BEFORE INSERT OR UPDATE OF chunk_text
-                    ON ordinance_chunks
-                    FOR EACH ROW
-                    EXECUTE FUNCTION ordinance_chunks_search_vector_update();
-                END IF;
-            END $$;
-        """)
-        )
-        # GIN index for fast full-text search
-        await conn.execute(
-            text("""
-            CREATE INDEX IF NOT EXISTS idx_search_vector
-            ON ordinance_chunks USING GIN (search_vector);
-        """)
-        )
-
-        # Surface any model/schema divergence create_all cannot repair. Never
-        # fatal: a degraded-but-running API is better than refusing to boot, and
-        # the operator needs the log to know a migration is owed.
+        # Never fatal: a degraded-but-running API beats refusing to boot, and the
+        # operator needs the log line to know a migration is owed.
         try:
             drift = await conn.run_sync(_detect_schema_drift)
         except Exception:
@@ -173,14 +154,15 @@ async def init_db() -> None:
             drift = []
         if drift:
             logger.error(
-                "SCHEMA DRIFT DETECTED (%d) — the live database is behind the models. "
-                "create_all cannot fix an existing table; run `alembic upgrade head`. "
-                "Details: %s",
+                "SCHEMA DRIFT DETECTED (%d) — the live database is behind the models; "
+                "run `alembic upgrade head`. Details: %s",
                 len(drift),
                 "; ".join(drift),
             )
 
-    logger.info("Database initialized")
+    from plotlot.storage.runtime import initialize_configured_storage_runtime
+
+    await initialize_configured_storage_runtime()
 
 
 async def get_session() -> AsyncSession:

@@ -61,15 +61,15 @@ run_ruff() {
 run_pytest() {
   if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
     if "$ROOT_DIR/.venv/bin/python" -c 'import pytest' >/dev/null 2>&1; then
-      run env PYTHONPATH="$ROOT_DIR/src" MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns "$ROOT_DIR/.venv/bin/python" -m pytest "$@"
+      run env PYTHONPATH="$ROOT_DIR/src" MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns MLFLOW_ALLOW_FILE_STORE=true "$ROOT_DIR/.venv/bin/python" -m pytest "$@"
       return
     fi
   fi
   if [[ -x "$ROOT_DIR/../.venv/bin/python" ]]; then
-    run env PYTHONPATH="$ROOT_DIR/src" MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns "$ROOT_DIR/../.venv/bin/python" -m pytest "$@"
+    run env PYTHONPATH="$ROOT_DIR/src" MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns MLFLOW_ALLOW_FILE_STORE=true "$ROOT_DIR/../.venv/bin/python" -m pytest "$@"
     return
   fi
-  run env MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns uv run pytest "$@"
+  run env MLFLOW_TRACKING_URI=file:///tmp/plotlot-mlruns MLFLOW_ALLOW_FILE_STORE=true uv run pytest "$@"
 }
 
 clean_playwright_artifacts() {

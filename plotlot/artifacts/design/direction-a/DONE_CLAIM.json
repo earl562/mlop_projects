@@ -1,0 +1,24 @@
+{
+  "claim_version": "direction-a-done/v1.2.0",
+  "scope": "Design-only packet for PlotLot Direction A, Operational Intelligence Workbench.",
+  "status": "complete",
+  "completed": [
+    "Materially distinct evidence-led acquisition/preconstruction workbench direction",
+    "Route map, panel hierarchy, semantic state matrix, and responsive specifications for 1440x900, 768x1024, and 390x844",
+    "Truthful coverage gates: Miami-Dade private beta; Broward/Palm municipality-conditional; San Diego County planned/not enabled",
+    "Redacted parcel/folio/APN fixture with zoning, setbacks, capacity/max-units, constraints, survey/plat/documents, comps, conditional purchase ceiling, evidence/replay, and agent handoff",
+    "Grounded LLM brief contract with citation binding and explicit abstention",
+    "Validated provenance-bound v4 ui-mockup reference from exactly one fresh built-in ImageGen call for this privacy correction, with tool-scoped output, timestamp, prompt SHA-256, output SHA-256, dimensions, truth-contract binding, and preserved generation history",
+    "Decision rail visibly abstains from both maximum units and purchase ceiling while parking is not hash-bound, matching STATE_MATRIX.md lines 42-50",
+    "Visible deal and parcel identifiers are restricted to allowlisted opaque synthetic DEAL-* IDs; no address-like text, folio, APN, owner, coordinates, or URL is visible",
+    "Versioned machine-consumed design-truth contract defines state IDs, abstention dependencies, scenario/current-value separation, coverage, and privacy semantics without parsing prompt prose",
+    "Accessibility, overflow, focus, and reduced-motion design audit"
+  ],
+  "not_claimed": [
+    "UI implementation",
+    "Legal, title, survey, appraisal, underwriting, entitlement, or investment advice",
+    "Runtime visual QA, keyboard testing, accessibility testing, or Lighthouse results",
+    "Coverage beyond the explicitly stated gates"
+  ],
+  "validation_pointer": ".omo/evidence/direction-a-packet-validation/validation.md"
+}

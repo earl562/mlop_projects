@@ -1,0 +1,42 @@
+{
+  "fixture_version": "direction-a-fixture/v1.0.0",
+  "disclaimer": "Illustrative, redacted product-design fixture. Not legal, title, appraisal, survey, zoning, underwriting, or entitlement advice.",
+  "deal": {
+    "deal_id": "deal_redacted_mdc_0420",
+    "address_display": "12•• NW 67 ST",
+    "municipality_display": "UNINCORPORATED MIAMI-DADE",
+    "folio_display": "30-3115-•••-0420",
+    "coverage": "enabled_private_beta"
+  },
+  "coverage_examples": [
+    { "label": "MIAMI-DADE", "state": "enabled_private_beta", "copy": "Miami-Dade private beta" },
+    { "label": "BROWARD", "state": "municipality_required", "copy": "Broward — municipality required" },
+    { "label": "PALM BEACH", "state": "municipality_required", "copy": "Palm Beach — municipality required" },
+    { "label": "SAN DIEGO COUNTY", "state": "planned_not_enabled", "copy": "San Diego County — planned, not enabled", "apn_display": "436-302-••-00", "municipality_display": "CITY OF SAN DIEGO" }
+  ],
+  "artifacts": [
+    { "id": "PA-24-98123", "kind": "parcel_record", "issuer": "illustrative county property appraiser", "acquired_at": "2026-07-26T14:20:00Z", "effective_date": "2026-07-01", "sha256_display": "7f4a…c91e" },
+    { "id": "GIS-24-55110", "kind": "jurisdiction_record", "issuer": "illustrative county GIS", "acquired_at": "2026-07-26T14:21:00Z", "effective_date": "2026-07-01", "sha256_display": "9b21…aac3" },
+    { "id": "Z-03", "kind": "zoning_ordinance_excerpt", "issuer": "illustrative municipal code", "section": "33-311", "sha256_display": "1c8d…4a71" },
+    { "id": "D-07", "kind": "dimensional_rule_table", "issuer": "illustrative municipal code", "section": "33-311 Table A", "sha256_display": "26ef…7d2b" },
+    { "id": "OV-11", "kind": "overlay_record", "issuer": "illustrative county GIS", "sha256_display": "6b30…f9e2" },
+    { "id": "IC-02", "kind": "capacity_calculation", "issuer": "PlotLot deterministic calculator", "formula": "floor(lot_area_sf / min_lot_area_per_unit_sf)", "inputs": ["Z-03", "D-07", "PA-24-98123"], "result_display": "2 units", "governing_constraint": "lot area", "sha256_display": "3d12…a8c4" },
+    { "id": "S-24-4487", "kind": "boundary_survey", "issuer": "illustrative survey professional", "document_date": "2024-12-04", "pages": 2, "sha256_display": "5a19…0e33" },
+    { "id": "CMP-06", "kind": "comparable_set", "issuer": "illustrative normalized sales dataset", "inclusion_basis": "3 sales; 0.91–1.08 adjustment range", "sha256_display": "8e71…b6d9" },
+    { "id": "UW-09", "kind": "underwriting_scenario", "issuer": "PlotLot underwriting model", "purchase_ceiling_display": "$418,000", "state": "conditional", "depends_on": ["IC-02", "CMP-06", "PARKING-RULE"], "sha256_display": "d2c3…1ff7" }
+  ],
+  "missing_evidence": {
+    "id": "PARKING-RULE",
+    "state": "not_hash_bound",
+    "copy": "Abstain: parking rule is not hash-bound",
+    "acceptable_evidence": "Current jurisdiction-matched parking rule with issuer, effective date, section, and SHA-256",
+    "owner": "underwriting agent"
+  },
+  "replay": {
+    "run_id": "replay_redacted_20260726_001",
+    "root_hash_display": "7f4a…c91e",
+    "claims": [
+      { "claim_id": "C-02", "copy": "Two-unit infill case is supportable", "state": "partially_grounded", "citations": ["Z-03", "IC-02"], "limitation": "Parking rule is not hash-bound; this is not a reliance-ready or legal conclusion." }
+    ]
+  }
+}

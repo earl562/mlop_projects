@@ -64,7 +64,16 @@ class TestHealthEndpoint:
 
         _runtime_health["startup_mode"] = "degraded"
         _runtime_health["startup_warnings"] = ["database_unavailable"]
-        with patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")):
+        with (
+            patch("plotlot.api.main.get_session", side_effect=ConnectionError("refused")),
+            patch("plotlot.api.main.settings") as mock_settings,
+        ):
+            # Pin config like the sibling tests do — otherwise this asserts
+            # against whatever database the developer's .env points at.
+            mock_settings.database_url = (
+                "postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot"
+            )
+            mock_settings.database_require_ssl = False
             result = await health()
 
         assert result["status"] == "degraded"

@@ -1,6 +1,7 @@
 """Tests for the max-allowable-units calculator."""
 
 from plotlot.core.types import NumericZoningParams
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
 from plotlot.pipeline.calculator import (
     _effective_stories,
     _reconcile_density,
@@ -622,3 +623,125 @@ class TestVerifiedEntitlementProtection:
         res = calculate_max_units(6470.6, params, min_lot_area_verified=True)
         assert res.max_units == 6
         assert res.governing_constraint != "floor_area_ratio"
+
+
+class TestDistrictDimensionalStandardWiring:
+    """WIRE-1.1b: calculate_max_units consumes the typed verified-fact source.
+
+    The typed DistrictDimensionalStandard (extracted from the ordinance's
+    Schedule of District Regulations at ingestion time) is the verified-fact
+    replacement for LLM-extracted NumericZoningParams on the hot path. These
+    tests pin the wiring contract: the calculator accepts the standard, labels
+    the result ``origin="local_authority"`` (not LLM-extracted), keeps the
+    NumericZoningParams fallback, and produces the same max_units as the
+    equivalent NumericZoningParams.
+    """
+
+    @staticmethod
+    def _rs8_standard(**overrides) -> DistrictDimensionalStandard:
+        # RS-8: 8 du/ac → 5,445 sqft/unit. Density + min-lot-area are consistent
+        # by construction (the standard derives one from the other), so parity is
+        # about the conversion being lossless for the density path — the
+        # standard's load-bearing fields.
+        base = {
+            "municipality": "Sandbox Springs",
+            "county": "Test County",
+            "state": "FL",
+            "district_code": "RS-8",
+            "min_lot_area_sqft": 5445.0,  # 43,560 / 8
+            "min_lot_width_ft": 50.0,
+            "setback_front_ft": 25.0,
+            "setback_side_ft": 5.0,
+            "setback_rear_ft": 25.0,
+            "max_height_ft": 35.0,
+            "max_lot_coverage_pct": 40.0,
+            "far": 0.50,
+            "max_density_units_per_acre": 8.0,
+            "source_section_id": "sandbox_rs8_dim_table",
+            "source_url": "https://example.gov/zoning/rs8",
+        }
+        base.update(overrides)
+        return DistrictDimensionalStandard(**base)
+
+    def test_accepts_district_dimensional_standard(self):
+        # Criterion 1: the calculator accepts a DistrictDimensionalStandard.
+        result = calculate_max_units(
+            43560.0, self._rs8_standard(), lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        assert result.max_units == 8  # 8 du/ac × 1 acre
+
+    def test_typed_standard_labeled_local_authority(self):
+        # Criterion 2: a typed standard labels the result verified-fact grade.
+        result = calculate_max_units(
+            43560.0, self._rs8_standard(), lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        assert result.origin == "local_authority"
+
+    def test_numeric_params_fallback_labeled_unknown(self):
+        # Criterion 3: the LLM-extracted NumericZoningParams path still works and
+        # is labeled assumption grade (origin=unknown).
+        equiv = self._rs8_standard().to_numeric_zoning_params()
+        result = calculate_max_units(
+            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        assert result.max_units == 8
+        assert result.origin == "unknown"
+
+    def test_parity_standard_vs_equivalent_numeric_params(self):
+        # Criterion 4: a DistrictDimensionalStandard for RS-8 returns the same
+        # max_units as its .to_numeric_zoning_params() equivalent.
+        standard = self._rs8_standard()
+        equiv = standard.to_numeric_zoning_params()
+        r_standard = calculate_max_units(
+            43560.0, standard, lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        r_equiv = calculate_max_units(
+            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        assert r_standard.max_units == r_equiv.max_units == 8
+        assert r_standard.governing_constraint == r_equiv.governing_constraint
+
+    def test_origin_override_for_caller_converted_path(self):
+        # Criterion 1, Path B ("or a caller converts via .to_numeric_zoning_params()"):
+        # a caller that converted the standard itself can still label the result
+        # local_authority via the origin override.
+        equiv = self._rs8_standard().to_numeric_zoning_params()
+        result = calculate_max_units(
+            43560.0, equiv, lot_width_ft=100.0, lot_depth_ft=435.6,
+            origin="local_authority",
+        )
+        assert result.origin == "local_authority"
+        assert result.max_units == 8
+
+    def test_origin_override_wins_over_inferred(self):
+        # An explicit origin override takes precedence over the inferred label —
+        # the caller owns the provenance claim when it bypasses the standard.
+        forced_unknown = calculate_max_units(
+            43560.0, self._rs8_standard(), lot_width_ft=100.0, lot_depth_ft=435.6,
+            origin="unknown",
+        )
+        assert forced_unknown.origin == "unknown"
+
+    def test_no_lot_data_return_carries_origin(self):
+        # Provenance propagates to the early no_lot_data return path, both grades.
+        r_standard = calculate_max_units(0.0, self._rs8_standard())
+        assert r_standard.governing_constraint == "no_lot_data"
+        assert r_standard.origin == "local_authority"
+        r_params = calculate_max_units(0.0, self._rs8_standard().to_numeric_zoning_params())
+        assert r_params.origin == "unknown"
+
+    def test_insufficient_data_return_carries_origin(self):
+        # A standard with no dimensional values → insufficient_data, but the
+        # provenance label still reflects the verified-fact source.
+        empty_standard = self._rs8_standard(
+            min_lot_area_sqft=None,
+            max_density_units_per_acre=None,
+            far=None,
+            max_lot_coverage_pct=None,
+            max_height_ft=None,
+        )
+        result = calculate_max_units(
+            43560.0, empty_standard, lot_width_ft=100.0, lot_depth_ft=435.6
+        )
+        assert result.governing_constraint == "insufficient_data"
+        assert result.origin == "local_authority"

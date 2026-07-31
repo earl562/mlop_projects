@@ -93,12 +93,19 @@ def test_lookup_reprompt_does_not_use_expert_knowledge():
 
 
 def test_lookup_max_turns_allows_enough_searches():
-    from plotlot.pipeline.lookup import MAX_ANALYSIS_TURNS
+    from plotlot.pipeline.lookup import _PREFETCH_TOPICS, MAX_ANALYSIS_TURNS
 
-    # Must be at least 6 to allow 4 searches + submit + possible retry
-    assert MAX_ANALYSIS_TURNS >= 6, (
-        f"MAX_ANALYSIS_TURNS={MAX_ANALYSIS_TURNS} is too low — "
-        "need at least 6 to fit 4 targeted searches before submit_report"
+    # The standards searches this budget used to exist for are now issued up
+    # front (_PREFETCH_TOPICS) and deduped into the initial context, so the
+    # model submits on turn 1 rather than spending turns discovering them.
+    # What must still hold: room to search at least once AND still submit.
+    assert MAX_ANALYSIS_TURNS >= 2, (
+        f"MAX_ANALYSIS_TURNS={MAX_ANALYSIS_TURNS} leaves no turn to submit "
+        "after a search"
+    )
+    assert len(_PREFETCH_TOPICS) >= 4, (
+        "the standards topics must be pre-fetched; without them the loop needs "
+        "a much larger turn budget to reach submit_report"
     )
 
 

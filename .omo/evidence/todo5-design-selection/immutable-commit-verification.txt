@@ -1,0 +1,123 @@
+IMMUTABLE_COMMIT_AUDIT
+TODO5_SHA=4e043b0c53baa653dd75bdca72a3456723ea7cce
+CURRENT_HEAD=1d350e99099bba289a450205894bb347e1e9aa83
+COMMIT_OBJECT_EXISTS=PASS
+COMMIT_IS_ANCESTOR=PASS
+SUBJECT=docs(frontend): select the production workbench system
+AUTHOR=Earl Perry <earlperry562@gmail.com>
+COMMITTER=Earl Perry <earlperry562@gmail.com>
+TREE=3cd107b6c0f6f799a00349d264400d0489bbf454
+PARENT=719e3179a77722e74df3ced161b350f60b5e6ad7
+IDENTITY_AND_SUBJECT=PASS
+{
+  "commitFileCount": 90,
+  "commitAllowlist": "pass",
+  "workingBlobsMatchCommit": 90,
+  "selected": "Operational Intelligence Workbench",
+  "scores": {
+    "a": 100,
+    "b": 72.8,
+    "c": 83.2
+  },
+  "coverage": {
+    "miami_dade": "private_beta",
+    "broward": "municipality_conditional",
+    "palm_beach": "municipality_conditional",
+    "san_diego": "planned_not_enabled"
+  },
+  "newImageCalls": 0,
+  "committedEvidence": {
+    "png": 13,
+    "aria": 12,
+    "json": 14
+  }
+}
+IMMUTABLE_BLOB_AND_SCORING_AUDIT=PASS
+{
+  "result": "pass",
+  "selected": "Operational Intelligence Workbench",
+  "totals": {
+    "a": 100,
+    "b": 72.8,
+    "c": 83.2
+  },
+  "coverage": {
+    "miami_dade": "private_beta",
+    "broward": "municipality_conditional",
+    "palm_beach": "municipality_conditional",
+    "san_diego": "planned_not_enabled"
+  },
+  "viewports": [
+    "1440x900",
+    "768x1024",
+    "390x844",
+    "375x844"
+  ],
+  "requiredStateCount": 19,
+  "baselineDefectCount": 9,
+  "newImageCalls": 0
+}
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+fixtures/redacted-acquisition-case.json: OK
+reference-direction-a-v1.png: OK
+../direction-a.prompt.md: OK
+CONTENT_FIXTURES_AND_GROUNDING.md: OK
+ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+STATE_MATRIX.md: OK
+RESPONSIVE_WIREFRAMES.md: OK
+SELF_AUDIT.md: OK
+DESIGN.md: OK
+README.md: OK
+imagegen.metadata.json: OK
+DONE_CLAIM.json: OK
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+artifacts/design/direction-b/CONTENT_FIXTURES_AND_GROUNDING.md: OK
+artifacts/design/direction-b/DESIGN.md: OK
+artifacts/design/direction-b/DONE_CLAIM.json: OK
+artifacts/design/direction-b/README.md: OK
+artifacts/design/direction-b/RESPONSIVE_WIREFRAMES.md: OK
+artifacts/design/direction-b/ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+artifacts/design/direction-b/SELF_AUDIT.md: OK
+artifacts/design/direction-b/STATE_MATRIX.md: OK
+artifacts/design/direction-b/fixture-direction-b-v1.json: OK
+artifacts/design/direction-b/imagegen.metadata.json: OK
+artifacts/design/direction-b/reference-direction-b-v1.png: OK
+artifacts/design/direction-b.prompt.md: OK
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+../direction-c.prompt.md: OK
+sample-fixture-redacted.json: OK
+RESPONSIVE_WIREFRAMES.md: OK
+STATE_MATRIX.md: OK
+SELF_AUDIT.md: OK
+ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+reference-direction-c-v1.png: OK
+imagegen.metadata.json: OK
+DESIGN.md: OK
+DONE_CLAIM.json: OK
+README.md: OK
+CONTENT_FIXTURES_AND_GROUNDING.md: OK
+plotlot/artifacts/design/direction-a/reference-direction-a-v1.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+plotlot/artifacts/design/direction-b/reference-direction-b-v1.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+plotlot/artifacts/design/direction-c/reference-direction-c-v1.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+BROWSER_ARTIFACT_COUNTS: screenshots=13 aria=12 json=14
+TODO5_VERIFICATION: PASS
+UNCHANGED_COMMITTED_VERIFIER=PASS
+IMMUTABLE_COMMIT_AUDIT=PASS

@@ -32,8 +32,16 @@ mlruns.db
 plotlot_tmp_mlflow.db
 mlruns/
 
-# Firebase local logs
-firebase-debug.log
+# Generated/private SQLite state is never source
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Generated package-manager and Firebase CLI debug logs
+**/firebase-debug.log
+**/npm-debug.log
+**/yarn-debug.log
+**/yarn-error.log
 
 # Frontend
 **/node_modules/

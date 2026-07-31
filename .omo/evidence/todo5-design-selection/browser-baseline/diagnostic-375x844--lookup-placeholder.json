@@ -1,0 +1,19 @@
+{
+  "data": {
+    "viewport": 375,
+    "placeholder": "Enter a property address...",
+    "input": {
+      "x": 33,
+      "width": 126.078125,
+      "right": 159.078125
+    },
+    "inputComputed": {
+      "fontSize": "14px",
+      "overflow": "clip"
+    },
+    "documentWidth": 375,
+    "horizontalOverflow": false
+  },
+  "consoleEntries": [],
+  "failures": []
+}

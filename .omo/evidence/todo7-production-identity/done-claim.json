@@ -1,0 +1,55 @@
+{
+  "DoneClaim": {
+    "task": "Todo7 production identity",
+    "changed_files": [
+      "plotlot/src/plotlot/config.py",
+      "plotlot/src/plotlot/api/auth.py",
+      "plotlot/src/plotlot/api/auth_types.py",
+      "plotlot/src/plotlot/api/service_auth.py",
+      "plotlot/src/plotlot/storage/models.py",
+      "plotlot/tests/security/test_clerk_auth.py",
+      "plotlot/tests/security/test_service_principals.py",
+      "plotlot/frontend/src/proxy.ts",
+      "plotlot/frontend/src/middleware.ts",
+      "plotlot/frontend/src/instrumentation.ts",
+      "plotlot/frontend/src/lib/auth-config.ts",
+      "plotlot/frontend/src/lib/auth-roles.ts",
+      "plotlot/frontend/tests/global-setup.ts",
+      "plotlot/frontend/tests/auth-roles.spec.ts",
+      "plotlot/frontend/tests/auth-playwright.config.ts"
+    ],
+    "tests": [
+      "production-mode pytest tests/security/test_clerk_auth.py tests/security/test_service_principals.py: 22 passed",
+      "pytest tests/unit: 1872 passed",
+      "pytest dimensional-model regression: 85 passed",
+      "Playwright auth roles Chromium with PLOTLOT_TEST_AUTH_BYPASS=0: 3 passed",
+      "Vitest: 30 passed",
+      "Ruff: passed",
+      "mypy storage/models.py: passed",
+      "TypeScript no-excuse: passed",
+      "tsc: passed",
+      "Next production build: passed"
+    ],
+    "manual_qa": [
+      ".omo/evidence/todo7-production-identity/backend-http-spoof-rejected.log",
+      ".omo/evidence/todo7-production-identity/frontend-startup-missing-config-next15.log",
+      ".omo/evidence/todo7-production-identity/frontend-protected-route-next15-headers.txt",
+      ".omo/evidence/todo7-production-identity/frontend-source-artifact-forbidden-scan-final.log"
+    ],
+    "cleanup": [
+      ".omo/evidence/todo7-production-identity/cleanup-receipt.log"
+    ],
+    "risks": [
+      "A live Clerk browser sign-in was intentionally not used; deterministic local keys/JWKS and fail-closed Clerk middleware headers provide non-secret coverage.",
+      "The repository's pre-existing config broad-except and oversized storage/models.py remain outside Todo7's scoped change."
+    ]
+  },
+  "AdversarialVerify": {
+    "verdict": "executor-self-verified",
+    "evidence": [
+      ".omo/evidence/todo7-production-identity/qa-matrix.md"
+    ],
+    "repro": "Run the invocations in qa-matrix.md",
+    "confidence": 0.96
+  }
+}

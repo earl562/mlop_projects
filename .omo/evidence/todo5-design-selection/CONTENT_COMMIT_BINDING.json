@@ -1,0 +1,70 @@
+{
+  "schema_version": "todo5-two-commit-evidence/v1.1.0",
+  "pattern": "The immutable content commit is created first. Its exact SHA, tree, parent, identity, subject, and changed blob OIDs are then committed in the immediately following evidence commit. The evidence commit does not claim to contain its own hash.",
+  "content_commit": "24c351ab403aa5b55a9874f54f615849d1853eed",
+  "content_tree": "fc9cde0c2a408f0c8027f4c15a10860a85db7193",
+  "content_parent": "8705cdddfee478cd1b0ad6a5e87f7529d59e86e9",
+  "content_subject": "fix(frontend): use opaque direction a identifiers",
+  "author": "Earl Perry <earlperry562@gmail.com>",
+  "committer": "Earl Perry <earlperry562@gmail.com>",
+  "changed_file_count": 13,
+  "changed_blobs": [
+    {
+      "oid": "451b8afa8c65c7e88a3528c04a335f5488fa0c86",
+      "path": "plotlot/DESIGN.md"
+    },
+    {
+      "oid": "78c56f99e642c9d9daf2709b7b7d985036dab63b",
+      "path": "plotlot/artifacts/design/direction-a.prompt.md"
+    },
+    {
+      "oid": "c63dba42cb777e40bf8d3c1f2f1e4cda825f4e36",
+      "path": "plotlot/artifacts/design/direction-a/DESIGN.md"
+    },
+    {
+      "oid": "25bc4a6eb09e74cd239ed9b25c53db76b324410b",
+      "path": "plotlot/artifacts/design/direction-a/DONE_CLAIM.json"
+    },
+    {
+      "oid": "ca89ef373dbb754aa3661056d1801e857116fad5",
+      "path": "plotlot/artifacts/design/direction-a/README.md"
+    },
+    {
+      "oid": "73cc2bd3317b37c8697ac934b2009c53d7dbbf7c",
+      "path": "plotlot/artifacts/design/direction-a/SELF_AUDIT.md"
+    },
+    {
+      "oid": "d1979cd0c4da886373ee30a083cb3142c79191e0",
+      "path": "plotlot/artifacts/design/direction-a/checksums.sha256"
+    },
+    {
+      "oid": "21687caadad9db09f25751c9a8a2cd34c4a9f5a8",
+      "path": "plotlot/artifacts/design/direction-a/design-truth-contract.json"
+    },
+    {
+      "oid": "2fceadc7b02536f952d1b7f762d2f44533a763db",
+      "path": "plotlot/artifacts/design/direction-a/design-truth-contract.sha256"
+    },
+    {
+      "oid": "184b775ff9a0e3e95367eb9d00f42bddc88c42de",
+      "path": "plotlot/artifacts/design/direction-a/imagegen.metadata.json"
+    },
+    {
+      "oid": "2608eb95ce52a78511822ee76efdf2a89d29d53d",
+      "path": "plotlot/artifacts/design/direction-a/reference-direction-a-v4.png"
+    },
+    {
+      "oid": "a1ca0724a9fa570cf2873f19fe3fbf1964e90ab9",
+      "path": "plotlot/artifacts/design/selection/README.md"
+    },
+    {
+      "oid": "6a93d5d692aeb915b3e914c944102c5ff9ad6f37",
+      "path": "plotlot/artifacts/design/selection/packet-audit.json"
+    }
+  ],
+  "evidence_commit_contract": {
+    "required_first_parent": "24c351ab403aa5b55a9874f54f615849d1853eed",
+    "required_scope": ".omo/evidence/todo5-design-selection/** only",
+    "verification_artifact": ".omo/evidence/todo5-design-selection/content-commit-verification.txt"
+  }
+}

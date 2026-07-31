@@ -1,0 +1,40 @@
+{
+  "schema_version": "todo5-direction-a-truth-correction/v1.0.0",
+  "content_commit": "84d13551b46062075a36ae63e10e5b113483643c",
+  "generation": {
+    "fresh_calls_for_this_correction": 1,
+    "mode": "built-in image_gen.imagegen",
+    "use_case": "ui-mockup",
+    "invoked_at_utc": "2026-07-27T04:12:30Z",
+    "prompt_version": "direction-a/v1.1.0",
+    "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
+    "tool_scoped_output": "call_MsVmzzkbYp4tuStMWeB02Sug.png",
+    "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_MsVmzzkbYp4tuStMWeB02Sug.png",
+    "project_copy": "plotlot/artifacts/design/direction-a/reference-direction-a-v3.png"
+  },
+  "output": {
+    "sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
+    "bytes": 1443125,
+    "format": "PNG RGB",
+    "width": 1586,
+    "height": 992
+  },
+  "reviewer_defect": "Direction A v2 displayed MAX UNITS 2 and PURCHASE CEILING $418,000 as current rail figures while also saying the parking rule was not hash-bound.",
+  "binary_observable": {
+    "max_units": "MAX UNITS / ABSTAINED / PARKING RULE NOT HASH-BOUND",
+    "purchase_ceiling": "PURCHASE CEILING / ABSTAINED / REQUIRED INPUT MISSING",
+    "forbidden_current_results_observed": [],
+    "state_matrix_binding": "STATE_MATRIX.md lines 42-50",
+    "result": "pass"
+  },
+  "privacy": {
+    "result": "pass",
+    "observable": "Only stable-redacted synthetic parcel, folio, and APN identifiers are visible; no private address, raw lead, owner, phone, email, coordinates, or source URL."
+  },
+  "selection": {
+    "direction_a": 100.0,
+    "direction_c": 83.2,
+    "direction_b": 72.8,
+    "winner_unchanged": true
+  }
+}

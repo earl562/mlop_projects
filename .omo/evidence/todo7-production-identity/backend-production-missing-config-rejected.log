@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/src/plotlot/config.py", line 284, in <module>
+    settings = Settings()
+               ^^^^^^^^^^
+  File "/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/.venv/lib/python3.12/site-packages/pydantic_settings/main.py", line 242, in __init__
+    super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+  File "/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/.venv/lib/python3.12/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+  Value error, production identity configuration is incomplete [type=value_error, input_value={'PLOTLOT_ENVIRONMENT': 'production'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/value_error
+PASS: production backend rejected missing identity configuration (exit=1)

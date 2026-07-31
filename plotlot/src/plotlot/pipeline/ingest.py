@@ -29,7 +29,7 @@ from plotlot.ingestion.embedder import embed_texts
 from plotlot.ingestion.scraper import MunicodeScraper
 from plotlot.observability.tracing import log_metrics, start_span
 from plotlot.storage.db import get_session, init_db
-from plotlot.storage.models import IngestionCheckpoint, OrdinanceChunk
+from plotlot.storage.models import IngestionCheckpoint, OrdinanceChunk, OrdinanceSection
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +195,79 @@ async def _scrape(config) -> list:
     return await scraper.scrape_zoning_chapter(config)
 
 
+async def _store_ordinance_sections(session: AsyncSession, chunks: list, config) -> int:
+    """Upsert one OrdinanceSection row per unique municode node_id.
+
+    Slice 3.1's structural index: a section fans out to many chunks, but each
+    carries the same path/cross_refs/section_type (computed once per section in
+    `chunk_sections`). We dedup by node_id and upsert a single structural row.
+    `referenced_by` is left untouched here (empty by default); the reverse index
+    is built by the Slice 3.5 backfill that scans every section's cross_refs.
+
+    Idempotent: upsert on the (municipality, node_id) natural key, so re-ingestion
+    refreshes path/cross_refs/section_type without duplicating rows.
+    """
+    now = datetime.now(timezone.utc)
+    seen: dict[tuple[str, str], dict] = {}
+    for chunk in chunks:
+        meta = chunk.metadata
+        node_id = meta.municode_node_id
+        if not node_id:
+            # PDF-only sources without a node_id can't satisfy the natural key;
+            # skip here (Slice 3.5 backfill handles synthetic node_ids).
+            continue
+        key = (meta.municipality, node_id)
+        if key in seen:
+            # Union cross_refs in case a section's chunks split the text such that
+            # different refs landed in different chunks (defensive — chunk_sections
+            # computes cross_refs once per section, so this is usually a no-op).
+            existing = seen[key]
+            existing_set = set(existing["cross_refs"]) | set(meta.cross_refs)
+            existing["cross_refs"] = sorted(existing_set)
+            continue
+        source_url = (
+            f"https://library.municode.com/search?clientId={config.client_id}&nodeId={node_id}"
+        )
+        seen[key] = {
+            "municipality": meta.municipality,
+            "county": meta.county,
+            "state": config.state,
+            "node_id": node_id,
+            "heading": (meta.section_title or None),
+            "section_number": (meta.section or None),
+            "section_title": (meta.section_title or None),
+            "section_type": meta.section_type,
+            "path": meta.path,
+            "cross_refs": meta.cross_refs,
+            "source_url": source_url,
+            "scraped_at": now,
+        }
+    if not seen:
+        return 0
+    row_dicts = list(seen.values())
+    stmt = pg_insert(OrdinanceSection).values(row_dicts)
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_section_natural_key",
+        set_={
+            "heading": stmt.excluded.heading,
+            "section_number": stmt.excluded.section_number,
+            "section_title": stmt.excluded.section_title,
+            "section_type": stmt.excluded.section_type,
+            "path": stmt.excluded.path,
+            "cross_refs": stmt.excluded.cross_refs,
+            "county": stmt.excluded.county,
+            "state": stmt.excluded.state,
+            "source_url": stmt.excluded.source_url,
+            "scraped_at": stmt.excluded.scraped_at,
+            # referenced_by intentionally NOT overwritten — the backfill-built
+            # reverse index must survive a re-ingestion refresh.
+        },
+    )
+    await session.execute(stmt)
+    await session.commit()
+    return len(row_dicts)
+
+
 async def ingest_municipality(key: str, state: str | None = None) -> int:
     """Run the full ingestion pipeline for a single municipality.
 
@@ -338,6 +411,17 @@ async def ingest_municipality(key: str, state: str | None = None) -> int:
                 await asyncio.sleep(0)  # yield between DB batches
             logger.info("Stored %d chunks for %s (upsert)", stored, config.municipality)
             _safe_log_metrics({"ingest.chunks_stored": stored})
+
+            # Step 4b: Index sections (Slice 3.1) — one OrdinanceSection row per
+            # unique node_id, populated from the chunker's path/cross_refs/section_type.
+            sections_indexed = await _store_ordinance_sections(session, chunks, config)
+            logger.info(
+                "Indexed %d sections for %s (upsert)",
+                sections_indexed,
+                config.municipality,
+            )
+            _safe_log_metrics({"ingest.sections_indexed": sections_indexed})
+
             if span:
                 span.set_outputs(
                     {

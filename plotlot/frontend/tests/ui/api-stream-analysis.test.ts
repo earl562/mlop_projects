@@ -115,7 +115,7 @@ describe("streamAnalysis", () => {
       { address: report.address },
       () => {},
       (result) => {
-        receivedResult = result as typeof report;
+        receivedResult = result as unknown as typeof report;
       },
       (error) => {
         receivedError = error;
@@ -130,92 +130,41 @@ describe("streamAnalysis", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it("falls back to sync analysis when the stream ends without a final event", async () => {
-    const report = {
-      address: "7940 Plantation Blvd, Miramar, FL 33023",
-      formatted_address: "7940 Plantation Blvd, Miramar, FL 33023",
-      municipality: "Miramar",
-      county: "Broward",
-      lat: 26.0,
-      lng: -80.0,
-      zoning_district: "RM-25",
-      zoning_description: "Multifamily",
-      allowed_uses: [],
-      conditional_uses: [],
-      prohibited_uses: [],
-      setbacks: { front: "", side: "", rear: "" },
-      max_height: "",
-      max_density: "",
-      floor_area_ratio: "",
-      lot_coverage: "",
-      min_lot_size: "",
-      parking_requirements: "",
-      property_record: null,
-      numeric_params: null,
-      density_analysis: null,
-      comp_analysis: null,
-      pro_forma: null,
-      summary: "Recovered after truncated stream",
-      sources: [],
-      confidence: "medium",
-    };
-
+  it("reports one recoverable error when a status-only stream closes", async () => {
     const sseBody = [
       `event: status\ndata: ${JSON.stringify({ step: "geocoding", message: "Resolving address..." })}\n\n`,
     ].join("");
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-
-      if (url.endsWith("/api/v1/analyze/stream")) {
-        return new Response(sseBody, {
-          status: 200,
-          headers: { "Content-Type": "text/event-stream" },
-        });
-      }
-
-      if (url.endsWith("/health")) {
-        return new Response(
-          JSON.stringify({
-            status: "healthy",
-            capabilities: { db_backed_analysis_ready: true },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      if (url.endsWith("/api/v1/analyze")) {
-        return new Response(JSON.stringify(report), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      throw new Error(`Unexpected fetch URL: ${url}`);
-    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(sseBody, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
 
     vi.stubGlobal("fetch", fetchMock);
 
     const statuses: string[] = [];
-    let receivedResult: typeof report | null = null;
-    let receivedError: AnalysisError | null = null;
+    const errors: AnalysisError[] = [];
 
     await streamAnalysis(
-      { address: report.address },
+      { address: "7940 Plantation Blvd, Miramar, FL 33023" },
       (status) => {
         statuses.push(status.step);
       },
-      (result) => {
-        receivedResult = result as typeof report;
+      () => {
+        throw new Error("result should not be emitted");
       },
       (error) => {
-        receivedError = error;
+        errors.push(error);
       },
     );
 
     expect(statuses).toEqual(["geocoding"]);
-    expect(receivedResult).toEqual(report);
-    expect(receivedError).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(errors).toEqual([{
+      detail: "The analysis stream ended before a final result was returned.",
+      errorType: "pipeline_error",
+    }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

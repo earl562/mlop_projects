@@ -638,10 +638,16 @@ class TestUniversalFallback:
         "plotlot.property.california.CaliforniaProvider._universal_fallback",
         new_callable=AsyncMock,
     )
-    async def test_unknown_county_uses_universal_fallback(self, mock_fallback):
+    @patch(
+        "plotlot.property.california.CaliforniaProvider._statewide_parcel",
+        new_callable=AsyncMock,
+    )
+    async def test_unknown_county_uses_universal_fallback(self, mock_statewide, mock_fallback):
+        mock_statewide.return_value = None
         mock_fallback.return_value = None
         provider = CaliforniaProvider()
         record = await provider.lookup("100 Test Ave, Fresno, CA", "Fresno", lat=36.7, lng=-119.7)
+        mock_statewide.assert_awaited_once()
         mock_fallback.assert_awaited_once()
         assert record is None
 

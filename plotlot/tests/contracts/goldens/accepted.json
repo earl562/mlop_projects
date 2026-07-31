@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "OpportunityDecisionInputV1",
+  "persona": {
+    "buyerKind": "general-contractor-developer",
+    "role": "acquisition-lead",
+    "decisionIntent": "control",
+    "targetStrategy": "build-to-sell"
+  },
+  "opportunity": {
+    "externalId": "lead-sha256-c299bb6b",
+    "address": "redacted:sha256:c299bb6b2ce4ae2451ff62584437be44743ebdbc5d3134ba1252c0c4df7399d4",
+    "county": "miami-dade",
+    "municipalityLane": "miami",
+    "developmentProgramId": "program-001"
+  },
+  "facts": {
+    "propertyIdentity": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-identity"]
+    },
+    "localTruth": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-truth"]
+    },
+    "constraintsCapacity": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-capacity"]
+    },
+    "marketEvidence": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-market"]
+    },
+    "underwriting": {
+      "status": "verified",
+      "evidenceReceiptIds": ["receipt-underwriting"]
+    }
+  },
+  "support": {
+    "county": "miami-dade",
+    "municipalityLane": "miami",
+    "coordinateReceipts": [
+      {"workflow": "opportunity-intake", "factFamily": "property-identity", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:opportunity-intake:property-identity"},
+      {"workflow": "opportunity-intake", "factFamily": "jurisdiction", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:opportunity-intake:jurisdiction"},
+      {"workflow": "constraints-and-capacity", "factFamily": "zoning", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:constraints-and-capacity:zoning"},
+      {"workflow": "constraints-and-capacity", "factFamily": "development-constraints", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:constraints-and-capacity:development-constraints"},
+      {"workflow": "constraints-and-capacity", "factFamily": "legal-capacity", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:constraints-and-capacity:legal-capacity"},
+      {"workflow": "market-underwriting", "factFamily": "land-comps", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:market-underwriting:land-comps"},
+      {"workflow": "market-underwriting", "factFamily": "finished-resale-comps", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:market-underwriting:finished-resale-comps"},
+      {"workflow": "market-underwriting", "factFamily": "underwriting", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:market-underwriting:underwriting"},
+      {"workflow": "decision-release", "factFamily": "pricing-readiness", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:decision-release:pricing-readiness"},
+      {"workflow": "decision-release", "factFamily": "reviewer-approval", "evidenceReceiptId": "issued:plotlot-public-test-authority:public-test-v1:miami:decision-release:reviewer-approval"}
+    ]
+  },
+  "proposedCeilingCents": 52500000,
+  "review": {
+    "status": "approved",
+    "analystId": "analyst-001",
+    "reviewerId": "reviewer-002"
+  },
+  "requestedRelease": true,
+  "externalAction": "none"
+}

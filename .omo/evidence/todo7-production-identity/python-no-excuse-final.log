@@ -1,0 +1,4 @@
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/src/plotlot/config.py:229:9: [broad-except] `except Exception` is too broad — catch the specific exception you expect
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/src/plotlot/storage/models.py:1:1: [oversized-module] 703 pure LOC (limit: 250) — split by responsibility
+
+2 violation(s) in 7 file(s)

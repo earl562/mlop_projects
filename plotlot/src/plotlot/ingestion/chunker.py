@@ -19,6 +19,90 @@ OVERLAP = 200
 # Common zone code patterns in South Florida ordinances
 ZONE_CODE_PATTERN = re.compile(r"\b([A-Z]{1,4}[-\s]?\d{1,3}(?:\.\d{1,2})?(?:[-/][A-Z0-9]+)?)\b")
 
+# Outbound cross-reference patterns in ordinance prose. Ordinances cite other
+# sections many ways: "§47-5.60", "Sec. 47-24.3", "Section 47-5.601", "pursuant
+# to § 33-49". We capture the section-number token (digits, hyphens, dots) and
+# normalize to a bare "47-5.60"-style key so traversal can match it against the
+# OrdinanceSection.section_number index.
+_CROSS_REF_RE = re.compile(
+    r"(?:\u00a7|Sec\.?|Section|\xc2\xa7)\s*([\d][\d\-.]+[\d])",
+    re.IGNORECASE,
+)
+
+# Section-type classification heuristics keyed off the heading + title. The
+# types drive the AgenticRAG fast-path (dimensional tables skip the LLM) and
+# the report's evidence provenance. Ordered: most-specific first.
+_SECTION_TYPE_RULES: list[tuple[str, re.Pattern[str]]] = [
+    (
+        "dimensional_table",
+        re.compile(
+            r"\b(schedule of (district )?regulations|dimensional (standards|table)|density regulations)\b",
+            re.I,
+        ),
+    ),
+    ("schedule", re.compile(r"\b(schedule|table of (permitted )?uses|fee schedule)\b", re.I)),
+    ("definition", re.compile(r"\b(definitions|defined terms?)\b", re.I)),
+    (
+        "use_regulation",
+        re.compile(
+            r"\b(permitted uses?|use regulations?|use (standards|tables?)|principal uses?|accessory uses?)\b",
+            re.I,
+        ),
+    ),
+]
+
+
+def _extract_cross_refs(text: str) -> list[str]:
+    """Extract outbound section-number cross-references from ordinance text.
+
+    Returns de-duplicated, sorted bare section numbers (e.g. ["47-24.3",
+    "47-5.601"]). A section's own number is NOT self-referenced; callers that
+    want self-exclusion can drop the section's own number afterwards.
+    """
+    refs: set[str] = set()
+    for m in _CROSS_REF_RE.finditer(text):
+        token = m.group(1).strip().rstrip(".")
+        if len(token) >= 2:
+            refs.add(token)
+    return sorted(refs)
+
+
+def _classify_section_type(heading: str, title: str, text: str) -> str:
+    """Classify a section by its role in the ordinance structure.
+
+    Heuristic over heading + title (+ first chunk of text). Returns one of:
+    dimensional_table | schedule | definition | use_regulation | regulation.
+    `regulation` is the catch-all default for narrative regulatory sections.
+    """
+    haystack = f"{heading} {title}".strip()
+    if not haystack:
+        haystack = text[:200]
+    for type_name, pattern in _SECTION_TYPE_RULES:
+        if pattern.search(haystack):
+            return type_name
+    return "regulation"
+
+
+def _build_section_path(section: RawSection, sec_num: str, title: str) -> list[str]:
+    """Build the hierarchical breadcrumb path for a section.
+
+    Prefers an explicit `section.path` (full ancestor chain, root-first) when
+    the scraper supplied one; otherwise synthesizes a 1–2 level breadcrumb from
+    `parent_heading` (chapter) + the section's own heading. Empty/whitespace
+    segments are dropped so the path never carries placeholder blanks.
+    """
+    if section.path:
+        return [p.strip() for p in section.path if p and p.strip()]
+    path: list[str] = []
+    if section.parent_heading and section.parent_heading.strip():
+        path.append(section.parent_heading.strip())
+    # Use the parsed section number when available ("Sec. 47-5.60") so the path
+    # leaf is a stable, matchable identifier rather than free-form prose.
+    leaf = sec_num.strip() if sec_num.strip() else section.heading.strip()
+    if leaf:
+        path.append(leaf)
+    return path
+
 
 def _extract_zone_codes(text: str) -> list[str]:
     """Extract zone code references from text (e.g., RS-8, RMM-25, T6-80)."""
@@ -198,6 +282,9 @@ def chunk_sections(sections: list[RawSection]) -> list[TextChunk]:
 
         chapter, sec_num, title = _parse_chapter_section(section.heading, section.parent_heading)
         zone_codes = _extract_zone_codes(text)
+        path = _build_section_path(section, sec_num, title)
+        cross_refs = _extract_cross_refs(text)
+        section_type = _classify_section_type(section.heading, title, text)
 
         text_parts = _split_text(text)
         for i, part in enumerate(text_parts):
@@ -212,6 +299,9 @@ def chunk_sections(sections: list[RawSection]) -> list[TextChunk]:
                     zone_codes=zone_codes,
                     chunk_index=i,
                     municode_node_id=section.node_id,
+                    path=path,
+                    cross_refs=cross_refs,
+                    section_type=section_type,
                 ),
             )
             all_chunks.append(chunk)

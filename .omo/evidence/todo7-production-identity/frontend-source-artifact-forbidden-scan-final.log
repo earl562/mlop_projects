@@ -1,0 +1,1 @@
+PASS: no forbidden auth bypass or synthetic anonymous markers in production source/build artifacts

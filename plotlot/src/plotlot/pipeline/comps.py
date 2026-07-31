@@ -45,8 +45,8 @@ _SALES_FIELD_KEYWORDS = {
 _SALES_NAME_KEYWORDS = {"sale", "transaction", "transfer", "recorded", "deed"}
 
 # Candidate field names for each datum (case-insensitive).
-_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
-_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE"}
+_PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "SALE_AMOUNT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
+_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE", "DOS", "DATEOFSALE"}
 _ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
 _LOT_FIELDS = {"LOT_SIZE", "LOT_AREA", "LAND_SQFT", "ACRES", "ACREAGE", "SQ_FOOTAGE"}
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}
@@ -163,11 +163,23 @@ def _is_arms_length(price: float) -> bool:
 
 
 def _find_field(fields: list[str], candidates: set[str]) -> str | None:
-    """Find the first matching field name (case-insensitive)."""
+    """Find the first matching field name (case-insensitive).
+
+    Matches exactly first, then falls back to substring/contains matching so
+    DB-qualified names (e.g. "SQLGIS02.dbo.BCPA_SALES.SALE_AMOUNT") and
+    suffixed names (e.g. "PRICE_1", "DOS_1") resolve against the candidate
+    set. Without the substring fallback, Broward + Miami-Dade registered sources
+    silently produced 0 comps because price_field/date_field were None.
+    """
     upper_map = {f.upper(): f for f in fields}
     for c in candidates:
         if c in upper_map:
             return upper_map[c]
+    # Substring fallback: candidate appears anywhere in the field name.
+    for c in candidates:
+        for upper_name, original in upper_map.items():
+            if c in upper_name:
+                return original
     return None
 
 
@@ -319,7 +331,11 @@ async def _query_nearby_sales(
         params["orderByFields"] = f"{order_by} DESC"
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.get(layer_url, params=params)
+        # ArcGIS layer query endpoint is <layer_url>/query. Registered layer URLs
+        # are stored as the layer resource (.../FeatureServer/0), not the query
+        # endpoint. Without this suffix, ArcGIS returns service metadata (0 features).
+        query_url = layer_url if layer_url.endswith("/query") else f"{layer_url}/query"
+        resp = await client.get(query_url, params=params)
         resp.raise_for_status()
         data = resp.json()
 

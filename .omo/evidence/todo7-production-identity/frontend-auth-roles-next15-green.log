@@ -1,0 +1,15 @@
+(node:43197) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:43200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:43200) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:43200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/auth-roles.spec.ts:7:5 › each authenticated role exposes only its configured capabilities (299ms)
+  ✓  2 [chromium] › tests/auth-roles.spec.ts:37:5 › production auth source contains no anonymous test bypass (54ms)
+  ✓  3 [chromium] › tests/auth-roles.spec.ts:50:5 › production startup rejects incomplete Clerk configuration (1ms)
+
+  3 passed (1.5s)

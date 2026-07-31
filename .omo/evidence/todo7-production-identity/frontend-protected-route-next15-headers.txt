@@ -1,0 +1,7 @@
+HTTP/1.1 500 Internal Server Error
+x-clerk-auth-reason: protect-rewrite, dev-browser-missing
+x-clerk-auth-status: signed-out
+x-middleware-rewrite: http://localhost:3998/clerk_1785125821426
+date: Mon, 27 Jul 2026 04:17:01 GMT
+connection: close
+transfer-encoding: chunked

@@ -1,0 +1,2 @@
+curl: (7) Failed to connect to 127.0.0.1 port 3215 after 0 ms: Couldn't connect to server
+EXPECTED_CONNECTION_FAILURE_EXIT=7

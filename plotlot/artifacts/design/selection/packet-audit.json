@@ -1,0 +1,74 @@
+{
+  "schema_version": "plotlot-direction-packet-audit/v1.2.0",
+  "audited_at": "2026-07-27",
+  "generation_policy": {
+    "new_image_calls": 1,
+    "current_privacy_correction_calls": 1,
+    "direction_a_total_recorded_calls": 3,
+    "existing_reference_packets_only": false,
+    "correction_scope": "Exactly one fresh built-in ImageGen call was made for the v4 opaque-identifier privacy correction. Direction A v2 and v3 are historical; no new Direction B or C image call was made.",
+    "one_call_claims": {
+      "direction_a_v2_provenance_correction": 1,
+      "direction_a_v3_truth_correction": 1,
+      "direction_a_v4_privacy_correction": 1,
+      "direction_b": 1,
+      "direction_c": 1
+    }
+  },
+  "radical_difference": {
+    "result": "pass",
+    "home_objects": {
+      "direction_a": "ordered evidence ledger plus anchored decision rail",
+      "direction_b": "cadastral parcel atlas plus source-record dossier",
+      "direction_c": "role-owned stage-gate binder plus approval rail"
+    }
+  },
+  "directions": {
+    "a": {
+      "prompt_sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+      "image_sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+      "selected_asset": "reference-direction-a-v4.png",
+      "dimensions": [1586, 992],
+      "manifest_verification": "pass",
+      "visual_inspection": "pass",
+      "privacy": "opaque synthetic DEAL-* identifiers only; no address-like text",
+      "raster_role": "non-authoritative visual reference",
+      "provenance": {
+        "tool": "built-in image_gen.imagegen",
+        "invoked_at_utc": "2026-07-27T04:27:24Z",
+        "tool_scoped_output": "call_rvzv9UecapZkYRet64S9f95J.png",
+        "metadata": "../direction-a/imagegen.metadata.json"
+      },
+      "truth_contract": "../direction-a/design-truth-contract.json",
+      "decision_rail_truth": "pass: maximum units and purchase ceiling are visibly abstained because parking is not hash-bound",
+      "privacy_truth": "pass: visible parcel/deal identifiers are opaque synthetic DEAL-* IDs only"
+    },
+    "b": {
+      "prompt_sha256": "c7e23c9abc2d922da92c9f7dd8d23327f812160279eac0bbc5537788083ff963",
+      "image_sha256": "7bffefab7b23eb1adba0c1a632b4852a5feb6f6f748b5c667551e0f9b9ac5af6",
+      "dimensions": [1586, 992],
+      "manifest_verification": "pass",
+      "visual_inspection": "pass",
+      "privacy": "generic/redacted parcel identifiers; no address, owner, customer, coordinates, or source URL in canonical fixture",
+      "raster_role": "non-authoritative visual reference"
+    },
+    "c": {
+      "prompt_sha256": "172494983061bc1b8748d25c9a8a29f3eeebeff810759ae2ea9a2711410f96e9",
+      "image_sha256": "6806a87c67ce205edfa1030c850189bad993bce8737f8bde3741da051908e8c0",
+      "dimensions": [1586, 992],
+      "manifest_verification": "pass",
+      "visual_inspection": "pass",
+      "privacy": "stable-redacted synthetic identifiers only",
+      "raster_role": "non-authoritative visual reference"
+    }
+  },
+  "content_safety": {
+    "private_address_or_raw_lead_data": "none observed in direction packets",
+    "screenshot_embedded_in_device": "none observed",
+    "interactive_raster_instruction": "none observed; explicit ban added by selection contract",
+    "generic_chat_or_saas_primary_surface": "explicitly prohibited in all directions",
+    "regional_cliches": "no beach, palm, luxury, resort, ocean, or aerial-lifestyle imagery observed",
+    "coverage_truth": "Miami-Dade private beta; Broward and Palm Beach municipality-conditional; San Diego planned/not enabled"
+  },
+  "known_non_blocking_variance": "All three generated references are 1586x992 rather than the requested 1440x900. Written layout and viewport contracts are authoritative."
+}

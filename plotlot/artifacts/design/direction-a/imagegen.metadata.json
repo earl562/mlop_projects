@@ -1,0 +1,111 @@
+{
+  "schema_version": "direction-a-imagegen-metadata/v1.3.0",
+  "asset": "reference-direction-a-v4.png",
+  "generation": {
+    "mode": "built-in image_gen.imagegen",
+    "use_case": "ui-mockup",
+    "invocation_count_for_privacy_correction": 1,
+    "total_recorded_direction_a_calls": 3,
+    "invoked_at_utc": "2026-07-27T04:27:24Z",
+    "canonical_prompt": "../direction-a.prompt.md",
+    "prompt_version": "direction-a/v1.2.0",
+    "prompt_sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+    "tool_call_binding": {
+      "tool": "image_gen.imagegen",
+      "tool_scoped_output": "call_rvzv9UecapZkYRet64S9f95J.png",
+      "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_rvzv9UecapZkYRet64S9f95J.png",
+      "project_copy": "reference-direction-a-v4.png"
+    }
+  },
+  "output": {
+    "sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+    "format": "PNG RGB",
+    "dimensions": [1586, 992],
+    "requested_dimensions": [1440, 900],
+    "bytes": 1398226,
+    "alpha_channel": false
+  },
+  "truth_contract": {
+    "path": "design-truth-contract.json",
+    "sha256": "c6015707ba71ff5661a879f595795794bbbbc487d05410e72875904a214d46f3",
+    "role": "machine-consumed semantic contract; prompt prose is not executable"
+  },
+  "visual_validation": {
+    "result": "pass",
+    "observed": [
+      "deal queue uses only DEAL-MIA-0420, DEAL-MIA-0150, DEAL-BRW-0010, DEAL-PBC-1234, and DEAL-SD-0000",
+      "parcel identity uses PARCEL ID REDACTED and no street address, folio, APN, owner, coordinates, or URL",
+      "decision rail labels MAX UNITS as ABSTAINED with PARKING RULE NOT HASH-BOUND",
+      "decision rail labels PURCHASE CEILING as ABSTAINED with REQUIRED INPUT MISSING",
+      "2 and $418,000 appear only inside CONDITIONAL SCENARIO / NOT RELIANCE-READY",
+      "Miami-Dade private beta, Broward and Palm Beach municipality required, and San Diego planned/not enabled remain explicit"
+    ],
+    "visible_deal_ids": [
+      "DEAL-MIA-0420",
+      "DEAL-MIA-0150",
+      "DEAL-BRW-0010",
+      "DEAL-PBC-1234",
+      "DEAL-SD-0000"
+    ],
+    "address_like_strings_observed": [],
+    "prohibited_content_observed": [],
+    "truth_table_result": "pass: maximum units and purchase ceiling are abstained while parking is not hash-bound",
+    "privacy_result": "pass: opaque synthetic deal IDs only",
+    "selection_impact": "No score change. Direction A remains the deterministic winner."
+  },
+  "reference_contract": {
+    "authoritative_for": [
+      "density",
+      "three-region proportion",
+      "paper-and-hairline material",
+      "evidence-led hierarchy",
+      "abstained decision-rail treatment",
+      "opaque synthetic identifier treatment"
+    ],
+    "not_authoritative_for": [
+      "exact raster copy",
+      "legal or economic facts",
+      "coverage policy beyond the written packet",
+      "pixel-perfect 1440x900 geometry",
+      "runtime behavior"
+    ],
+    "known_limitations": [
+      "The built-in output is 1586x992 rather than the requested 1440x900.",
+      "Generated raster text must be superseded by the machine truth contract and textual specification when copy differs or is unclear.",
+      "The image is a visual reference and must not be used as a production data source."
+    ]
+  },
+  "generation_history": [
+    {
+      "asset": "reference-direction-a-v2.png",
+      "prompt_version": "direction-a/v1.0.0",
+      "prompt_sha256": "2b24a583d2aa2e45e27befa37b2f970b700a859026a15394bcfbbbc1df3b6078",
+      "output_sha256": "4100a9de594e486ed03054a959247e8be70f29742f8b84d111873c40ec829cc7",
+      "status": "historical; rejected because the rail rendered current figures while parking was not hash-bound"
+    },
+    {
+      "asset": "reference-direction-a-v3.png",
+      "prompt_version": "direction-a/v1.1.0",
+      "prompt_sha256": "6cc5f6fa07043b68cf5349e01ff6c9b9dc6d45736d236f24dea342bc914a26a8",
+      "output_sha256": "5594f7e9d8dff1bb62667a4e80680a83c4b7de2ee917e7a1ef8aba8dad8d6cf5",
+      "status": "historical; rejected because generated queue copy included address-like text"
+    },
+    {
+      "asset": "reference-direction-a-v4.png",
+      "prompt_version": "direction-a/v1.2.0",
+      "prompt_sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+      "output_sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+      "status": "selected truth-table-correct and privacy-safe reference"
+    }
+  ],
+  "legacy_reference": {
+    "asset": "reference-direction-a-v1.png",
+    "sha256": "69ad0bd9973bbf16a8991bfb4b6f6fb16398b393b6c1d072472e1b78b05b17db",
+    "status": "preserved historical reference; not selected"
+  },
+  "fixture": {
+    "path": "fixtures/redacted-acquisition-case.json",
+    "sha256": "e81ade34d18a10c5aa6bc9e7bd63e4654818b2ed34f77271e7a8ec4a73530338",
+    "privacy": "Textual fixture remains synthetic and redacted; generated visual references must use opaque synthetic deal IDs only."
+  }
+}
