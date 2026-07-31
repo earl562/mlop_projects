@@ -7,6 +7,14 @@ Create Date: 2026-07-28
 Durable cache for county-assessor parcel lookups (recorded lot area + owner).
 Purely additive: a new standalone table with no foreign keys, so it cannot
 affect existing data or the harness tables.
+
+Idempotent by design. The Phat and production-MVP branches were reconciled after
+both had already been applied to the live database, so this revision must run
+against a database where these objects may ALREADY exist (created earlier under
+different revision ids) or may not exist at all (a fresh database). Guarding each
+object keeps a single migration correct for both, instead of requiring an
+out-of-band stamp that would desync the two histories again.
+
 """
 
 from typing import Sequence, Union
@@ -21,6 +29,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # See module docstring: may already exist from the pre-reconciliation history.
+    if sa.inspect(op.get_bind()).has_table("assessor_parcel_cache"):
+        return
     op.create_table(
         "assessor_parcel_cache",
         sa.Column("cache_key", sa.String(length=80), primary_key=True),

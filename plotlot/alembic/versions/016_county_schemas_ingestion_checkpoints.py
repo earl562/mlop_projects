@@ -10,13 +10,12 @@ built by Base.metadata.create_all. This revision brings the migration chain up
 to the full model schema so `alembic upgrade head` on a fresh database
 reproduces EVERY table the ORM declares.
 
-Adoption note: on the existing create_all-built database (Neon) these tables
-already exist, so that database is brought under Alembic control with
-`alembic stamp head` (which records the version without running DDL) rather than
-`upgrade from base`. This migration therefore only executes against a fresh
-database, where the tables do not yet exist. Column-level drift on the existing
-database (e.g. workspaces.owner_user_id) is handled by a separate, idempotent
-reconciliation migration authored after introspecting the live schema.
+Idempotent by design. The Phat and production-MVP branches were reconciled after
+both had already been applied to the live database, so this revision must run
+against a database where these objects may ALREADY exist (created earlier under
+different revision ids) or may not exist at all (a fresh database). Guarding each
+object keeps a single migration correct for both, instead of requiring an
+out-of-band stamp that would desync the two histories again.
 """
 
 from typing import Sequence, Union
@@ -31,7 +30,18 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_table(name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(name)
+
+
 def upgrade() -> None:
+    if not _has_table("ingestion_checkpoints"):
+        _create_ingestion_checkpoints()
+    if not _has_table("county_schemas"):
+        _create_county_schemas()
+
+
+def _create_ingestion_checkpoints() -> None:
     op.create_table(
         "ingestion_checkpoints",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -59,6 +69,7 @@ def upgrade() -> None:
         ["batch_id"],
     )
 
+def _create_county_schemas() -> None:
     op.create_table(
         "county_schemas",
         sa.Column("county_key", sa.String(length=200), primary_key=True),

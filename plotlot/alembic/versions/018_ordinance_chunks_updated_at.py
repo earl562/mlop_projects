@@ -17,6 +17,14 @@ default applies only to rows written from here on.
 
 Both statements are catalog-only on PostgreSQL 11+ (no table rewrite), so this
 is effectively instant regardless of row count.
+
+Idempotent by design. The Phat and production-MVP branches were reconciled after
+both had already been applied to the live database, so this revision must run
+against a database where these objects may ALREADY exist (created earlier under
+different revision ids) or may not exist at all (a fresh database). Guarding each
+object keeps a single migration correct for both, instead of requiring an
+out-of-band stamp that would desync the two histories again.
+
 """
 
 from typing import Sequence, Union
@@ -30,7 +38,15 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_column(table: str, column: str) -> bool:
+    inspector = sa.inspect(op.get_bind())
+    return any(c["name"] == column for c in inspector.get_columns(table))
+
+
 def upgrade() -> None:
+    # See module docstring: may already exist from the pre-reconciliation history.
+    if _has_column("ordinance_chunks", "updated_at"):
+        return
     op.add_column(
         "ordinance_chunks",
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
