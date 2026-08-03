@@ -4,6 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Resolve a working Python. Bare `python3` is absent on Windows/Git-Bash, where
+# it resolves to the Microsoft Store stub and exits 49 before the heredoc runs —
+# so the script reported a spurious failure regardless of service health. Prefer
+# the repo venv, then whichever of python3/python actually executes.
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  for _candidate in "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/.venv/Scripts/python.exe" python3 python; do
+    if command -v "$_candidate" >/dev/null 2>&1 && "$_candidate" -c "" >/dev/null 2>&1; then
+      PYTHON_BIN="$_candidate"
+      break
+    fi
+  done
+fi
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 WATCHDOG_LOG_DIR="${WATCHDOG_LOG_DIR:-$ROOT_DIR/logs/runner}"
 mkdir -p "$WATCHDOG_LOG_DIR"
@@ -17,7 +31,7 @@ else
 fi
 
 STATUS_JSON="${STATUS_JSON:-$ROOT_DIR/docs/status/runtime-status.json}"
-python3 - <<'PY' "$STATUS_JSON" "$healthcheck_exit"
+"$PYTHON_BIN" - <<'PY' "$STATUS_JSON" "$healthcheck_exit"
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)

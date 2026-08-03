@@ -11,7 +11,6 @@ The 007 migration uses IF NOT EXISTS, so re-running is safe.
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "d3e4f5a6b7c8"

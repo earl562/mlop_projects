@@ -4,6 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Resolve a working Python. Bare `python3` is absent on Windows/Git-Bash, where
+# it resolves to the Microsoft Store stub and exits 49 before the heredoc runs —
+# so the script reported a spurious failure regardless of service health. Prefer
+# the repo venv, then whichever of python3/python actually executes.
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  for _candidate in "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/.venv/Scripts/python.exe" python3 python; do
+    if command -v "$_candidate" >/dev/null 2>&1 && "$_candidate" -c "" >/dev/null 2>&1; then
+      PYTHON_BIN="$_candidate"
+      break
+    fi
+  done
+fi
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000}"
@@ -69,7 +83,7 @@ else
   process_lines="$(ps aux | egrep 'uvicorn plotlot|next dev|next-server|node .*3000' | grep -v grep || true)"
 fi
 
-parsed_output="$(python3 - <<'PY' "$backend_raw"
+parsed_output="$("$PYTHON_BIN" - <<'PY' "$backend_raw"
 import json, sys
 raw = sys.argv[1]
 try:
@@ -134,7 +148,7 @@ if [[ "$ANALYZE_SMOKE_ENABLED" == "1" ]]; then
   analyze_smoke_status="failed"
   payload="$ANALYZE_SMOKE_PAYLOAD"
   if [[ -z "$payload" ]]; then
-    payload="$(python3 - <<'PY' "$ANALYZE_SMOKE_ADDRESS"
+    payload="$("$PYTHON_BIN" - <<'PY' "$ANALYZE_SMOKE_ADDRESS"
 import json, sys
 print(json.dumps({"address": sys.argv[1]}))
 PY
@@ -168,7 +182,7 @@ PY
 
   if [[ "$analyze_smoke_http_code" == "200" ]]; then
     analyze_smoke_status="ok"
-    analyze_smoke_summary="$(python3 - <<'PY' "$analyze_smoke_body"
+    analyze_smoke_summary="$("$PYTHON_BIN" - <<'PY' "$analyze_smoke_body"
 import json, sys
 body = sys.argv[1]
 try:
@@ -192,7 +206,7 @@ if [[ "$CHAT_SMOKE_ENABLED" == "1" ]]; then
   chat_smoke_status="failed"
   payload="$CHAT_SMOKE_PAYLOAD"
   if [[ -z "$payload" ]]; then
-    payload="$(python3 - <<'PY' "$CHAT_SMOKE_MESSAGE"
+    payload="$("$PYTHON_BIN" - <<'PY' "$CHAT_SMOKE_MESSAGE"
 import json, sys
 print(json.dumps({"message": sys.argv[1], "history": [], "report_context": None}))
 PY
@@ -264,7 +278,7 @@ if [[ "$PORTFOLIO_SMOKE_ENABLED" == "1" ]]; then
 
   if [[ "$portfolio_smoke_http_code" == "200" ]]; then
     portfolio_smoke_status="ok"
-    portfolio_smoke_summary="$(python3 - <<'PY' "$portfolio_smoke_body"
+    portfolio_smoke_summary="$("$PYTHON_BIN" - <<'PY' "$portfolio_smoke_body"
 import json, sys
 body = sys.argv[1]
 try:
@@ -349,7 +363,7 @@ portfolio_smoke_body:
 $portfolio_smoke_body
 EOF
 
-python3 - <<'PY' "$STATUS_JSON" "$TIMESTAMP" "$FRONTEND_URL" "$frontend_status" "$frontend_error" "$BACKEND_URL" "$backend_raw" "$backend_error" "$database_status" "$mlflow_status" "$last_ingestion" "$runtime_startup_mode" "$runtime_startup_warnings" "$backend_seen" "$frontend_seen" "$ANALYZE_SMOKE_ENABLED" "$ANALYZE_SMOKE_URL" "$ANALYZE_SMOKE_ADDRESS" "$analyze_smoke_status" "$analyze_smoke_http_code" "$analyze_smoke_summary" "$analyze_smoke_error" "$CHAT_SMOKE_ENABLED" "$CHAT_SMOKE_URL" "$CHAT_SMOKE_MESSAGE" "$chat_smoke_status" "$chat_smoke_http_code" "$chat_smoke_summary" "$chat_smoke_error" "$PORTFOLIO_SMOKE_ENABLED" "$PORTFOLIO_SMOKE_URL" "$portfolio_smoke_status" "$portfolio_smoke_http_code" "$portfolio_smoke_summary" "$portfolio_smoke_error" "$health_ok"
+"$PYTHON_BIN" - <<'PY' "$STATUS_JSON" "$TIMESTAMP" "$FRONTEND_URL" "$frontend_status" "$frontend_error" "$BACKEND_URL" "$backend_raw" "$backend_error" "$database_status" "$mlflow_status" "$last_ingestion" "$runtime_startup_mode" "$runtime_startup_warnings" "$backend_seen" "$frontend_seen" "$ANALYZE_SMOKE_ENABLED" "$ANALYZE_SMOKE_URL" "$ANALYZE_SMOKE_ADDRESS" "$analyze_smoke_status" "$analyze_smoke_http_code" "$analyze_smoke_summary" "$analyze_smoke_error" "$CHAT_SMOKE_ENABLED" "$CHAT_SMOKE_URL" "$CHAT_SMOKE_MESSAGE" "$chat_smoke_status" "$chat_smoke_http_code" "$chat_smoke_summary" "$chat_smoke_error" "$PORTFOLIO_SMOKE_ENABLED" "$PORTFOLIO_SMOKE_URL" "$portfolio_smoke_status" "$portfolio_smoke_http_code" "$portfolio_smoke_summary" "$portfolio_smoke_error" "$health_ok"
 import json, sys
 (
     path,
