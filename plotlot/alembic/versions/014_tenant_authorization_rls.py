@@ -50,7 +50,25 @@ def _enable_workspace_rls(table_name: str) -> None:
 
 
 def upgrade() -> None:
-    op.execute("ALTER ROLE plotlot_app NOBYPASSRLS NOSUPERUSER")
+    # Belt-and-braces hardening of the app role. Altering role ATTRIBUTES needs
+    # superuser, which managed Postgres never grants (Neon's neondb_owner is
+    # createrole-but-not-superuser), so an unconditional ALTER aborts the whole
+    # migration there. Skipping it is safe rather than a weakening: revision 011
+    # already creates plotlot_app with NOSUPERUSER, and NOBYPASSRLS is the
+    # default for a newly created role — this statement only re-asserts both.
+    # It still runs where the migrating role is superuser (self-hosted).
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            EXECUTE 'ALTER ROLE plotlot_app NOBYPASSRLS NOSUPERUSER';
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE
+                'Skipped ALTER ROLE plotlot_app (needs superuser); role already '
+                'created NOSUPERUSER/NOBYPASSRLS in revision 011.';
+        END $$;
+        """
+    )
     op.execute(
         """CREATE TABLE IF NOT EXISTS service_principals (
         id varchar(120) PRIMARY KEY,
