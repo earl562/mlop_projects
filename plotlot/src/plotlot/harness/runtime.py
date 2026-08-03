@@ -16,6 +16,7 @@ from plotlot.harness.events import EventKind, HarnessEvent
 from plotlot.harness.policy import HarnessPolicyEngine
 from plotlot.harness.tool_registry import tool_exists
 from plotlot.land_use.models import PolicyDecision, ToolContext
+from plotlot.security.context import reset_tenant, set_tenant
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[dict[str, Any]]]
 
@@ -67,6 +68,37 @@ class HarnessRuntime:
         return tool_name in self._handlers
 
     async def call_tool(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, Any],
+        context: ToolContext,
+        approval_id: str | None = None,
+        events: list[HarnessEvent] | None = None,
+    ) -> ToolCallResult:
+        """Execute a governed tool call bound to its workspace's tenant scope.
+
+        Tenant-scoped tables enforce row-level security against
+        `app.tenant_id`, which the session listener reads from the tenant
+        contextvar. Without it a handler's queries return nothing — silently,
+        as empty results rather than errors. `ToolContext.workspace_id` is the
+        tenant boundary for a tool call, so binding it here covers every
+        transport (REST, CLI, MCP) in one place instead of each adapter
+        remembering to do it.
+        """
+        token = set_tenant(context.workspace_id)
+        try:
+            return await self._call_tool(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                context=context,
+                approval_id=approval_id,
+                events=events,
+            )
+        finally:
+            reset_tenant(token)
+
+    async def _call_tool(
         self,
         *,
         tool_name: str,

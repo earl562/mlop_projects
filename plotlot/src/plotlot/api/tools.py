@@ -21,6 +21,7 @@ from plotlot.harness.events import HarnessEvent
 from plotlot.land_use.evidence import persist_land_use_evidence
 from plotlot.land_use.models import EvidenceItem as LandUseEvidenceItem
 from plotlot.land_use.models import ToolContext
+from plotlot.security.context import reset_tenant, set_tenant
 from plotlot.storage.db import get_session
 from plotlot.storage.models import (
     ApprovalRequest,
@@ -164,6 +165,13 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
             workspace_id=req.workspace_id,
         )
 
+    # The audit/evidence writes below happen OUTSIDE runtime.call_tool, so they
+    # need the tenant bound here too: workspaces/report_cache/portfolio_entries
+    # enforce row-level security against app.tenant_id, and an unbound session
+    # sees zero rows rather than erroring. When auth is enabled the middleware
+    # has already bound the actor's tenant and rejected cross-tenant requests,
+    # so this is a no-op re-bind of the same value.
+    tenant_token = set_tenant(req.workspace_id)
     session = await get_session()
     tool_run = None
     try:
@@ -325,3 +333,4 @@ async def call_tool(req: ToolCallRequest, http_request: Request):
         raise
     finally:
         await session.close()
+        reset_tenant(tenant_token)

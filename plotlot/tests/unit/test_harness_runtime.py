@@ -130,3 +130,83 @@ async def test_search_municode_live_san_diego_degrades_honestly_when_unindexed()
     assert result["results"] == []
     assert "search_zoning_ordinance" in result["message"]
     assert "fabricate" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Tenant propagation — RLS makes tenant-scoped tables return NOTHING (silently)
+# when app.tenant_id is unbound, and the session listener reads it from this
+# contextvar. Binding is therefore a correctness requirement, not hygiene.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_tool_binds_workspace_as_tenant_during_execution():
+    from plotlot.security.context import current_tenant_id
+
+    seen: dict[str, str | None] = {}
+
+    async def handler(args, context):
+        seen["during"] = current_tenant_id()
+        return {"ok": True}
+
+    runtime = HarnessRuntime(handlers={"geocode_address": handler})
+    context = ToolContext(
+        workspace_id="ws_tenant_a", actor_user_id="u", run_id="r", risk_budget_cents=0
+    )
+
+    assert current_tenant_id() is None
+    result = await runtime.call_tool(
+        tool_name="geocode_address", tool_args={"address": "x"}, context=context
+    )
+
+    assert result.status == "ok"
+    assert seen["during"] == "ws_tenant_a", "handler must run inside its workspace's tenant scope"
+    assert current_tenant_id() is None, "tenant binding must not leak past the call"
+
+
+@pytest.mark.asyncio
+async def test_tenant_binding_is_released_when_the_handler_raises():
+    """A leaked binding would silently scope the NEXT caller to the wrong tenant."""
+    from plotlot.security.context import current_tenant_id
+
+    async def boom(args, context):
+        raise RuntimeError("handler exploded")
+
+    runtime = HarnessRuntime(handlers={"geocode_address": boom})
+    context = ToolContext(
+        workspace_id="ws_tenant_b", actor_user_id="u", run_id="r", risk_budget_cents=0
+    )
+
+    result = await runtime.call_tool(
+        tool_name="geocode_address", tool_args={"address": "x"}, context=context
+    )
+
+    assert result.status == "error"
+    assert current_tenant_id() is None
+
+
+@pytest.mark.asyncio
+async def test_tenant_binding_released_on_policy_block():
+    """Early returns (policy gate) must release the binding too."""
+    from plotlot.security.context import current_tenant_id
+
+    async def handler(args, context):
+        return {"ok": True}
+
+    runtime = HarnessRuntime(handlers={"create_spreadsheet": handler})
+    context = ToolContext(
+        workspace_id="ws_tenant_c",
+        actor_user_id="u",
+        run_id="r",
+        risk_budget_cents=0,
+        live_network_allowed=True,
+    )
+
+    result = await runtime.call_tool(
+        tool_name="create_spreadsheet",
+        tool_args={"title": "t", "headers": [], "rows": []},
+        context=context,
+    )
+
+    assert result.status == "pending_approval"
+    assert current_tenant_id() is None
