@@ -894,7 +894,7 @@ async def test_chat_create_spreadsheet_tool(client):
             side_effect=[tool_response, final_response],
         ),
         patch(
-            "plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
+            "plotlot.retrieval.google_workspace.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
         ),
     ):
         resp = await client.post(
@@ -948,7 +948,7 @@ async def test_chat_create_document_tool(client):
             new_callable=AsyncMock,
             side_effect=[tool_response, final_response],
         ),
-        patch("plotlot.api.chat.create_document", new_callable=AsyncMock, return_value=mock_result),
+        patch("plotlot.retrieval.google_workspace.create_document", new_callable=AsyncMock, return_value=mock_result),
     ):
         resp = await client.post(
             "/api/v1/chat",
@@ -1020,7 +1020,7 @@ async def test_chat_search_properties(client):
             side_effect=[tool_response, final_response],
         ),
         patch(
-            "plotlot.api.chat.bulk_property_search",
+            "plotlot.retrieval.bulk_search.bulk_property_search",
             new_callable=AsyncMock,
             return_value=mock_records,
         ),
@@ -1103,7 +1103,7 @@ async def test_chat_export_dataset(client):
             side_effect=[tool_response, final_response],
         ),
         patch(
-            "plotlot.api.chat.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
+            "plotlot.retrieval.google_workspace.create_spreadsheet", new_callable=AsyncMock, return_value=mock_result
         ),
     ):
         resp = await client.post(

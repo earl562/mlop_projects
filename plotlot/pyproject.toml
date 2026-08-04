@@ -71,7 +71,7 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 markers = [
     "eval: evaluation tests against golden dataset",
     "e2e: end-to-end pipeline regression tests",

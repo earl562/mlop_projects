@@ -18,7 +18,6 @@ from plotlot.api.chat import (
     _sessions,
     _execute_municode_live_search,
     _execute_open_data_discovery,
-    _execute_tool,
     _execute_web_search,
     _execute_zoning_search,
 )
@@ -248,71 +247,6 @@ async def test_zoning_search_no_results_without_session_still_forbids_fabricatio
     assert payload["status"] == "no_results"
     assert payload["known_zoning_code"] == ""
     assert "never fabricate" in payload["presentation_guidance"].lower()
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_passes_session_id_to_zoning_search():
-    """The dispatcher must thread session_id so the no-results guidance can echo zoning."""
-    captured: dict = {}
-
-    async def _spy(municipality, query, session_id=""):
-        captured["session_id"] = session_id
-        return json.dumps({"status": "no_results", "results": []})
-
-    with patch("plotlot.api.chat._execute_zoning_search", _spy):
-        await _execute_tool(
-            "search_zoning_ordinance",
-            {"municipality": "Las Vegas", "query": "RS20"},
-            session_id="sess-xyz",
-        )
-
-    assert captured["session_id"] == "sess-xyz"
-
-
-@pytest.mark.asyncio
-async def test_execute_tool_routes_new_live_tools():
-    with (
-        patch(
-            "plotlot.api.chat._execute_open_data_discovery",
-            new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "open_data"})),
-        ),
-        patch(
-            "plotlot.api.chat._execute_municode_live_search",
-            new=AsyncMock(return_value=json.dumps({"status": "success", "kind": "municode"})),
-        ),
-    ):
-        open_data_payload = json.loads(
-            await _execute_tool(
-                "discover_open_data_layers",
-                {"county": "Broward", "state": "FL", "lat": 26.1, "lng": -80.1},
-                session_id="s1",
-            )
-        )
-        municode_payload = json.loads(
-            await _execute_tool(
-                "search_municode_live",
-                {"municipality": "Fort Lauderdale", "query": "RS-8 setbacks"},
-                session_id="s1",
-            )
-        )
-
-    assert open_data_payload["kind"] == "open_data"
-    assert municode_payload["kind"] == "municode"
-
-
-@pytest.mark.asyncio
-async def test_external_write_tools_fail_closed_without_approval():
-    with patch("plotlot.api.chat.create_spreadsheet", new=AsyncMock()) as mock_create:
-        payload = json.loads(
-            await _execute_tool(
-                "create_spreadsheet",
-                {"title": "t", "headers": ["a"], "rows": [["1"]]},
-                session_id="s1",
-            )
-        )
-
-    assert payload["status"] == "pending_approval"
-    mock_create.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

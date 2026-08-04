@@ -27,16 +27,9 @@ from plotlot.api.schemas import ChatRequest
 from plotlot.config import settings
 from plotlot.retrieval.bulk_search import (
     DatasetInfo,
-    PropertySearchParams,
-    bulk_property_search,
-    compute_dataset_stats,
-    describe_search,
-    _safe_filter,
 )
-from plotlot.retrieval.google_workspace import create_document, create_spreadsheet
 from plotlot.retrieval.llm import call_llm
 from plotlot.retrieval.search import hybrid_search
-from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
 from plotlot.observability.prompts import get_active_prompt
 from plotlot.observability.tracing import start_span
 from plotlot.oauth.openai_auth import has_saved_tokens
@@ -2739,117 +2732,6 @@ def _get_tools_for_turn(
 # ---------------------------------------------------------------------------
 
 
-async def _execute_geocode(address: str, session_id: str = "") -> str:
-    """Geocode an address to get municipality, county, and coordinates."""
-    from plotlot.retrieval.geocode import geocode_address
-
-    try:
-        result = await geocode_address(address)
-        if result:
-            # Store full-precision coords in session so lookup_property_info
-            # can use them even if the LLM truncates the values
-            if session_id:
-                _sessions.set_geocode(session_id, result)
-            return json.dumps(
-                {
-                    "status": "success",
-                    "municipality": result["municipality"],
-                    "county": result["county"],
-                    "state": result.get("state"),
-                    "formatted_address": result["formatted_address"],
-                    "lat": result.get("lat"),
-                    "lng": result.get("lng"),
-                    "next_step": "Now call lookup_property_info with this address, county, state, lat, lng to get the zoning code",
-                }
-            )
-        return json.dumps({"status": "not_found", "message": f"Could not geocode: {address}"})
-    except Exception as e:
-        return json.dumps({"status": "error", "message": f"Geocoding failed: {str(e)}"})
-
-
-async def _execute_lookup_property(
-    address: str,
-    county: str,
-    lat: float,
-    lng: float,
-    session_id: str = "",
-    state: str = "",
-) -> str:
-    """Look up property info from county Property Appraiser ArcGIS APIs."""
-    from plotlot.retrieval.property import lookup_property
-
-    # Use full-precision coords from session geocode if the LLM truncated them
-    geo = _sessions.get_geocode(session_id) if session_id else None
-    if geo:
-        precise_lat = geo.get("lat")
-        precise_lng = geo.get("lng")
-        if precise_lat and precise_lng:
-            lat = precise_lat
-            lng = precise_lng
-        if not state:
-            state = str(geo.get("state") or "")
-
-    try:
-        record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
-        if record:
-            result = {
-                "status": "success",
-                "folio": record.folio,
-                "address": record.address,
-                "municipality": record.municipality,
-                "county": record.county,
-                "owner": record.owner,
-                "zoning_code": record.zoning_code,
-                "zoning_description": record.zoning_description,
-                "lot_size_sqft": record.lot_size_sqft,
-                "lot_dimensions": record.lot_dimensions,
-                "bedrooms": record.bedrooms,
-                "year_built": record.year_built,
-                "assessed_value": record.assessed_value,
-                "living_area_sqft": record.living_area_sqft,
-                "living_units": record.living_units,
-            }
-            muni = record.municipality or address
-            # The GIS layer's code (Track 1) and the ordinance code book (Track 2)
-            # can label the same district differently (e.g. GIS "RS20" vs. Clark
-            # County "R-E"). Crosswalk before steering the agent's ordinance search,
-            # else it searches the GIS code and matches nothing in the indexed text.
-            crosswalk = crosswalk_zoning_code(
-                record.zoning_code,
-                state=state,
-                county=record.county,
-                municipality=record.municipality,
-            )
-            if crosswalk.matched:
-                result["ordinance_district_code"] = crosswalk.search_code
-            zoning_query = (
-                f"{crosswalk.search_code} setbacks density height"
-                if record.zoning_code
-                else f"{muni} zoning setbacks density height allowed uses"
-            )
-            if crosswalk.matched:
-                result["next_step"] = (
-                    f"The GIS layer labels this parcel '{record.zoning_code}', but the adopted "
-                    f"ordinance uses '{crosswalk.search_code}' for that district. Now call "
-                    f"search_zoning_ordinance with municipality='{muni}' and query='{zoning_query}' "
-                    f"— search under '{crosswalk.search_code}', not '{record.zoning_code}'."
-                )
-            else:
-                result["next_step"] = (
-                    f"Now call search_zoning_ordinance with municipality='{muni}' "
-                    f"and query='{zoning_query}' to get the zoning regulations for this property"
-                )
-            return json.dumps(result)
-        return json.dumps(
-            {
-                "status": "not_found",
-                "message": f"No property record found for {address} in {county}",
-            }
-        )
-    except Exception as e:
-        return json.dumps({"status": "error", "message": f"Property lookup failed: {str(e)}"})
-
-
 async def _execute_zoning_search(municipality: str, query: str, session_id: str = "") -> str:
     """Search the local zoning ordinance database via hybrid RAG.
 
@@ -3758,66 +3640,6 @@ async def _execute_web_search(query: str) -> str:
         return json.dumps({"status": "error", "message": f"Web search failed: {str(e)}"})
 
 
-async def _execute_create_spreadsheet(
-    title: str,
-    headers: list[str],
-    rows: list[list[str]],
-    *,
-    approval_id: str | None = None,
-) -> str:
-    """Create a Google Sheets spreadsheet with data."""
-    if not approval_id:
-        return json.dumps(
-            {
-                "status": "pending_approval",
-                "message": "External write requires approval",
-            }
-        )
-    try:
-        result = await create_spreadsheet(title, headers, rows)
-        return json.dumps(
-            {
-                "status": "success",
-                "spreadsheet_url": result.spreadsheet_url,
-                "title": result.title,
-                "row_count": len(rows),
-                "message": f"Created spreadsheet '{result.title}' with {len(rows)} rows",
-            }
-        )
-    except Exception as e:
-        logger.warning("Spreadsheet creation failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Failed to create spreadsheet: {str(e)}"})
-
-
-async def _execute_create_document(
-    title: str,
-    content: str,
-    *,
-    approval_id: str | None = None,
-) -> str:
-    """Create a Google Docs document with content."""
-    if not approval_id:
-        return json.dumps(
-            {
-                "status": "pending_approval",
-                "message": "External write requires approval",
-            }
-        )
-    try:
-        result = await create_document(title, content)
-        return json.dumps(
-            {
-                "status": "success",
-                "document_url": result.document_url,
-                "title": result.title,
-                "message": f"Created document '{result.title}'",
-            }
-        )
-    except Exception as e:
-        logger.warning("Document creation failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Failed to create document: {str(e)}"})
-
-
 # Explicit generate_document args that map directly onto DealContext fields.
 _DOC_ARG_FIELDS = (
     "buyer_name",
@@ -3878,259 +3700,9 @@ def _build_deal_context_data(session_id: str, args: dict) -> dict:
     return ctx_data
 
 
-async def _execute_generate_document(session_id: str, args: dict) -> str:
-    """Generate a deal document via the clause builder engine."""
-    from plotlot.clauses.engine import assemble_document
-    from plotlot.clauses.loader import ClauseRegistry
-    from plotlot.clauses.schema import AssemblyConfig, DealContext, DealType, DocumentType
-
-    doc_type_str = args.get("document_type", "deal_summary")
-    deal_type_str = args.get("deal_type", "land_deal")
-
-    try:
-        doc_type = DocumentType(doc_type_str)
-        deal_type = DealType(deal_type_str)
-    except ValueError as e:
-        return json.dumps({"status": "error", "message": str(e)})
-
-    # Build context from the chat session's stored property + geocode data.
-    ctx_data = _build_deal_context_data(session_id, args)
-
-    output_format = "xlsx" if doc_type == DocumentType.proforma_spreadsheet else "docx"
-    config = AssemblyConfig(
-        document_type=doc_type,
-        deal_type=deal_type,
-        state_code=ctx_data.get("state_code", "FL"),
-        output_format=output_format,
-    )
-    context = DealContext(**{k: v for k, v in ctx_data.items() if v})
-
-    try:
-        from plotlot.clauses.renderers.sheets_renderer import SheetsProFormaResult
-
-        registry = ClauseRegistry.from_directory()
-        doc = await assemble_document(config, context, registry)
-
-        if isinstance(doc, SheetsProFormaResult):
-            return json.dumps(
-                {
-                    "status": "success",
-                    "document_type": doc_type_str,
-                    "deal_type": deal_type_str,
-                    "spreadsheet_url": doc.spreadsheet_url,
-                    "title": doc.title,
-                    "message": (
-                        f"Created Google Sheets pro forma: {doc.title}. "
-                        f"View it here: {doc.spreadsheet_url}"
-                    ),
-                }
-            )
-
-        return json.dumps(
-            {
-                "status": "success",
-                "document_type": doc_type_str,
-                "deal_type": deal_type_str,
-                "filename": doc.filename,
-                "content_type": doc.content_type,
-                "size_bytes": len(doc.data),
-                "message": (
-                    f"Generated {doc.filename} ({len(doc.data):,} bytes). "
-                    f"The user can download it from the Documents panel in the report."
-                ),
-            }
-        )
-    except Exception as e:
-        logger.warning("Document generation failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Failed to generate document: {str(e)}"})
-
-
-async def _execute_search_properties(session_id: str, args: dict) -> str:
-    """Search county property databases and store results in session."""
-    try:
-        # Convert ownership_min_years to max_sale_date
-        max_sale_date = None
-        ownership_years = args.get("ownership_min_years")
-        if ownership_years:
-            cutoff_year = datetime.now().year - int(ownership_years)
-            max_sale_date = f"{cutoff_year}-01-01"
-
-        params = PropertySearchParams(
-            county=args["county"],
-            state=args.get("state"),
-            lat=args.get("lat"),
-            lng=args.get("lng"),
-            land_use_type=args.get("land_use_type"),
-            city=args.get("city"),
-            max_sale_date=max_sale_date,
-            min_lot_size_sqft=args.get("min_lot_size_sqft"),
-            max_lot_size_sqft=args.get("max_lot_size_sqft"),
-            min_sale_price=args.get("min_sale_price"),
-            max_sale_price=args.get("max_sale_price"),
-            min_assessed_value=args.get("min_assessed_value"),
-            max_assessed_value=args.get("max_assessed_value"),
-            year_built_before=args.get("year_built_before"),
-            year_built_after=args.get("year_built_after"),
-            owner_name_contains=args.get("owner_name_contains"),
-            max_results=min(args.get("max_results", 500), 2000),
-        )
-
-        records = await bulk_property_search(params)
-
-        # Store in session
-        _sessions.set_dataset(
-            session_id,
-            DatasetInfo(
-                records=records,
-                search_params=args,
-                query_description=describe_search(args),
-                total_available=len(records),
-                fetched_at=datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-
-        # Return summary + sample (not all records — avoids token blowout)
-        sample = records[:10]
-        stats = compute_dataset_stats(records)
-        return json.dumps(
-            {
-                "status": "success",
-                "total_results": len(records),
-                "sample": sample,
-                "stats": stats,
-                "message": f"Found {len(records)} properties. Use filter_dataset to narrow down or export_dataset to create a spreadsheet.",
-            }
-        )
-    except Exception as e:
-        logger.warning("Property search failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Property search failed: {str(e)}"})
-
-
-async def _execute_filter_dataset(session_id: str, args: dict) -> str:
-    """Filter/sort the in-session dataset."""
-    dataset = _sessions.get_dataset(session_id)
-    if not dataset or not dataset.records:
-        return json.dumps(
-            {"status": "error", "message": "No dataset in session. Use search_properties first."}
-        )
-
-    records = dataset.records
-
-    # Apply filter
-    expression = args.get("filter_expression")
-    if expression:
-        records = _safe_filter(records, expression)
-
-    # Apply sort
-    sort_by = args.get("sort_by")
-    if sort_by and records and sort_by in records[0]:
-        reverse = args.get("sort_order", "desc") == "desc"
-        records = sorted(records, key=lambda r: r.get(sort_by, 0) or 0, reverse=reverse)
-
-    # Apply limit (cast to int — LLM may pass as string)
-    limit = args.get("limit")
-    if limit:
-        records = records[: int(limit)]
-
-    # Summary only mode
-    if args.get("summary_only"):
-        return json.dumps(
-            {
-                "status": "success",
-                "count": len(records),
-                "stats": compute_dataset_stats(records),
-            }
-        )
-
-    # Update dataset with filtered results
-    desc_suffix = f" (filtered: {expression})" if expression else " (sorted)"
-    _sessions.set_dataset(
-        session_id,
-        DatasetInfo(
-            records=records,
-            search_params=dataset.search_params,
-            query_description=dataset.query_description + desc_suffix,
-            total_available=dataset.total_available,
-            fetched_at=dataset.fetched_at,
-        ),
-    )
-
-    sample = records[:10]
-    return json.dumps(
-        {
-            "status": "success",
-            "total_after_filter": len(records),
-            "sample": sample,
-            "message": f"Filtered to {len(records)} properties.",
-        }
-    )
-
-
-async def _execute_get_dataset_info(session_id: str) -> str:
-    """Get info about the current in-session dataset."""
-    dataset = _sessions.get_dataset(session_id)
-    if not dataset or not dataset.records:
-        return json.dumps(
-            {"status": "empty", "message": "No dataset in session. Use search_properties first."}
-        )
-
-    stats = compute_dataset_stats(dataset.records)
-    sample = dataset.records[:5]
-    fields = list(dataset.records[0].keys()) if dataset.records else []
-
-    return json.dumps(
-        {
-            "status": "success",
-            "count": len(dataset.records),
-            "fields": fields,
-            "search_description": dataset.query_description,
-            "fetched_at": dataset.fetched_at,
-            "stats": stats,
-            "sample": sample,
-        }
-    )
-
-
-async def _execute_export_dataset(session_id: str, args: dict) -> str:
-    """Export the in-session dataset to a Google Spreadsheet."""
-    if not args.get("approval_id"):
-        return json.dumps(
-            {
-                "status": "pending_approval",
-                "message": "External write requires approval",
-            }
-        )
-    dataset = _sessions.get_dataset(session_id)
-    if not dataset or not dataset.records:
-        return json.dumps(
-            {"status": "error", "message": "No dataset to export. Use search_properties first."}
-        )
-
-    title = args.get("title") or f"PlotLot — {dataset.query_description}"
-    include_fields = args.get("include_fields") or list(dataset.records[0].keys())
-
-    headers = [f.replace("_", " ").title() for f in include_fields]
-    rows = [[str(record.get(f, "")) for f in include_fields] for record in dataset.records]
-
-    try:
-        result = await create_spreadsheet(title, headers, rows)
-        return json.dumps(
-            {
-                "status": "success",
-                "spreadsheet_url": result.spreadsheet_url,
-                "title": result.title,
-                "row_count": len(rows),
-                "message": f"Exported {len(rows)} properties to '{result.title}'",
-            }
-        )
-    except Exception as e:
-        logger.warning("Dataset export failed: %s", e)
-        return json.dumps({"status": "error", "message": f"Failed to export dataset: {str(e)}"})
-
-
 # Chat tools that execute through HarnessRuntime.call_tool (policy + evidence +
 # events + one shared implementation with REST/MCP). This must cover EVERY chat
-# tool: a name missing here silently falls back to the bespoke _execute_tool
+# tool: a name missing here is refused rather than executed ungoverned
 # path below, which has no governance — the guard test in
 # test_chat_runtime_routing.py enforces full coverage.
 _RUNTIME_ROUTED_TOOLS = frozenset(
@@ -4199,75 +3771,6 @@ def _mirror_grounded_analysis_to_session(session_id: str, payload: Any) -> None:
             "owner": payload.get("owner", ""),
         },
     )
-
-
-async def _execute_tool(name: str, args: dict, session_id: str = "") -> str:
-    """Route a tool call to the appropriate handler."""
-    if name == "geocode_address":
-        return await _execute_geocode(args.get("address", ""), session_id=session_id)
-    elif name == "lookup_property_info":
-        return await _execute_lookup_property(
-            args.get("address", ""),
-            args.get("county", ""),
-            args.get("lat", 0.0),
-            args.get("lng", 0.0),
-            session_id=session_id,
-            state=args.get("state", ""),
-        )
-    elif name == "analyze_property":
-        return await _execute_analyze_property(args.get("address", ""), session_id=session_id)
-    elif name == "calculate":
-        return _execute_calculate(args.get("expression", ""))
-    elif name == "analyze_upzoning":
-        return _execute_analyze_upzoning(args)
-    elif name == "screen_properties":
-        return await _execute_screen_properties(args)
-    elif name == "search_zoning_ordinance":
-        return await _execute_zoning_search(
-            args.get("municipality", ""),
-            args.get("query", ""),
-            session_id=session_id,
-        )
-    elif name == "search_municode_live":
-        return await _execute_municode_live_search(
-            args.get("municipality", ""),
-            args.get("query", ""),
-            session_id=session_id,
-        )
-    elif name == "discover_open_data_layers":
-        return await _execute_open_data_discovery(
-            args.get("county", ""),
-            args.get("state", ""),
-            args.get("lat", 0.0),
-            args.get("lng", 0.0),
-        )
-    elif name == "web_search":
-        return await _execute_web_search(args.get("query", ""))
-    elif name == "create_spreadsheet":
-        return await _execute_create_spreadsheet(
-            args.get("title", "Untitled"),
-            args.get("headers", []),
-            args.get("rows", []),
-            approval_id=args.get("approval_id"),
-        )
-    elif name == "create_document":
-        return await _execute_create_document(
-            args.get("title", "Untitled"),
-            args.get("content", ""),
-            approval_id=args.get("approval_id"),
-        )
-    elif name == "generate_document":
-        return await _execute_generate_document(session_id, args)
-    elif name == "search_properties":
-        return await _execute_search_properties(session_id, args)
-    elif name == "filter_dataset":
-        return await _execute_filter_dataset(session_id, args)
-    elif name == "get_dataset_info":
-        return await _execute_get_dataset_info(session_id)
-    elif name == "export_dataset":
-        return await _execute_export_dataset(session_id, args)
-    else:
-        return json.dumps({"status": "error", "message": f"Unknown tool: {name}"})
 
 
 # ---------------------------------------------------------------------------
@@ -4862,7 +4365,21 @@ async def chat(request: ChatRequest, http_request: Request):
                                             _sessions.add_evidence_ids(session_id, new_ids)
                                 result = json.dumps(tool_result.result or {})
                         else:
-                            result = await _execute_tool(fn_name, fn_args, session_id=session_id)
+                            # Unreachable by construction: every CHAT_TOOLS entry is in
+                            # _RUNTIME_ROUTED_TOOLS, enforced by
+                            # test_every_chat_tool_is_runtime_routed. Kept as a loud,
+                            # honest failure so a tool added without routing can never
+                            # silently execute outside the policy/evidence/audit gate.
+                            logger.error("Tool %s is not harness-routed; refusing", fn_name)
+                            result = json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": (
+                                        f"Tool '{fn_name}' is not routed through the harness "
+                                        "and will not be executed ungoverned."
+                                    ),
+                                }
+                            )
                         yield _sse_event(
                             "tool_result",
                             {

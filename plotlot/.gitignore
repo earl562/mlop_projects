@@ -72,3 +72,6 @@ frontend/tests/temp-*.spec.ts
 
 # OMX local integration hooks
 .omx/tmux-hook.json
+
+# Written by scripts/status/healthcheck.sh on every run — runtime artifact, not source.
+docs/status/runtime-status.json
