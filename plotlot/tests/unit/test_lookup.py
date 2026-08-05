@@ -288,7 +288,12 @@ class TestLookupAddress:
             result = await lookup_address("171 NE 209th Ter, Miami, FL")
 
         assert isinstance(result, ZoningReport)
-        assert result.zoning_district == "R-1"
+        # The parcel layer reports RS-4 while the model's JSON claims R-1. The
+        # authoritative parcel code wins: it is what the density drivers are
+        # verified against, so reporting the model's string instead would put the
+        # displayed district out of step with the numbers derived from it.
+        assert result.zoning_district == "RS-4"
+        assert result.zoning_source == "gis"
 
     @pytest.mark.asyncio
     async def test_llm_failure_returns_fallback(self):

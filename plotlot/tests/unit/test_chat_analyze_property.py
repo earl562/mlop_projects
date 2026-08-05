@@ -72,6 +72,7 @@ def _hueneme_report(*, provisional: bool = False) -> ZoningReport:
         lng=-117.21,
         zoning_district="RM-3-7",
         zoning_description="Residential Multiple-Unit",
+        zoning_source="gis",
         property_record=PropertyRecord(
             zoning_code="RM-3-7",
             lot_size_sqft=6470.61,
@@ -398,6 +399,7 @@ def test_active_context_reflects_all_trust_critical_fields():
         "residual max land price": "980,000",
         "itemized DIF total": "20,065",
         "DIF line item": "Citywide Park DIF",
+        "zoning provenance": "parcel/zoning GIS layer",
         "development permit count": "20 city permits",
         "permit holder": "Belmont West",
         "CA upside program": "ADU/JADU",
@@ -1556,3 +1558,45 @@ def test_land_value_is_kept_when_comps_exist():
     val = _format_grounded_analysis(_hueneme_report())["valuation"]
     assert val["estimated_land_value"] == 1_200_000
     assert val["land_value_range"] == [1_000_000, 1_400_000]
+
+
+def test_inferred_zoning_is_labelled_and_forces_provisional():
+    """A district the model inferred is an assumption, not a lookup.
+
+    With no parcel zoning code the district comes from the LLM's reading of the
+    ordinance text, and has differed between runs for the same parcel ("CFR-116"
+    vs "C-2" on one West Palm Beach address). Unlabelled it is indistinguishable
+    from a GIS lookup, and the grounding note invites the agent to cite it as
+    fact — so it must be marked, warned about, and must drag the unit count to
+    provisional, exactly as an unconfirmed lot area does.
+    """
+    report = _hueneme_report()
+    report.zoning_source = "ordinance_extraction"
+
+    payload = _format_grounded_analysis(report)
+
+    assert payload["zoning_source"] == "ordinance_extraction"
+    assert "inferred from ordinance text" in payload["zoning_basis"].lower()
+    assert payload["by_right"]["zoning_confirmed"] is False
+    assert payload["by_right"]["verification"] == "provisional"
+    assert payload["by_right"]["offer_is_provisional"] is True
+    assert any("inferred from ordinance text" in w.lower() for w in payload["warnings"])
+
+
+def test_gis_zoning_is_confirmed_and_does_not_force_provisional():
+    payload = _format_grounded_analysis(_hueneme_report())
+
+    assert payload["zoning_source"] == "gis"
+    assert payload["by_right"]["zoning_confirmed"] is True
+    assert payload["by_right"]["verification"] == "verified"
+
+
+def test_inferred_zoning_survives_into_the_re_render():
+    """Parity: a caveat only in the payload is laundered into fact on follow-ups."""
+    report = _hueneme_report()
+    report.zoning_source = "ordinance_extraction"
+
+    block = _build_active_analysis_context(_format_grounded_analysis(report))
+
+    assert "INFERRED from ordinance text" in block
+    assert "unconfirmed" in block

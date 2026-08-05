@@ -1309,10 +1309,17 @@ def _build_report(
     # LLM-supplied district string — zone-aware grounding needs the exact code to
     # read the right row out of a multi-zone density table (San Diego lists every
     # RM zone in one chunk, so the wrong code grounds a neighbor's density).
-    zone_code = (getattr(prop_record, "zoning_code", "") or "").strip() or args.get(
-        "zoning_district", ""
-    )
+    gis_zone_code = (getattr(prop_record, "zoning_code", "") or "").strip()
+    zone_code = gis_zone_code or args.get("zoning_district", "")
     verification = verify_numeric_params(numeric_params, search_results, zone_code)
+
+    # Record where the district came from. The same precedence already governs the
+    # verification code above, so the reported district must not disagree with the
+    # code the drivers were verified against. Without a parcel/zoning layer the
+    # district is the model's reading of the ordinance text — an assumption that has
+    # varied run-to-run — so it is labelled rather than presented as a lookup.
+    reported_district = zone_code
+    zoning_source = "gis" if gis_zone_code else ("ordinance_extraction" if zone_code else "")
 
     return ZoningReport(
         address=address,
@@ -1322,8 +1329,9 @@ def _build_report(
         state=geo.get("state", ""),
         lat=geo.get("lat"),
         lng=geo.get("lng"),
-        zoning_district=args.get("zoning_district", ""),
+        zoning_district=reported_district,
         zoning_description=args.get("zoning_description", ""),
+        zoning_source=zoning_source,
         allowed_uses=_coerce_list(args.get("allowed_uses", [])),
         conditional_uses=_coerce_list(args.get("conditional_uses", [])),
         prohibited_uses=_coerce_list(args.get("prohibited_uses", [])),
@@ -1465,9 +1473,11 @@ def _build_fallback_report(
         )
     )
     extracted, numeric_params = _extract_fallback_insights(search_results)
-    zoning_district = (prop_record.zoning_code if prop_record else "") or (
-        zone_codes[0] if zone_codes else ""
-    )
+    gis_district = (prop_record.zoning_code if prop_record else "") or ""
+    zoning_district = gis_district or (zone_codes[0] if zone_codes else "")
+    # Same provenance rule as the primary path: a district recovered from retrieved
+    # ordinance chunks is an inference, not a parcel lookup.
+    zoning_source = "gis" if gis_district else ("ordinance_extraction" if zoning_district else "")
     zoning_description = prop_record.zoning_description if prop_record else ""
     summary_bits = []
     if zoning_district:
@@ -1483,6 +1493,7 @@ def _build_fallback_report(
         lat=geo.get("lat"),
         lng=geo.get("lng"),
         zoning_district=zoning_district,
+        zoning_source=zoning_source,
         zoning_description=zoning_description,
         setbacks=Setbacks(
             front=extracted.get("setbacks_front", ""),

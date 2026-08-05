@@ -1581,9 +1581,23 @@ def _build_active_analysis_context(payload: dict) -> str:
     if not payload or payload.get("status") != "success":
         return ""
 
+    # Zoning carries its provenance here too. This block is what follow-up turns
+    # answer from, so a district labelled only in the payload would be laundered
+    # into a bare fact one turn later — the dual-representation trap that
+    # previously dropped the owner and mislabelled the itemized fees.
+    zoning_src = payload.get("zoning_source") or ""
+    zoning_txt = payload.get("zoning_code", "")
+    if zoning_txt and zoning_src == "gis":
+        zoning_txt = f"{zoning_txt} (parcel/zoning GIS layer)"
+    elif zoning_txt:
+        zoning_txt = (
+            f"{zoning_txt} (INFERRED from ordinance text — NOT read from a parcel or "
+            "zoning layer; unconfirmed, and every standard below depends on it)"
+        )
+
     lines: list[str] = [
         "\n\n## ACTIVE GROUNDED ANALYSIS — AUTHORITATIVE (cite these EXACT numbers)",
-        f"Property: {payload.get('address', '')} · Zoning: {payload.get('zoning_code', '')}",
+        f"Property: {payload.get('address', '')} · Zoning: {zoning_txt}",
     ]
     lot = payload.get("lot_size_sqft")
     if lot:
@@ -2904,6 +2918,26 @@ def _format_grounded_analysis(report) -> dict:
         "zoning_description": report.zoning_description or "",
     }
 
+    # Zoning provenance gates trust the same way lot-size provenance does: the
+    # district selects every dimensional standard downstream. "gis" means it was
+    # read off the parcel/zoning layer. "ordinance_extraction" means no parcel
+    # zoning code existed and the model inferred the district from retrieved
+    # ordinance text — an assumption that has returned different districts for the
+    # same parcel across runs ("CFR-116" vs "C-2" on one West Palm Beach address).
+    # Unlabelled, that value is indistinguishable from a lookup, and the grounding
+    # note invites the agent to cite it as fact.
+    zoning_source = (report.zoning_source or "") if report.zoning_district else ""
+    out["zoning_source"] = zoning_source
+    zoning_unconfirmed = zoning_source != "gis" and bool(report.zoning_district)
+    if zoning_unconfirmed:
+        out["zoning_basis"] = (
+            "zoning district was inferred from ordinance text, NOT read from a parcel "
+            "or zoning layer — treat it as unconfirmed and verify with the "
+            "municipality before relying on any standard derived from it"
+        )
+    elif zoning_source == "gis":
+        out["zoning_basis"] = "zoning district read from the parcel/zoning GIS layer"
+
     pr = report.property_record
     out["lot_size_sqft"] = _round(pr.lot_size_sqft, 0) if pr and pr.lot_size_sqft else None
     # Lot-size provenance gates trust: the unit count is lot ÷ min-lot-area, so a
@@ -2938,8 +2972,12 @@ def _format_grounded_analysis(report) -> dict:
     ev = report.extraction_verification
     if density is not None:
         # A count built on an unconfirmed (geometry) lot area cannot be firm even
-        # when the ordinance rule itself verified — the INPUT is unverified.
-        provisional = bool(ev and ev.offer_is_provisional) or lot_unconfirmed
+        # when the ordinance rule itself verified — the INPUT is unverified. The
+        # same holds for an inferred district: every standard behind the count was
+        # read out of whichever district the model picked.
+        provisional = (
+            bool(ev and ev.offer_is_provisional) or lot_unconfirmed or zoning_unconfirmed
+        )
         out["by_right"] = {
             "max_units": density.max_units,
             "governing_constraint": density.governing_constraint,
@@ -2947,6 +2985,7 @@ def _format_grounded_analysis(report) -> dict:
             "verification": "provisional" if provisional else "verified",
             "offer_is_provisional": provisional,
             "lot_size_confirmed": not lot_unconfirmed and lot_source == "assessor",
+            "zoning_confirmed": zoning_source == "gis",
             "verified_drivers": [
                 {
                     "field": f.field,
@@ -3213,6 +3252,12 @@ def _format_grounded_analysis(report) -> dict:
             f"Lot area ({out['lot_size_sqft']:,.0f} sqft) is a GIS parcel-polygon "
             "estimate, not the recorded legal lot — confirm with the county assessor; "
             "the by-right unit count is provisional until it is."
+        )
+    if zoning_unconfirmed:
+        user_warnings.append(
+            f"Zoning district ({out['zoning_code']}) was inferred from ordinance text, "
+            "not read from a parcel or zoning layer — confirm with the municipality; "
+            "every dimensional standard below depends on it."
         )
     if user_warnings:
         out["warnings"] = user_warnings

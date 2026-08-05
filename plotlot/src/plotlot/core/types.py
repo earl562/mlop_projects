@@ -530,6 +530,18 @@ class ZoningReport:
     # Zoning classification
     zoning_district: str = ""
     zoning_description: str = ""
+    # Provenance for zoning_district, mirroring lot_size_source. The district
+    # drives every dimensional standard, so where it came from decides whether a
+    # downstream figure can be called firm:
+    #   "gis"                  — read from the parcel/zoning layer (authoritative)
+    #   "ordinance_extraction" — inferred by the LLM from retrieved ordinance text
+    #                            because no parcel/zoning code was available. This is
+    #                            an assumption, not a lookup: the same parcel has
+    #                            returned different districts across runs when the
+    #                            parcel lookup fails (e.g. "CFR-116" vs "C-2" for one
+    #                            West Palm Beach address).
+    #   ""                     — unknown/absent
+    zoning_source: str = ""
 
     # Land use
     allowed_uses: list[str] = field(default_factory=list)
