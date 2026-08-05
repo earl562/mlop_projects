@@ -107,16 +107,31 @@ async def _resolve_config(key: str, state: str | None = None):
         return config
 
     if state:
-        from plotlot.ingestion.discovery import discover_municode_authority_for_name
+        from plotlot.ingestion.discovery import (
+            MunicodeAPIUnavailable,
+            discover_municode_authority_for_name,
+        )
 
         name = key.replace("_", " ").title()
         logger.info("Key %r not cached — discovering %r in %s live", key, name, state)
-        config = await discover_municode_authority_for_name(name, state)
+        try:
+            config = await discover_municode_authority_for_name(name, state)
+        except MunicodeAPIUnavailable as exc:
+            # Do NOT report this as "not on Municode". The API throttles hard and
+            # recovers within minutes; treating a 429/401 as a definitive absence
+            # sends the operator chasing a codifier that does not exist.
+            raise ValueError(
+                f"Municode Library API is unavailable, so {name!r} could not be "
+                f"resolved — this is NOT evidence that {name!r} is absent from "
+                f"Municode. It rate limits aggressively; retry in a few minutes. "
+                f"Cause: {exc}"
+            ) from exc
         if config:
             return config
         raise ValueError(
-            f"Could not discover {name!r} on Municode for state {state!r}. "
-            "It may use a non-Municode codifier (ingest via the county/ACP path)."
+            f"{name!r} was not found in Municode's client list for {state!r} "
+            "(the API responded, so this is a real absence rather than a throttle). "
+            "It may use a different codifier — try the county/ACP path."
         )
 
     available = list(MUNICODE_CONFIGS.keys())

@@ -975,6 +975,34 @@ def zoning_rank(heading: str) -> int:
     return 5
 
 
+# Phrases that actually denote a zoning/development code. ZONING_KEYWORDS is far
+# broader — it also carries data-centre siting terms ("utilities", "industrial",
+# "noise", "warehouse") so those chapters can be *retrieved* — which means simply
+# matching it is not evidence of a zoning code. Oceanside's "Chapter 36B -
+# UNDERGROUND UTILITIES" matched on "utilities" and, as the only candidate, would
+# have been ingested and labelled that city's zoning code. An unrelated chapter is
+# worse than nothing: it produces a confident, well-formed, entirely wrong answer.
+#
+# Acceptance is deliberately separate from zoning_rank, which ORDERS candidates and
+# demotes appendices — plenty of municipalities really do publish zoning as
+# "Appendix A - ZONING ORDINANCE", so a low rank must not disqualify.
+_ZONING_SIGNAL_PHRASES = (
+    "zoning",
+    "land development",
+    "development code",
+    "development regulations",
+    "land use",
+    "unified land",
+    "uldc",
+)
+
+
+def looks_like_zoning_code(heading: str) -> bool:
+    """True when a TOC heading names a zoning/development code rather than merely
+    mentioning a term that zoning searches also happen to use."""
+    return any(p in (heading or "").lower() for p in _ZONING_SIGNAL_PHRASES)
+
+
 async def _deep_search_toc(
     client: httpx.AsyncClient,
     product_id: int,
@@ -1019,12 +1047,29 @@ async def _deep_search_toc(
     return deduped
 
 
+class MunicodeAPIUnavailable(RuntimeError):
+    """The Municode Library API could not be reached.
+
+    Distinct from "this jurisdiction is not on Municode". The library API rate
+    limits aggressively (observed 429, then 401, then recovering to 200 within
+    minutes), and conflating a throttled request with a definitive absence sends
+    the operator hunting for a non-existent alternative codifier.
+    """
+
+
 async def _fetch_json(
     client: httpx.AsyncClient,
     path: str,
+    *,
+    raise_on_error: bool = False,
     **params: str | int,
 ) -> dict | list | None:
-    """GET request to the Municode Library API with error handling."""
+    """GET request to the Municode Library API with error handling.
+
+    Returns ``None`` on failure by default so bulk discovery can skip a bad
+    entry and continue. Pass ``raise_on_error=True`` when the caller needs to
+    tell "API refused us" apart from "no such jurisdiction".
+    """
     url = f"{LIBRARY_API_URL}/{path}"
     try:
         resp = await client.get(url, params=params, headers=LIBRARY_HEADERS)
@@ -1032,6 +1077,8 @@ async def _fetch_json(
         return resp.json()  # type: ignore[no-any-return]
     except (httpx.HTTPError, ValueError) as e:
         logger.warning("Library API error: %s %s — %s", path, params, e)
+        if raise_on_error:
+            raise MunicodeAPIUnavailable(f"{path}: {e}") from e
         return None
 
 
@@ -1095,6 +1142,20 @@ async def _discover_municipality(
                 continue
 
             sorted_matches = sorted(matches, key=lambda m: zoning_rank(m.get("Heading") or ""))
+            credible = [
+                m for m in sorted_matches if looks_like_zoning_code(m.get("Heading") or "")
+            ]
+            if not credible:
+                logger.warning(
+                    "%s: %d TOC candidate(s) matched only broad keywords, none look like a "
+                    "zoning/development code (best: %r) — refusing to ingest an unrelated "
+                    "chapter. The jurisdiction likely publishes zoning outside this code.",
+                    name,
+                    len(sorted_matches),
+                    (sorted_matches[0].get("Heading") or "")[:80],
+                )
+                continue
+            sorted_matches = credible
 
             for candidate in sorted_matches:
                 node_id = str(
@@ -1309,10 +1370,30 @@ async def discover_municode_authority_for_name(
     state_code = state_abbr.strip().upper()
     county_key = normalize_county_key(county or jurisdiction_name)
     async with httpx.AsyncClient(timeout=30.0) as client:
-        state_clients = await _fetch_json(client, "Clients/stateAbbr", stateAbbr=state_code)
-        if not state_clients or not isinstance(state_clients, list):
-            logger.error("Failed to fetch %s clients from Municode Library API", state_code)
-            return None
+        # Resolve the one city directly. Enumerating every client in the state is
+        # ~100KB for a single lookup and is what trips Municode's rate limiter —
+        # the throttle then surfaces as "not on Municode", which is wrong and
+        # sends the operator looking for another codifier. Clients/name returns
+        # just this jurisdiction, so the common path stays cheap.
+        state_clients: list[dict] = []
+        single = await _fetch_json(
+            client, "Clients/name", clientName=jurisdiction_name, stateAbbr=state_code
+        )
+        if isinstance(single, dict) and single.get("ClientID"):
+            state_clients = [single]
+
+        if not state_clients:
+            # Fall back to the full listing — needed for alias matches the exact
+            # name endpoint misses ("St. Petersburg" vs "Saint Petersburg").
+            listed = await _fetch_json(
+                client, "Clients/stateAbbr", raise_on_error=True, stateAbbr=state_code
+            )
+            if not listed or not isinstance(listed, list):
+                raise MunicodeAPIUnavailable(
+                    f"Clients/stateAbbr returned no usable data for {state_code}"
+                )
+            state_clients = listed
+
         _, config = await _discover_municipality(
             client,
             asyncio.Semaphore(1),
