@@ -11,6 +11,8 @@ Adding a new municipality:
   - If it's on Municode or a known codifier platform → nothing to do
     (auto-discovered)
   - If it's PDF-only → add one entry to _PDF_REGISTRY and one factory function
+  - If the city self-hosts PDFs on CivicPlus → add a CivicPlusSite to
+    adapters/civicplus.py and point a _PDF_REGISTRY entry at it
   - If it's custom HTML → build an HTMLAdapter manually (no registry entry needed
     since HTMLAdapter accepts an arbitrary URL list at construction time)
 """
@@ -23,6 +25,7 @@ from collections.abc import Awaitable, Callable
 from plotlot.core.errors import NoAdapterError
 from plotlot.core.types import MunicodeConfig
 from plotlot.ingestion.adapters.base import SourceAdapter
+from plotlot.ingestion.adapters.civicplus import create_oceanside_adapter
 from plotlot.ingestion.adapters.municode import MunicodeAdapter
 from plotlot.ingestion.adapters.pdf import create_san_diego_adapter
 
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 _PDF_REGISTRY: dict[str, Callable[[], Awaitable[SourceAdapter]]] = {
     "san diego_ca": create_san_diego_adapter,
+    "oceanside_ca": create_oceanside_adapter,
 }
 
 

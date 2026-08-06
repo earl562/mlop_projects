@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
@@ -83,17 +84,28 @@ class PDFAdapter(SourceAdapter):
         verify_ssl: bool = True,
         max_chunk_size: int = MAX_CHUNK_SIZE,
         overlap: int = OVERLAP,
+        headers: dict[str, str] | None = None,
+        zone_code_extractor: Callable[[str], list[str]] | None = None,
     ) -> None:
         super().__init__(municipality, county, state)
         self.sources = sources
         self.verify_ssl = verify_ssl
         self.max_chunk_size = max_chunk_size
         self.overlap = overlap
+        # Some city portals (notably CivicPlus) reject the default httpx
+        # User-Agent with 403 and serve an HTML error page instead of the PDF.
+        self.headers = headers
+        # Default pattern assumes San Diego-style hyphenated codes (RS-8, CC-4-2).
+        # Cities whose districts are bare letters (Oceanside: RE, RS, RM, RH)
+        # supply their own extractor so zone_code boosting still fires.
+        self.zone_code_extractor = zone_code_extractor or _extract_zone_codes
 
     async def fetch_chunks(self) -> list[TextChunk]:
         chunks: list[TextChunk] = []
 
-        async with httpx.AsyncClient(timeout=30.0, verify=self.verify_ssl) as client:
+        async with httpx.AsyncClient(
+            timeout=30.0, verify=self.verify_ssl, headers=self.headers
+        ) as client:
             for source in self.sources:
                 text = await _fetch_pdf_text(client, source.url)
                 if text is None or len(text) < 50:
@@ -117,7 +129,7 @@ class PDFAdapter(SourceAdapter):
                                 chapter=source.chapter,
                                 section=source.section,
                                 section_title=section_title,
-                                zone_codes=_extract_zone_codes(chunk_text_str),
+                                zone_codes=self.zone_code_extractor(chunk_text_str),
                                 chunk_index=idx,
                                 municode_node_id=f"{node_id}_chunk{idx}",
                             ),
@@ -142,10 +154,24 @@ async def _fetch_pdf_text(client: httpx.AsyncClient, url: str) -> str | None:
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
-    except httpx.HTTPStatusError:
+    except httpx.HTTPStatusError as exc:
+        # 404 is an expected miss when probing a URL grid; anything else means
+        # the source is reachable but refusing us (403 bot-blocks, 5xx), which
+        # would otherwise drop a whole municipality silently.
+        logger.warning("pdf_http_error url=%s status=%s", url, exc.response.status_code)
         return None
     except Exception as exc:
         logger.warning("pdf_fetch_error url=%s error=%s", url, exc)
+        return None
+
+    content_type = resp.headers.get("content-type", "")
+    if "pdf" not in content_type.lower() and not resp.content.startswith(b"%PDF-"):
+        logger.warning(
+            "pdf_unexpected_content url=%s content_type=%s bytes=%d",
+            url,
+            content_type or "<none>",
+            len(resp.content),
+        )
         return None
 
     try:
