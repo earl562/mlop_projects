@@ -115,16 +115,44 @@ def _extract_zone_codes(text: str) -> list[str]:
     return sorted(set(filtered))
 
 
+# "Sec. 47-5.60 - Title" / "Section 20.100.010 - Title" / "24.01.020 - Purpose"
+# The number must start and end on a digit so a trailing separator ("24.01.020 -")
+# is not swallowed into the number itself.
+_SECTION_HEADING_RE = re.compile(
+    r"^\s*(?P<label>Sec\.|Section|§)?\s*"
+    r"(?P<number>\d[\d\-.]*\d|\d)"
+    # "Sec. 33-49. - Title" carries two separators; consume the whole run.
+    r"(?:(?:\s*[-—–.]\s*)+(?P<title>.*))?$",
+    re.IGNORECASE,
+)
+
+
 def _parse_chapter_section(heading: str, parent_heading: str | None) -> tuple[str, str, str]:
-    """Extract chapter, section number, and section title from headings."""
+    """Extract chapter, section number, and section title from headings.
+
+    Municode publishers label sections inconsistently — "Sec. 47-5.60 - Title"
+    (Fort Lauderdale), "Section 20.100.010 - Title" (San Marcos), and a bare
+    "24.01.020 - Purpose and scope." (La Mesa) all occur.  Matching only the
+    first form left `section` empty for whole municipalities, which zeroes out
+    citations downstream, so all three are accepted here.
+
+    The label is preserved as written ("Sec." vs "Section") rather than
+    normalised, since it is only ever displayed.  A trailing separator period is
+    dropped, so "Sec. 33-49. - Title" now yields "Sec. 33-49" — punctuation, not
+    part of the number.
+    """
     chapter = parent_heading or ""
     section = ""
     title = heading
 
-    sec_match = re.match(r"(Sec\.\s*[\d\-.]+)\s*[-—.]\s*(.*)", heading, re.IGNORECASE)
+    sec_match = _SECTION_HEADING_RE.match(heading)
     if sec_match:
-        section = sec_match.group(1).strip()
-        title = sec_match.group(2).strip()
+        label = (sec_match.group("label") or "").strip()
+        number = sec_match.group("number").strip()
+        section = f"{label} {number}".strip() if label else number
+        matched_title = (sec_match.group("title") or "").strip()
+        if matched_title:
+            title = matched_title
 
     return chapter, section, title
 

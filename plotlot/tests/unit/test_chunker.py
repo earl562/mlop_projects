@@ -36,13 +36,39 @@ class TestParseChapterSection:
             "Sec. 33-49. - Minimum lot requirements", "Chapter 33 - ZONING"
         )
         assert chapter == "Chapter 33 - ZONING"
-        assert section == "Sec. 33-49."
+        # The separator period is punctuation, not part of the section number.
+        assert section == "Sec. 33-49"
         assert title == "Minimum lot requirements"
 
     def test_no_parent(self):
         chapter, section, title = _parse_chapter_section("General provisions", None)
         assert chapter == ""
         assert title == "General provisions"
+
+    def test_spelled_out_section_label(self):
+        """San Marcos publishes "Section 20.100.010 - Title"; `Sec\\.` cannot match it."""
+        _, section, title = _parse_chapter_section(
+            "Section 20.100.010 - Title", "CHAPTER 20.100 - GENERAL PROVISIONS"
+        )
+        assert section == "Section 20.100.010"
+        assert title == "Title"
+
+    def test_bare_numeric_section(self):
+        """La Mesa publishes section numbers with no label at all."""
+        _, section, title = _parse_chapter_section(
+            "24.01.020 - Purpose and scope.", "Chapter 24.01 - GENERAL PROVISIONS"
+        )
+        assert section == "24.01.020"
+        assert title == "Purpose and scope."
+
+    def test_section_number_without_title(self):
+        _, section, _ = _parse_chapter_section("Section 20.200.030", "CH 20.200")
+        assert section == "Section 20.200.030"
+
+    def test_chapter_heading_is_not_a_section(self):
+        """Chapter headings must not be mistaken for sections."""
+        _, section, _ = _parse_chapter_section("Chapter 16.08 MAPS REQUIRED", "Title 16")
+        assert section == ""
 
 
 class TestHtmlToText:
