@@ -14,9 +14,11 @@ from plotlot.ingestion.discovery import (
     _match_client,
     _normalize,
     _search_toc_for_zoning,
+    candidate_node_id,
     clear_cache,
     discover_county_authorities,
     discover_all,
+    drop_nested_candidates,
     get_municode_configs,
     normalize_county_key,
     resolve_municode_config,
@@ -192,6 +194,49 @@ class TestZoningRank:
 
     def test_development_code_is_top_rank(self):
         assert zoning_rank("Land Development Code") == 0
+
+
+class TestDropNestedCandidates:
+    """Regression: a chapter nested inside a Title must never displace the Title.
+
+    La Mesa's "Chapter 24.23 - MEDICAL MARIJUANA ACTIVITY ZONING ORDINANCE"
+    outranks "Title 24 - ZONING" on wording alone, because zoning_rank treats
+    "zoning ordinance" as stronger evidence than a bare "zoning". Ingesting it
+    replaced the city's entire zoning code with 20 chunks of dispensary rules.
+    """
+
+    LA_MESA_TOC = [
+        {"Id": "TIT24ZO_CH24.23MEMAACZOORLAME", "Heading": "Chapter 24.23 - MEDICAL MARIJUANA"},
+        {"Id": "TIT24ZO", "Heading": "Title 24 - ZONING"},
+        {"Id": "TIT24ZO_CH24.06COZODERE", "Heading": "Chapter 24.06 - COMMERCIAL ZONES"},
+        {"Id": "TIT21PUUT", "Heading": "Title 21 - PUBLIC UTILITIES"},
+    ]
+
+    def test_descendants_of_a_candidate_are_dropped(self):
+        kept = {candidate_node_id(m) for m in drop_nested_candidates(self.LA_MESA_TOC)}
+        assert kept == {"TIT24ZO", "TIT21PUUT"}
+
+    def test_title_wins_after_ranking(self):
+        survivors = drop_nested_candidates(self.LA_MESA_TOC)
+        best = min(survivors, key=lambda m: zoning_rank(m["Heading"]))
+        assert candidate_node_id(best) == "TIT24ZO"
+
+    def test_unrelated_prefix_is_not_treated_as_ancestor(self):
+        """"TIT2" must not swallow "TIT24ZO" — nesting requires the separator."""
+        toc = [{"Id": "TIT2", "Heading": "Title 2 - ZONING"}, {"Id": "TIT24ZO", "Heading": "Zoning"}]
+        assert len(drop_nested_candidates(toc)) == 2
+
+    def test_siblings_are_all_kept(self):
+        toc = [
+            {"Id": "TIT24ZO_CH1", "Heading": "Chapter 1 - ZONING"},
+            {"Id": "TIT24ZO_CH2", "Heading": "Chapter 2 - ZONING"},
+        ]
+        assert len(drop_nested_candidates(toc)) == 2
+
+    def test_handles_alternate_id_spellings(self):
+        toc = [{"NodeId": "TIT24ZO", "Heading": "Title 24"}, {"nodeId": "TIT24ZO_CH1", "H": "x"}]
+        kept = {candidate_node_id(m) for m in drop_nested_candidates(toc)}
+        assert kept == {"TIT24ZO"}
 
 
 # ---------------------------------------------------------------------------

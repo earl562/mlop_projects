@@ -1003,6 +1003,44 @@ def looks_like_zoning_code(heading: str) -> bool:
     return any(p in (heading or "").lower() for p in _ZONING_SIGNAL_PHRASES)
 
 
+def candidate_node_id(candidate: dict) -> str:
+    """Read a TOC node's id, whichever spelling this Municode payload uses."""
+    return str(
+        candidate.get("Id")
+        or candidate.get("id")
+        or candidate.get("NodeId")
+        or candidate.get("nodeId")
+        or ""
+    )
+
+
+def drop_nested_candidates(matches: list[dict]) -> list[dict]:
+    """Remove candidates that live inside another candidate.
+
+    Municode node ids encode the TOC path — "TIT24ZO" is the Title, and
+    "TIT24ZO_CH24.23MEMAACZOORLAME" a chapter within it — so a narrow chapter can
+    outrank the title that contains it purely on wording. La Mesa's "Chapter 24.23
+    - MEDICAL MARIJUANA ACTIVITY ZONING ORDINANCE" scores better than "Title 24 -
+    ZONING" because zoning_rank treats the phrase "zoning ordinance" as stronger
+    evidence than a bare "zoning", and ingesting it yielded 20 chunks of dispensary
+    rules in place of the city's entire zoning code.
+
+    Ingesting an ancestor already covers every child, so whenever both are present
+    the ancestor is the only correct choice.
+    """
+    ids = {candidate_node_id(m) for m in matches}
+    ids.discard("")
+
+    kept: list[dict] = []
+    for match in matches:
+        node_id = candidate_node_id(match)
+        if node_id and any(node_id.startswith(f"{other}_") for other in ids if other != node_id):
+            logger.debug("skipping nested TOC candidate node=%s", node_id)
+            continue
+        kept.append(match)
+    return kept
+
+
 async def _deep_search_toc(
     client: httpx.AsyncClient,
     product_id: int,
@@ -1141,6 +1179,7 @@ async def _discover_municipality(
             if not matches:
                 continue
 
+            matches = drop_nested_candidates(matches)
             sorted_matches = sorted(matches, key=lambda m: zoning_rank(m.get("Heading") or ""))
             credible = [
                 m for m in sorted_matches if looks_like_zoning_code(m.get("Heading") or "")
