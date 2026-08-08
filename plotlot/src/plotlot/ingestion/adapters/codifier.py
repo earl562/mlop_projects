@@ -172,7 +172,12 @@ class CodifierTransport:
         return _parse_html_page(body, str(resp.url), resp.status_code)
 
     async def _fetch_jina(self, url: str) -> PageContent:
-        headers = {"X-Retain-Images": "none"}
+        # Links-summary is required, not a nicety: eCode360 renders some chapter
+        # TOCs as plain bullets with no markdown link syntax, so the default
+        # response yields zero links and the walk cannot descend. Santee's "Title
+        # 13 Zoning" page listed every section as text and produced 10 chunks
+        # containing no setback, height or lot standards at all.
+        headers = {"X-Retain-Images": "none", "X-With-Links-Summary": "true"}
         if self._jina_key:
             headers["Authorization"] = f"Bearer {self._jina_key}"
         pacing = _JINA_PACING_KEYED if self._jina_key else _JINA_PACING_KEYLESS
@@ -230,12 +235,24 @@ def _parse_jina_page(body: str, requested_url: str) -> PageContent:
     idx = body.find(marker)
     text = body[idx + len(marker) :].strip() if idx >= 0 else body
 
+    # X-With-Links-Summary appends a "Links/Buttons:" block after the content.
+    # It must be split off before chunking, or the site's whole navigation gets
+    # indexed as ordinance text — but it is also the only place a link appears
+    # when the page renders its TOC without markdown link syntax.
+    summary = ""
+    split_at = text.rfind("Links/Buttons:")
+    if split_at >= 0:
+        summary = text[split_at:]
+        text = text[:split_at].strip()
+
     links: list[tuple[str, str]] = []
-    for label, href in _MD_LINK_RE.findall(text):
-        if _SKIP_HREF_RE.search(href):
+    seen: set[str] = set()
+    for label, href in _MD_LINK_RE.findall(text) + _MD_LINK_RE.findall(summary):
+        if _SKIP_HREF_RE.search(href) or href in seen:
             continue
         label_clean = re.sub(r"\s+", " ", label).strip()
         if label_clean:
+            seen.add(href)
             links.append((label_clean, href))
 
     blocked = _looks_like_challenge(text)
