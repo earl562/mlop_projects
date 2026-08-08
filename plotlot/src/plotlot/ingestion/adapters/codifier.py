@@ -50,8 +50,15 @@ _JINA_PACING_KEYED = 1.0
 _JINA_RATE_LIMIT_RETRIES = 3
 
 # Hard cap on pages fetched per municipality — bounds both runtime and the
-# (free-tier) Jina quota. 60 pages ≈ a full zoning title on these platforms.
-MAX_PAGES_DEFAULT = 60
+# (free-tier) Jina quota.
+#
+# 60 was an underestimate: El Cajon's Title 17 (§17.05.010 – §17.265.210) yielded
+# only 76 chunks and 0 building-height standards at that budget, versus 1,256
+# chunks across 738 distinct sections at 200. A silently truncated zoning code is
+# the worst outcome here — it answers confidently from a fraction of the rules —
+# so the cap favours completeness. Ingests are one-off and run in the background;
+# budget 200 takes roughly ten minutes per city through the Jina proxy.
+MAX_PAGES_DEFAULT = 200
 
 # Minimum extracted characters for a page to be worth chunking (filters
 # nav-only / stub pages).
@@ -405,6 +412,11 @@ class WebCodifierAdapter(SourceAdapter):
                 urlparse(root.final_url).netloc,
                 urlparse(self.hit.url).netloc,
             }
+            if self.hit.platform == "ecode360":
+                # Chapter pages live on the content host rather than the resolver
+                # the TOC was fetched from; without these, every link found on a
+                # re-rooted page would be filtered back out as off-host.
+                allowed_hosts |= {"ecode360.com", "www.ecode360.com"}
             zoning_links = _select_links(
                 root.links, allowed_hosts, keyword_match=True, section_match=False
             )
@@ -415,12 +427,17 @@ class WebCodifierAdapter(SourceAdapter):
                     root.links, allowed_hosts, keyword_match=False, section_match=True
                 )
 
+            # Zoning-named titles first so a limited page budget is spent on the
+            # zoning code rather than exhausted on subdivisions or planning. El
+            # Cajon lists "Title 16 Subdivisions" before "Title 17 Zoning", and
+            # walking them in TOC order consumed the whole budget on Title 16 —
+            # the ingest produced 297 chunks with no height or district standards
+            # in them at all.
+            zoning_links.sort(key=lambda lu: 0 if "zoning" in lu[0].lower() else 1)
+
             if self.hit.platform == "codepublishing":
                 # Code Publishing migrated to a numeric SPA whose Title links are
                 # empty shells; expand each to its legacy static chapter pages.
-                # Zoning-named titles first so the page budget covers them before
-                # subdivisions/planning if the code is large.
-                zoning_links.sort(key=lambda lu: 0 if "zoning" in lu[0].lower() else 1)
                 zoning_links = await self._expand_codepublishing(
                     transport, root.final_url or self.hit.url, zoning_links
                 )
@@ -447,14 +464,22 @@ class WebCodifierAdapter(SourceAdapter):
                 Every attempt counts against the page budget."""
                 fetch_budget[0] -= 1
                 page = await transport.fetch(url)
-                if page.target_status == 404 and fetch_budget[0] > 0:
-                    alt = _reroot_candidate(url, root.final_url or self.hit.url)
-                    if alt and alt not in visited:
-                        visited.add(alt)
-                        fetch_budget[0] -= 1
-                        alt_page = await transport.fetch(alt)
-                        if alt_page.target_status == 200 and not alt_page.blocked:
-                            return alt_page, alt
+                if page.target_status != 404:
+                    return page, url
+
+                for alt in (
+                    _reroot_candidate(url, root.final_url or self.hit.url),
+                    _ecode360_candidate(url),
+                ):
+                    if fetch_budget[0] <= 0:
+                        break
+                    if not alt or alt in visited:
+                        continue
+                    visited.add(alt)
+                    fetch_budget[0] -= 1
+                    alt_page = await transport.fetch(alt)
+                    if alt_page.target_status == 200 and not alt_page.blocked:
+                        return alt_page, alt
                 return page, url
 
             for chapter_label, chapter_url in zoning_links:
@@ -617,6 +642,34 @@ def _reroot_candidate(url: str, root_url: str) -> str | None:
     if not p.path or p.path.startswith(base):
         return None
     return p._replace(path=f"{base.rstrip('/')}{p.path}").geturl()
+
+
+# eCode360 node ids are bare numbers ("44373846"); a code's landing id carries a
+# jurisdiction prefix ("EL4925").
+_ECODE360_NODE_RE = re.compile(r"^(?:\d+|[A-Za-z]{2,4}\d+)$")
+
+
+def _ecode360_candidate(url: str) -> str | None:
+    """Map an eCode360 resolver link onto the host that actually serves content.
+
+    ``resolve.ecode360.com`` serves a jurisdiction's landing page but 404s on node
+    ids — ``resolve.ecode360.com/codes/44373846`` answers "Could not find
+    44373846", while ``ecode360.com/44373846`` is El Cajon's real Title 17 Zoning
+    page. TOC hrefs are relative, so they resolve against the resolver host and
+    every chapter link inherits the broken form.
+
+    Returns None when the URL is not an eCode360 node link or already canonical.
+    """
+    parsed = urlparse(url)
+    if not parsed.netloc.endswith("ecode360.com"):
+        return None
+
+    node = parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    if not node or not _ECODE360_NODE_RE.match(node):
+        return None
+
+    candidate = f"https://ecode360.com/{node}"
+    return None if candidate == _strip_fragment(url) else candidate
 
 
 def _strip_fragment(url: str) -> str:
