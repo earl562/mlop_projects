@@ -592,6 +592,13 @@ class ZoningReport:
     # Site risk — FEMA flood zone + NWI wetland data
     site_risk: "SiteRisk | None" = None
 
+    # The district the model read out of ordinance text when no parcel/zoning
+    # layer was available. NEVER the parcel's zoning — there is no parcel-specific
+    # evidence behind it, and it has varied run-to-run for the same parcel. Kept
+    # only so the retrieval it drove remains auditable, and so a report can say
+    # which candidate was searched. Present it as a candidate or not at all.
+    unverified_district: str = ""
+
     # Measured parcel slope (USGS 3DEP). Gates whether a unit count derived from
     # gross lot area may be presented as firm: on a sloped parcel, buildable area
     # is smaller than lot area, so density x gross acres is an upper bound rather

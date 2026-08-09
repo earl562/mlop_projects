@@ -173,7 +173,12 @@ class TestBuildReport:
             [result],
         )
 
-        assert report.zoning_district == "RM-12"
+        # A zone code that merely appeared in the retrieved chunks is not this
+        # parcel's zoning, so it is kept as a candidate rather than reported as
+        # the district. The salvaged dimensional standards are still returned.
+        assert report.zoning_district == ""
+        assert report.unverified_district == "RM-12"
+        assert report.zoning_source == ""
         assert report.max_height == "35 ft"
         assert report.max_density == "12 units/acre"
         assert report.setbacks.front == "25 ft"

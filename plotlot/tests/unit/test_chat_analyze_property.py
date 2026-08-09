@@ -1560,27 +1560,46 @@ def test_land_value_is_kept_when_comps_exist():
     assert val["land_value_range"] == [1_000_000, 1_400_000]
 
 
-def test_inferred_zoning_is_labelled_and_forces_provisional():
-    """A district the model inferred is an assumption, not a lookup.
+def test_unknown_zoning_is_reported_as_unknown_not_inferred():
+    """With no zoning layer the district is NOT known, and is not guessed.
 
-    With no parcel zoning code the district comes from the LLM's reading of the
-    ordinance text, and has differed between runs for the same parcel ("CFR-116"
-    vs "C-2" on one West Palm Beach address). Unlabelled it is indistinguishable
-    from a GIS lookup, and the grounding note invites the agent to cite it as
-    fact — so it must be marked, warned about, and must drag the unit count to
-    provisional, exactly as an unconfirmed lot area does.
+    Labelling an inferred district as "unconfirmed" was not enough: it still
+    reached the reader as this parcel's zoning. The pick had no parcel-specific
+    evidence, varied run-to-run for the same parcel ("CFR-116" vs "C-2" in West
+    Palm Beach), and was sometimes not a real district in that city at all
+    (Oceanside returned "R-1" where the base districts are RE/RS/RM/RH/RT).
+
+    So no district is reported, the count goes provisional, and the candidate the
+    search ran against is exposed only under a name that cannot be mistaken for a
+    lookup.
     """
     report = _hueneme_report()
-    report.zoning_source = "ordinance_extraction"
+    report.zoning_district = ""
+    report.zoning_source = ""
+    report.unverified_district = "R-1"
 
     payload = _format_grounded_analysis(report)
 
-    assert payload["zoning_source"] == "ordinance_extraction"
-    assert "inferred from ordinance text" in payload["zoning_basis"].lower()
+    assert payload["zoning_code"] is None
+    assert payload["zoning_status"] == "not_determined"
+    assert payload["unverified_district_candidate"] == "R-1"
+    assert "never cite it" in payload["unverified_district_note"].lower()
     assert payload["by_right"]["zoning_confirmed"] is False
     assert payload["by_right"]["verification"] == "provisional"
     assert payload["by_right"]["offer_is_provisional"] is True
-    assert any("inferred from ordinance text" in w.lower() for w in payload["warnings"])
+    assert any("not known" in w.lower() for w in payload["warnings"])
+
+
+def test_unknown_zoning_without_a_candidate_says_nothing_about_a_district():
+    report = _hueneme_report()
+    report.zoning_district = ""
+    report.zoning_source = ""
+    report.unverified_district = ""
+
+    payload = _format_grounded_analysis(report)
+
+    assert payload["zoning_code"] is None
+    assert "unverified_district_candidate" not in payload
 
 
 def test_gis_zoning_is_confirmed_and_does_not_force_provisional():

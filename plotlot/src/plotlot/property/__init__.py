@@ -112,11 +112,46 @@ async def lookup_property(
         return None
 
 
+async def lookup_property_by_apn(apn: str, county: str = "") -> PropertyRecord | None:
+    """Resolve a parcel from its Assessor Parcel Number.
+
+    The address path cannot identify vacant land — three separate Oceanside lots
+    are all recorded as "0 PAHVANT ST", and a geocoder given that returns the
+    street centreline. The APN selects exactly one parcel.
+
+    Only providers implementing ``lookup_by_apn`` support this; others return
+    None rather than silently falling back to a fuzzy address match.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    provider = get_provider(county) if county else None
+    if provider is None:
+        # An APN carries no county, so default to California, whose statewide
+        # layer covers all 58 counties.
+        from plotlot.property.california import CaliforniaProvider
+
+        provider = CaliforniaProvider()
+
+    resolver = getattr(provider, "lookup_by_apn", None)
+    if resolver is None:
+        logger.warning("Provider for %r cannot resolve by APN", county or "CA")
+        return None
+
+    try:
+        return await resolver(apn, county)
+    except Exception:
+        logger.exception("lookup_by_apn failed for APN %s (%s)", apn, county)
+        return None
+
+
 __all__ = [
     "PropertyProvider",
     "PropertyRecord",
     "get_provider",
     "lookup_property",
+    "lookup_property_by_apn",
     "register_provider",
     "registered_counties",
 ]

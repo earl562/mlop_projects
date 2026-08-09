@@ -37,6 +37,7 @@ from plotlot.observability.tracing import (
 )
 from plotlot.observability.prompts import get_active_prompt, log_prompt_to_run
 from plotlot.pipeline.calculator import calculate_max_units, calculate_max_gla, parse_lot_dimensions
+from plotlot.property.apn import format_apn, parse_apn
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
@@ -254,6 +255,35 @@ async def _gather_ordinance_sections(
     return results, ("auto_ingested" if results else "ingest_empty")
 
 
+async def _county_for_municipality(municipality: str) -> str:
+    """Look up a municipality's county from the ordinances we have ingested.
+
+    An APN carries no county, and the parcel layer returns only a city. Rather
+    than infer one, read the pairing we already recorded at ingestion time.
+    Returns "" when the municipality has not been ingested — an honest blank
+    beats a guessed county, which would silently select the wrong assessor.
+    """
+    try:
+        from sqlalchemy import text as _sql_text
+
+        from plotlot.storage.db import get_session
+
+        session = await get_session()
+        async with session:
+            row = await session.execute(
+                _sql_text(
+                    "SELECT county FROM ordinance_chunks "
+                    "WHERE municipality ILIKE :m AND county <> '' LIMIT 1"
+                ),
+                {"m": (municipality or "").strip()},
+            )
+            found = row.scalar()
+            return str(found) if found else ""
+    except Exception as exc:  # noqa: BLE001 — county is a nicety, never fatal
+        logger.debug("county_lookup_failed municipality=%s error=%s", municipality, exc)
+        return ""
+
+
 @trace(name="lookup_address", span_type="CHAIN")
 async def lookup_address(address: str) -> ZoningReport | None:
     """Run the full address → zoning report pipeline.
@@ -287,37 +317,100 @@ async def lookup_address(address: str) -> ZoningReport | None:
 
         # ── Phase 1: Deterministic data gathering ──
 
-        # Step 1: Geocode
-        geo = await geocode_address(address)
-        if not geo:
-            logger.error("Geocoding failed for: %s", address)
-            set_tag("status", "failed")
-            set_tag("failure_reason", "geocoding")
-            return None
+        # Step 1: Resolve the parcel — by APN when one was given, else geocode.
+        #
+        # Vacant land is the case the address path cannot serve: three separate
+        # Oceanside parcels are all recorded as "0 PAHVANT ST", and a geocoder
+        # given that string drops the "0" and returns the street centreline, so
+        # the lookup probes a point in the road and finds nothing. An APN selects
+        # exactly one parcel, so it bypasses geocoding entirely.
+        apn = parse_apn(address)
+        prop_record = None
+        if apn:
+            from plotlot.property import lookup_property_by_apn
 
-        municipality = geo["municipality"]
-        county = geo["county"]
-        state = geo.get("state", "")
-        lat = geo.get("lat")
-        lng = geo.get("lng")
+            prop_record = await lookup_property_by_apn(apn)
+            if prop_record is None:
+                logger.error("No parcel found for APN: %s", apn)
+                set_tag("status", "failed")
+                set_tag("failure_reason", "apn_not_found")
+                return None
 
-        logger.info(
-            "Geocoded: %s → %s, %s County (%.4f, %.4f)", address, municipality, county, lat, lng
-        )
+            municipality = prop_record.municipality
+            county = prop_record.county or await _county_for_municipality(municipality)
 
-        # Geocoding accuracy check — reject low-confidence matches
-        # Geocodio returns numeric `accuracy` (0-1) AND string `accuracy_type`
-        accuracy_score = geo.get("accuracy")
-        if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
-            set_tag("status", "rejected")
-            set_tag("failure_reason", "low_accuracy_geocode")
-            raise ValueError(
-                f"Could not confidently locate this address (geocoding accuracy: {accuracy_score}). "
-                f"Please check the address and try again."
+            # The first pass had no county, so it could not apply the assessor's
+            # recorded legal lot area — leaving a polygon estimate, which makes
+            # any unit count provisional. Now that the county is known, redo the
+            # lookup so the authoritative lot area and owner come through.
+            if county and prop_record.lot_size_source != "assessor":
+                enriched = await lookup_property_by_apn(apn, county)
+                if enriched is not None:
+                    prop_record = enriched
+            state = "CA"
+            lat = prop_record.lat
+            lng = prop_record.lng
+            # Downstream expects the geocoder's shape. Resolving from the parcel
+            # layer is strictly better than geocoding — the coordinates are the
+            # parcel's own centroid — so it is labelled as such rather than
+            # impersonating a geocoder result.
+            geo = {
+                "formatted_address": prop_record.address or f"APN {format_apn(apn)}",
+                "municipality": municipality,
+                "county": county,
+                "state": state,
+                "lat": lat,
+                "lng": lng,
+                "accuracy": 1.0,
+                "accuracy_type": "parcel_centroid",
+                "geocode_provider": "assessor_apn",
+            }
+            set_tag("resolved_by", "apn")
+            logger.info(
+                "Resolved APN %s → %s, %s County (%s)",
+                apn,
+                municipality or "?",
+                county or "?",
+                prop_record.address or "no situs address",
+            )
+        else:
+            geo = await geocode_address(address)
+            if not geo:
+                logger.error("Geocoding failed for: %s", address)
+                set_tag("status", "failed")
+                set_tag("failure_reason", "geocoding")
+                return None
+
+            municipality = geo["municipality"]
+            county = geo["county"]
+            state = geo.get("state", "")
+            lat = geo.get("lat")
+            lng = geo.get("lng")
+
+            logger.info(
+                "Geocoded: %s → %s, %s County (%.4f, %.4f)",
+                address,
+                municipality,
+                county,
+                lat,
+                lng,
             )
 
-        # Step 2: Property Appraiser lookup
-        prop_record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
+            # Geocoding accuracy check — reject low-confidence matches.
+            # Geocodio returns numeric `accuracy` (0-1) AND string `accuracy_type`.
+            accuracy_score = geo.get("accuracy")
+            if isinstance(accuracy_score, (int, float)) and accuracy_score < 0.8:
+                set_tag("status", "rejected")
+                set_tag("failure_reason", "low_accuracy_geocode")
+                raise ValueError(
+                    f"Could not confidently locate this address "
+                    f"(geocoding accuracy: {accuracy_score}). "
+                    f"Please check the address and try again."
+                )
+
+        # Step 2: Property Appraiser lookup (the APN path already has the parcel)
+        if prop_record is None:
+            prop_record = await lookup_property(address, county, lat=lat, lng=lng, state=state)
 
         if prop_record:
             logger.info(
@@ -1313,13 +1406,21 @@ def _build_report(
     zone_code = gis_zone_code or args.get("zoning_district", "")
     verification = verify_numeric_params(numeric_params, search_results, zone_code)
 
-    # Record where the district came from. The same precedence already governs the
-    # verification code above, so the reported district must not disagree with the
-    # code the drivers were verified against. Without a parcel/zoning layer the
-    # district is the model's reading of the ordinance text — an assumption that has
-    # varied run-to-run — so it is labelled rather than presented as a lookup.
-    reported_district = zone_code
-    zoning_source = "gis" if gis_zone_code else ("ordinance_extraction" if zone_code else "")
+    # A district is only ever reported when a parcel/zoning layer actually says so.
+    #
+    # Without a layer, the model picks a district by reading ordinance text — it
+    # has no parcel-specific evidence at all, and the pick has varied run-to-run
+    # for the same parcel ("CFR-116" vs "C-2" in West Palm Beach). It is also
+    # frequently not even a real district in that city: Oceanside returned "R-1"
+    # for parcels whose actual base districts are RE/RS/RM/RH/RT. Labelling that
+    # as unconfirmed was not enough — it still reached the reader as this parcel's
+    # zoning, and every dimensional standard below it inherited the guess.
+    #
+    # So the guess is no longer reported as the district. It is kept only as an
+    # explicitly-named candidate, so the retrieval it drove stays auditable.
+    reported_district = gis_zone_code
+    zoning_source = "gis" if gis_zone_code else ""
+    unverified_district = "" if gis_zone_code else (zone_code or "")
 
     return ZoningReport(
         address=address,
@@ -1332,6 +1433,7 @@ def _build_report(
         zoning_district=reported_district,
         zoning_description=args.get("zoning_description", ""),
         zoning_source=zoning_source,
+        unverified_district=unverified_district,
         allowed_uses=_coerce_list(args.get("allowed_uses", [])),
         conditional_uses=_coerce_list(args.get("conditional_uses", [])),
         prohibited_uses=_coerce_list(args.get("prohibited_uses", [])),
@@ -1474,10 +1576,11 @@ def _build_fallback_report(
     )
     extracted, numeric_params = _extract_fallback_insights(search_results)
     gis_district = (prop_record.zoning_code if prop_record else "") or ""
-    zoning_district = gis_district or (zone_codes[0] if zone_codes else "")
-    # Same provenance rule as the primary path: a district recovered from retrieved
-    # ordinance chunks is an inference, not a parcel lookup.
-    zoning_source = "gis" if gis_district else ("ordinance_extraction" if zoning_district else "")
+    # Same rule as the primary path: whichever zone code happened to appear in the
+    # retrieved chunks is not this parcel's zoning. Reported as a candidate only.
+    zoning_district = gis_district
+    unverified_district = "" if gis_district else (zone_codes[0] if zone_codes else "")
+    zoning_source = "gis" if gis_district else ""
     zoning_description = prop_record.zoning_description if prop_record else ""
     summary_bits = []
     if zoning_district:
@@ -1494,6 +1597,7 @@ def _build_fallback_report(
         lng=geo.get("lng"),
         zoning_district=zoning_district,
         zoning_source=zoning_source,
+        unverified_district=unverified_district,
         zoning_description=zoning_description,
         setbacks=Setbacks(
             front=extracted.get("setbacks_front", ""),

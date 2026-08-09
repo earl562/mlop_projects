@@ -704,6 +704,72 @@ class CaliforniaProvider(PropertyProvider):
 
         return code, desc
 
+    async def lookup_by_apn(self, apn: str, county: str = "") -> PropertyRecord | None:
+        """Resolve a parcel from its Assessor Parcel Number.
+
+        Vacant land often has no usable address — three distinct Oceanside lots
+        are all recorded as "0 PAHVANT ST" — so the APN is the only identifier
+        that actually selects one parcel. Queries the statewide layer (all 58
+        counties) and returns geometry, so slope and zoning still work.
+
+        The county assessor's recorded lot area overrides the polygon estimate
+        where a config for that county exists, exactly as the address path does.
+        """
+        digits = re.sub(r"\D", "", apn or "")
+        if not digits:
+            return None
+
+        params = {
+            "where": f"PARCEL_APN='{digits}'",
+            "outFields": "PARCEL_APN,SITE_ADDR,SITE_CITY,Shape__Area",
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "f": "json",
+            "resultRecordCount": "1",
+        }
+        # The statewide layer drops connections intermittently — the same
+        # flakiness the assessor endpoint above retries around. A dropped
+        # connection surfaces as an exception with an empty message, so the type
+        # is logged too; without it the failure reads as a blank.
+        features: list[dict] = []
+        for attempt in range(1, _ASSESSOR_ATTEMPTS + 1):
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    resp = await client.get(_CA_STATEWIDE_PARCEL_URL, params=params)
+                    resp.raise_for_status()
+                    features = resp.json().get("features", [])
+                break
+            except Exception as exc:
+                if attempt == _ASSESSOR_ATTEMPTS:
+                    logger.warning(
+                        "CaliforniaProvider APN query failed apn=%s attempts=%d error=%s: %s",
+                        digits,
+                        attempt,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    return None
+                await asyncio.sleep(_ASSESSOR_BACKOFF_S * attempt)
+
+        if not features:
+            logger.info("CaliforniaProvider: no parcel for APN %s", digits)
+            return None
+
+        record = self._parse_statewide_feature(features[0], county)
+        record.folio = record.folio or digits
+
+        config = _COUNTY_CONFIG.get((county or "").lower().strip())
+        assessor_url = (config or {}).get("assessor_lot_url")
+        if assessor_url and record.lot_size_source != "assessor":
+            assessor_lot, owner_name = await self._assessor_lot_sqft(assessor_url, digits)
+            if assessor_lot and assessor_lot > 0:
+                record.lot_size_sqft = assessor_lot
+                record.lot_size_source = "assessor"
+            if owner_name and not record.owner:
+                record.owner = owner_name
+
+        return record
+
     async def _statewide_parcel(
         self,
         address: str,
@@ -784,6 +850,18 @@ class CaliforniaProvider(PropertyProvider):
         feat_lat: float | None = geom.get("y")
         feat_lng: float | None = geom.get("x")
 
+        # Parcel features are polygons, not points. Reading only x/y dropped the
+        # boundary entirely, which left parcel_geometry unset — and terrain
+        # analysis needs the polygon, so slope could never be measured on any
+        # parcel resolved through this layer.
+        rings = geom.get("rings") or []
+        parcel_geometry: list[list[float]] | None = None
+        if rings:
+            parcel_geometry = [[float(pt[0]), float(pt[1])] for pt in rings[0] if len(pt) >= 2]
+            if parcel_geometry and (feat_lat is None or feat_lng is None):
+                feat_lng = sum(p[0] for p in parcel_geometry) / len(parcel_geometry)
+                feat_lat = sum(p[1] for p in parcel_geometry) / len(parcel_geometry)
+
         return PropertyRecord(
             folio=folio,
             address=address_val,
@@ -795,6 +873,7 @@ class CaliforniaProvider(PropertyProvider):
             lot_size_source="geometry" if lot_sqft > 0 else "",
             lat=feat_lat,
             lng=feat_lng,
+            parcel_geometry=parcel_geometry,
         )
 
     @staticmethod

@@ -2943,14 +2943,30 @@ def _format_grounded_analysis(report) -> dict:
     # note invites the agent to cite it as fact.
     zoning_source = (report.zoning_source or "") if report.zoning_district else ""
     out["zoning_source"] = zoning_source
-    zoning_unconfirmed = zoning_source != "gis" and bool(report.zoning_district)
+    # A district now only exists when a parcel/zoning layer supplied it. When one
+    # did not, the pipeline reports no district at all rather than the model's
+    # reading of the ordinance — that pick had no parcel-specific evidence and was
+    # sometimes not even a real district in the city. The candidate it searched is
+    # surfaced under a name no narrator can mistake for a lookup.
+    zoning_unconfirmed = not report.zoning_district
     if zoning_unconfirmed:
+        out["zoning_code"] = None
+        out["zoning_status"] = "not_determined"
         out["zoning_basis"] = (
-            "zoning district was inferred from ordinance text, NOT read from a parcel "
-            "or zoning layer — treat it as unconfirmed and verify with the "
-            "municipality before relying on any standard derived from it"
+            f"{report.municipality or 'This municipality'} has no parcel/zoning GIS layer "
+            "wired, so this parcel's zoning district is NOT known. Do not state a "
+            "district. Any standard below was retrieved without a confirmed district "
+            "and must be presented as unconfirmed."
         )
-    elif zoning_source == "gis":
+        if report.unverified_district:
+            out["unverified_district_candidate"] = report.unverified_district
+            out["unverified_district_note"] = (
+                f"{report.unverified_district!r} is the district the ordinance search "
+                "was run against, NOT this parcel's zoning. It is a candidate only — "
+                "never cite it as the parcel's district."
+            )
+    else:
+        out["zoning_status"] = "confirmed"
         out["zoning_basis"] = "zoning district read from the parcel/zoning GIS layer"
 
     pr = report.property_record
@@ -3303,10 +3319,17 @@ def _format_grounded_analysis(report) -> dict:
             "the by-right unit count is provisional until it is."
         )
     if zoning_unconfirmed:
+        candidate = report.unverified_district
         user_warnings.append(
-            f"Zoning district ({out['zoning_code']}) was inferred from ordinance text, "
-            "not read from a parcel or zoning layer — confirm with the municipality; "
-            "every dimensional standard below depends on it."
+            f"This parcel's zoning district is not known — {report.municipality or 'this city'} "
+            "has no parcel/zoning GIS layer wired, and PlotLot will not infer a district "
+            "from ordinance text."
+            + (
+                f" The ordinance search was run against {candidate!r} as a candidate only."
+                if candidate
+                else ""
+            )
+            + " Every dimensional standard below is unconfirmed until the district is."
         )
     if slope_unconfirmed and terrain is not None:
         user_warnings.append(terrain.yield_caveat())
