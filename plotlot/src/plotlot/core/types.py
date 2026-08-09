@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # avoid runtime cycle; Claim is defined in plotlot.domain.claims
     from plotlot.domain.claims import Claim
+    from plotlot.property.terrain import TerrainAnalysis
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +591,12 @@ class ZoningReport:
 
     # Site risk — FEMA flood zone + NWI wetland data
     site_risk: "SiteRisk | None" = None
+
+    # Measured parcel slope (USGS 3DEP). Gates whether a unit count derived from
+    # gross lot area may be presented as firm: on a sloped parcel, buildable area
+    # is smaller than lot area, so density x gross acres is an upper bound rather
+    # than an entitlement. None = not measured (behaves as before).
+    terrain: "TerrainAnalysis | None" = None
 
     # San Diego Coastal Height Limit Overlay (Prop D) — height → stories → units
     coastal_overlay: "CoastalHeightOverlay | None" = None

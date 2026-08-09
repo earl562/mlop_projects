@@ -132,6 +132,15 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
                 fetch_site_risk(report.lat, report.lng), timeout=12
             )
 
+    async def _aug_terrain() -> None:
+        record = report.property_record
+        if record and record.parcel_geometry:
+            from plotlot.property.terrain import analyze_terrain
+
+            report.terrain = await asyncio.wait_for(
+                analyze_terrain(record.parcel_geometry), timeout=15
+            )
+
     async def _aug_permits() -> None:
         if apn and county:
             from plotlot.pipeline.permits import fetch_development_signals
@@ -165,10 +174,11 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
                 timeout=18,
             )
 
-    _aug_names = ("comps", "site risk", "permits", "timeline risk")
+    _aug_names = ("comps", "site risk", "terrain", "permits", "timeline risk")
     _aug_results = await asyncio.gather(
         _aug_comps(),
         _aug_site_risk(),
+        _aug_terrain(),
         _aug_permits(),
         _aug_timeline(),
         return_exceptions=True,

@@ -1982,6 +1982,12 @@ def _build_source_answer(payload: dict) -> str | None:
     lot_source = payload.get("lot_size_source") or ""
     lot_confirmed = lot_source == "assessor"
     lot_unconfirmed = lot_source == "geometry"
+    # Slope has to be echoed here too, not only in the payload: this re-render is
+    # a second, lossy grounding surface, and anything missing from it regresses on
+    # follow-up turns. Without it this block would print "VERIFIED" for a count
+    # that applied density to gross acres on a hillside.
+    terrain = payload.get("terrain") or {}
+    slope_unconfirmed = bool(terrain.get("slope_constrained"))
 
     # Prefer the driver matching the governing constraint, else the first verified.
     governing = by_right.get("governing_constraint") or ""
@@ -2020,6 +2026,15 @@ def _build_source_answer(payload: dict) -> str | None:
             "lot area is a GIS parcel-polygon estimate, not the recorded legal lot — so "
             f"the {max_units}-unit count is **PROVISIONAL** until the lot is confirmed "
             "with the county assessor (a different lot area changes the count)."
+        )
+    elif slope_unconfirmed:
+        lines.append(
+            "- Status: the density **rule** is VERIFIED against the ordinance, but the "
+            f"math above divides GROSS lot area — and {terrain.get('steep_fraction_pct', 0)}% "
+            f"of this parcel sits at or above a 25% gradient "
+            f"({terrain.get('mean_slope_pct', 0):.0f}% average). Steep ground is deducted "
+            f"before density applies, so **{max_units} units is an upper bound**, not an "
+            "achievable yield, until a slope analysis establishes the buildable area."
         )
     else:
         lines.append("- Verification status: **VERIFIED** against the retrieved ordinance text")
@@ -2959,6 +2974,34 @@ def _format_grounded_analysis(report) -> dict:
             "lot area is the county assessor's recorded legal lot (authoritative)"
         )
 
+    # Measured slope gates the count the same way lot provenance does, and for
+    # the same reason: the formula is density x GROSS acres, which silently
+    # assumes the whole lot is buildable. That holds in flat Florida and fails on
+    # a San Diego hillside, where steep ground is deducted before density applies
+    # (SDMC §143.0110 environmentally sensitive lands; Carlsbad sizes coverage off
+    # "net developable acreage"). We do not guess the buildable area — inventing
+    # one would produce a confident wrong number — we mark the count an upper bound.
+    terrain = report.terrain
+    slope_unconfirmed = bool(terrain and terrain.slope_constrained)
+    if terrain is not None:
+        out["terrain"] = {
+            "mean_slope_pct": terrain.mean_slope_pct,
+            "max_slope_pct": terrain.max_slope_pct,
+            "elevation_differential_ft": terrain.elevation_differential_ft,
+            "steep_fraction_pct": terrain.steep_pct,
+            "is_steep_hillside": terrain.is_steep_hillside,
+            "slope_constrained": terrain.slope_constrained,
+            "summary": terrain.summary(),
+            "source": terrain.source,
+        }
+        if slope_unconfirmed:
+            out["buildable_area_basis"] = terrain.yield_caveat()
+        else:
+            out["buildable_area_basis"] = (
+                f"parcel is effectively flat ({terrain.mean_slope_pct:.0f}% average slope) — "
+                "gross lot area is a sound basis for the unit count"
+            )
+
     # Owner of record (county assessor OWN_NAME1) — a deterministic lookup field,
     # never an LLM guess. Carried in the grounded payload so it PERSISTS across
     # turns: the per-turn grounding block used to drop it, which let the narrator
@@ -2976,7 +3019,10 @@ def _format_grounded_analysis(report) -> dict:
         # same holds for an inferred district: every standard behind the count was
         # read out of whichever district the model picked.
         provisional = (
-            bool(ev and ev.offer_is_provisional) or lot_unconfirmed or zoning_unconfirmed
+            bool(ev and ev.offer_is_provisional)
+            or lot_unconfirmed
+            or zoning_unconfirmed
+            or slope_unconfirmed
         )
         out["by_right"] = {
             "max_units": density.max_units,
@@ -2986,6 +3032,9 @@ def _format_grounded_analysis(report) -> dict:
             "offer_is_provisional": provisional,
             "lot_size_confirmed": not lot_unconfirmed and lot_source == "assessor",
             "zoning_confirmed": zoning_source == "gis",
+            # False = density was applied to gross lot area on sloped ground, so
+            # the count is an upper bound rather than an achievable yield.
+            "buildable_area_confirmed": not slope_unconfirmed,
             "verified_drivers": [
                 {
                     "field": f.field,
@@ -3259,6 +3308,8 @@ def _format_grounded_analysis(report) -> dict:
             "not read from a parcel or zoning layer — confirm with the municipality; "
             "every dimensional standard below depends on it."
         )
+    if slope_unconfirmed and terrain is not None:
+        user_warnings.append(terrain.yield_caveat())
     if user_warnings:
         out["warnings"] = user_warnings
 
