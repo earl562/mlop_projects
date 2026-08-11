@@ -22,6 +22,19 @@ Evidence precedes analysis. Every material conclusion must expose its source, ci
 
 No route may claim nationwide analysis or “any property in the US.”
 
+> **Backend/frontend coverage divergence — recorded 2026-08-10, unresolved.**
+> The San Diego row above is the *frontend* contract and still governs the UI. It no
+> longer describes the backend: 14 San Diego County municipalities (18,114 ordinance
+> chunks) are ingested and San Diego is the active market, while Florida — which this
+> document treats as the enabled beta — is deprioritised.
+>
+> This is deliberately **not** reconciled here. Flipping San Diego to an enabled state
+> is a product decision, not a documentation edit, and it is gated on a real blocker:
+> no San Diego city has a parcel/zoning GIS layer wired, so `zoning_status` is
+> `not_determined` for every SD parcel. Until that resolves, an SD route could not
+> satisfy §5's `verified` evidence state for zoning designation — the third row of the
+> canonical ledger. Resolve the zoning-layer gap first, then decide the coverage state.
+
 ## 1. Product identity
 
 The product feels like a well-organized land-use evidence desk: calm, technical, grounded, and consequential. Its recognizable grammar is:

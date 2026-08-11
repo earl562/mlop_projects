@@ -1162,10 +1162,11 @@ async def _handle_analyze_property(args: dict[str, Any], context: ToolContext) -
     read this exact shape.
     """
 
-    # Deferred so the api→harness module-load order stays acyclic; the grounded
-    # payload formatter is chat-owned so every transport cites identical numbers.
-    from plotlot.api.chat import _format_grounded_analysis
+    # The grounded payload formatter lives in the pipeline layer, so serving an MCP
+    # or CLI tool call no longer requires importing the chat API module. Every
+    # transport is a peer consumer of the same formatter and cites identical numbers.
     from plotlot.pipeline.analyze import analyze_property_deep
+    from plotlot.pipeline.grounding import _format_grounded_analysis
 
     address = str(args.get("address") or "")
     if not address.strip():

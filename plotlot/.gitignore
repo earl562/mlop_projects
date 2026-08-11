@@ -75,3 +75,7 @@ frontend/tests/temp-*.spec.ts
 
 # Written by scripts/status/healthcheck.sh on every run — runtime artifact, not source.
 docs/status/runtime-status.json
+
+# Session handoff notes for picking up work in a new conversation — local scratch,
+# not project documentation.
+handoff.md

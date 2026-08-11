@@ -172,6 +172,138 @@ def _hueneme_report(*, provisional: bool = False) -> ZoningReport:
     )
 
 
+def _santee_unconfirmed_report() -> ZoningReport:
+    """A report in the state MOST San Diego parcels are actually in.
+
+    No SD city has a parcel/zoning GIS layer wired, so `zoning_district` is empty,
+    `zoning_source` is "", and the model's ordinance-text pick survives only as
+    `unverified_district`. The lot is a polygon estimate and the ground is steep —
+    i.e. all three trust gates are open at once. The Hueneme fixture is the opposite
+    case (everything confirmed), so it can never exercise these paths.
+    """
+    from plotlot.property.terrain import TerrainAnalysis
+
+    return ZoningReport(
+        address="Fanita Ranch, Santee, CA 92071",
+        formatted_address="Fanita Ranch, Santee, CA 92071",
+        municipality="Santee",
+        county="San Diego",
+        state="CA",
+        lat=32.88,
+        lng=-116.99,
+        zoning_district="",  # no GIS layer -> no district is reported at all
+        zoning_source="",
+        unverified_district="R-7",  # searched as a candidate only
+        property_record=PropertyRecord(
+            zoning_code="",
+            lot_size_sqft=7120.0,
+            lot_size_source="geometry",
+            lat=32.88,
+            lng=-116.99,
+            owner="MATISSE SERIES 1 LLC",
+        ),
+        density_analysis=DensityAnalysis(
+            max_units=6073,
+            governing_constraint="max_density",
+            constraints=[],
+            lot_size_sqft=7120.0,
+            confidence="low",
+        ),
+        extraction_verification=ExtractionVerification(
+            fields=[], overall="unverified", offer_is_provisional=False
+        ),
+        terrain=TerrainAnalysis(
+            mean_slope_pct=43.0,
+            max_slope_pct=71.0,
+            elevation_min_ft=310.0,
+            elevation_max_ft=448.0,
+            elevation_differential_ft=138.0,
+            steep_fraction=1.0,
+            sample_count=64,
+            is_steep_hillside=True,
+            slope_constrained=True,
+            steep_basis="43% average gradient with 138 ft of relief (>= 25% and >= 50 ft)",
+            resolution_note="10x10 grid, ~30 m spacing",
+        ),
+    )
+
+
+def test_active_context_reflects_trust_gates_when_nothing_is_confirmed():
+    """PARITY GUARD for the UNCONFIRMED branch — the companion to
+    `test_active_context_reflects_all_trust_critical_fields`.
+
+    That guard only ever runs the Hueneme fixture, where zoning is GIS-confirmed, the
+    lot is the assessor's, and there is no terrain. So it structurally cannot catch a
+    field that only exists when a gate is OPEN — which is how `zoning_status`,
+    `unverified_district_candidate` and the whole terrain block reached the payload
+    (2a2f71c / 1515a20) while never reaching the re-render at all.
+
+    These are the fields the model sees on EVERY follow-up turn for a typical San
+    Diego parcel. Add a row whenever a new gate or caveat is added to the payload."""
+    block = _build_active_analysis_context(_format_grounded_analysis(_santee_unconfirmed_report()))
+
+    required = {
+        "district is not determined": "NOT DETERMINED",
+        "prohibition on stating a district": "Do not state a district",
+        "candidate is named as a candidate": "'R-7'",
+        "candidate is not the district": "CANDIDATE ONLY",
+        "lot is an estimate": "GIS parcel-polygon ESTIMATE",
+        "count is provisional": "PROVISIONAL",
+        "reason — zoning": "NOT read from a GIS layer",
+        "reason — lot": "GIS polygon estimate",
+        "reason — slope": "UPPER BOUND",
+        "measured slope": "43% average slope",
+        "relief": "138 ft of relief",
+        "steep-hillside consequence": "Environmentally Sensitive Lands",
+    }
+    missing = {name: sub for name, sub in required.items() if sub not in block}
+    assert not missing, f"persistent context dropped trust gate(s): {missing}\n\n{block}"
+
+
+def test_active_context_never_renders_an_empty_zoning_field():
+    """A blank district with no prohibition is what invites the model to supply one.
+
+    Before the fix the re-render printed `Zoning: ` (empty) for every undetermined
+    parcel, because it only knew how to format a district that exists."""
+    block = _build_active_analysis_context(_format_grounded_analysis(_santee_unconfirmed_report()))
+    assert "Zoning: \n" not in block
+    assert "Zoning: ·" not in block
+    assert "· Zoning: NOT DETERMINED" in block
+
+
+def test_trust_caveats_survive_a_flood_of_pipeline_warnings():
+    """The re-render caps warnings at 4, and trust caveats were appended LAST.
+
+    So a parcel carrying four ordinary pipeline warnings silently truncated every
+    trust caveat out of the persistent block — the count kept saying PROVISIONAL
+    while the reason it was provisional never reached the follow-up turn. Trust
+    content is now rendered structurally and is not subject to that cap."""
+    report = _santee_unconfirmed_report()
+    report.warnings = [f"pipeline warning {i}" for i in range(6)]
+
+    payload = _format_grounded_analysis(report)
+    # The caveats still ride in `warnings` for the tool turn / UI contract...
+    assert any("zoning district is not known" in w for w in payload["warnings"])
+    # ...and are separately addressable so the re-render can subtract them.
+    assert len(payload["trust_caveats"]) == 3
+
+    block = _build_active_analysis_context(payload)
+    assert "NOT DETERMINED" in block
+    assert "UPPER BOUND" in block
+    assert "43% average slope" in block
+    # Each caveat appears once, not twice — subtracted from the warnings channel.
+    assert block.count("Warning: pipeline warning") == 4
+    assert "Warning: This parcel's zoning district is not known" not in block
+
+
+def test_active_context_omits_provisional_reasons_when_everything_is_confirmed():
+    """The reason list must not fire on a clean parcel — it would read as a warning
+    about a count that is in fact fully verified."""
+    block = _build_active_analysis_context(_format_grounded_analysis(_hueneme_report()))
+    assert "PROVISIONAL because:" not in block
+    assert "By-right max units: 6" in block
+
+
 def test_grounded_payload_has_verified_units_and_drivers():
     payload = _format_grounded_analysis(_hueneme_report())
     assert payload["status"] == "success"
@@ -761,9 +893,7 @@ def test_residual_answer_reconciles_cost_stack():
     report.pro_forma.soft_costs = 404_250.0
     report.pro_forma.builder_margin = 630_000.0
     report.pro_forma.impact_fees = 108_000.0
-    answer = _build_residual_answer(
-        _format_grounded_analysis(report), "what's the most I can pay?"
-    )
+    answer = _build_residual_answer(_format_grounded_analysis(report), "what's the most I can pay?")
 
     assert answer is not None
     assert "$980,000" in answer  # the grounded residual
@@ -914,8 +1044,7 @@ def test_strip_placeholder_links_collapses_dead_citations():
     assert _strip_placeholder_links("[jump](#fees)") == "[jump](#fees)"
     # Mixed: drop the dead one, keep the real one.
     assert (
-        _strip_placeholder_links("[a](link) and [b](https://x.com)")
-        == "a and [b](https://x.com)"
+        _strip_placeholder_links("[a](link) and [b](https://x.com)") == "a and [b](https://x.com)"
     )
     # No links → unchanged; empty → empty.
     assert _strip_placeholder_links("plain text, no links") == "plain text, no links"
@@ -1524,7 +1653,7 @@ class TestForcedGrounding:
 
 
 def test_land_value_is_null_not_zero_when_no_comps_were_found():
-    """"$0" is a false claim about a real parcel; absent is the honest answer.
+    """ "$0" is a false claim about a real parcel; absent is the honest answer.
 
     With no comps the CompAnalysis fields come back 0.0. Emitting that verbatim
     made the chat formatter print "Implied land value from comps: $0" (because

@@ -147,7 +147,9 @@ async def test_analyze_property_returns_grounded_payload_unmodified():
             "plotlot.pipeline.analyze.analyze_property_deep",
             new=AsyncMock(return_value=fake_report),
         ),
-        patch("plotlot.api.chat._format_grounded_analysis", return_value=grounded) as fmt,
+        # Patched where it now lives: the formatter moved to the pipeline layer so
+        # the harness no longer imports the chat API module to serve MCP/CLI calls.
+        patch("plotlot.pipeline.grounding._format_grounded_analysis", return_value=grounded) as fmt,
     ):
         result = await _handle_analyze_property({"address": "1233 Hueneme St"}, _ctx())
 

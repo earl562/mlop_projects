@@ -1,8 +1,16 @@
 # PlotLot Technical Overview
 
-AI-powered zoning analysis and real estate intelligence platform. Given any US property address, PlotLot geocodes it, pulls county parcel data from ArcGIS, searches indexed municipal zoning ordinances, runs an LLM extraction to get dimensional standards, and deterministically calculates maximum allowable density — then generates comps and a residual land pro forma.
+AI-powered zoning analysis and real estate intelligence platform. Given a property address **or APN**, PlotLot geocodes it (or resolves the parcel directly), pulls county parcel data from ArcGIS, searches indexed municipal zoning ordinances, runs an LLM extraction to get dimensional standards, and deterministically calculates maximum allowable density — then generates comps and a residual land pro forma.
 
-**Production state:** 8,142 ordinance chunks, 17 municipalities (5 FL + 12 NC), 88 discoverable via Municode.
+**Production state (verified against Neon 2026-08-10):** 24,536 ordinance chunks across
+20 municipalities — **14 San Diego County, CA** (18,114 chunks; the active market) and
+6 Florida remnants (6,422 chunks; deprioritised). There are **no North Carolina
+municipalities** in the database.
+
+> Counts drift fast. Re-verify with
+> `select count(*), count(distinct municipality) from ordinance_chunks` before quoting
+> this line — a previous revision claimed "8,142 chunks, 17 municipalities (5 FL + 12 NC)"
+> long after that stopped being true.
 
 ---
 
@@ -10,7 +18,7 @@ AI-powered zoning analysis and real estate intelligence platform. Given any US p
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16, React 19, Tailwind CSS 4, TypeScript strict |
+| Frontend | Next.js 15.5, React 19, Tailwind CSS 4, TypeScript strict |
 | Backend | FastAPI, Python 3.12+, async-first (httpx, asyncpg) |
 | Database | Neon PostgreSQL + pgvector (1024d embeddings) |
 | LLM | Claude Sonnet 4.6 → Gemini 2.5 Flash → NVIDIA NIM Llama 3.3 70B → Kimi K2.5 |
@@ -30,7 +38,7 @@ AI-powered zoning analysis and real estate intelligence platform. Given any US p
 
 ### Framework & Stack
 
-- **Next.js 16** with App Router (`src/app/`)
+- **Next.js 15.5** with App Router (`src/app/`)
 - **React 19** — server components where possible, `"use client"` only for interactivity
 - **Tailwind CSS 4** — PostCSS-first, no `tailwind.config.ts` needed
 - **TypeScript strict mode** — explicit interfaces for all API shapes
@@ -220,7 +228,7 @@ plotlot/frontend/
 // next.config.ts
 {
   output: "standalone",           // Self-contained Docker-compatible build
-  turbopack: { root: __dirname }, // Turbopack (Next.js 16 default bundler)
+  turbopack: { root: __dirname }, // Turbopack
   images: {
     remotePatterns: ["**.fal.ai"] // FAL.ai generated image hosting
   }
@@ -673,17 +681,44 @@ PIPELINE_CACHE_TTL = 1800   # SHA256(address) key
 
 ### Current Coverage
 
-| Region | Municipalities | Chunks | Source |
-|--------|---------------|--------|--------|
-| Florida | Miami Gardens | 3,561 | Municode |
-| Florida | Miami-Dade County (unincorporated) | 2,666 | Municode |
-| Florida | Boca Raton | 1,538 | Municode |
-| Florida | Miramar | 241 | Municode |
-| Florida | Fort Lauderdale | 136 | Municode |
-| North Carolina | Charlotte, Huntersville, Cornelius, Davidson, Matthews, Mint Hill, Pineville, Concord, Kannapolis, Mooresville, Monroe, Waxhaw | — | Municode |
-| **Total** | **17 municipalities** | **~8,142** | |
+Verified against Neon 2026-08-10.
 
-Discoverable via Municode: **88 municipalities**. West Palm Beach uses enCodePlus (not yet supported).
+| Region | Municipality | Chunks | Source platform |
+|--------|--------------|--------|-----------------|
+| **CA — San Diego County** | San Diego | 2,910 | PDF scraper (`docs.sandiego.gov`) |
+| CA | Encinitas | 2,805 | eCode360 |
+| CA | Carlsbad | 1,598 | eCode360 |
+| CA | El Cajon | 1,566 | eCode360 |
+| CA | Escondido | 1,543 | eCode360 |
+| CA | San Marcos | 1,259 | Municode |
+| CA | Lemon Grove | 1,096 | eCode360 |
+| CA | Oceanside | 1,070 | CivicPlus |
+| CA | Chula Vista | 985 | codifier |
+| CA | National City | 856 | Municode |
+| CA | Imperial Beach | 784 | eCode360 |
+| CA | Poway | 765 | codifier |
+| CA | Santee | 494 | eCode360 |
+| CA | La Mesa | 383 | Municode |
+| | **CA subtotal (active market)** | **18,114** | |
+| FL | Miami-Dade County (unincorporated) | 2,666 | Municode |
+| FL | Boca Raton | 1,538 | Municode |
+| FL | Miami Gardens | 1,187 | Municode |
+| FL | Fort Lauderdale | 559 | Municode |
+| FL | Miramar | 241 | Municode |
+| FL | West Palm Beach | 231 | Municode |
+| | **FL subtotal (deprioritised)** | **6,422** | |
+| | **Total — 20 municipalities** | **24,536** | |
+
+All 14 CA municipalities have zero empty `section` values (an empty `section` zeroes out
+citations downstream). Fort Lauderdale still has 21.
+
+**Not ingested:** no North Carolina municipality is in the database, despite
+`MecklenburgProvider` existing in `property/mecklenburg.py` — the parcel provider is code
+that has no corresponding ordinance coverage.
+
+Discoverable via Municode: **88 municipalities**. Municode rate-limits (429) aggressively
+under repeated discovery probing, and a throttled run surfaces as `empty_source` rather
+than an obvious rate-limit error.
 
 ### Ingestion Pipeline
 
@@ -696,7 +731,11 @@ Municode Library API (discovery)
           → pgvector upsert (ordinance_chunks table)
 ```
 
-Fallback configs hardcoded for 5 FL + 12 NC municipalities with known Municode node IDs.
+The diagram above describes the Municode path only. Adapter resolution is
+`_PDF_REGISTRY` → Municode live discovery → codifier discovery (eCode360 /
+Code Publishing / municipal.codes / American Legal), with CivicPlus cities served as
+PDFs through `_PDF_REGISTRY`. Always run `discover_codifier(city, state)` before
+concluding a city needs a custom adapter.
 
 ### Hybrid Search Algorithm
 

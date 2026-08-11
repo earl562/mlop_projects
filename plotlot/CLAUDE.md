@@ -2,7 +2,11 @@
 
 > Fresh-agent handoff. Read the **Guiding Principle (§2)** first — it governs
 > everything. This supersedes the old "Chat Grounding + Data Sources" handoff.
-> Work is on branch **`Phat`** and is **committed** (tree clean unless noted).
+>
+> **Current branch is `integration/phat-harness-mvp`, not `Phat`** (as of 2026-08-10).
+> Market focus has shifted to **San Diego**; Florida is deprioritised. The
+> session-specific state below (§3–§7) predates that shift — treat it as history and
+> verify before relying on it.
 
 ---
 
@@ -15,7 +19,9 @@ Plus an **agentic chat** (`api/chat.py`) that narrates GROUNDED numbers only.
 
 - **User:** Phat (persona "Earl Perry"). Values action, conciseness, honesty,
   **no silent failures**.
-- **Repo:** `d:\mlop_clone\mlop_projects` (git). Work in `plotlot/`. Branch `Phat`.
+- **Repo:** `d:\mlop_clone\mlop_projects` (git — **one level below** the `d:\mlop_clone`
+  the environment banner reports as "not a git repository"). Work in `plotlot/`.
+  Branch `integration/phat-harness-mvp`.
   **Git user is "Phat Dang"** — do not modify git config. **No Co-Authored-By.**
 - **Stack:** FastAPI + Python 3.12 (async), Neon Postgres + pgvector, Next.js 16,
   NVIDIA NIM Llama / Claude / Kimi. Tooling: `uv`. Dev box: Windows + PowerShell
@@ -102,15 +108,26 @@ Plus an **agentic chat** (`api/chat.py`) that narrates GROUNDED numbers only.
 - `calculate` tool + MATH/FEE rules; owner surfaced; ADV source labeled.
 
 **Open:**
-- **Comps exit value**: RentCast wired but **unverified** (no key yet). Until then,
-  exit stays the labeled **$750k regional default**.
+- **Comps exit value — BLOCKED, not merely unverified (diagnosed 2026-08-10).** A
+  `RENTCAST_API_KEY` is now present in `.env`, but **every** RentCast endpoint
+  (`/avm/value`, `/properties`, `/listings/sale`, `/markets`) returns
+  `403 billing/subscription-inactive`. The key is well-formed; the **subscription is
+  inactive**. Consequence: with no free CA sold-price layer either, every San Diego
+  comp lookup falls through to the labeled **$750k regional default** — identical
+  across all 14 CA municipalities, which is why manual comping disagrees with it.
+  Reactivate at `app.rentcast.io/app/api`. The response-schema mapping in
+  `pipeline/comps_rentcast.py` has **still never run against a live response** — it is
+  mock-tested only, so treat the first successful call as the real verification.
 - **Impact fees**: SD's verified FY26 Citywide DIFs (Park/Fire/Library/Mobility =
   $23,402/unit for a ~1,000 sqft MF unit) are now **itemized** in the chat
   (`pipeline/fee_schedule.py`). It's a PARTIAL schedule (`covers_all_fees=False`):
   RTCIP/school/utility capacity fees are separate, so the **residual keeps the
   conservative $40k all-in** (never optimistically understated). Remaining: parse
   those separate fees for a full all-in.
-- **ESL Steep Hillsides** slope review: not checked (needs DEM/slope analysis).
+- ~~**ESL Steep Hillsides** slope review: not checked~~ — **DONE** (`property/terrain.py`,
+  commit `1515a20`): USGS 3DEP sampling gives `is_steep_hillside` (SDMC §113.0103's actual
+  two-limb definition) and the broader `slope_constrained` gate. The unit count is
+  deliberately **not** reduced — it is labelled an upper bound.
 - **Weak-NIM narrator**: `calculate` + deterministic surfacing mitigate, but live
   re-runs of the deal-question sequence are the real regression test.
 
@@ -145,7 +162,8 @@ uv run pytest tests/unit/ -q
 | CGS geologic hazard | `services2.arcgis.com/.../CA_State_Parcels/FeatureServer/0` | none | ✅ wired |
 | SD Airport Influence | `webmaps.sandiego.gov/.../DSD/Airports/MapServer/1` | none | ✅ wired |
 | SD permits (Accela) | `webmaps.sandiego.gov/.../DoIT_Public/DSDPermits/MapServer/0` | none | ✅ wired |
-| SD comps (sold price) | RentCast `/avm/value` | `RENTCAST_API_KEY` | ⚠️ wired, needs key+verify |
+| SD comps (sold price) | RentCast `/avm/value` | `RENTCAST_API_KEY` | ❌ keyed but **403 subscription-inactive** (2026-08-10) |
+| SD slope / steep hillside | USGS 3DEP `getSamples` | none | ✅ wired (`property/terrain.py`) |
 | SD impact fees (DIF) | `sandiego.gov/.../feeschedule.pdf` | public PDF | ✅ city DIFs parsed (partial) |
 
 ---

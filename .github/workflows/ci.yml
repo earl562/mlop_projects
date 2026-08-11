@@ -2,9 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    # `integration/**` is included deliberately. Long-lived integration branches
+    # (e.g. integration/phat-harness-mvp) accumulate many commits before they ever
+    # reach main, and they are NOT covered by dev-branch-pr.yml — that workflow only
+    # auto-opens a draft PR, it runs no checks. Without this line such a branch is
+    # gated by nothing at all: eight commits landed on integration/phat-harness-mvp
+    # in one session without ruff, mypy, or pytest ever running.
+    branches: [main, dev, "integration/**"]
   pull_request:
-    branches: [main]
+    # Gate merges INTO integration and dev branches too, not just into main —
+    # otherwise a broken PR is only caught at promotion time, after it has already
+    # been built on top of.
+    branches: [main, dev, "integration/**"]
   workflow_dispatch:
 
 permissions:

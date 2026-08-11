@@ -20,6 +20,7 @@ from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
 from plotlot.pipeline.calculator import calculate_max_units, parse_lot_dimensions
+from plotlot.pipeline.trust import assess_by_right_trust
 from plotlot.pipeline.lookup import _agentic_analysis, GENERIC_ZONING_QUERY, PIPELINE_VERSION
 from plotlot.observability.tracing import start_run, log_params, log_metrics, set_tag
 from plotlot.observability.prompts import log_prompt_to_run
@@ -723,10 +724,10 @@ async def analyze_stream(request: AnalyzeRequest):
                     property_type=(
                         report.numeric_params.property_type or "" if report.numeric_params else ""
                     ),
-                    base_is_provisional=bool(
-                        report.extraction_verification
-                        and report.extraction_verification.offer_is_provisional
-                    ),
+                    # The COMPOSITE gate, not just the extraction verifier. A base
+                    # count resting on a polygon-estimated lot or an undetermined
+                    # district is not a firm floor to stack a density bonus on.
+                    base_is_provisional=assess_by_right_trust(report).is_provisional,
                     in_flood_hazard=bool(sr and sr.flood_zone and sr.flood_zone.in_sfha),
                     has_wetlands=bool(sr and sr.has_wetlands),
                 )
@@ -751,8 +752,28 @@ async def analyze_stream(request: AnalyzeRequest):
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Local-override step skipped: %s", exc)
 
-            # Final result
+            # Final result.
+            #
+            # The composite trust verdict is attached explicitly rather than as a
+            # dataclass field: `asdict` serialises fields only, and the parts the UI
+            # most needs (is_provisional, verification, buildable_area_confirmed) are
+            # derived properties that would silently not ship.
+            #
+            # Until this was added the browser had no way to know a count was
+            # provisional for any reason other than a failed extraction — the same
+            # parcel read PROVISIONAL in chat and firm in the web UI.
             report_dict = asdict(report)
+            if report.density_analysis is not None:
+                _trust = assess_by_right_trust(report)
+                report_dict["by_right_trust"] = {
+                    "verification": _trust.verification,
+                    "is_provisional": _trust.is_provisional,
+                    "zoning_confirmed": _trust.zoning_confirmed,
+                    "lot_confirmed": _trust.lot_confirmed,
+                    "buildable_area_confirmed": _trust.buildable_area_confirmed,
+                    "buildable_area_measured": _trust.slope_measured,
+                    "reasons": list(_trust.reasons),
+                }
             yield _sse_event("result", report_dict)
 
             # Contextual suggestions based on deal type

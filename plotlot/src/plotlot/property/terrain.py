@@ -205,7 +205,8 @@ async def analyze_terrain(
 ) -> TerrainAnalysis | None:
     """Measure a parcel's slope from 3DEP. Returns None when unavailable.
 
-    Samples an 8x8 grid across the parcel's bounding box, computes the slope
+    Samples a ``_GRID``x``_GRID`` grid across the parcel's bounding box (10x10
+    at the current setting), computes the slope
     field by central differences, then restricts the statistics to the points
     that actually fall inside the parcel polygon. Sampling the full box rather
     than only interior points keeps the gradient well defined at the edges.
