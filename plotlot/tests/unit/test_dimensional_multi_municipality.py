@@ -54,12 +54,30 @@ HOLLYWOOD_TABLE = """
 """
 
 MUNI_SPECS = [
-    ("Fort Lauderdale", "Broward", "FL", "fl_fort_lauderdale_47_5_60",
-     "https://www.fortlauderdale.gov/uldr", FTL_TABLE),
-    ("Miami", "Miami-Dade", "FL", "miami_dade_code_33_3_1",
-     "https://www.miamidade.gov/library/codes/chapter33", MIAMI_TABLE),
-    ("Hollywood", "Broward", "FL", "hollywood_uldr_art_9",
-     "https://www.hollywoodfl.gov/uldr", HOLLYWOOD_TABLE),
+    (
+        "Fort Lauderdale",
+        "Broward",
+        "FL",
+        "fl_fort_lauderdale_47_5_60",
+        "https://www.fortlauderdale.gov/uldr",
+        FTL_TABLE,
+    ),
+    (
+        "Miami",
+        "Miami-Dade",
+        "FL",
+        "miami_dade_code_33_3_1",
+        "https://www.miamidade.gov/library/codes/chapter33",
+        MIAMI_TABLE,
+    ),
+    (
+        "Hollywood",
+        "Broward",
+        "FL",
+        "hollywood_uldr_art_9",
+        "https://www.hollywoodfl.gov/uldr",
+        HOLLYWOOD_TABLE,
+    ),
 ]
 
 
@@ -72,7 +90,13 @@ class TestExtractAcrossMunicipalities:
         ids=["fort_lauderdale", "miami", "hollywood"],
     )
     def test_extracts_rows_for_each_municipality(
-        self, municipality, county, state, section_id, source_url, table,
+        self,
+        municipality,
+        county,
+        state,
+        section_id,
+        source_url,
+        table,
     ):
         rows = extract_dimensional_standards(
             table,
@@ -97,7 +121,13 @@ class TestProvenance:
         ids=["fort_lauderdale", "miami", "hollywood"],
     )
     def test_each_row_has_source_section_id(
-        self, municipality, county, state, section_id, source_url, table,
+        self,
+        municipality,
+        county,
+        state,
+        section_id,
+        source_url,
+        table,
     ):
         rows = extract_dimensional_standards(
             table,
@@ -128,12 +158,23 @@ class TestStoreAndQuery:
     async def test_store_then_query_round_trip_across_municipalities(self):
         ds_store.clear_dimensional_standard_fixtures()
         # Extract from all three municipalities and register into the store.
+        # Rows are marked VERIFIED because this test exercises the storage/query
+        # ROUND TRIP, not the verification gate: `get_dimensional_standard` now
+        # refuses to serve non-verified rows as verified facts, so an UNVERIFIED
+        # row would (correctly) come back as None and mask the round-trip check.
+        # The gate itself is covered by test_verification_gate.py.
+        from plotlot.domain.dimensional_standard import VerificationStatus
+
         all_rows = []
         for municipality, county, state, section_id, source_url, table in MUNI_SPECS:
             rows = extract_dimensional_standards(
                 table,
-                municipality=municipality, county=county, state=state,
-                source_section_id=section_id, source_url=source_url,
+                municipality=municipality,
+                county=county,
+                state=state,
+                source_section_id=section_id,
+                source_url=source_url,
+                verification_status=VerificationStatus.VERIFIED,
             )
             for r in rows:
                 ds_store.register_dimensional_standard_fixture(r)
@@ -144,14 +185,17 @@ class TestStoreAndQuery:
         # when no DB session is available (the unit-test/offline path).
         for municipality, _county, _state, _sid, _url, table in MUNI_SPECS:
             rows = extract_dimensional_standards(
-                table, municipality=municipality, county=_county, state=_state,
-                source_section_id=_sid, source_url=_url,
+                table,
+                municipality=municipality,
+                county=_county,
+                state=_state,
+                source_section_id=_sid,
+                source_url=_url,
+                verification_status=VerificationStatus.VERIFIED,
             )
             for r in rows:
                 got = await ds_store.get_dimensional_standard(municipality, r.district_code)
-                assert got is not None, (
-                    f"query miss for {municipality}/{r.district_code}"
-                )
+                assert got is not None, f"query miss for {municipality}/{r.district_code}"
                 assert got.municipality == municipality
                 assert got.district_code == r.district_code
                 assert got.max_density_units_per_acre == r.max_density_units_per_acre
@@ -168,9 +212,14 @@ class TestIntegrationNumericFieldsPopulated:
         ds_store._ensure_seeded()  # seeds all three municipalities
 
         NUMERIC_FIELDS = (
-            "min_lot_area_sqft", "min_lot_width_ft",
-            "setback_front_ft", "setback_side_ft", "setback_rear_ft",
-            "max_height_ft", "max_lot_coverage_pct", "far",
+            "min_lot_area_sqft",
+            "min_lot_width_ft",
+            "setback_front_ft",
+            "setback_side_ft",
+            "setback_rear_ft",
+            "max_height_ft",
+            "max_lot_coverage_pct",
+            "far",
             "max_density_units_per_acre",
         )
 

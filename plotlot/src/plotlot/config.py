@@ -161,8 +161,16 @@ class Settings(BaseSettings):
     jina_api_key: str = ""
 
     # RentCast — keyed comparable-sales API (fallback comps where no open GIS
-    # sales layer exists, e.g. San Diego). Free tier ~50 req/mo.
+    # sales layer exists, e.g. San Diego). Free tier is 50 req/mo.
     rentcast_api_key: str = ""
+    # Hard monthly request cap. The free Developer plan does NOT hard-stop at its
+    # quota — RentCast bills $0.20 for every request beyond 50 — so the only thing
+    # standing between a retry loop and a real invoice is this counter. Default 45
+    # leaves headroom under the free allowance. Set 0 to disable the cap entirely.
+    rentcast_monthly_cap: int = 45
+    # Where the month's request tally is persisted so it survives a restart.
+    # Empty → alongside the project .env.
+    rentcast_usage_file: str = ""
 
     # Sentry
     sentry_dsn: str = ""

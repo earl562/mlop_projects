@@ -298,17 +298,55 @@ async def run_on_demand_ingestion(
         )
         return
 
+    # Derive the typed dimensional standards from the chunks we just stored.
+    #
+    # THIS IS THE STEP THAT WAS MISSING. The extractor, the store, the query and
+    # the calculator seam were all built and wired, but nothing ever invoked the
+    # extractor — so `district_dimensional_standards` sat empty for every
+    # municipality, `get_dimensional_standard` returned None on every lookup, and
+    # the density inputs fell through to LLM extraction on every single analysis.
+    # That is what made the same parcel return 7 units on one run and 0 on the
+    # next. Running it here means a city is never ingested without it.
+    #
+    # Best-effort: a failure must not fail the ingest. Chunks are already
+    # committed and searchable; the city simply falls back to the (labelled)
+    # LLM path until the standards are backfilled, which the coverage guard in
+    # `check_standards_coverage` will report.
+    standards_note = ""
+    try:
+        from plotlot.ingestion.standards_extraction import backfill_dimensional_standards
+
+        report = await backfill_dimensional_standards(
+            municipality, state=state, county=county or ""
+        )
+        if report.districts_found:
+            standards_note = f", {report.districts_found} district standards"
+        if report.conflicted:
+            logger.warning(
+                "acp_standards_conflicts municipality=%s districts=%s",
+                municipality,
+                ",".join(report.conflicted),
+            )
+    except Exception as exc:  # noqa: BLE001 — never fail an ingest over this
+        logger.warning(
+            "acp_standards_extraction_failed municipality=%s error=%s — city will "
+            "use the LLM density path until backfilled",
+            municipality,
+            exc,
+        )
+
     logger.info(
-        "acp_complete municipality=%s state=%s chunks_stored=%d trigger=%s",
+        "acp_complete municipality=%s state=%s chunks_stored=%d trigger=%s%s",
         municipality,
         state,
         stored,
         request.trigger,
+        standards_note,
     )
 
     yield IngestProgress(
         stage="complete",
-        message=f"Ingested {stored} chunks for {municipality} — retrying search",
+        message=(f"Ingested {stored} chunks for {municipality}{standards_note} — retrying search"),
         chunks_done=stored,
         chunks_total=stored,
         complete=True,

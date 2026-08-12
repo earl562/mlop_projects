@@ -17,9 +17,12 @@ Docs: https://developers.rentcast.io  (GET /avm/value → value + comparables[])
 
 from __future__ import annotations
 
+import json
 import logging
 import statistics
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -91,6 +94,75 @@ def rentcast_configured() -> bool:
     return bool(getattr(settings, "rentcast_api_key", "") or "")
 
 
+# ── Monthly spend cap ────────────────────────────────────────────────────────
+#
+# The free Developer plan is NOT hard-capped: RentCast bills $0.20 for every
+# request past 50 ("you will be charged this fee for each additional request").
+# So an accidental retry loop is a real invoice, not just a failed call. This
+# counter is the stop.
+#
+# Persisted to a small JSON file, keyed by calendar month, so a restart or a
+# second session cannot silently reset the tally. It is advisory, not
+# transactional: concurrent processes each read-modify-write, so a burst could
+# overshoot by a few requests. That is acceptable — it exists to stop runaway
+# loops, and the 45 default already leaves 5 requests of slack under the free 50.
+
+_USAGE_FILENAME = ".rentcast_usage.json"
+
+
+def _usage_path() -> Path:
+    configured = (getattr(settings, "rentcast_usage_file", "") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    # Default next to the project .env (src/plotlot/config.py -> parents[2]).
+    return Path(__file__).resolve().parents[3] / _USAGE_FILENAME
+
+
+def _current_month() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def _read_usage() -> tuple[str, int]:
+    """(month, count) for the persisted tally; a fresh month resets the count."""
+    month = _current_month()
+    try:
+        raw = json.loads(_usage_path().read_text(encoding="utf-8"))
+        if raw.get("month") == month:
+            return month, int(raw.get("count") or 0)
+    except (OSError, ValueError, TypeError):
+        pass
+    return month, 0
+
+
+def rentcast_usage() -> tuple[int, int]:
+    """(requests_used_this_month, cap). A cap of 0 means unlimited."""
+    _, count = _read_usage()
+    return count, int(getattr(settings, "rentcast_monthly_cap", 0) or 0)
+
+
+def _reserve_request() -> bool:
+    """Claim one request against the monthly cap. False when the cap is reached.
+
+    Increments BEFORE the call goes out, so a request that errors still counts —
+    RentCast meters requests, not successes, and under-counting is what would let
+    a failing retry loop bill us.
+    """
+    cap = int(getattr(settings, "rentcast_monthly_cap", 0) or 0)
+    month, count = _read_usage()
+    if cap > 0 and count >= cap:
+        return False
+    try:
+        path = _usage_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"month": month, "count": count + 1}), encoding="utf-8")
+    except OSError as exc:
+        # Can't persist — refuse rather than spend blind. An unwritable state file
+        # would otherwise mean every call reads 0 and the cap never engages.
+        logger.warning("RentCast usage file unwritable (%s); refusing the request", exc)
+        return False
+    return True
+
+
 def _percentiles(values: list[float]) -> tuple[float, float, float]:
     """(p25, median, p75) of positive values; zeros when empty."""
     vals = sorted(v for v in values if v > 0)
@@ -121,6 +193,18 @@ async def fetch_rentcast_comps(
         return RentcastAttempt(reason="RentCast is not configured (no RENTCAST_API_KEY set)")
     if not subject.lat or not subject.lng:
         return RentcastAttempt(reason="subject parcel has no coordinates to search around")
+
+    # Claim the request before spending it. Checked here — the single point where a
+    # request actually leaves the process — so no caller can route around the cap.
+    if not _reserve_request():
+        used, cap = rentcast_usage()
+        return RentcastAttempt(
+            reason=(
+                f"monthly RentCast request cap reached ({used}/{cap} used this month) — "
+                "no request was sent, so no overage was billed. Raise "
+                "RENTCAST_MONTHLY_CAP in .env to continue"
+            )
+        )
 
     params: dict[str, str | int | float] = {
         "latitude": subject.lat,

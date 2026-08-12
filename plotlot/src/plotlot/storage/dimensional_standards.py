@@ -32,7 +32,10 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.dimensional_standard import (
+    DistrictDimensionalStandard,
+    VerificationStatus,
+)
 from plotlot.storage.db import get_session
 from plotlot.storage.models import DistrictDimensionalStandardORM
 
@@ -70,37 +73,73 @@ def _seed_fort_lauderdale_fixture() -> None:
         # (25 ft only when abutting a waterway), coverage 50% (≤7,500 sf tier),
         # FAR 0.75 (≤7,500 sf tier).
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RS-8",
-            min_lot_area_sqft=6000.0, min_lot_width_ft=50.0,
-            setback_front_ft=25.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=50.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RS-8",
+            min_lot_area_sqft=6000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=25.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=50.0,
+            far=0.75,
             max_density_units_per_acre=8.0,
             source_section_id="Sec. 47-5.31 (ordinance_chunks id=3755)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            # Cross-checked against the cited ingested chunk id above — which is
+            # exactly what VERIFIED means. The status was simply never set, so the
+            # gate in get_dimensional_standard would (correctly) refuse to serve it.
+            verification_status=VerificationStatus.VERIFIED,
         ),
         # RS-4.4: Sec. 47-5.30 (ordinance_chunks id=3752). NOTE: the real code
         # is RS-4.4, NOT RS-4 (no RS-4 district exists). 4.4 du/net ac, min lot
         # 10,000 sf, height 35 ft, width 75 ft, front 25 ft, side 10 ft, rear
         # 15 ft, coverage 45%, FAR 0.75.
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RS-4.4",
-            min_lot_area_sqft=10000.0, min_lot_width_ft=75.0,
-            setback_front_ft=25.0, setback_side_ft=10.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RS-4.4",
+            min_lot_area_sqft=10000.0,
+            min_lot_width_ft=75.0,
+            setback_front_ft=25.0,
+            setback_side_ft=10.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=4.4,
             source_section_id="Sec. 47-5.30 (ordinance_chunks id=3752)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            # Cross-checked against the cited ingested chunk id above — which is
+            # exactly what VERIFIED means. The status was simply never set, so the
+            # gate in get_dimensional_standard would (correctly) refuse to serve it.
+            verification_status=VerificationStatus.VERIFIED,
         ),
         # RM-15: Sec. 47-5.34 (ordinance_chunks id=3764). 15 du/net ac, min lot
         # 5,000 sf, height 35 ft, width 50 ft, front 25 ft, side 5 ft, rear 15 ft.
         DistrictDimensionalStandard(
-            municipality=fl, county=broward, state=state, district_code="RM-15",
-            min_lot_area_sqft=5000.0, min_lot_width_ft=50.0,
-            setback_front_ft=25.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=35.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality=fl,
+            county=broward,
+            state=state,
+            district_code="RM-15",
+            min_lot_area_sqft=5000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=25.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=15.0,
             source_section_id="Sec. 47-5.34 (ordinance_chunks id=3764)",
             source_url="https://www.fortlauderdale.gov/uldr",
+            # Cross-checked against the cited ingested chunk id above — which is
+            # exactly what VERIFIED means. The status was simply never set, so the
+            # gate in get_dimensional_standard would (correctly) refuse to serve it.
+            verification_status=VerificationStatus.VERIFIED,
         ),
     ]
     for row in rows:
@@ -118,28 +157,52 @@ def _seed_multi_municipality_fixtures() -> None:
     """
     miami_rows = [
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-1", min_lot_area_sqft=7500.0, min_lot_width_ft=75.0,
-            setback_front_ft=25.0, setback_side_ft=7.5, setback_rear_ft=25.0,
-            max_height_ft=35.0, max_lot_coverage_pct=40.0, far=0.50,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-1",
+            min_lot_area_sqft=7500.0,
+            min_lot_width_ft=75.0,
+            setback_front_ft=25.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=25.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=40.0,
+            far=0.50,
             max_density_units_per_acre=5.8,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
         ),
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-3", min_lot_area_sqft=5000.0, min_lot_width_ft=50.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=45.0, max_lot_coverage_pct=50.0, far=0.80,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-3",
+            min_lot_area_sqft=5000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=45.0,
+            max_lot_coverage_pct=50.0,
+            far=0.80,
             max_density_units_per_acre=17.4,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
         ),
         DistrictDimensionalStandard(
-            municipality="Miami", county="Miami-Dade", state="FL",
-            district_code="R-4", min_lot_area_sqft=3750.0, min_lot_width_ft=40.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=60.0, max_lot_coverage_pct=55.0, far=1.20,
+            municipality="Miami",
+            county="Miami-Dade",
+            state="FL",
+            district_code="R-4",
+            min_lot_area_sqft=3750.0,
+            min_lot_width_ft=40.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=60.0,
+            max_lot_coverage_pct=55.0,
+            far=1.20,
             max_density_units_per_acre=43.5,
             source_section_id="STAGED: Miami-Dade Code §33-3.1 (not yet ingested)",
             source_url="https://www.miamidade.gov/library/codes/chapter33",
@@ -147,28 +210,52 @@ def _seed_multi_municipality_fixtures() -> None:
     ]
     hollywood_rows = [
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RS-5", min_lot_area_sqft=7500.0, min_lot_width_ft=60.0,
-            setback_front_ft=25.0, setback_side_ft=7.5, setback_rear_ft=25.0,
-            max_height_ft=35.0, max_lot_coverage_pct=40.0, far=0.50,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RS-5",
+            min_lot_area_sqft=7500.0,
+            min_lot_width_ft=60.0,
+            setback_front_ft=25.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=25.0,
+            max_height_ft=35.0,
+            max_lot_coverage_pct=40.0,
+            far=0.50,
             max_density_units_per_acre=5.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
         ),
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RM-15", min_lot_area_sqft=3000.0, min_lot_width_ft=50.0,
-            setback_front_ft=20.0, setback_side_ft=7.5, setback_rear_ft=20.0,
-            max_height_ft=45.0, max_lot_coverage_pct=45.0, far=0.75,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RM-15",
+            min_lot_area_sqft=3000.0,
+            min_lot_width_ft=50.0,
+            setback_front_ft=20.0,
+            setback_side_ft=7.5,
+            setback_rear_ft=20.0,
+            max_height_ft=45.0,
+            max_lot_coverage_pct=45.0,
+            far=0.75,
             max_density_units_per_acre=15.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
         ),
         DistrictDimensionalStandard(
-            municipality="Hollywood", county="Broward", state="FL",
-            district_code="RM-25", min_lot_area_sqft=2000.0, min_lot_width_ft=40.0,
-            setback_front_ft=15.0, setback_side_ft=5.0, setback_rear_ft=15.0,
-            max_height_ft=65.0, max_lot_coverage_pct=55.0, far=1.50,
+            municipality="Hollywood",
+            county="Broward",
+            state="FL",
+            district_code="RM-25",
+            min_lot_area_sqft=2000.0,
+            min_lot_width_ft=40.0,
+            setback_front_ft=15.0,
+            setback_side_ft=5.0,
+            setback_rear_ft=15.0,
+            max_height_ft=65.0,
+            max_lot_coverage_pct=55.0,
+            far=1.50,
             max_density_units_per_acre=25.0,
             source_section_id="STAGED: Hollywood ULDR Art. 9 (not yet ingested)",
             source_url="https://www.hollywoodfl.gov/uldr",
@@ -267,23 +354,59 @@ async def get_dimensional_standard(
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is not None:
-                return row.to_domain()
+                standard = row.to_domain()
+                # ENFORCE the gate that VerificationStatus documents but nothing
+                # previously checked. Callers label ANY returned standard
+                # origin="local_authority" (verified-fact grade), so returning a
+                # STAGED or UNVERIFIED row would silently promote assumption-grade
+                # data to fact — trading visible LLM flakiness for confident
+                # wrongness, which is strictly worse. Non-verified rows are
+                # ignored here and the caller falls back to the LLM path, which
+                # is at least labelled as an assumption.
+                if not standard.is_verified_fact_source():
+                    logger.warning(
+                        "Dimensional standard for (%s, %s) is %s, not verified — "
+                        "refusing to serve it as a verified fact",
+                        muni,
+                        code,
+                        standard.verification_status.value,
+                    )
+                    return None
+                return standard
         finally:
             await session.close()
     except SQLAlchemyError as exc:
         logger.warning(
             "Dimensional standard DB lookup failed for (%s, %s): %s — falling "
-            "back to in-memory fixture.", muni, code, exc,
+            "back to in-memory fixture.",
+            muni,
+            code,
+            exc,
         )
     except Exception as exc:  # noqa: BLE001 — DB unreachable in tests/offline
         logger.debug(
             "Dimensional standard DB lookup unavailable for (%s, %s): %s — "
-            "falling back to in-memory fixture.", muni, code, exc,
+            "falling back to in-memory fixture.",
+            muni,
+            code,
+            exc,
         )
 
     # ── Fallback: in-memory fixture (tests/offline dev / pre-extraction) ──
     if allow_fixture_fallback:
-        return get_dimensional_standard_from_fixture(muni, code)
+        fixture = get_dimensional_standard_from_fixture(muni, code)
+        # Same gate as the DB path. Enforcing it in only one place would leave the
+        # fixture as a back door through which assumption-grade data still reaches
+        # the calculator labelled as verified fact.
+        if fixture is not None and not fixture.is_verified_fact_source():
+            logger.debug(
+                "Fixture standard for (%s, %s) is %s, not verified — not served as fact",
+                muni,
+                code,
+                fixture.verification_status.value,
+            )
+            return None
+        return fixture
     return None
 
 

@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+
+# Local RentCast spend tally (per-machine state, not shared config)
+.rentcast_usage.json
 *.pem
 *.key
 *.crt

@@ -34,9 +34,10 @@ class VerificationStatus(str, Enum):
     UNVERIFIED is the default for rows from new ingestion runs before QC.
     """
 
-    VERIFIED = "verified"      # cross-checked against ingested source text — production-ready
-    STAGED = "staged"           # assumption-grade, pending QC — never becomes verified_fact
-    UNVERIFIED = "unverified"   # from a fresh ingestion run, not yet QC'd
+    VERIFIED = "verified"  # cross-checked against ingested source text — production-ready
+    STAGED = "staged"  # assumption-grade, pending QC — never becomes verified_fact
+    UNVERIFIED = "unverified"  # from a fresh ingestion run, not yet QC'd
+
 
 # District code: 1-4 uppercase letters, optional hyphen/digits/suffix.
 # Matches RS-1, RM-15, T6-80, RMM-25, B-2, etc.
@@ -195,6 +196,125 @@ def extract_dimensional_standards(
             )
         )
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Prose extraction (PDF-scraped codes with no tables)
+# ---------------------------------------------------------------------------
+#
+# `extract_dimensional_standards` above requires a pipe-delimited markdown table.
+# That covers codifier-served cities, but it cannot read a scraped PDF: San Diego
+# has 2,910 ingested chunks and NOT ONE contains a pipe character. Eight of the
+# twenty ingested municipalities are in the same position.
+#
+# San Diego states density as highly regular prose instead, one bullet per district:
+#
+#     • RM-3-7 permits a maximum density of 1 dwelling unit for each
+#       1,000 square feet of lot area
+#     • RT-1-1 requires minimum 3,500-square-foot lots
+#
+# Two properties of the scraped text drive the design:
+#
+# 1. **Sentences wrap**, so the number often sits on the following line. The text
+#    is whitespace-normalised before matching so "for each\n1,000" joins up.
+# 2. **PDF page furniture is injected mid-sentence** — a running header like
+#    "Ch. Art. Div. 13 1 4 4 San Diego Municipal Code Chapter 13: Zones (3-2026)"
+#    can land between "for each" and its number. The patterns therefore require
+#    the number to follow the trigger phrase with only whitespace between, so
+#    furniture makes the match FAIL rather than bind the wrong number. Losing a
+#    district is recoverable (chunks overlap, so a clean copy of the same
+#    sentence almost always appears in a neighbouring chunk); binding a page
+#    number as a density is not.
+
+# A district code: RM-3-7, RT-1-1, RS-1-7, CC-3-4 ... letters then 1-3 numeric groups.
+_PROSE_DISTRICT = r"[A-Z]{1,3}(?:-\d{1,3}){1,3}"
+# Comma-grouped or bare integer.
+_PROSE_SQFT = r"\d{1,3}(?:,\d{3})+|\d+"
+
+# "RM-3-7 permits a maximum density of 1 dwelling unit for each 1,000 square feet
+# of lot area". The gap between the code and the trigger is bounded and may not
+# cross a bullet or section mark, so a truncated sentence cannot reach forward
+# into the next district's number.
+_PROSE_DENSITY_RE = re.compile(
+    rf"(?P<code>{_PROSE_DISTRICT})\s+permits\s+[^•§]{{0,160}}?"
+    rf"maximum\s+density\s+of\s+1\s+dwelling\s+unit\s+for\s+each\s+"
+    rf"(?P<sqft>{_PROSE_SQFT})\s+square\s+feet\s+of\s+lot\s+area",
+    re.IGNORECASE,
+)
+
+# "RT-1-1 requires minimum 3,500-square-foot lots" — a true minimum lot size.
+_PROSE_MIN_LOT_RE = re.compile(
+    rf"(?P<code>{_PROSE_DISTRICT})\s+requires\s+minimum\s+"
+    rf"(?P<sqft>{_PROSE_SQFT})[-\s]square[-\s]foot\s+lots",
+    re.IGNORECASE,
+)
+
+# Sanity bounds. A lot-area-per-unit outside this range is a misparse (a page
+# number, a year, a dollar figure), not a zoning standard.
+_MIN_PLAUSIBLE_SQFT = 100.0
+_MAX_PLAUSIBLE_SQFT = 500_000.0
+
+
+def extract_dimensional_standards_from_prose(
+    text: str,
+    *,
+    municipality: str,
+    county: str,
+    state: str,
+    source_section_id: str,
+    source_url: str = "",
+    verification_status: "VerificationStatus | None" = None,
+) -> list[DistrictDimensionalStandard]:
+    """Extract typed standards from ordinance PROSE (no table required).
+
+    Returns one row per district statement found. The caller is expected to
+    corroborate across chunks before trusting a value — see
+    ``plotlot.ingestion.standards_extraction``.
+
+    **Density is stored as ``min_lot_area_sqft``, deliberately, not as
+    ``max_density_units_per_acre``.** "1 dwelling unit per N square feet" is a
+    per-unit lot area, and ``_min_lot_area_per_unit()`` returns
+    ``min_lot_area_sqft`` verbatim when no density is set — exact integer
+    arithmetic. Converting to du/acre and back does NOT round-trip cleanly
+    (1,750 → 43560/1750 → 1750.0000000000002), and the calculator FLOORS the
+    result, so a lot that divides evenly would silently lose a unit:
+    ``floor(7000 / 1000.0000000001) == 6``. Exactness matters more here than
+    field-name tidiness, and ``_min_lot_area_per_unit`` is the only reader.
+    """
+    if not text:
+        return []
+
+    # Join wrapped lines so "for each\n1,000 square feet" reads as one sentence.
+    flat = re.sub(r"\s+", " ", text)
+
+    found: dict[str, float] = {}
+    for pattern in (_PROSE_DENSITY_RE, _PROSE_MIN_LOT_RE):
+        for m in pattern.finditer(flat):
+            code = m.group("code").upper()
+            sqft = _parse_number(m.group("sqft"))
+            if sqft is None or not (_MIN_PLAUSIBLE_SQFT <= sqft <= _MAX_PLAUSIBLE_SQFT):
+                continue
+            # A district stated twice within ONE chunk with different values is
+            # ambiguous; drop it rather than pick arbitrarily.
+            if code in found and found[code] != sqft:
+                found[code] = float("nan")
+                continue
+            found[code] = sqft
+
+    return [
+        DistrictDimensionalStandard(
+            municipality=municipality,
+            county=county,
+            state=state,
+            district_code=code,
+            min_lot_area_sqft=sqft,
+            source_section_id=source_section_id,
+            source_url=source_url,
+            verification_status=verification_status or VerificationStatus.UNVERIFIED,
+        )
+        for code, sqft in sorted(found.items())
+        if sqft == sqft  # drop the NaN-marked conflicts
+    ]
 
 
 # ---------------------------------------------------------------------------

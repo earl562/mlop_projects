@@ -60,6 +60,7 @@ plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
 plotlot-api = "plotlot.api.main:run"
 plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
+plotlot-standards = "plotlot.ingestion.standards_extraction:main"
 plotlot-mcp = "plotlot.mcp.server:run"
 plotlot-mcp-harness = "plotlot.mcp.harness_server:run"
 

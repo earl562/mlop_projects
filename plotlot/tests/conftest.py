@@ -85,6 +85,23 @@ def _disable_mlflow_tracing():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_rentcast_usage_file(tmp_path, monkeypatch):
+    """Never let a test touch the real RentCast spend tally.
+
+    The cap counter persists to a JSON file in the project root. Without this,
+    any test that exercises `fetch_rentcast_comps` — even fully mocked, with no
+    HTTP at all — increments the live tally and eats into the month's real
+    allowance. It did exactly that on first run, charging 4 phantom requests.
+    """
+    from plotlot.config import settings
+
+    monkeypatch.setattr(
+        settings, "rentcast_usage_file", str(tmp_path / "rentcast_usage.json"), raising=False
+    )
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _clear_discovery_cache():
     """Clear discovery cache before each test and disable disk cache."""
     from plotlot.ingestion.discovery import clear_cache
