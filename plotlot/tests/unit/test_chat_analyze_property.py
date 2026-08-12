@@ -1181,7 +1181,7 @@ async def test_execute_requires_address():
 
 @pytest.mark.asyncio
 async def test_execute_returns_not_found_when_pipeline_returns_none(monkeypatch):
-    async def _none(_address):
+    async def _none(_address, *, adv_per_unit=None):
         return None
 
     monkeypatch.setattr("plotlot.pipeline.analyze.analyze_property_deep", _none)
@@ -1193,7 +1193,7 @@ async def test_execute_returns_not_found_when_pipeline_returns_none(monkeypatch)
 async def test_execute_formats_grounded_report_and_sets_context(monkeypatch):
     report = _hueneme_report()
 
-    async def _report(_address):
+    async def _report(_address, *, adv_per_unit=None):
         return report
 
     monkeypatch.setattr("plotlot.pipeline.analyze.analyze_property_deep", _report)
@@ -1211,7 +1211,7 @@ async def test_execute_formats_grounded_report_and_sets_context(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_handles_pipeline_exception(monkeypatch):
-    async def _boom(_address):
+    async def _boom(_address, *, adv_per_unit=None):
         raise RuntimeError("pipeline exploded")
 
     monkeypatch.setattr("plotlot.pipeline.analyze.analyze_property_deep", _boom)
@@ -1379,7 +1379,7 @@ def test_active_analysis_context_empty_for_bad_payload():
 async def test_execute_persists_analysis_for_followup_turns(monkeypatch):
     report = _hueneme_report()
 
-    async def _report(_address):
+    async def _report(_address, *, adv_per_unit=None):
         return report
 
     monkeypatch.setattr("plotlot.pipeline.analyze.analyze_property_deep", _report)

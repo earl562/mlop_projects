@@ -89,7 +89,12 @@ _TOOL_CONTRACTS: dict[str, ToolContract] = {
         risk_class=ToolRiskClass.EXPENSIVE_READ,
         input_schema={
             "type": "object",
-            "properties": {"address": {"type": "string", "minLength": 3}},
+            "properties": {
+                "address": {"type": "string", "minLength": 3},
+                # User-supplied exit value per finished unit. Overrides comps and the
+                # regional default; reported as user-supplied, never as a PlotLot comp.
+                "adv_per_unit": {"type": "number", "exclusiveMinimum": 0},
+            },
             "required": ["address"],
         },
         output_schema={

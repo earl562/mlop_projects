@@ -680,14 +680,31 @@ CHAT_TOOLS: list[dict[str, Any]] = [
                 "You MUST call this before stating ANY number about units, density, land "
                 "value, comps, pro forma, fees, risk, or entitlement. NEVER compute these "
                 "yourself or quote them from memory — only repeat what this tool returns. "
-                "Pass the full street address; it self-geocodes and looks up the parcel."
+                "Pass the full street address or an APN; it self-geocodes and looks up "
+                "the parcel."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "address": {
                         "type": "string",
-                        "description": "Full street address (e.g. '1233 Hueneme St, San Diego, CA 92110')",
+                        "description": (
+                            "Full street address (e.g. '1233 Hueneme St, San Diego, CA "
+                            "92110') or an APN (e.g. '146-121-08-00')"
+                        ),
+                    },
+                    "adv_per_unit": {
+                        "type": "number",
+                        "description": (
+                            "OPTIONAL. After-development value per finished unit, in "
+                            "dollars, supplied by the USER. Pass this ONLY when the user "
+                            "has explicitly given you a per-unit exit value or their own "
+                            "comps — never invent one, and never pass a number you "
+                            "derived yourself. When set it overrides comps and the "
+                            "regional default, and the residual, max land price and "
+                            "sensitivity grid are all rebuilt from it. The result is "
+                            "labelled as user-supplied, not as a PlotLot comp."
+                        ),
                     },
                 },
                 "required": ["address"],
@@ -2901,21 +2918,32 @@ async def _execute_zoning_search(municipality: str, query: str, session_id: str 
         return json.dumps({"status": "success", "results": chunks})
 
 
-async def _execute_analyze_property(address: str, session_id: str = "") -> str:
+async def _execute_analyze_property(
+    address: str, session_id: str = "", adv_per_unit: float | None = None
+) -> str:
     """Run the full deterministic deal pipeline and return grounded numbers.
 
     This is the anti-hallucination engine for chat: the agent calls it instead of
     free-forming density, valuation, fees, or risk. It composes the same steps as
     ``/analyze`` (verified density → comps → residual → entitlement → site risk →
     CA uplift) via ``analyze_property_deep``.
+
+    ``adv_per_unit`` is a user-supplied exit value that overrides comps and the
+    regional default. See ``analyze_property_deep`` for why it exists.
     """
     if not address or not address.strip():
         return json.dumps({"status": "error", "message": "An address is required."})
 
+    override = adv_per_unit if (adv_per_unit and adv_per_unit > 0) else None
+
     # Reuse a cached analysis for the same parcel — avoids re-running the ~minute
     # pipeline when grounding was already forced this turn (or computed on a prior
     # turn for this address), including a redundant model-issued call after forcing.
-    if session_id:
+    #
+    # A supplied exit value bypasses the cache: the cached run was priced off comps
+    # or the regional default, so returning it would silently ignore the number the
+    # user just gave and leave them reading someone else's valuation as their own.
+    if session_id and override is None:
         cached = _sessions.get_analysis(session_id)
         if _analysis_covers_address(cached, address):
             return json.dumps(cached)
@@ -2923,7 +2951,7 @@ async def _execute_analyze_property(address: str, session_id: str = "") -> str:
     from plotlot.pipeline.analyze import analyze_property_deep
 
     try:
-        report = await analyze_property_deep(address)
+        report = await analyze_property_deep(address, adv_per_unit=override)
     except Exception as e:  # noqa: BLE001 — surface a structured error, never 500 the chat
         logger.warning("analyze_property failed for %s: %s", address[:60], e)
         return json.dumps({"status": "error", "message": f"Analysis failed: {str(e)[:200]}"})
@@ -3979,11 +4007,14 @@ async def chat(request: ChatRequest, http_request: Request):
                                 if accumulated:
                                     fn_args = {**fn_args, "evidence_ids": accumulated}
 
+                            # A user-supplied exit value must re-price the deal, so it
+                            # bypasses the cache — the cached run was built on comps or
+                            # the regional default and would silently discard their number.
                             cached_analysis = (
                                 _cached_grounded_analysis(
                                     session_id, str(fn_args.get("address") or "")
                                 )
-                                if fn_name == "analyze_property"
+                                if fn_name == "analyze_property" and not fn_args.get("adv_per_unit")
                                 else None
                             )
                             if cached_analysis is not None:

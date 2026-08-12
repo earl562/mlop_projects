@@ -358,11 +358,28 @@ def _format_grounded_analysis(report) -> dict:
                 "unit count."
             )
         valuation["adv_source"] = pf.adv_source or valuation.get("adv_source", "")
-        if valuation["adv_source"] != "comps":
+        if valuation["adv_source"] == "override":
+            # A hand-supplied comp. It is the best number available in markets with
+            # no sold-price source, but it is the USER's figure, not PlotLot's —
+            # say so, or a later reader mistakes their own input for evidence.
             valuation["adv_basis"] = (
+                "exit value per unit was SUPPLIED BY THE USER, not derived by PlotLot. "
+                "The residual, max land price and sensitivity grid are all built on it. "
+                "Attribute it to the user; never cite it as a PlotLot comp or as market "
+                "evidence."
+            )
+        elif valuation["adv_source"] != "comps":
+            basis = (
                 "regional market default — no local sold-unit comps were found; "
                 "treat exit value and residual as estimates, not appraised"
             )
+            # Carry the comps engine's own account of WHY. A dead provider and an
+            # uncovered market both land on the regional default, but only one is
+            # fixable, and "no comps were found" hides which one this is.
+            why = next((n for n in (comps.notes if comps else []) if n), "")
+            if why:
+                basis += f". Reason: {why}"
+            valuation["adv_basis"] = basis
         valuation["market"] = pf.market
     out["valuation"] = valuation or None
 

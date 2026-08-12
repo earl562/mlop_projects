@@ -1172,8 +1172,20 @@ async def _handle_analyze_property(args: dict[str, Any], context: ToolContext) -
     if not address.strip():
         return {"status": "error", "message": "An address is required."}
 
+    # Optional user-supplied exit value. Non-positive or unparseable is treated as
+    # absent rather than as an error: a bad override should fall back to the normal
+    # comps path, not fail the whole analysis.
+    adv_per_unit: float | None = None
+    raw_adv = args.get("adv_per_unit")
+    if raw_adv is not None:
+        try:
+            parsed = float(raw_adv)
+            adv_per_unit = parsed if parsed > 0 else None
+        except (TypeError, ValueError):
+            adv_per_unit = None
+
     try:
-        report = await analyze_property_deep(address)
+        report = await analyze_property_deep(address, adv_per_unit=adv_per_unit)
     except Exception as e:
         return {"status": "error", "message": f"Analysis failed: {str(e)[:200]}"}
     if report is None:

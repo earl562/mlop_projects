@@ -67,8 +67,23 @@ async def analyze_property_full(address: str, *, with_comps: bool = False) -> Zo
     return report
 
 
-async def analyze_property_deep(address: str) -> ZoningReport | None:
+async def analyze_property_deep(
+    address: str, *, adv_per_unit: float | None = None
+) -> ZoningReport | None:
     """Full grounded single-address analysis for the chat agent.
+
+    Args:
+        address: Street address or APN.
+        adv_per_unit: Caller-supplied after-development value per finished unit,
+            overriding both comps and the regional default. This exists because
+            automated comps are genuinely unavailable in some markets — no free
+            California sold-price layer exists, so a San Diego exit value is a
+            labelled regional default unless a keyed provider is live. Without an
+            input port, an analyst who has done the comping by hand can only
+            eyeball their number against ours; with one, the residual, the offer
+            and the sensitivity grid are all rebuilt from their figure. It is
+            recorded as ``adv_source="override"`` and reported as user-supplied —
+            never laundered into looking like a PlotLot-derived comp.
 
     Runs the same deterministic composition the ``/analyze`` SSE pipeline runs —
     geocode → property → zoning → LLM extraction → **verification** → density,
@@ -225,9 +240,16 @@ async def analyze_property_deep(address: str) -> ZoningReport | None:
             comps=report.comp_analysis,
             cost_model=cost_model,
             impact_fees_per_unit=fee_override,
+            adv_per_unit=adv_per_unit,
         )
+        # The sensitivity grid must sweep around the SAME base the residual used.
+        # Centring it on a $750k regional default while the residual runs off a
+        # hand-supplied comp would produce a grid that never contains the answer.
         report.sensitivity = build_sensitivity_table(
-            density=density, comps=report.comp_analysis, cost_model=cost_model
+            density=density,
+            comps=report.comp_analysis,
+            cost_model=cost_model,
+            adv_per_unit=adv_per_unit,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Deep pro forma failed for %s: %s", address[:60], exc)

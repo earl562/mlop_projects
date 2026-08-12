@@ -7,9 +7,10 @@ Diego) being the motivating case. Unlike the ArcGIS-layer sources in
 formed ``CompAnalysis``.
 
 Used only when the free ArcGIS path (curated registry + Hub discovery) finds
-nothing, to conserve the free tier (~50 req/mo). No key configured → returns
-None and the pipeline falls back to the labeled regional default (honest, not
-fabricated).
+nothing, to conserve the free tier (~50 req/mo). Every call returns a
+``RentcastAttempt``: on failure it carries the reason, and the pipeline falls back
+to the labeled regional default (honest, not fabricated) while still being able to
+say *why* it fell back.
 
 Docs: https://developers.rentcast.io  (GET /avm/value → value + comparables[]).
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import statistics
+from dataclasses import dataclass
 
 import httpx
 
@@ -25,6 +27,56 @@ from plotlot.config import settings
 from plotlot.core.types import ComparableSale, CompAnalysis, PropertyRecord
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RentcastAttempt:
+    """The outcome of a RentCast lookup, including *why* it produced nothing.
+
+    Returning a bare ``None`` conflated four very different situations: no key
+    configured, a key whose subscription is dead, a network failure, and a
+    perfectly successful call that simply found no comps nearby. Only the first
+    and last are benign, but all four looked identical downstream and were
+    reported to the user as "no sales dataset found" — which reads as *we have no
+    source for this market* when the truth may be *our source is switched off*.
+
+    That distinction is not academic. On 2026-08-10 every San Diego comp silently
+    resolved to the $750k regional default because RentCast answered
+    ``403 billing/subscription-inactive`` to every request. The log carried the
+    reason; nothing the user saw did.
+    """
+
+    analysis: CompAnalysis | None = None
+    #: Empty when comps were found. Otherwise a user-safe explanation.
+    reason: str = ""
+    #: True when the provider was reachable and simply had nothing to offer, as
+    #: opposed to being unconfigured or refusing us.
+    provider_answered: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.analysis is not None
+
+
+def _http_error_reason(exc: httpx.HTTPStatusError) -> str:
+    """Turn a RentCast error response into something worth showing a user.
+
+    RentCast returns a JSON body like ``{"error": "billing/subscription-inactive",
+    "message": "..."}``. The status code alone ("403") does not tell an operator
+    that the fix is a billing page rather than a code change, so surface the
+    provider's own error slug.
+    """
+    status = exc.response.status_code
+    slug = ""
+    try:
+        body = exc.response.json()
+        slug = str(body.get("error") or "").strip()
+    except Exception:  # noqa: BLE001 — a non-JSON error body is still an error
+        slug = ""
+    if slug:
+        return f"RentCast refused the request (HTTP {status}: {slug})"
+    return f"RentCast refused the request (HTTP {status})"
+
 
 _RENTCAST_AVM_URL = "https://api.rentcast.io/v1/avm/value"
 
@@ -58,15 +110,17 @@ async def fetch_rentcast_comps(
     *,
     comp_count: int = 12,
     timeout: float = 20.0,
-) -> CompAnalysis | None:
+) -> RentcastAttempt:
     """Nearby finished-unit sale comps from RentCast → ADV per unit.
 
-    Returns a ``CompAnalysis`` with ``adv_source="comps"`` when comps are found,
-    or None (no key, missing lat/lng, API error, or no comps) so the caller falls
-    back to the labeled regional default.
+    Always returns a ``RentcastAttempt``. On success it carries a ``CompAnalysis``
+    with ``adv_source="comps"``; otherwise it carries the reason, so the caller can
+    tell an unconfigured provider from a dead one and say so in the report.
     """
-    if not rentcast_configured() or not subject.lat or not subject.lng:
-        return None
+    if not rentcast_configured():
+        return RentcastAttempt(reason="RentCast is not configured (no RENTCAST_API_KEY set)")
+    if not subject.lat or not subject.lng:
+        return RentcastAttempt(reason="subject parcel has no coordinates to search around")
 
     params: dict[str, str | int | float] = {
         "latitude": subject.lat,
@@ -84,9 +138,14 @@ async def fetch_rentcast_comps(
             resp = await client.get(_RENTCAST_AVM_URL, params=params, headers=headers)
             resp.raise_for_status()
             data = resp.json()
+    except httpx.HTTPStatusError as exc:
+        reason = _http_error_reason(exc)
+        logger.warning("RentCast comps unavailable: %s", reason)
+        return RentcastAttempt(reason=reason)
     except Exception as exc:  # noqa: BLE001 — comps are advisory; never fatal
-        logger.warning("RentCast comps unavailable: %s", exc)
-        return None
+        reason = f"RentCast request failed ({type(exc).__name__})"
+        logger.warning("RentCast comps unavailable: %s: %s", reason, exc)
+        return RentcastAttempt(reason=reason)
 
     raw = data.get("comparables") or []
     unit_comps: list[ComparableSale] = []
@@ -106,7 +165,15 @@ async def fetch_rentcast_comps(
         )
 
     if not unit_comps:
-        return None
+        # The provider answered; the market simply had nothing. Materially different
+        # from a refusal, and the caller reports it differently.
+        return RentcastAttempt(
+            reason=(
+                f"RentCast returned no comparable sales within {radius_miles:g} mi "
+                f"in the last {months} months"
+            ),
+            provider_answered=True,
+        )
 
     unit_comps.sort(key=lambda x: x.distance_miles)
     low, median, high = _percentiles([c.price_per_unit or 0 for c in unit_comps])
@@ -125,4 +192,4 @@ async def fetch_rentcast_comps(
         f"{radius_miles:g} mi (last {months} mo). Market comps for finished units — "
         "not new-construction-specific; treat as a data-grounded estimate."
     ]
-    return result
+    return RentcastAttempt(analysis=result, provider_answered=True)

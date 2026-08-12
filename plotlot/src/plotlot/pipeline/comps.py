@@ -18,7 +18,12 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Type-only: the runtime import stays inside `_try_rentcast_comps` so the
+    # provider module is loaded lazily, but the annotation still type-checks.
+    from plotlot.pipeline.comps_rentcast import RentcastAttempt
 
 import httpx
 
@@ -46,7 +51,15 @@ _SALES_NAME_KEYWORDS = {"sale", "transaction", "transfer", "recorded", "deed"}
 
 # Candidate field names for each datum (case-insensitive).
 _PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "SALE_AMOUNT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
-_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE", "DOS", "DATEOFSALE"}
+_DATE_FIELDS = {
+    "SALE_DATE",
+    "TRANS_DATE",
+    "SALE_DT",
+    "DATE_SOLD",
+    "RECORDING_DATE",
+    "DOS",
+    "DATEOFSALE",
+}
 _ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
 _LOT_FIELDS = {"LOT_SIZE", "LOT_AREA", "LAND_SQFT", "ACRES", "ACREAGE", "SQ_FOOTAGE"}
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}
@@ -361,17 +374,19 @@ def _score_confidence(land_count: int, fraction_recent_6mo: float) -> float:
 
 async def _try_rentcast_comps(
     subject: PropertyRecord, radius_miles: float, months: int
-) -> CompAnalysis | None:
-    """Keyed RentCast comps fallback (lazy import → no circular dependency)."""
-    from plotlot.pipeline.comps_rentcast import fetch_rentcast_comps, rentcast_configured
+) -> RentcastAttempt:
+    """Keyed RentCast comps fallback (lazy import → no circular dependency).
 
-    if not rentcast_configured():
-        return None
+    Returns the provider's ``RentcastAttempt`` so the caller can report *why* it got
+    nothing, rather than collapsing every outcome to a bare None.
+    """
+    from plotlot.pipeline.comps_rentcast import RentcastAttempt, fetch_rentcast_comps
+
     try:
         return await fetch_rentcast_comps(subject, radius_miles, months)
     except Exception as exc:  # noqa: BLE001
         logger.warning("RentCast comps fallback failed: %s", exc)
-        return None
+        return RentcastAttempt(reason=f"RentCast lookup errored ({type(exc).__name__})")
 
 
 async def find_comparables(
@@ -421,9 +436,19 @@ async def find_comparables(
         # it never breaks when unconfigured, and only here so the free tier is
         # spent only where the free GIS path fails.
         rc = await _try_rentcast_comps(subject, radius_miles, months)
-        if rc is not None:
-            return rc
-        result.notes = [f"No sales dataset found for {subject.county} County, {state}"]
+        if rc.analysis is not None:
+            return rc.analysis
+        # Say WHICH kind of nothing this is. "No sales dataset found" alone reads as
+        # "this market has no source", which is wrong and unactionable when the real
+        # story is a configured provider refusing us (a dead RentCast subscription
+        # silently routed every San Diego parcel to the regional default). The exit
+        # value that follows is a regional default either way — but only one of
+        # these is something a human can go fix.
+        note = f"No open sales dataset for {subject.county} County, {state}"
+        if rc.reason:
+            note += f"; {rc.reason}"
+        note += ". Exit value falls back to the labeled regional default."
+        result.notes = [note]
         return result
 
     layer_url, fields = sales_info
