@@ -129,11 +129,43 @@ must resolve to **no district** rather than a guess.
 
 Ordered by value: chunk count × how tractable the layer looked.
 
-### 1. Escondido — layer already proven
+### 1. Escondido — ✅ DONE 2026-08-13 (`property/san_diego_zoning.py`)
 - **URL** `https://services2.arcgis.com/eJcVbjTyyZIzZ5Ye/arcgis/rest/services/Zoning/FeatureServer/0`
-- **Field** `ZONING` · verified returning `S-P` at 1234 E Valley Pkwy (33.130602, -117.066400)
-- Remaining: confirm it returns `R-1-*` codes on an ordinary single-family parcel, then crosswalk.
+- **Field** `ZONING` (the layer also carries `APN`). Layer 3 is *Split Zoning* — not consulted.
+- All five steps pass. 5/5 cache-cleared runs on 616 Carlann Ln returned
+  `max_units=1`, `origin=local_authority`, `governing=min_lot_area`
+  (lot 6,300 ÷ R-1-6's 6,000 sqft-per-unit).
 - Stored: `R-1-6 · R-1-7 · R-1-8 · R-1-9 · R-1-10 · R-1-12 · R-1-15 · R-1-18 · R-1-20 · R-1-25` (sqft/unit = the suffix × 1,000)
+
+**Two things this plan got wrong — check them on every remaining city.**
+
+**No crosswalk was needed.** This plan said the layer "returns `S-P` while its
+stored districts are `R-1-6`…" and concluded a crosswalk was required. That was
+measured at *one civic address*, which is the trap this document itself warns
+about. Across the whole layer the codes match verbatim: **13,773 of 47,331
+polygons (29.1%) are an exact stored district.** Establish the code *domain*
+(`returnDistinctValues=true`, then a `groupByFieldsForStatistics` count) before
+concluding anything from a single point.
+
+**The municipality name is not a usable key.** San Diego County is configured
+against the CA statewide parcel layer, and `_spatial_parcel`'s municipality
+fallback chain did not read that layer's `SITE_CITY` field — so every SD parcel
+arrived with `municipality=""` and a name-keyed registry never fired at all.
+Fixed by adding `SITE_CITY` to the chain (this populates municipality for all of
+SD county, which is also the ordinance-search join key), **and** by making the
+resolver fall back to a concurrent geometry fan-out when the name is absent.
+City layers do not overlap, so geometry is the reliable discriminator; two
+cities claiming one point returns no district rather than a guess.
+
+**Match exactly — never by substring.** Three live shapes each contain or
+resemble a valid district and must be refused:
+`PZ-*` (pre-zoned for annexation, **county** authority today — `PZ-R-1-10`, 56
+polygons), `A/B` composites (split-zoned — `R-1-10/RE-20`, 142 polygons), and
+`COUNTY` (8,747 polygons, the layer's single largest value).
+
+**The remaining Escondido gap is extraction, not the join.** `R-T` (3,462),
+`RE-20` (2,989), `R-2-12` (2,750) and `R-3-18` (1,924) are real districts with
+**no stored standard**. They now resolve a district and correctly miss the join.
 
 ### 2. Oceanside — service found, wrong layer
 - **Service** `https://gis.oceansideca.org/gis/rest/services/WebService/Planning_Hub/FeatureServer`

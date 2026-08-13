@@ -316,6 +316,14 @@ class CaliforniaProvider(PropertyProvider):
                 record.zoning_code = zoning_code
                 record.zoning_description = zoning_desc
 
+        # --- 3. Per-city zoning fallback ---
+        # `zoning_url` is a single per-COUNTY slot, and for San Diego it holds the
+        # *City* of San Diego's citywide layer. A parcel in any other SD city
+        # therefore falls through step 2 empty, its standards join misses, and
+        # density gets re-derived by the LLM on every run. Each city publishes its
+        # own layer; resolve from the curated registry.
+        await self._enrich_san_diego_city_zoning(record, county, lat, lng)
+
         return record
 
     # ------------------------------------------------------------------
@@ -344,6 +352,37 @@ class CaliforniaProvider(PropertyProvider):
             code, desc = await resolve_marin_zone(record.municipality or "", lat, lng)
         except Exception as exc:
             logger.debug("Marin zoning enrichment failed: %s", exc)
+            return
+        if code:
+            record.zoning_code = code
+            if desc:
+                record.zoning_description = desc
+
+    @staticmethod
+    async def _enrich_san_diego_city_zoning(
+        record: PropertyRecord,
+        county: str,
+        lat: float | None,
+        lng: float | None,
+    ) -> None:
+        """Fill an SD-county parcel's district from its own city's zoning layer.
+
+        Only fires when step 2 left the district empty, so the City of San Diego
+        path is untouched. The registry refuses pre-zoned, split-zoned, and
+        county-authority codes, so an empty result here is a deliberate
+        abstention as often as it is a miss — either way the pipeline marks the
+        count provisional rather than guessing.
+        """
+        if record.zoning_code or county.lower().strip() != "san diego":
+            return
+        if lat is None or lng is None:
+            return
+        try:
+            from plotlot.property.san_diego_zoning import resolve_san_diego_zone
+
+            code, desc = await resolve_san_diego_zone(record.municipality or "", lat, lng)
+        except Exception as exc:  # noqa: BLE001 — best-effort enrichment
+            logger.debug("SD city zoning enrichment failed: %s", exc)
             return
         if code:
             record.zoning_code = code
@@ -623,6 +662,10 @@ class CaliforniaProvider(PropertyProvider):
             or attrs.get("City")  # Contra Costa
             or attrs.get("CITY")  # Sacramento
             or attrs.get("MUNICIPALITY")
+            # CA statewide parcel layer — the parcel source San Diego County is
+            # configured against. Without this every SD parcel returned a blank
+            # municipality, which is also the ordinance-search join key.
+            or attrs.get("SITE_CITY")
             or ""
         )
         year_built = int(
