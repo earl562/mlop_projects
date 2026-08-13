@@ -254,6 +254,112 @@ _PROSE_MIN_LOT_RE = re.compile(
 _MIN_PLAUSIBLE_SQFT = 100.0
 _MAX_PLAUSIBLE_SQFT = 500_000.0
 
+# Encinitas and Poway both state density in WORDS alongside a minimum lot size:
+#
+#   **R-3: Residential 3** is intended to provide for single-family detached
+#   residential units with minimum lot sizes of 14,500 net square feet and
+#   maximum densities of three units per net acre
+#
+#   The RS-4 residential single-family 4 zone is intended as an area for
+#   single-family residential development on minimum lot sizes of 10,000 square
+#   feet and maximum densities of four units per acre
+#
+# The DENSITY is captured rather than the lot size, for two reasons. It is the
+# ordinance's own density rule, and the minimum lot size is a gross-area floor
+# that can exceed it — Poway RS-2 states 20,000 sqft against a 2 du/net-acre
+# density (21,780 sqft/unit), so treating the lot minimum as the per-unit basis
+# would OVER-count units on a sub-acre parcel, the dangerous direction for a
+# tool that sets a purchase ceiling.
+#
+# Small integer densities also round-trip exactly (43560/2, /3, /4, /5 are all
+# whole numbers), so the float-precision hazard that rules density out for San
+# Diego's per-unit-area statements does not apply here.
+_WORD_NUMBERS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "fifteen": 15,
+    "sixteen": 16,
+    "eighteen": 18,
+    "twenty": 20,
+    "twenty-four": 24,
+    "thirty": 30,
+}
+
+_PROSE_WORDED_DENSITY_RE = re.compile(
+    rf"(?P<code>{_PROSE_DISTRICT})\b[^.•§]{{0,220}}?"
+    r"maximum\s+densit(?:y|ies)\s+of\s+(?P<n>[a-z-]+|\d{1,3})\s+units?\s+"
+    r"per\s+(?:net\s+|gross\s+)?acre",
+    re.IGNORECASE,
+)
+
+# A density above this is not a base residential zone in these codes.
+_MAX_PLAUSIBLE_DU_ACRE = 200.0
+
+# El Cajon puts the standard in the zone's own NAME, in its establishment-of-zones
+# table (§17.15.010):
+#
+#   | RS-14   | Residential, Single-family, 14,000 square-foot |
+#   | RM-2500 | Residential, Multi-family 2,500 square-foot    |
+#
+# The code says explicitly what those numbers mean: "the numbers represent the
+# minimum lot size in the single-family zones, and the density (minimum lot area
+# per dwelling unit) in the multiple-family zones". Both reduce to the same thing
+# for the calculator — lot area per dwelling unit — so either row type is stored
+# as `min_lot_area_sqft` (exact integers, no float round-trip).
+#
+# The descriptive name is what makes this safe. The CODE alone is ambiguous:
+# RS-6 means 6,000 sqft while RM-2500 means 2,500, so inferring the value from
+# the numeric suffix would have been wrong by three orders of magnitude for the
+# RS zones. Requiring the spelled-out figure also drops RM-HR (High-Rise, no
+# number) and every non-residential row rather than guessing at them.
+_ZONE_NAME_TABLE_RE = re.compile(
+    r"\|\s*(?P<code>[A-Z]{1,3}-[A-Z0-9]{1,5})\s*\|\s*"
+    r"Residential[,\s]+(?:Single|Multi)-family[,\s]+"
+    r"(?P<sqft>\d{1,3}(?:,\d{3})+|\d+)\s*square[-\s]foot",
+    re.IGNORECASE,
+)
+
+# Oceanside names each district and states two densities in one sentence:
+#
+#   the Estate A (RE -A) District where the base density is 0.5 dwelling units per
+#   gross acre and the maximum potential density is 0.9 dwelling units per gross acre
+#
+# **Only the BASE density is captured.** The "maximum potential" figure requires a
+# density bonus or discretionary approval; it is not by-right, and using it would
+# overstate what a buyer can build as of right — which flows straight into the
+# purchase ceiling.
+#
+# District codes here carry LETTER suffixes (RE-A, RM-B, RH) rather than the
+# numeric ones San Diego uses, and the PDF sprinkles stray spaces inside them
+# ("RE -A", "single -family"), so the code allows optional whitespace around the
+# hyphen and is normalised afterwards. The pattern is anchored on two separate
+# cues — the literal word "District" and the phrase "base density is" — so a bare
+# two-letter token cannot match on its own.
+#
+# The code is matched case-SENSITIVELY via a scoped `(?-i:...)` flag even though
+# the surrounding phrase is case-insensitive. Without that, `[A-Z]` under
+# re.IGNORECASE happily matches lowercase and the pattern binds the tail of an
+# ordinary word — "...RESIDENTIAL District" yielded a district literally named
+# "IAL". A minimum of two letters and a preceding non-letter guard finish the
+# job: they reject the bare "B" in "Estate B District" (whose real code is the
+# parenthesised RE-B) and the truncated "M-B".
+_PROSE_BASE_DENSITY_RE = re.compile(
+    r"(?<![A-Za-z])\(?\s*(?P<code>(?-i:[A-Z]{2,3}(?:\s*-\s*[A-Z0-9]{1,2})?))(?![A-Za-z])\s*\)?\s*"
+    r"(?:District\b)?[^.]{0,80}?base\s+density\s+is\s+(?P<n>\d+(?:\.\d+)?)\s+"
+    r"(?:dwelling\s+)?units?\s+per\s+(?:gross\s+|net\s+)?acre",
+    re.IGNORECASE,
+)
+
 
 def extract_dimensional_standards_from_prose(
     text: str,
@@ -288,7 +394,7 @@ def extract_dimensional_standards_from_prose(
     flat = re.sub(r"\s+", " ", text)
 
     found: dict[str, float] = {}
-    for pattern in (_PROSE_DENSITY_RE, _PROSE_MIN_LOT_RE):
+    for pattern in (_PROSE_DENSITY_RE, _PROSE_MIN_LOT_RE, _ZONE_NAME_TABLE_RE):
         for m in pattern.finditer(flat):
             code = m.group("code").upper()
             sqft = _parse_number(m.group("sqft"))
@@ -301,20 +407,55 @@ def extract_dimensional_standards_from_prose(
                 continue
             found[code] = sqft
 
-    return [
-        DistrictDimensionalStandard(
-            municipality=municipality,
-            county=county,
-            state=state,
-            district_code=code,
-            min_lot_area_sqft=sqft,
-            source_section_id=source_section_id,
-            source_url=source_url,
-            verification_status=verification_status or VerificationStatus.UNVERIFIED,
+    # du/acre densities — a separate axis, so a district may legitimately appear
+    # here and not above. Worded (Encinitas, Poway) and decimal base-density
+    # (Oceanside) forms both land in this map.
+    densities: dict[str, float] = {}
+    for pattern in (_PROSE_WORDED_DENSITY_RE, _PROSE_BASE_DENSITY_RE):
+        for m in pattern.finditer(flat):
+            # Strip the stray spaces the PDF inserts inside codes ("RE -A").
+            code = re.sub(r"\s+", "", m.group("code")).upper()
+            raw = m.group("n").lower()
+            value = float(_WORD_NUMBERS[raw]) if raw in _WORD_NUMBERS else _parse_number(raw)
+            if value is None or not (0 < value <= _MAX_PLAUSIBLE_DU_ACRE):
+                continue
+            if code in densities and densities[code] != value:
+                densities[code] = float("nan")
+                continue
+            densities[code] = value
+
+    codes = sorted(set(found) | set(densities))
+    rows: list[DistrictDimensionalStandard] = []
+    for code in codes:
+        sqft = found.get(code)
+        density = densities.get(code)
+        # Drop NaN-marked conflicts on either axis.
+        if sqft is not None and sqft != sqft:
+            continue
+        if density is not None and density != density:
+            continue
+        # When a district states BOTH, the density is the ordinance's density rule
+        # and the lot size is a floor. Keep the density and leave the area unset so
+        # `_min_lot_area_per_unit` derives per-unit from the density rather than
+        # from a lot minimum that can under-state it.
+        if density is not None:
+            sqft = None
+        if sqft is None and density is None:
+            continue
+        rows.append(
+            DistrictDimensionalStandard(
+                municipality=municipality,
+                county=county,
+                state=state,
+                district_code=code,
+                min_lot_area_sqft=sqft,
+                max_density_units_per_acre=density,
+                source_section_id=source_section_id,
+                source_url=source_url,
+                verification_status=verification_status or VerificationStatus.UNVERIFIED,
+            )
         )
-        for code, sqft in sorted(found.items())
-        if sqft == sqft  # drop the NaN-marked conflicts
-    ]
+    return rows
 
 
 # ---------------------------------------------------------------------------

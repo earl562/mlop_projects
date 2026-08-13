@@ -83,6 +83,50 @@ class TestCorroboration:
         assert report.conflicted == ("RM-3-7",)
 
     @pytest.mark.asyncio
+    async def test_density_governed_districts_are_excluded(self):
+        """Caught during validation of real Escondido data.
+
+        `| R-3 | 6,000 | 60 | 18 du/acre |` — 6,000 is the minimum LOT SIZE, not
+        the per-unit area. The table extractor captured the area but missed the
+        density column, so storing it would compute 4 units on a 24,000 sqft lot
+        where the ordinance allows 9. A district whose own line advertises a
+        du/acre density we did not capture is proof that area is the wrong basis.
+        """
+        chunks = [
+            _chunk(
+                "| Zone | Min Lot Area | Min Width |\n| --- | --- | --- |\n| R-3 | 6,000 | 60 | 18 du/acre |"
+            )
+        ]
+        rows, report = await _extract(chunks)
+        assert rows == []
+        assert report.density_governed == ("R-3",)
+        assert "R-3" not in report.values
+
+    @pytest.mark.asyncio
+    async def test_area_governed_districts_are_kept_alongside_density_governed_ones(self):
+        """One multi-family zone must not disqualify the single-family zones in the
+        same table — Escondido keeps its 10 R-1-N rows and drops only R-2..R-5."""
+        chunks = [
+            _chunk(
+                "| Zone | Min Lot Area | Min Width |\n| --- | --- | --- |\n"
+                "| R-1-10 | 10,000 | 80 |\n"
+                "| R-3 | 6,000 | 60 | 18 du/acre |"
+            )
+        ]
+        rows, report = await _extract(chunks)
+        assert [r.district_code for r in rows] == ["R-1-10"]
+        assert report.density_governed == ("R-3",)
+
+    @pytest.mark.asyncio
+    async def test_a_per_unit_area_statement_is_not_treated_as_density_governed(self):
+        """San Diego states 'per N square feet of lot area', which IS the per-unit
+        basis. It must not be swept up by the du/acre guard."""
+        chunks = [_chunk(_DENSITY.format(code="RM-3-7", n="1,000"))]
+        rows, report = await _extract(chunks)
+        assert [r.district_code for r in rows] == ["RM-3-7"]
+        assert report.density_governed == ()
+
+    @pytest.mark.asyncio
     async def test_no_chunks_yields_an_empty_report_not_an_error(self):
         rows, report = await _extract([])
         assert rows == []

@@ -141,6 +141,175 @@ def test_prose_without_any_district_statement_yields_nothing():
     assert extract_dimensional_standards_from_prose(text, **_KW) == []
 
 
+# Verbatim Encinitas and Poway. Both state a minimum lot size AND a worded
+# du/acre density in one sentence.
+_ENCINITAS = (
+    "**R-3: Residential 3** is intended to provide for single-family detached "
+    "residential units with minimum lot sizes of 14,500 net square feet and "
+    "maximum densities of three units per net acre\n"
+    "**R-5: Residential 5** is intended to provide for lower density suburban "
+    "development consisting of single-family detached units with minimum lot sizes "
+    "of 8,700 net square feet and maximum densities of five units per net acre\n"
+)
+
+_POWAY_RS7 = (
+    "The RS-7 residential single-family 7 zone is intended as an area for "
+    "single-family residential development on minimum lot sizes of 4,500 square "
+    "feet and maximum densities of eight units per acre."
+)
+
+_ENC_KW = dict(municipality="Encinitas", county="San Diego", state="CA", source_section_id="30.09")
+
+
+def test_worded_density_is_captured_as_du_per_acre():
+    rows = extract_dimensional_standards_from_prose(_ENCINITAS, **_ENC_KW)
+    got = {r.district_code: r.max_density_units_per_acre for r in rows}
+    assert got == {"R-3": 3.0, "R-5": 5.0}
+
+
+def test_density_is_preferred_over_the_stated_lot_minimum():
+    """Poway RS-7: 'minimum lot sizes of 4,500 square feet and maximum densities of
+    eight units per acre'. 43,560/8 = 5,445 per unit, but the lot minimum is 4,500.
+
+    Treating the lot minimum as the per-unit basis would compute 9 units on a
+    43,560 sqft parcel where the ordinance allows 8 — over-counting, which inflates
+    the purchase ceiling. The density is the ordinance's density rule; keep it."""
+    rows = extract_dimensional_standards_from_prose(
+        _POWAY_RS7,
+        municipality="Poway",
+        county="San Diego",
+        state="CA",
+        source_section_id="17.08.060",
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.district_code == "RS-7"
+    assert row.max_density_units_per_acre == 8.0
+    assert row.min_lot_area_sqft is None
+    assert row.to_numeric_zoning_params().min_lot_area_per_unit_sqft == 5445.0
+
+
+def test_small_integer_densities_round_trip_exactly():
+    """Storing density is only safe because these divide cleanly. 43,560/1,750 does
+    not, which is why San Diego's per-unit-area statements are stored as areas."""
+    for du in (2, 3, 4, 5, 8, 15, 20, 30):
+        per_unit = 43560.0 / du
+        assert per_unit == float(int(per_unit)), f"{du} du/acre does not divide cleanly"
+
+
+# Verbatim Oceanside (Art.10), including the stray spaces its PDF inserts inside
+# district codes ("RE -A") and the two densities stated in one sentence.
+_OCEANSIDE_RE = (
+    "Two types of Residential Estate districts are established: the Estate A (RE -A) "
+    "District where the base density is 0.5 dwelling units per gross acre and the "
+    "maximum potential density is 0.9 dwelling units per gross acre; and the Estate B "
+    "District (RE-B) where the base density is 1.0 dwelling units per gross acre and "
+    "the maximum potential density is 3.5 dwelling units per gross acre."
+)
+
+_OCEANSIDE_RH = (
+    "In the RH District the base density is 21.0 dwelling units per gross acre and the "
+    "maximum potential density is 28.9 units per gross acre; in the Urban High Density "
+    "Residential District (RH-U) the base density is 29.0 dwelling units per gross acre "
+    "and the maximum potential density is 43.0 dwelling units per gross acre."
+)
+
+_OCN_KW = dict(municipality="Oceanside", county="San Diego", state="CA", source_section_id="Art.10")
+
+
+def test_oceanside_takes_base_density_never_maximum_potential():
+    """THE correctness call for Oceanside.
+
+    Every district states two densities. "Maximum potential" requires a density
+    bonus or discretionary approval — it is not by-right. Taking 43.0 instead of
+    29.0 for RH-U would overstate buildable units by ~48% and flow straight into
+    an inflated purchase ceiling."""
+    got = {
+        r.district_code: r.max_density_units_per_acre
+        for r in extract_dimensional_standards_from_prose(_OCEANSIDE_RH, **_OCN_KW)
+    }
+    assert got == {"RH": 21.0, "RH-U": 29.0}
+    assert 28.9 not in got.values() and 43.0 not in got.values()
+
+
+def test_stray_spaces_inside_a_district_code_are_normalised():
+    """The PDF writes "RE -A". The stored code must be RE-A."""
+    got = {
+        r.district_code: r.max_density_units_per_acre
+        for r in extract_dimensional_standards_from_prose(_OCEANSIDE_RE, **_OCN_KW)
+    }
+    assert got == {"RE-A": 0.5, "RE-B": 1.0}
+
+
+def test_a_word_tail_is_never_mistaken_for_a_district_code():
+    """Regression: under re.IGNORECASE, `[A-Z]{2,3}` matched lowercase and bound the
+    tail of an ordinary word — "...RESIDENTIAL District..." produced a district
+    literally named "IAL" carrying a real density. Case-sensitive code matching
+    plus letter-boundary guards on both sides."""
+    text = (
+        "To provide opportunities for RESIDENTIAL District uses where the base "
+        "density is 29.0 units per gross acre."
+    )
+    assert extract_dimensional_standards_from_prose(text, **_OCN_KW) == []
+
+
+def test_a_single_letter_code_is_rejected():
+    """ "the Estate B District" must not register a district called "B" — the real
+    code is the parenthesised RE-B."""
+    rows = extract_dimensional_standards_from_prose(_OCEANSIDE_RE, **_OCN_KW)
+    assert "B" not in {r.district_code for r in rows}
+
+
+# Verbatim El Cajon §17.15.010 "Establishment of zones by name".
+_EL_CAJON_TABLE = (
+    "| Zoning Districts: | Descriptive Zoning District Name: | | --- | --- | "
+    "| O-S | Open Space | | H | Hillside Overlay | "
+    "| PRD | Planned Residential Development | "
+    "| RS-40 | Residential, Single-family, 40,000 square-foot | "
+    "| RS-6 | Residential, Single-family, 6,000 square-foot | "
+    "| RM-6000 | Residential, Multi-family 6,000 square-foot | "
+    "| RM-2500 | Residential, Multi-family 2,500 square-foot | "
+    "| RM-HR | Residential, Multi-family, High-Rise | "
+    "| C-G | General Commercial | | M | Manufacturing |"
+)
+
+_ELC_KW = dict(
+    municipality="El Cajon", county="San Diego", state="CA", source_section_id="17.15.010"
+)
+
+
+def test_el_cajon_reads_the_area_from_the_zones_descriptive_name():
+    """The value is spelled out in the zone's NAME, not in a dimensional column."""
+    got = _codes(extract_dimensional_standards_from_prose(_EL_CAJON_TABLE, **_ELC_KW))
+    assert got == {
+        "RS-40": 40000.0,
+        "RS-6": 6000.0,
+        "RM-6000": 6000.0,
+        "RM-2500": 2500.0,
+    }
+
+
+def test_the_numeric_suffix_alone_is_never_used():
+    """RS-6 is 6,000 sqft but RM-2500 is 2,500 — the suffix means different things
+    in the two series. Deriving the value from the code would be wrong by three
+    orders of magnitude for every RS zone, so only the spelled-out figure counts."""
+    got = _codes(extract_dimensional_standards_from_prose(_EL_CAJON_TABLE, **_ELC_KW))
+    assert got["RS-6"] == 6000.0 and got["RM-2500"] == 2500.0
+
+
+def test_rows_without_a_stated_area_are_skipped():
+    """RM-HR (High-Rise) states no figure, and the commercial/open-space rows have
+    none either. None of them may be invented."""
+    got = _codes(extract_dimensional_standards_from_prose(_EL_CAJON_TABLE, **_ELC_KW))
+    for absent in ("RM-HR", "O-S", "PRD", "C-G", "M", "H"):
+        assert absent not in got
+
+
+def test_a_district_with_neither_axis_is_not_emitted():
+    text = "**R-9: Residential 9** is intended to provide for residential units."
+    assert extract_dimensional_standards_from_prose(text, **_ENC_KW) == []
+
+
 def test_rows_carry_provenance_and_default_to_unverified():
     rows = extract_dimensional_standards_from_prose(_RM_BLOCK, **_KW, source_url="http://x")
     r = rows[0]
