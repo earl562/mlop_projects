@@ -141,9 +141,13 @@ uv run ruff check src/ tests/
 uv run mypy src/plotlot/<changed files>
 uv run pytest tests/unit/ -q
 ```
-- **Known-environmental failures — IGNORE:** `test_status_scripts.py` (4 tests,
-  `python` = MS-Store stub) + `test_health.py::test_health_degraded_on_db_failure`.
-  Last green run: **1519 passed, 5 env failures.**
+- **No known-good failures. The suite is fully green:** **2,100 passed, 0 failed**
+  (2026-08-13, ~6 min). Treat *any* red test as real.
+  The former "5 environmental failures — IGNORE" note is **obsolete**:
+  `test_status_scripts.py` (4) was fixed by `9de72f7` (interpreter-portable) and
+  `test_health.py::test_health_degraded_on_db_failure` now passes. A standing
+  ignore-list outlives its cause and trains you to skip real regressions — do not
+  reintroduce one without re-verifying it still fails.
 - Every change ships with tests. Commit to `Phat`, git user Phat Dang, no
   Co-Authored-By. Don't modify git config.
 

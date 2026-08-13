@@ -99,7 +99,12 @@ class TestResolveConfig:
     @pytest.mark.asyncio
     async def test_resolve_non_municode_with_state_raises(self):
         """When live discovery finds nothing (non-Municode codifier, e.g. Sausalito),
-        the error must say so rather than silently doing nothing."""
+        the error must say so rather than silently doing nothing.
+
+        The message must also mark this as a REAL absence. The throttle path below
+        produces the opposite claim, and confusing the two sends an operator hunting
+        for a codifier that does not exist.
+        """
 
         async def empty_cache():
             return {}
@@ -111,8 +116,43 @@ class TestResolveConfig:
                 new=AsyncMock(return_value=None),
             ),
         ):
-            with pytest.raises(ValueError, match="non-Municode codifier"):
+            with pytest.raises(ValueError) as excinfo:
                 await _resolve_config("sausalito", state="CA")
+
+        message = str(excinfo.value)
+        assert "different codifier" in message
+        assert "real absence rather than a throttle" in message
+
+    @pytest.mark.asyncio
+    async def test_resolve_throttled_municode_is_not_reported_as_absent(self):
+        """A rate-limited Municode API must NOT be reported as "not on Municode".
+
+        Municode 429s aggressively and recovers within minutes. Treating a throttle
+        as a definitive absence is the failure that sent earlier sessions building
+        custom adapters for cities already supported (Santee was a ~10-minute
+        eCode360 job misdiagnosed as a multi-day QCode build).
+        """
+
+        async def empty_cache():
+            return {}
+
+        from plotlot.ingestion.discovery import MunicodeAPIUnavailable
+
+        with (
+            patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache),
+            patch(
+                "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+                new=AsyncMock(side_effect=MunicodeAPIUnavailable("HTTP 429")),
+            ),
+        ):
+            with pytest.raises(ValueError) as excinfo:
+                await _resolve_config("sausalito", state="CA")
+
+        message = str(excinfo.value)
+        assert "unavailable" in message
+        assert "NOT evidence" in message
+        # The absence wording from the test above must never appear here.
+        assert "real absence" not in message
 
     @pytest.mark.asyncio
     async def test_resolve_unknown_without_state_hints_state_flag(self):
