@@ -57,8 +57,11 @@ class TestDimensionalStandardStore:
 
     def test_register_then_lookup_round_trip(self):
         custom = DistrictDimensionalStandard(
-            municipality="Testburg", county="Test County", state="FL",
-            district_code="RM-30", max_density_units_per_acre=30.0,
+            municipality="Testburg",
+            county="Test County",
+            state="FL",
+            district_code="RM-30",
+            max_density_units_per_acre=30.0,
         )
         ds_store.register_dimensional_standard_fixture(custom)
         got = ds_store.get_dimensional_standard_from_fixture("Testburg", "RM-30")
@@ -286,3 +289,53 @@ async def test_lookup_queries_parcel_district_code():
     assert "RS-8" in queried_codes
     # And the municipality is the resolved one.
     assert all(call.args[0] == "Fort Lauderdale" for call in mock_get_std.call_args_list)
+
+
+class TestMunicipalityCaseInsensitiveJoin:
+    """The (municipality, district_code) join must not depend on casing.
+
+    Municipality casing is not the pipeline's to control. An address-resolved
+    parcel gets it from the geocoder ("Oceanside"); an APN-resolved parcel gets
+    it from the statewide parcel layer's SITE_CITY ("OCEANSIDE"). A strict
+    compare matched the first and silently missed the second, so a verified
+    standard was present and unreachable, density fell through to the LLM, and
+    the same parcel returned 0 units on one run and 8 on the next.
+
+    The fixture path documented case-insensitive matching all along; only the DB
+    primary was strict, so the fallback was more forgiving than the source.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _fixture_store(self):
+        ds_store.register_dimensional_standard_fixture(
+            DistrictDimensionalStandard(
+                municipality="Oceanside",
+                county="San Diego",
+                state="CA",
+                district_code="RE-B",
+                max_density_units_per_acre=1.0,
+                verification_status=ds_store.VerificationStatus.VERIFIED,
+            )
+        )
+        yield
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "municipality",
+        ["Oceanside", "OCEANSIDE", "oceanside", "  Oceanside  "],
+    )
+    async def test_municipality_casing_does_not_change_the_result(self, municipality):
+        std = await ds_store.get_dimensional_standard(municipality, "RE-B")
+        assert std is not None, f"{municipality!r} failed to join"
+        assert std.max_density_units_per_acre == 1.0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("code", ["RE-B", "re-b"])
+    async def test_district_code_casing_does_not_change_the_result(self, code):
+        std = await ds_store.get_dimensional_standard("Oceanside", code)
+        assert std is not None, f"{code!r} failed to join"
+
+    @pytest.mark.asyncio
+    async def test_a_genuinely_absent_district_still_misses(self):
+        """Loosening the compare must not turn a miss into a false hit."""
+        assert await ds_store.get_dimensional_standard("Oceanside", "R-1-6") is None

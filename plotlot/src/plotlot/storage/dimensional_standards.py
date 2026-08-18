@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from plotlot.domain.dimensional_standard import (
@@ -348,9 +348,18 @@ async def get_dimensional_standard(
     try:
         session = await get_session()
         try:
+            # Case-insensitive on both keys, matching what the fixture path
+            # below already documents and does. The DB path was strict, so the
+            # primary source rejected joins its own fallback would have made.
+            # Municipality casing is not ours to control: it arrives from a
+            # geocoder ("Oceanside") or from a parcel layer's SITE_CITY
+            # ("OCEANSIDE") depending on whether the caller passed an address or
+            # an APN, and the strict compare silently missed the second — the
+            # standard was present, verified, and unreachable, so density fell
+            # back to the LLM and flapped between runs.
             stmt = select(DistrictDimensionalStandardORM).where(
-                DistrictDimensionalStandardORM.municipality == muni,
-                DistrictDimensionalStandardORM.district_code == code,
+                func.lower(DistrictDimensionalStandardORM.municipality) == muni.lower(),
+                func.lower(DistrictDimensionalStandardORM.district_code) == code.lower(),
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is not None:

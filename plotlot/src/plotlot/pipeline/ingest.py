@@ -283,6 +283,41 @@ async def _store_ordinance_sections(session: AsyncSession, chunks: list, config)
     return len(row_dicts)
 
 
+async def _extract_standards_after_ingest(municipality: str, state: str, county: str) -> None:
+    """Derive typed dimensional standards from the chunks just ingested.
+
+    The CLI (`plotlot-ingest`) reaches the database through THIS module, not
+    through `acp_coordinator` — so wiring the extractor only into the coordinator
+    left the primary bulk-ingest path silently unwired, which is the same shape of
+    defect (built, wired in one place, never invoked from the path that matters)
+    that left `district_dimensional_standards` empty for months.
+
+    Best-effort: the chunks are already committed and searchable, so a failure
+    here must not fail the ingest. The city simply keeps using the LLM density
+    path until backfilled, which `check_standards_coverage` reports.
+    """
+    try:
+        from plotlot.ingestion.standards_extraction import backfill_dimensional_standards
+
+        report = await backfill_dimensional_standards(
+            municipality, state=state or "", county=county or ""
+        )
+        if report.districts_found:
+            logger.info("Standards extraction — %s", report.summary())
+        else:
+            logger.warning(
+                "No typed dimensional standards derived for %s — its unit counts "
+                "stay LLM-derived and may vary between runs",
+                municipality,
+            )
+    except Exception as exc:  # noqa: BLE001 — never fail an ingest over this
+        logger.warning(
+            "Standards extraction failed for %s: %s — city stays on the LLM path",
+            municipality,
+            exc,
+        )
+
+
 async def ingest_municipality(key: str, state: str | None = None) -> int:
     """Run the full ingestion pipeline for a single municipality.
 
@@ -444,6 +479,13 @@ async def ingest_municipality(key: str, state: str | None = None) -> int:
                         "municipality": config.municipality,
                     }
                 )
+
+            # Chunks are committed above, so the extractor's own session sees them.
+            await _extract_standards_after_ingest(
+                config.municipality,
+                getattr(config, "state", "") or (state or ""),
+                getattr(config, "county", "") or "",
+            )
             return stored
 
         except Exception:
@@ -544,6 +586,7 @@ async def ingest_san_diego() -> int:
             await session.commit()
             stored += len(row_dicts)
         logger.info("Stored %d chunks for San Diego", stored)
+        await _extract_standards_after_ingest("San Diego", "CA", "San Diego")
         return stored
     except Exception:
         await session.rollback()

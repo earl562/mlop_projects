@@ -91,6 +91,29 @@ class ByRightTrust:
     def verification(self) -> str:
         return "provisional" if self.is_provisional else "verified"
 
+    @property
+    def review_status(self) -> str:
+        """Routing verdict for anything consuming this result downstream.
+
+        The same verdict, expressed as the action it implies rather than the
+        confidence it carries — an integration writing back to a customer's deal
+        record needs to know whether a human must look at this, and the answer
+        must come from the one place that already computes trust.
+
+        Three states, matching the derived-output contract in DESIGN.md §5:
+
+        * ``blocked`` — no zoning district was determined, so every dimensional
+          standard behind the count was retrieved without a confirmed district.
+          The dependent numeric result is *abstained*, not merely soft; there is
+          no question a reviewer could resolve from this report alone.
+        * ``needs_review`` — a district exists but an input is unfirm (estimated
+          lot, constrained slope, unverified rule). A reviewer can resolve it.
+        * ``ready`` — every gating input is confirmed.
+        """
+        if not self.zoning_determined:
+            return "blocked"
+        return "needs_review" if self.is_provisional else "ready"
+
 
 def assess_by_right_trust(report: ZoningReport) -> ByRightTrust:
     """Derive the composite trust verdict for ``report``'s by-right count.

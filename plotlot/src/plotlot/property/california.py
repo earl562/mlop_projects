@@ -811,6 +811,23 @@ class CaliforniaProvider(PropertyProvider):
             if owner_name and not record.owner:
                 record.owner = owner_name
 
+        # Zoning, exactly as the address path resolves it. Without this the APN
+        # path returned a parcel with no district at all — for every city,
+        # including the one whose citywide layer is configured — so an
+        # APN-identified parcel silently fell back to LLM-extracted density and
+        # its unit count flapped between runs. The docstring's promise that
+        # "zoning still works" was only ever true of the geometry it returns.
+        zoning_url = (config or {}).get("zoning_url")
+        if not record.zoning_code and zoning_url and record.lat and record.lng:
+            code, desc = await self._spatial_zoning(
+                zoning_url + "/query", record.lat, record.lng, config or {}
+            )
+            if code:
+                record.zoning_code = code
+                record.zoning_description = desc
+
+        await self._enrich_san_diego_city_zoning(record, county, record.lat, record.lng)
+
         return record
 
     async def _statewide_parcel(

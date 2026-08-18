@@ -14,7 +14,9 @@ from plotlot.core.types import (
     PropertyRecord,
     ZoningReport,
 )
-from plotlot.pipeline.trust import assess_by_right_trust
+import pytest
+
+from plotlot.pipeline.trust import ByRightTrust, assess_by_right_trust
 from plotlot.property.terrain import TerrainAnalysis
 
 
@@ -155,3 +157,48 @@ def test_chat_payload_and_sse_route_reach_the_same_verdict():
     route_verdict = assess_by_right_trust(report).verification
 
     assert payload_verdict == route_verdict == "provisional"
+
+
+class TestReviewStatus:
+    """`review_status` is the routing form of the trust verdict.
+
+    It must never disagree with `is_provisional` — they are one decision, and a
+    downstream system routing on one while the UI shows the other is the exact
+    split this module was created to remove.
+    """
+
+    def test_ready_only_when_nothing_is_provisional(self):
+        trust = ByRightTrust(zoning_determined=True)
+        assert trust.is_provisional is False
+        assert trust.review_status == "ready"
+
+    def test_undetermined_district_blocks_rather_than_reviews(self):
+        """No district means no reviewer could resolve it from this report."""
+        trust = ByRightTrust(zoning_determined=False)
+        assert trust.review_status == "blocked"
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"lot_estimated": True},
+            {"slope_constrained": True, "slope_measured": True},
+            {"extraction_provisional": True},
+        ],
+    )
+    def test_resolvable_doubt_needs_review(self, kwargs):
+        trust = ByRightTrust(zoning_determined=True, **kwargs)
+        assert trust.is_provisional is True
+        assert trust.review_status == "needs_review"
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"zoning_determined": True},
+            {"zoning_determined": True, "lot_estimated": True},
+            {"zoning_determined": False},
+            {"zoning_determined": False, "extraction_provisional": True},
+        ],
+    )
+    def test_never_reports_ready_while_provisional(self, kwargs):
+        trust = ByRightTrust(**kwargs)
+        assert (trust.review_status == "ready") is (not trust.is_provisional)

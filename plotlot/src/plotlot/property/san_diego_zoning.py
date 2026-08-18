@@ -75,6 +75,23 @@ _SD_CITY_ZONING: dict[str, CityZoning] = {
         verified_at="APN 2255935000 (33.145686, -117.049988)",
         verified_code="R-1-6",
     ),
+    "oceanside": CityZoning(
+        # Layer 11 is ZONING (the base districts). Not layer 12 — that is
+        # "Preserve Planning Zones"; the coastal boundary is layer 2.
+        url=(
+            "https://gis.oceansideca.org/gis/rest/services/WebService/Planning_Hub/FeatureServer/11"
+        ),
+        # `Zone_Code` is the bare district. `Zone_Code_Print` is the same code
+        # with its overlay appended (RS -> "RS-SP", RE-B -> "RE-B-EQ") and would
+        # miss the standards join on every overlaid parcel — which is most of
+        # them. Read the bare field; overlays live in Overlay1/Overlay2.
+        zone_field="Zone_Code",
+        # Verified 2026-08-13 through the production spatial_query helper on
+        # RS / RM-A / RE-B / RH polygons, 4/4 exact. All 8 stored Oceanside
+        # districts appear verbatim; they cover 12,514 of 32,002 zoned acres.
+        verified_at="RE-B polygon, Zone_Code_Print='RE-B-EQ'",
+        verified_code="RE-B",
+    ),
 }
 
 

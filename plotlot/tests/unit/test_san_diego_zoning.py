@@ -129,6 +129,33 @@ class TestResolveSanDiegoZone:
         assert code is None
 
 
+class TestPerCityZoneField:
+    @pytest.mark.asyncio
+    async def test_oceanside_reads_the_bare_code_not_the_overlaid_one(self):
+        """Oceanside publishes both `Zone_Code` ("RE-B") and `Zone_Code_Print`
+        ("RE-B-EQ"). Reading the printed form would miss the standards join on
+        every overlaid parcel."""
+        feature = [{"attributes": {"Zone_Code": "RE-B", "Zone_Code_Print": "RE-B-EQ"}}]
+        with patch(
+            "plotlot.property.arcgis_utils.spatial_query",
+            new=AsyncMock(return_value=feature),
+        ):
+            code, _ = await resolve_san_diego_zone("Oceanside", 33.2, -117.35)
+        assert code == "RE-B"
+
+    @pytest.mark.asyncio
+    async def test_each_city_reads_its_own_configured_field(self):
+        """Escondido's field is ZONING, Oceanside's is Zone_Code. A feature
+        carrying only the other city's field must not resolve."""
+        wrong_field = [{"attributes": {"ZONING": "R-1-6"}}]
+        with patch(
+            "plotlot.property.arcgis_utils.spatial_query",
+            new=AsyncMock(return_value=wrong_field),
+        ):
+            code, _ = await resolve_san_diego_zone("Oceanside", 33.2, -117.35)
+        assert code is None
+
+
 class TestRegistryIntegrity:
     def test_every_entry_records_its_verification(self):
         """An entry that cannot say what it was proven against must not ship."""

@@ -1,12 +1,17 @@
 # Per-city zoning registry — task list and verification recipe
 
-Written 2026-08-12. Pick this up cold; everything needed is here.
+Written 2026-08-12. Updated 2026-08-13. Pick this up cold; everything needed is here.
+
+> **Status 2026-08-13: 3 of 7 cities deterministic** — San Diego, **Escondido**,
+> **Oceanside**. Four remain (Encinitas, El Cajon, Chula Vista, Poway). The two
+> completed sections below carry corrections to this document's own assumptions;
+> read them before starting city #4.
 
 ## Why this exists
 
-`max_units` is now deterministic **for the City of San Diego only** — 7 units on
-1233 Hueneme, `origin=local_authority`, 5/5 identical runs. Every other city still
-re-derives density from an LLM on every run and can flip between answers.
+`max_units` was deterministic **for the City of San Diego only** — 7 units on
+1233 Hueneme, `origin=local_authority`, 5/5 identical runs. Every other city
+re-derived density from an LLM on every run and could flip between answers.
 
 The reason is a broken join, not missing data. A dimensional standard is keyed on
 **(municipality, district_code)**, and only San Diego parcels come back with a
@@ -118,8 +123,11 @@ fallback nudge is needed.
 
 **Overlay layers answer first.** See step 2.
 
-**Returned codes are not ordinance district codes.** Escondido's layer returns
-`S-P` (Specific Plan) while its stored districts are `R-1-6`…`R-1-25`. The seam for
+**Returned codes are not ordinance district codes.** *(Overstated — see Escondido
+below: measured across the whole layer, 29.1% of its polygons match a stored
+district verbatim and no crosswalk was needed. Establish the code domain before
+concluding this.)* Escondido's layer returns `S-P` (Specific Plan) at a civic
+address while its stored districts are `R-1-6`…`R-1-25`. The seam for
 this already exists — `retrieval/zoning_crosswalk.py` / `crosswalk_zoning_code`,
 already called in `lookup.py` before the GIS code. Each city's mapping needs
 verifying, and codes with no ordinance equivalent (Specific Plan, PD, overlays)
@@ -167,11 +175,59 @@ polygons), `A/B` composites (split-zoned — `R-1-10/RE-20`, 142 polygons), and
 `RE-20` (2,989), `R-2-12` (2,750) and `R-3-18` (1,924) are real districts with
 **no stored standard**. They now resolve a district and correctly miss the join.
 
-### 2. Oceanside — service found, wrong layer
-- **Service** `https://gis.oceansideca.org/gis/rest/services/WebService/Planning_Hub/FeatureServer`
-- Layer 12 is `ZONE='Coastal'` (overlay). Enumerate and find the base district layer.
+### 2. Oceanside — ✅ DONE 2026-08-13
+- **Layer 11** `.../WebService/Planning_Hub/FeatureServer/11` (`ZONING`).
+  Layer 12 is *Preserve Planning Zones*, not the coastal overlay this plan
+  assumed; the coastal boundary is layer 2.
+- **Field `Zone_Code`, NOT `Zone_Code_Print`.** Both exist. The printed form
+  appends the overlay (`RS` → `RS-SP`, `RE-B` → `RE-B-EQ`) and would miss the
+  standards join on every overlaid parcel — which is most of them. Overlays are
+  separately available in `Overlay1`/`Overlay2`. No `/CZ` variants appear in the
+  bare field, so the coastal concern below was unfounded.
+- All 8 stored districts appear verbatim. They cover **12,514 of 32,002 zoned
+  acres (39.1%)**. Note this layer is dissolved zone polygons (607 of them), not
+  parcels — so acres, not polygon count, is the honest coverage metric here.
 - Stored: `RE-A 0.5 · RE-B 1 · RS 3.6 · RM-A 6 · RM-B 10 · RM-C 15.1 · RH 21 · RH-U 29` (du/acre)
-- Watch for the density-suffixed map forms (`RE-A`, `RM-B`, `RH-U`) and `/CZ` coastal variants.
+- **Verified deterministic on the APN path** (`1461216100`): 5/5 cache-cleared
+  runs, `origin=local_authority`, `zone=RE-B`. Getting there required the two
+  fixes below, neither of which had anything to do with Oceanside.
+- **Open question, not a bug:** that parcel returns `max_units=0` — 8,980 sqft is
+  0.206 acres, and 0.206 x 1 du/acre floors to 0. Arithmetically right for the
+  density rule. Whether Oceanside grants one dwelling right on a legally-created
+  substandard lot is a *separate ordinance provision we have not extracted*. Do
+  not "fix" this by rounding up; extract the nonconforming-lot rule.
+- **This layer also publishes dimensional standards directly** (`Height`,
+  `Front_Setb`, `Min_Lot_Si`, `Density`, `Lot_Covera`…). Tempting as a second
+  source, but it is GIS-published rather than ordinance text, and the values are
+  dirty (`Min_Lot_Si` reads `"10, 000 sq. ft."`). It would be assumption-grade —
+  `STAGED` at best, never `VERIFIED` — so it is deliberately not used.
+
+### Two bugs found while wiring Oceanside — both city-agnostic
+
+Neither is an Oceanside problem. Both were blocking *every* city; Escondido only
+escaped them by accident of how it was tested.
+
+**1. The APN path resolved no zoning at all.** `lookup_by_apn` returned the parcel
+straight after the assessor lot override — no step-2 spatial query, no city
+fallback — so an APN-identified parcel had an empty district for every city,
+including the City of San Diego whose citywide layer is configured. Its docstring
+claimed "so slope and zoning still work"; only the geometry did. Escondido passed
+because it was verified with an *address*, which takes the other branch. Both
+paths now share one zoning resolution.
+
+**2. The standards join was case-sensitive.** `get_dimensional_standard` compared
+`municipality` exactly. Casing is not ours to control: an address-resolved parcel
+gets `"Oceanside"` from the geocoder, an APN-resolved one gets `"OCEANSIDE"` from
+the parcel layer's `SITE_CITY`. The second silently missed — **the standard was
+present, verified, and unreachable** — so density fell back to the LLM and the
+same parcel returned 0 units on one run and 8 on the next. The fixture fallback
+had documented case-insensitive matching all along, so the primary source was
+stricter than its own fallback. Both keys are now compared lowered.
+
+**The lesson for city #3 onward: verify through both an address and an APN.**
+They take different code paths and read municipality from different fields. A
+city that passes one can fail the other — which is exactly what Escondido's
+"5/5 deterministic" hid.
 
 ### 3. Encinitas — not yet found
 - Stored: `RR-1 1 · RR-2 2 · R-3 3 · R-5 5 · R-8 8 · RS-11 11 · R-15 15 · R-20 20 · R-25 25 · R-30 30` (du/acre)

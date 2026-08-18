@@ -223,6 +223,10 @@ def _format_grounded_analysis(report) -> dict:
             "governing_constraint": density.governing_constraint,
             "confidence": density.confidence,
             "verification": trust.verification,
+            # ready | needs_review | blocked — the routing form of the same
+            # verdict, for callers that must decide whether a human looks at this
+            # before it reaches a deal record.
+            "review_status": trust.review_status,
             "offer_is_provisional": provisional,
             "lot_size_confirmed": trust.lot_confirmed,
             "zoning_confirmed": trust.zoning_confirmed,

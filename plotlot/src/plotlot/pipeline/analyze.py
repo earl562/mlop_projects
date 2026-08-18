@@ -25,6 +25,21 @@ from plotlot.pipeline.proforma import calculate_land_pro_forma
 logger = logging.getLogger(__name__)
 
 
+async def _measure_terrain(report: ZoningReport) -> None:
+    """Sample the parcel's slope from USGS 3DEP.
+
+    Shared by the deep-analysis augmentation pass and the no-unit-count early
+    return, because slope is a property of the ground and does not depend on how
+    many units the zoning allows.
+    """
+    record = report.property_record
+    if not (record and record.parcel_geometry):
+        return
+    from plotlot.property.terrain import analyze_terrain
+
+    report.terrain = await asyncio.wait_for(analyze_terrain(record.parcel_geometry), timeout=15)
+
+
 async def analyze_property_full(address: str, *, with_comps: bool = False) -> ZoningReport | None:
     """Analyze an address and attach a residual pro forma for ranking.
 
@@ -111,6 +126,17 @@ async def analyze_property_deep(
     if density is None or density.max_units <= 0:
         # No residential unit count to build a deal on — still return the report
         # (zoning + verification) so the agent can answer truthfully about why.
+        #
+        # Slope is measured first, because it does not depend on the unit count
+        # and this branch is exactly where zoning failed. Returning here without
+        # it meant the parcels most in need of a slope read — the large and
+        # commercial ones — were the only parcels that never got one, and came
+        # back "not measured" (Carlsbad 17.8 ac, El Cajon 3.7 ac, Escondido
+        # 1.3 ac all did).
+        try:
+            await _measure_terrain(report)
+        except Exception as exc:  # noqa: BLE001 — best-effort augmentation
+            logger.warning("Terrain measurement failed for %s: %s", address[:60], exc)
         return report
 
     state = report.state or "FL"
@@ -148,13 +174,7 @@ async def analyze_property_deep(
             )
 
     async def _aug_terrain() -> None:
-        record = report.property_record
-        if record and record.parcel_geometry:
-            from plotlot.property.terrain import analyze_terrain
-
-            report.terrain = await asyncio.wait_for(
-                analyze_terrain(record.parcel_geometry), timeout=15
-            )
+        await _measure_terrain(report)
 
     async def _aug_permits() -> None:
         if apn and county:
