@@ -61,6 +61,10 @@ apps/plotlot/frontend/playwright-chat-before.png
 apps/plotlot/frontend/playwright-chat-after.png
 apps/plotlot/frontend/IMAGE_TO_CODE_WORKFLOW.md
 
+# Agent/browser evidence and generated design renders
+.omo/evidence/
+plotlot/artifacts/design/**/reference-*.png
+
 # Frontend design/reference assets (not required to run PlotLot)
 apps/plotlot/frontend/public/plotlot-assets/
 apps/plotlot/frontend/public/plotlot-comps/
