@@ -51,10 +51,7 @@ def protected_route_matrix(app: FastAPI) -> RouteMatrix:
         for method in route.methods
         if method not in {HTTPMethod.HEAD, HTTPMethod.OPTIONS}
     }
-    policies = {
-        route: capability_for_route(method=route[0], path=route[1])
-        for route in api_routes
-    }
+    policies = {route: capability_for_route(method=route[0], path=route[1]) for route in api_routes}
     return RouteMatrix(
         covered_routes=frozenset(policies),
         missing_routes=frozenset(api_routes.difference(policies)),

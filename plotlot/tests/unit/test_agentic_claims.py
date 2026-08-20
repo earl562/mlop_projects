@@ -28,7 +28,11 @@ import pytest
 
 from plotlot.core.types import CoastalHeightOverlay, PropertyRecord
 from plotlot.domain.claims import Claim, ClaimKind, ClaimOrigin, SourceBoundaryViolation
-from plotlot.pipeline.lookup import _build_fallback_report, _extract_claims_from_report, lookup_address
+from plotlot.pipeline.lookup import (
+    _build_fallback_report,
+    _extract_claims_from_report,
+    lookup_address,
+)
 from plotlot.storage import dimensional_standards as ds_store
 
 
@@ -178,13 +182,21 @@ class TestAgenticAnalysisEmitsClaims:
         ds_store._ensure_seeded()
 
         with ExitStack() as stack:
-            stack.enter_context(patch("plotlot.pipeline.lookup.geocode_address", return_value=_ftl_geo()))
-            stack.enter_context(patch("plotlot.pipeline.lookup.lookup_property", return_value=_ftl_prop()))
+            stack.enter_context(
+                patch("plotlot.pipeline.lookup.geocode_address", return_value=_ftl_geo())
+            )
+            stack.enter_context(
+                patch("plotlot.pipeline.lookup.lookup_property", return_value=_ftl_prop())
+            )
             stack.enter_context(
                 patch("plotlot.pipeline.lookup.hybrid_search", return_value=[_FakeOrdResult()])
             )
-            stack.enter_context(patch("plotlot.pipeline.lookup.get_session", return_value=AsyncMock()))
-            stack.enter_context(patch("plotlot.retrieval.llm.call_llm", side_effect=_submit_report_llm()))
+            stack.enter_context(
+                patch("plotlot.pipeline.lookup.get_session", return_value=AsyncMock())
+            )
+            stack.enter_context(
+                patch("plotlot.retrieval.llm.call_llm", side_effect=_submit_report_llm())
+            )
             stack.enter_context(
                 patch(
                     "plotlot.pipeline.coastal_overlay.fetch_coastal_height_overlay",
@@ -196,9 +208,7 @@ class TestAgenticAnalysisEmitsClaims:
 
         assert report is not None
         assert report.claims, "_agentic_analysis must emit claims (criterion 1)"
-        district_claims = [
-            c for c in report.claims if c.field_key == "zoning.district"
-        ]
+        district_claims = [c for c in report.claims if c.field_key == "zoning.district"]
         assert district_claims, "a zoning.district claim must be emitted (criterion 5)"
         assert all(c.origin is ClaimOrigin.LOCAL_AUTHORITY for c in district_claims)
         assert all(c.kind is ClaimKind.VERIFIED_FACT for c in district_claims)

@@ -173,9 +173,7 @@ async def build_storage_runtime(
 async def _active_bucket(session_provider: SessionProvider, configured_bucket: str) -> str:
     session = await session_provider()
     async with session:
-        bucket = await session.scalar(
-            text("SELECT bucket FROM plotlot.active_storage_generation")
-        )
+        bucket = await session.scalar(text("SELECT bucket FROM plotlot.active_storage_generation"))
     return bucket if isinstance(bucket, str) and bucket else configured_bucket
 
 

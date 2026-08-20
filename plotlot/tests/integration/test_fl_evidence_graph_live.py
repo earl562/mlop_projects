@@ -36,7 +36,9 @@ async def test_fl_residential_districts_have_typed_standards():
     """Criterion 1: every FL residential district (RS-8, RS-4.4, RM-15) has a
     DistrictDimensionalStandard in the live DB with verified values."""
     for district_code, expected_density in [("RS-8", 8.0), ("RS-4.4", 4.4), ("RM-15", 15.0)]:
-        got = await get_dimensional_standard("Fort Lauderdale", district_code, allow_fixture_fallback=False)
+        got = await get_dimensional_standard(
+            "Fort Lauderdale", district_code, allow_fixture_fallback=False
+        )
         assert got is not None, f"FL/{district_code}: no typed standard in live DB"
         assert got.max_density_units_per_acre == pytest.approx(expected_density)
         # Provenance: verified against the ingested ordinance corpus.
@@ -70,7 +72,8 @@ async def test_fl_sections_have_path_and_cross_refs():
 
     session = await get_session()
     try:
-        result = await session.execute(text("""
+        result = await session.execute(
+            text("""
             SELECT count(*) AS total,
                    count(path) AS with_path,
                    count(cross_refs) AS with_xrefs,
@@ -78,13 +81,14 @@ async def test_fl_sections_have_path_and_cross_refs():
                    count(*) FILTER (WHERE array_length(cross_refs,1) > 0) AS with_nonempty_xrefs
             FROM ordinance_sections
             WHERE municipality = 'Fort Lauderdale'
-        """))
+        """)
+        )
         row = result.one()
         total, with_path, with_xrefs, with_type, with_nonempty = row
         assert total > 0, "FL has no sections in ordinance_sections (run backfill)"
-        assert with_path == total, f"FL: {total-with_path} sections missing path"
-        assert with_xrefs == total, f"FL: {total-with_xrefs} sections missing cross_refs"
-        assert with_type == total, f"FL: {total-with_type} sections missing section_type"
+        assert with_path == total, f"FL: {total - with_path} sections missing path"
+        assert with_xrefs == total, f"FL: {total - with_xrefs} sections missing cross_refs"
+        assert with_type == total, f"FL: {total - with_type} sections missing section_type"
         # At least the dimensional tables must have cross_refs (district codes).
         assert with_nonempty > 0, "FL: no section has non-empty cross_refs"
     finally:
@@ -100,13 +104,15 @@ async def test_fl_dimensional_tables_section_type_classified():
 
     session = await get_session()
     try:
-        result = await session.execute(text("""
+        result = await session.execute(
+            text("""
             SELECT section_number, section_type
             FROM ordinance_sections
             WHERE municipality = 'Fort Lauderdale'
               AND section_number IN ('Sec. 47-5.30.', 'Sec. 47-5.31.', 'Sec. 47-5.34.')
             ORDER BY section_number
-        """))
+        """)
+        )
         rows = result.all()
         assert len(rows) == 3, f"expected 3 FL residential dimensional sections, got {len(rows)}"
         for sec_num, sec_type in rows:

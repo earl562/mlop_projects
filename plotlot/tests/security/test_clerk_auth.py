@@ -90,7 +90,9 @@ def test_production_settings_fail_when_identity_configuration_is_incomplete(miss
         "clerk_authorized_parties": [AUTHORIZED_PARTY],
         "service_principal_signing_key": "s" * 32,
     }
-    values[missing] = False if missing == "auth_enabled" else ([] if missing.endswith("parties") else "")
+    values[missing] = (
+        False if missing == "auth_enabled" else ([] if missing.endswith("parties") else "")
+    )
 
     with pytest.raises(ValidationError, match="production identity configuration"):
         Settings(_env_file=None, **values)
@@ -156,7 +158,11 @@ def test_clerk_verifier_rejects_invalid_claims(
     now = datetime.now(UTC)
     key, jwk = _key_pair("key-1")
     token = _token(key, "key-1", now=now, claims=claim_override)
-    revoked = frozenset({"token-revoked"}) if claim_override.get("jti") == "token-revoked" else frozenset()
+    revoked = (
+        frozenset({"token-revoked"})
+        if claim_override.get("jti") == "token-revoked"
+        else frozenset()
+    )
 
     with pytest.raises(jwt.InvalidTokenError, match=expected_error):
         _verifier(lambda _: {"keys": [jwk]}, revoked_token_ids=revoked).verify(token)

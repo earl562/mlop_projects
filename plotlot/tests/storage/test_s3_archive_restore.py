@@ -212,10 +212,7 @@ async def test_hard_kill_restore_windows_never_expose_non_promoted_generation(
         for record in recovery_records
         if record["stage_bucket"] == recovery_attempt["stage_bucket"]
     )
-    assert (
-        recovery_record["state"] == "OBJECTS_RESTORED"
-        and recovery_record["stage_database"]
-    )
+    assert recovery_record["state"] == "OBJECTS_RESTORED" and recovery_record["stage_database"]
     administration = await asyncpg.connect(
         "postgresql://storage_admin:storage_test_password@127.0.0.1:55432/postgres"
     )
@@ -236,9 +233,7 @@ async def test_hard_kill_restore_windows_never_expose_non_promoted_generation(
     async def pre_rename_session():
         return pre_rename_sessions()
 
-    assert (
-        await _active_bucket(pre_rename_session, destination_bucket) == destination_bucket
-    )
+    assert await _active_bucket(pre_rename_session, destination_bucket) == destination_bucket
     await pre_rename_engine.dispose()
     restore = subprocess.run(
         [

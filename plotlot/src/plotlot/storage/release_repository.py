@@ -19,24 +19,28 @@ class PostgresReleaseRepository:
         session = await get_session()
         try:
             row = (
-                await session.execute(
-                    text(
-                        """SELECT tenant_id, analysis_id, revision_id,
+                (
+                    await session.execute(
+                        text(
+                            """SELECT tenant_id, analysis_id, revision_id,
                         revision_sha256, is_clean
                         FROM plotlot.analysis_revision_heads
                         WHERE tenant_id=:tenant_id
                           AND analysis_id=:analysis_id
                           AND revision_id=:revision_id
                           AND revision_sha256=:revision_sha256"""
-                    ),
-                    {
-                        "tenant_id": coordinate.tenant_id,
-                        "analysis_id": coordinate.analysis_id,
-                        "revision_id": coordinate.revision_id,
-                        "revision_sha256": coordinate.revision_sha256,
-                    },
+                        ),
+                        {
+                            "tenant_id": coordinate.tenant_id,
+                            "analysis_id": coordinate.analysis_id,
+                            "revision_id": coordinate.revision_id,
+                            "revision_sha256": coordinate.revision_sha256,
+                        },
+                    )
                 )
-            ).mappings().one_or_none()
+                .mappings()
+                .one_or_none()
+            )
             if row is None:
                 return None
             return ReleaseRevision(
@@ -83,16 +87,20 @@ class PostgresReleaseRepository:
         session = await get_session()
         try:
             row = (
-                await session.execute(
-                    text(
-                        """SELECT tenant_id, request_id, analysis_id, revision_id,
+                (
+                    await session.execute(
+                        text(
+                            """SELECT tenant_id, request_id, analysis_id, revision_id,
                         revision_sha256, requested_by, reviewed_by, status
                         FROM plotlot.external_release_requests
                         WHERE request_id=:request_id"""
-                    ),
-                    {"request_id": request_id},
+                        ),
+                        {"request_id": request_id},
+                    )
                 )
-            ).mappings().one_or_none()
+                .mappings()
+                .one_or_none()
+            )
             return self._release_request(row) if row is not None else None
         finally:
             await session.close()
@@ -105,9 +113,10 @@ class PostgresReleaseRepository:
         session = await get_session()
         try:
             row = (
-                await session.execute(
-                    text(
-                        """UPDATE plotlot.external_release_requests AS release
+                (
+                    await session.execute(
+                        text(
+                            """UPDATE plotlot.external_release_requests AS release
                         SET status='released',
                             reviewed_by=:reviewed_by
                         WHERE release.request_id=:request_id
@@ -124,13 +133,16 @@ class PostgresReleaseRepository:
                           )
                         RETURNING tenant_id, request_id, analysis_id, revision_id,
                                   revision_sha256, requested_by, reviewed_by, status"""
-                    ),
-                    {
-                        "request_id": request_id,
-                        "reviewed_by": reviewer_user_id,
-                    },
+                        ),
+                        {
+                            "request_id": request_id,
+                            "reviewed_by": reviewer_user_id,
+                        },
+                    )
                 )
-            ).mappings().one_or_none()
+                .mappings()
+                .one_or_none()
+            )
             if row is None:
                 await session.rollback()
                 raise ReleaseConflictError(request_id)

@@ -69,9 +69,7 @@ def test_composite_version_map_rejects_ambiguous_duplicate_identity(tmp_path: Pa
         "source_version_id": "shared",
         "destination_version_id": "destination",
     }
-    path.write_text(
-        json.dumps({"schema": "PlotLotVersionMapV2", "versions": [entry, entry]})
-    )
+    path.write_text(json.dumps({"schema": "PlotLotVersionMapV2", "versions": [entry, entry]}))
 
     with pytest.raises(RuntimeError, match="duplicate restore version identity"):
         _load_version_map(path)
@@ -356,9 +354,7 @@ async def test_non_promoted_attempt_cannot_bind_generation_or_activate_bucket(
         await connection.execute("SET session_replication_role=origin")
     finally:
         await connection.close()
-    engine = create_async_engine(
-        database_url.replace("postgresql://", "postgresql+asyncpg://")
-    )
+    engine = create_async_engine(database_url.replace("postgresql://", "postgresql+asyncpg://"))
     sessions = async_sessionmaker(engine, expire_on_commit=False)
 
     async def session_provider():

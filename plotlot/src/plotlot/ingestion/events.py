@@ -16,6 +16,7 @@ from typing import Any
 
 class IngestionEventType(str, Enum):
     """Master spec §2 ingestion events."""
+
     SOURCE_AUTHORITY_DISCOVERED = "source_authority_discovered"
     SOURCE_AUTHORITY_VERIFIED = "source_authority_verified"
     SOURCE_AUTHORITY_REJECTED = "source_authority_rejected"
@@ -44,6 +45,7 @@ class IngestionEventType(str, Enum):
 
 class HarnessEventType(str, Enum):
     """Master spec §3 harness analysis events."""
+
     RUN_REQUESTED = "run_requested"
     RUN_STARTED = "run_started"
     CONTEXT_BUILT = "context_built"
@@ -73,7 +75,13 @@ _REQUIRED_PAYLOAD: dict[str, set[str]] = {
     "source_authority_verified": {"authority_id", "verification_result", "checked_fields"},
     "source_authority_rejected": {"authority_id", "reason"},
     "source_fetch_started": {"authority_id", "source_url"},
-    "source_fetch_completed": {"authority_id", "snapshot_id", "http_status", "content_hash", "bytes"},
+    "source_fetch_completed": {
+        "authority_id",
+        "snapshot_id",
+        "http_status",
+        "content_hash",
+        "bytes",
+    },
     "source_fetch_failed": {"authority_id", "source_url", "error", "stage"},
     "raw_snapshot_stored": {"snapshot_id", "content_hash", "raw_storage_url"},
     "source_unchanged": {"authority_id", "snapshot_id", "content_hash"},
@@ -91,7 +99,13 @@ _REQUIRED_PAYLOAD: dict[str, set[str]] = {
     "freshness_checked": {"authority_id", "last_checked_at", "source_version", "stale"},
     "gold_query_passed": {"authority_id", "query_id", "hit"},
     "gold_query_failed": {"authority_id", "query_id", "miss_reason"},
-    "ingestion_run_completed": {"ingestion_run_id", "authority_id", "chunks", "sections", "duration_ms"},
+    "ingestion_run_completed": {
+        "ingestion_run_id",
+        "authority_id",
+        "chunks",
+        "sections",
+        "duration_ms",
+    },
     "ingestion_run_failed": {"ingestion_run_id", "authority_id", "error", "stage"},
     "run_requested": {"analysis_run_id", "skill_name", "site_id", "intended_use"},
     "run_started": {"analysis_run_id", "model"},
@@ -122,7 +136,9 @@ def _resolve_type(type_value: IngestionEventType | HarnessEventType | str) -> st
     if isinstance(type_value, (IngestionEventType, HarnessEventType)):
         return str(type_value.value)
     if isinstance(type_value, str):
-        if type_value in {t.value for t in IngestionEventType} or type_value in {t.value for t in HarnessEventType}:
+        if type_value in {t.value for t in IngestionEventType} or type_value in {
+            t.value for t in HarnessEventType
+        }:
             return type_value
         raise ValueError(f"Unknown event type: {type_value!r}")
     raise ValueError(f"Event type must be an enum or string, got {type(type_value).__name__}")
@@ -183,5 +199,7 @@ class HarnessEvent:
 
 
 __all__ = [
-    "HarnessEvent", "HarnessEventType", "IngestionEventType",
+    "HarnessEvent",
+    "HarnessEventType",
+    "IngestionEventType",
 ]

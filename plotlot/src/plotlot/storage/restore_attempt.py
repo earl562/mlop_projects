@@ -175,9 +175,7 @@ def main() -> None:
     elif arguments.command == "clean":
         asyncio.run(clean_ready(UUID(arguments.attempt)))
     else:
-        state = (
-            "RECOVERY_REQUIRED" if arguments.command == "failed" else "OBJECTS_RESTORED"
-        )
+        state = "RECOVERY_REQUIRED" if arguments.command == "failed" else "OBJECTS_RESTORED"
         asyncio.run(set_state(UUID(arguments.attempt), state, arguments.error))
 
 

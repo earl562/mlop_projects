@@ -46,8 +46,10 @@ def main() -> None:
     arguments = parser.parse_args()
     source = arguments.source.read_bytes()
     passphrase = os.environ["STORAGE_BACKUP_PASSPHRASE"]
-    result = encrypt(source, passphrase) if arguments.command == "encrypt" else decrypt(
-        source, passphrase
+    result = (
+        encrypt(source, passphrase)
+        if arguments.command == "encrypt"
+        else decrypt(source, passphrase)
     )
     arguments.destination.write_bytes(result)
 

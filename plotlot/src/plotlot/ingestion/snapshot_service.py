@@ -44,9 +44,14 @@ async def fetch_and_snapshot(
         return SnapshotResult(
             snapshot=None,
             event=HarnessEvent(
-                type=IngestionEventType.SOURCE_FETCH_FAILED, severity="error",
-                payload={"authority_id": source_authority_id, "source_url": source_url,
-                         "error": f"{type(exc).__name__}: {exc}", "stage": "fetch"},
+                type=IngestionEventType.SOURCE_FETCH_FAILED,
+                severity="error",
+                payload={
+                    "authority_id": source_authority_id,
+                    "source_url": source_url,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "stage": "fetch",
+                },
             ),
             changed=False,
         )
@@ -55,16 +60,23 @@ async def fetch_and_snapshot(
         return SnapshotResult(
             snapshot=None,
             event=HarnessEvent(
-                type=IngestionEventType.SOURCE_FETCH_FAILED, severity="error",
-                payload={"authority_id": source_authority_id, "source_url": source_url,
-                         "error": f"http_status={http_status}", "stage": "fetch"},
+                type=IngestionEventType.SOURCE_FETCH_FAILED,
+                severity="error",
+                payload={
+                    "authority_id": source_authority_id,
+                    "source_url": source_url,
+                    "error": f"http_status={http_status}",
+                    "stage": "fetch",
+                },
             ),
             changed=False,
         )
 
     snapshot = OrdinanceSourceSnapshot(
-        source_authority_id=source_authority_id, source_url=source_url,
-        content=content, http_status=http_status,
+        source_authority_id=source_authority_id,
+        source_url=source_url,
+        content=content,
+        http_status=http_status,
     )
 
     # Change detection (master spec §6: source_unchanged / source_diff_detected).
@@ -72,9 +84,13 @@ async def fetch_and_snapshot(
         return SnapshotResult(
             snapshot=prior_snapshot,  # reuse — idempotent
             event=HarnessEvent(
-                type=IngestionEventType.SOURCE_UNCHANGED, severity="info",
-                payload={"authority_id": source_authority_id, "snapshot_id": prior_snapshot.content_hash[:16],
-                         "content_hash": prior_snapshot.content_hash},
+                type=IngestionEventType.SOURCE_UNCHANGED,
+                severity="info",
+                payload={
+                    "authority_id": source_authority_id,
+                    "snapshot_id": prior_snapshot.content_hash[:16],
+                    "content_hash": prior_snapshot.content_hash,
+                },
             ),
             changed=False,
         )
@@ -83,9 +99,14 @@ async def fetch_and_snapshot(
         return SnapshotResult(
             snapshot=snapshot,
             event=HarnessEvent(
-                type=IngestionEventType.SOURCE_DIFF_DETECTED, severity="warning",
-                payload={"authority_id": source_authority_id, "old_hash": prior_snapshot.content_hash,
-                         "new_hash": snapshot.content_hash, "changed_sections": []},
+                type=IngestionEventType.SOURCE_DIFF_DETECTED,
+                severity="warning",
+                payload={
+                    "authority_id": source_authority_id,
+                    "old_hash": prior_snapshot.content_hash,
+                    "new_hash": snapshot.content_hash,
+                    "changed_sections": [],
+                },
             ),
             changed=True,
         )
@@ -94,10 +115,15 @@ async def fetch_and_snapshot(
     return SnapshotResult(
         snapshot=snapshot,
         event=HarnessEvent(
-            type=IngestionEventType.SOURCE_FETCH_COMPLETED, severity="info",
-            payload={"authority_id": source_authority_id, "snapshot_id": snapshot.content_hash[:16],
-                     "http_status": http_status, "content_hash": snapshot.content_hash,
-                     "bytes": len(content)},
+            type=IngestionEventType.SOURCE_FETCH_COMPLETED,
+            severity="info",
+            payload={
+                "authority_id": source_authority_id,
+                "snapshot_id": snapshot.content_hash[:16],
+                "http_status": http_status,
+                "content_hash": snapshot.content_hash,
+                "bytes": len(content),
+            },
         ),
         changed=True,
     )

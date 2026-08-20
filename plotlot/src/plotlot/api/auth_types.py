@@ -43,9 +43,7 @@ _ROLE_CAPABILITIES: dict[IdentityRole, frozenset[Capability]] = {
             Capability.VIEW_ANALYSIS,
         }
     ),
-    IdentityRole.ANALYST: frozenset(
-        {Capability.RUN_ANALYSIS, Capability.VIEW_ANALYSIS}
-    ),
+    IdentityRole.ANALYST: frozenset({Capability.RUN_ANALYSIS, Capability.VIEW_ANALYSIS}),
     IdentityRole.REVIEWER: frozenset(
         {
             Capability.REVIEW_ANALYSIS,

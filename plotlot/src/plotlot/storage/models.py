@@ -640,7 +640,8 @@ class DistrictDimensionalStandardORM(Base):
     # Verification status (Slice 3.2 review): only VERIFIED rows produce
     # verified_fact/local_authority claims. STAGED rows are assumption-grade.
     verification_status: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, default="unverified", index=True)
+        String(20), nullable=True, default="unverified", index=True
+    )
 
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -724,7 +725,11 @@ class JurisdictionSourceAuthorityORM(Base):
     __tablename__ = "jurisdiction_source_authorities"
     __table_args__ = (
         UniqueConstraint(
-            "state", "county", "municipality", "authority_scope", "provider",
+            "state",
+            "county",
+            "municipality",
+            "authority_scope",
+            "provider",
             name="uq_jurisdiction_source_authority_natural_key",
         ),
     )
@@ -743,7 +748,9 @@ class JurisdictionSourceAuthorityORM(Base):
     legal_caveat: Mapped[str] = mapped_column(Text, nullable=False)
     freshness_policy: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     source_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
     supplement_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     effective_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -751,9 +758,11 @@ class JurisdictionSourceAuthorityORM(Base):
     coverage_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class OrdinanceSourceSnapshotORM(Base):
@@ -766,18 +775,21 @@ class OrdinanceSourceSnapshotORM(Base):
     __tablename__ = "ordinance_source_snapshots"
     __table_args__ = (
         UniqueConstraint(
-            "source_authority_id", "content_hash",
+            "source_authority_id",
+            "content_hash",
             name="uq_ordinance_source_snapshot_natural_key",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
     source_authority_id: Mapped[str] = mapped_column(
-        String(120), ForeignKey("jurisdiction_source_authorities.id"), nullable=False, index=True)
+        String(120), ForeignKey("jurisdiction_source_authorities.id"), nullable=False, index=True
+    )
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     final_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now())
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -797,14 +809,13 @@ class HarnessEventORM(Base):
     """
 
     __tablename__ = "harness_events"
-    __table_args__ = (
-        UniqueConstraint("id", name="uq_harness_event_id"),
-    )
+    __table_args__ = (UniqueConstraint("id", name="uq_harness_event_id"),)
 
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
     type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
     correlation_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(10), nullable=False, default="info")
     workspace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)

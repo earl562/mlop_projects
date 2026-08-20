@@ -57,8 +57,11 @@ class TestDimensionalStandardStore:
 
     def test_register_then_lookup_round_trip(self):
         custom = DistrictDimensionalStandard(
-            municipality="Testburg", county="Test County", state="FL",
-            district_code="RM-30", max_density_units_per_acre=30.0,
+            municipality="Testburg",
+            county="Test County",
+            state="FL",
+            district_code="RM-30",
+            max_density_units_per_acre=30.0,
         )
         ds_store.register_dimensional_standard_fixture(custom)
         got = ds_store.get_dimensional_standard_from_fixture("Testburg", "RM-30")

@@ -46,7 +46,15 @@ _SALES_NAME_KEYWORDS = {"sale", "transaction", "transfer", "recorded", "deed"}
 
 # Candidate field names for each datum (case-insensitive).
 _PRICE_FIELDS = {"SALE_PRICE", "SALE_AMT", "SALE_AMOUNT", "PRICE", "CONSIDERATION", "TRANS_AMOUNT"}
-_DATE_FIELDS = {"SALE_DATE", "TRANS_DATE", "SALE_DT", "DATE_SOLD", "RECORDING_DATE", "DOS", "DATEOFSALE"}
+_DATE_FIELDS = {
+    "SALE_DATE",
+    "TRANS_DATE",
+    "SALE_DT",
+    "DATE_SOLD",
+    "RECORDING_DATE",
+    "DOS",
+    "DATEOFSALE",
+}
 _ADDR_FIELDS = {"SITE_ADDR", "ADDRESS", "SITUS_ADDR", "PROP_ADDR", "SITEADDR", "TRUE_SITE_ADDR"}
 _LOT_FIELDS = {"LOT_SIZE", "LOT_AREA", "LAND_SQFT", "ACRES", "ACREAGE", "SQ_FOOTAGE"}
 _ZONE_FIELDS = {"ZONE_CODE", "ZONING", "ZONING_CODE", "ZONE", "ZONE_CLASS"}

@@ -10,6 +10,7 @@ import pytest
 
 from plotlot.ingestion.events import IngestionEventType
 from plotlot.ingestion.snapshots import OrdinanceSourceSnapshot
+
 # Fails until snapshot_service exists (TDD).
 from plotlot.ingestion.snapshot_service import (
     fetch_and_snapshot,
@@ -20,8 +21,12 @@ class TestSnapshotHashing:
     """Master spec §7: deterministic content hash, idempotency."""
 
     def test_unchanged_content_reuses_snapshot(self):
-        s1 = OrdinanceSourceSnapshot(source_authority_id="a1", source_url="https://x", content="same")
-        s2 = OrdinanceSourceSnapshot(source_authority_id="a1", source_url="https://x", content="same")
+        s1 = OrdinanceSourceSnapshot(
+            source_authority_id="a1", source_url="https://x", content="same"
+        )
+        s2 = OrdinanceSourceSnapshot(
+            source_authority_id="a1", source_url="https://x", content="same"
+        )
         assert s1.is_unchanged_from(s2)
 
     def test_changed_content_different_hash(self):
@@ -40,7 +45,9 @@ class TestFetchAndSnapshot:
             return 200, "<html>first</html>"
 
         result = await fetch_and_snapshot(
-            source_authority_id="auth_1", source_url="https://x", fetcher=fetcher,
+            source_authority_id="auth_1",
+            source_url="https://x",
+            fetcher=fetcher,
             prior_snapshot=None,
         )
         assert result.snapshot is not None
@@ -54,9 +61,13 @@ class TestFetchAndSnapshot:
         async def fetcher(url: str) -> tuple[int, str]:
             return 200, "<html>same</html>"
 
-        prior = OrdinanceSourceSnapshot(source_authority_id="auth_1", source_url="https://x", content="<html>same</html>")
+        prior = OrdinanceSourceSnapshot(
+            source_authority_id="auth_1", source_url="https://x", content="<html>same</html>"
+        )
         result = await fetch_and_snapshot(
-            source_authority_id="auth_1", source_url="https://x", fetcher=fetcher,
+            source_authority_id="auth_1",
+            source_url="https://x",
+            fetcher=fetcher,
             prior_snapshot=prior,
         )
         # Idempotent: no new snapshot, source_unchanged event.
@@ -69,9 +80,13 @@ class TestFetchAndSnapshot:
         async def fetcher(url: str) -> tuple[int, str]:
             return 200, "<html>new content</html>"
 
-        prior = OrdinanceSourceSnapshot(source_authority_id="auth_1", source_url="https://x", content="<html>old</html>")
+        prior = OrdinanceSourceSnapshot(
+            source_authority_id="auth_1", source_url="https://x", content="<html>old</html>"
+        )
         result = await fetch_and_snapshot(
-            source_authority_id="auth_1", source_url="https://x", fetcher=fetcher,
+            source_authority_id="auth_1",
+            source_url="https://x",
+            fetcher=fetcher,
             prior_snapshot=prior,
         )
         assert result.changed is True
@@ -85,7 +100,9 @@ class TestFetchAndSnapshot:
             return 503, ""
 
         result = await fetch_and_snapshot(
-            source_authority_id="auth_1", source_url="https://x", fetcher=fetcher,
+            source_authority_id="auth_1",
+            source_url="https://x",
+            fetcher=fetcher,
             prior_snapshot=None,
         )
         assert result.snapshot is None

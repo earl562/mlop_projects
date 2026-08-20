@@ -11,6 +11,7 @@ from plotlot.ingestion.source_authorities.models import (
     JurisdictionType,
     Provider,
 )
+
 # Fails until service.py + south_florida.py exist (TDD).
 from plotlot.ingestion.source_authorities.service import (
     resolve_provider_priority,
@@ -27,17 +28,25 @@ class TestProviderPriority:
         assert resolve_provider_priority(official) < resolve_provider_priority(municode)
 
     def test_official_pdf_beats_municode(self):
-        assert resolve_provider_priority(Provider.OFFICIAL_PDF) < resolve_provider_priority(Provider.MUNICODE)
+        assert resolve_provider_priority(Provider.OFFICIAL_PDF) < resolve_provider_priority(
+            Provider.MUNICODE
+        )
 
     def test_municode_beats_amlegal(self):
-        assert resolve_provider_priority(Provider.MUNICODE) < resolve_provider_priority(Provider.AMLEGAL)
+        assert resolve_provider_priority(Provider.MUNICODE) < resolve_provider_priority(
+            Provider.AMLEGAL
+        )
 
     def test_amlegal_beats_manual(self):
-        assert resolve_provider_priority(Provider.AMLEGAL) < resolve_provider_priority(Provider.MANUAL)
+        assert resolve_provider_priority(Provider.AMLEGAL) < resolve_provider_priority(
+            Provider.MANUAL
+        )
 
     def test_arcgis_is_lowest_priority_for_ordinance(self):
         # arcgis is gis_zoning, not ordinance text — lowest for ordinance scope.
-        assert resolve_provider_priority(Provider.ARCGIS) > resolve_provider_priority(Provider.MUNICODE)
+        assert resolve_provider_priority(Provider.ARCGIS) > resolve_provider_priority(
+            Provider.MUNICODE
+        )
 
 
 class TestSouthFloridaSeeding:
@@ -58,10 +67,17 @@ class TestSouthFloridaSeeding:
 
     def test_city_of_miami_has_miami21_special_authority(self):
         auths = seed_south_florida_authorities()
-        miami = [a for a in auths if a.municipality == "Miami" and "miami21" in (a.metadata_json.get("special","").lower() or a.source_title.lower())]
+        miami = [
+            a
+            for a in auths
+            if a.municipality == "Miami"
+            and "miami21" in (a.metadata_json.get("special", "").lower() or a.source_title.lower())
+        ]
         assert miami, "City of Miami must have a Miami21 special authority"
         # Miami21 must carry a current-source caveat.
-        assert "caveat" in miami[0].legal_caveat.lower() or "current" in miami[0].legal_caveat.lower()
+        assert (
+            "caveat" in miami[0].legal_caveat.lower() or "current" in miami[0].legal_caveat.lower()
+        )
 
     def test_palm_beach_uldc_special_authority(self):
         auths = seed_south_florida_authorities()

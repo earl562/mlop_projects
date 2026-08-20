@@ -484,20 +484,21 @@ async def lookup_address(address: str) -> ZoningReport | None:
                         continue
                     seen.add(key)
                     try:
-                        typed_standard = await get_dimensional_standard(
-                            municipality, code
-                        )
+                        typed_standard = await get_dimensional_standard(municipality, code)
                     except Exception as exc:  # noqa: BLE001 — DB may be offline
                         logger.debug(
                             "Dimensional standard lookup failed for %s/%s: %s",
-                            municipality, code, exc,
+                            municipality,
+                            code,
+                            exc,
                         )
                         typed_standard = None
                     if typed_standard is not None:
                         logger.info(
                             "Typed dimensional standard found for %s/%s → "
                             "verified-fact density path (origin=local_authority)",
-                            municipality, code,
+                            municipality,
+                            code,
                         )
                         break
 

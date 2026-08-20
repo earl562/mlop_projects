@@ -34,7 +34,9 @@ def _independently_sign_service_token(*, principal_id: str, ttl_seconds: int) ->
     )
 
 
-def test_service_principal_token_is_tenant_and_action_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_service_principal_token_is_tenant_and_action_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "service_principal_signing_key", "t" * 32)
     monkeypatch.setattr(settings, "service_principal_max_ttl_seconds", 900)
     token = issue_service_principal_token(

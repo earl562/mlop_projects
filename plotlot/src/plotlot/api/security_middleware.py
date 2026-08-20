@@ -80,9 +80,7 @@ def _tenant_values(value: JsonValue) -> set[str]:
                 for key in ("workspace_id", "tenant_id")
                 if isinstance((item := mapping.get(key)), str)
             }
-            return direct.union(
-                *(_tenant_values(item) for item in mapping.values())
-            )
+            return direct.union(*(_tenant_values(item) for item in mapping.values()))
         case list() as items:
             return set().union(*(_tenant_values(item) for item in items))
         case str() | int() | float() | bool() | None:
@@ -96,26 +94,14 @@ def _server_derived_fields(
 ) -> set[str]:
     match value:
         case dict() as mapping:
-            direct = set(
-                _SERVER_DERIVED_FIELDS.difference({"role"}).intersection(mapping)
-            )
-            if "role" in mapping and (
-                is_root or _ROLE_CONTEXT_FIELDS.intersection(mapping)
-            ):
+            direct = set(_SERVER_DERIVED_FIELDS.difference({"role"}).intersection(mapping))
+            if "role" in mapping and (is_root or _ROLE_CONTEXT_FIELDS.intersection(mapping)):
                 direct.add("role")
             return direct.union(
-                *(
-                    _server_derived_fields(item, is_root=False)
-                    for item in mapping.values()
-                )
+                *(_server_derived_fields(item, is_root=False) for item in mapping.values())
             )
         case list() as items:
-            return set().union(
-                *(
-                    _server_derived_fields(item, is_root=False)
-                    for item in items
-                )
-            )
+            return set().union(*(_server_derived_fields(item, is_root=False) for item in items))
         case str() | int() | float() | bool() | None:
             return set()
 

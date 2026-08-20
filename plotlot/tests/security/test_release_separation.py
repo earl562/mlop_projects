@@ -98,9 +98,7 @@ async def test_mutated_revision_coordinates_are_not_releasable(
     body = {
         "analysis_id": "analysis-reviewed",
         "revision_id": "revision-reviewed",
-        "revision_sha256": sha256(
-            b"another synthetic immutable revision"
-        ).hexdigest(),
+        "revision_sha256": sha256(b"another synthetic immutable revision").hexdigest(),
     }
     body[field] = value
     with patch(
@@ -145,8 +143,6 @@ async def test_revision_head_mutation_invalidates_pending_release_atomically(
         "plotlot.api.security_middleware.get_current_user",
         new=AsyncMock(return_value=reviewer.as_request_user()),
     ):
-        released = await client.post(
-            f"/api/v1/releases/{requested.json()['request_id']}/release"
-        )
+        released = await client.post(f"/api/v1/releases/{requested.json()['request_id']}/release")
 
     assert released.status_code == 409

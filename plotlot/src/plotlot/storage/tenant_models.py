@@ -44,16 +44,12 @@ class ReportCache(Base):
     workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     address: Mapped[str] = mapped_column(String, nullable=False, index=True)
     address_normalized: Mapped[str] = mapped_column(String, nullable=False)
-    analysis_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="residential"
-    )
+    analysis_type: Mapped[str] = mapped_column(String(50), nullable=False, default="residential")
     report_json: Mapped[Any] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
 

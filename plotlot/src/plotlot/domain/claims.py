@@ -205,6 +205,7 @@ class Claim:
         if amended and scraped:
             try:
                 from datetime import datetime, timezone
+
                 a = datetime.fromisoformat(str(amended))
                 s = datetime.fromisoformat(str(scraped))
                 # Normalize to offset-aware (UTC) so naive vs aware dates compare.

@@ -80,8 +80,7 @@ async def _delete_fixture(fixture: ReleaseFixture) -> None:
 _IMMUTABLE_COLUMN_ATTACKS = (
     "UPDATE plotlot.external_release_requests "
     "SET tenant_id=tenant_id || '-rewritten' WHERE request_id=$1",
-    "UPDATE plotlot.external_release_requests "
-    "SET request_id=gen_random_uuid() WHERE request_id=$1",
+    "UPDATE plotlot.external_release_requests SET request_id=gen_random_uuid() WHERE request_id=$1",
     "UPDATE plotlot.external_release_requests "
     "SET analysis_id='analysis-rewritten' WHERE request_id=$1",
     "UPDATE plotlot.external_release_requests "
@@ -124,8 +123,7 @@ async def test_plotlot_app_cannot_rewrite_release_audit_identity(
         ),
         (
             False,
-            "UPDATE plotlot.external_release_requests "
-            "SET status='released' WHERE request_id=$1",
+            "UPDATE plotlot.external_release_requests SET status='released' WHERE request_id=$1",
         ),
         (
             False,
@@ -171,8 +169,7 @@ async def test_plotlot_app_cannot_make_invalid_transition_with_granted_columns(
     [
         (
             False,
-            "UPDATE plotlot.external_release_requests "
-            "SET released_at=now() WHERE request_id=$1",
+            "UPDATE plotlot.external_release_requests SET released_at=now() WHERE request_id=$1",
         ),
         (
             False,

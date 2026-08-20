@@ -70,18 +70,22 @@ class TestTableClassification:
     """Master spec §4/§7: classify chunk_kind (dimensional_table / use_table / etc)."""
 
     def test_classifies_dimensional_table(self):
-        t = ParsedTable(headers=["District", "Min Lot Area", "Front Setback", "Density"],
-                        rows=[["RS-8", "6000", "25", "8.0"]])
+        t = ParsedTable(
+            headers=["District", "Min Lot Area", "Front Setback", "Density"],
+            rows=[["RS-8", "6000", "25", "8.0"]],
+        )
         assert classify_table(t) is TableKind.DIMENSIONAL_TABLE
 
     def test_classifies_use_table(self):
-        t = ParsedTable(headers=["Use", "Permitted", "Conditional"],
-                        rows=[["Single Family", "P", ""]])
+        t = ParsedTable(
+            headers=["Use", "Permitted", "Conditional"], rows=[["Single Family", "P", ""]]
+        )
         assert classify_table(t) is TableKind.USE_TABLE
 
     def test_classifies_parking_table(self):
-        t = ParsedTable(headers=["Use", "Parking Spaces Required"],
-                        rows=[["Retail", "5 per 1000sf"]])
+        t = ParsedTable(
+            headers=["Use", "Parking Spaces Required"], rows=[["Retail", "5 per 1000sf"]]
+        )
         assert classify_table(t) is TableKind.PARKING
 
     def test_classifies_definition_table_as_narrative(self):
@@ -91,7 +95,6 @@ class TestTableClassification:
 
     def test_does_not_flatten_ambiguous_values(self):
         # A dimensional table with "None" / multi-value cells keeps them as strings.
-        t = ParsedTable(headers=["District", "Max Height"],
-                        rows=[["CC", "150 ft / 12 stories"]])
+        t = ParsedTable(headers=["District", "Max Height"], rows=[["CC", "150 ft / 12 stories"]])
         assert classify_table(t) is TableKind.DIMENSIONAL_TABLE
         assert t.rows[0][1] == "150 ft / 12 stories"  # not flattened/split

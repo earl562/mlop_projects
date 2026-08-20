@@ -24,7 +24,9 @@ UNLOCK_SQL = "SELECT pg_advisory_unlock(hashtextextended('plotlot-storage-backup
 
 async def create_backup(output_dir: Path) -> Path:
     database_url = os.environ["TEST_DATABASE_URL"]
-    connection = await asyncpg.connect(database_url.replace("postgresql+asyncpg://", "postgresql://"))
+    connection = await asyncpg.connect(
+        database_url.replace("postgresql+asyncpg://", "postgresql://")
+    )
     try:
         await connection.execute(LOCK_SQL)
         pending = await connection.fetchval(

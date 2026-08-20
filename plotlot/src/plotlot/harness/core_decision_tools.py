@@ -101,9 +101,7 @@ def _serialize_upzoning_scenario(scenario: Any) -> dict[str, Any] | None:
     }
 
 
-async def handle_analyze_upzoning(
-    args: dict[str, Any], context: ToolContext
-) -> dict[str, Any]:
+async def handle_analyze_upzoning(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     """Compare by-right and target entitlement yields using supplied inputs only."""
 
     del context
@@ -165,9 +163,7 @@ def serialize_analysis_report(report: Any) -> dict[str, Any]:
         "confidence": density.confidence if density else "low",
         "origin": density.origin if density else "unknown",
         "verification": verification.overall if verification else "unverified",
-        "offer_is_provisional": (
-            verification.offer_is_provisional if verification else True
-        ),
+        "offer_is_provisional": (verification.offer_is_provisional if verification else True),
         "constraints": _jsonable(density.constraints) if density else [],
         "notes": list(density.notes) if density else [],
     }
@@ -184,21 +180,15 @@ def serialize_analysis_report(report: Any) -> dict[str, Any]:
     valuation = {
         "estimated_land_value": comps.estimated_land_value if comps else None,
         "land_value_range": (
-            [comps.estimated_land_value_low, comps.estimated_land_value_high]
-            if comps
-            else None
+            [comps.estimated_land_value_low, comps.estimated_land_value_high] if comps else None
         ),
         "adv_per_unit": adv_per_unit,
         "adv_source": adv_source,
-        "gross_development_value": (
-            pro_forma.gross_development_value if pro_forma else None
-        ),
+        "gross_development_value": (pro_forma.gross_development_value if pro_forma else None),
         "max_land_price_residual": pro_forma.max_land_price if pro_forma else None,
         "impact_fees_per_unit": pro_forma.impact_fees_per_unit if pro_forma else None,
         "cost_per_door": pro_forma.cost_per_door if pro_forma else None,
-        "construction_cost_psf": (
-            pro_forma.construction_cost_psf if pro_forma else None
-        ),
+        "construction_cost_psf": (pro_forma.construction_cost_psf if pro_forma else None),
         "market": pro_forma.market if pro_forma else "",
     }
 
@@ -237,9 +227,7 @@ def serialize_analysis_report(report: Any) -> dict[str, Any]:
     }
 
 
-async def handle_analyze_property(
-    args: dict[str, Any], context: ToolContext
-) -> dict[str, Any]:
+async def handle_analyze_property(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     """Run the existing deep deterministic property pipeline for one address."""
 
     del context
@@ -299,9 +287,7 @@ def _screening_row(result: Any) -> dict[str, Any]:
     }
 
 
-async def handle_screen_properties(
-    args: dict[str, Any], context: ToolContext
-) -> dict[str, Any]:
+async def handle_screen_properties(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     """Screen a bounded address set against a deterministic acquisition buy box."""
 
     del context

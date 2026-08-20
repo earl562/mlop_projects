@@ -37,7 +37,9 @@ from plotlot.storage.dimensional_standards import get_dimensional_standard
 class InfillScenarioResult:
     """One scenario run against a real infill lot."""
 
-    scenario: str  # by_right_density | lot_split_feasibility | missing_middle_adu | assemblage_potential
+    scenario: (
+        str  # by_right_density | lot_split_feasibility | missing_middle_adu | assemblage_potential
+    )
     claim: Claim
     summary: str
     feasible: bool | None = None  # None = needs further verification
@@ -65,40 +67,56 @@ async def analyze_residential_infill(
     speculative) and provenance (origin + source_url).
     """
     results: list[InfillScenarioResult] = []
-    standard = await get_dimensional_standard(municipality, district_code,
-                                               allow_fixture_fallback=allow_fixture_fallback)
+    standard = await get_dimensional_standard(
+        municipality, district_code, allow_fixture_fallback=allow_fixture_fallback
+    )
 
     # Scenario 1: by-right density (the deterministic Kleyman step).
     results.append(
         _by_right_density(
-            address=address, municipality=municipality, district_code=district_code,
-            lot_size_sqft=lot_size_sqft, lot_width_ft=lot_width_ft,
-            lot_depth_ft=lot_depth_ft, standard=standard, source_url=source_url,
+            address=address,
+            municipality=municipality,
+            district_code=district_code,
+            lot_size_sqft=lot_size_sqft,
+            lot_width_ft=lot_width_ft,
+            lot_depth_ft=lot_depth_ft,
+            standard=standard,
+            source_url=source_url,
         )
     )
 
     # Scenario 2: lot-split feasibility (speculative — hypothesis).
     results.append(
         _lot_split_feasibility(
-            address=address, municipality=municipality, district_code=district_code,
-            lot_size_sqft=lot_size_sqft, lot_width_ft=lot_width_ft,
-            standard=standard, source_url=source_url,
+            address=address,
+            municipality=municipality,
+            district_code=district_code,
+            lot_size_sqft=lot_size_sqft,
+            lot_width_ft=lot_width_ft,
+            standard=standard,
+            source_url=source_url,
         )
     )
 
     # Scenario 3: missing-middle / ADU eligibility (speculative — hypothesis).
     results.append(
         _missing_middle_adu(
-            address=address, municipality=municipality, district_code=district_code,
-            standard=standard, source_url=source_url,
+            address=address,
+            municipality=municipality,
+            district_code=district_code,
+            standard=standard,
+            source_url=source_url,
         )
     )
 
     # Scenario 4: assemblage potential (speculative — hypothesis).
     results.append(
         _assemblage_potential(
-            address=address, municipality=municipality, district_code=district_code,
-            lot_size_sqft=lot_size_sqft, source_url=source_url,
+            address=address,
+            municipality=municipality,
+            district_code=district_code,
+            lot_size_sqft=lot_size_sqft,
+            source_url=source_url,
         )
     )
 
@@ -106,8 +124,15 @@ async def analyze_residential_infill(
 
 
 def _by_right_density(
-    *, address, municipality, district_code, lot_size_sqft, lot_width_ft,
-    lot_depth_ft, standard, source_url,
+    *,
+    address,
+    municipality,
+    district_code,
+    lot_size_sqft,
+    lot_width_ft,
+    lot_depth_ft,
+    standard,
+    source_url,
 ) -> InfillScenarioResult:
     """Scenario 1: by-right max units (deterministic calculation)."""
     provenance_url = (standard.source_url if standard else "") or source_url
@@ -133,8 +158,10 @@ def _by_right_density(
         )
 
     analysis = calculate_max_units(
-        lot_size_sqft=lot_size_sqft, params=standard,
-        lot_width_ft=lot_width_ft, lot_depth_ft=lot_depth_ft,
+        lot_size_sqft=lot_size_sqft,
+        params=standard,
+        lot_width_ft=lot_width_ft,
+        lot_depth_ft=lot_depth_ft,
     )
     return InfillScenarioResult(
         scenario="by_right_density",
@@ -145,7 +172,8 @@ def _by_right_density(
             origin=ClaimOrigin.LOCAL_AUTHORITY,
             source_url=provenance_url,
             metadata={
-                "address": address, "district_code": district_code,
+                "address": address,
+                "district_code": district_code,
                 "governing_constraint": analysis.governing_constraint,
                 "origin": analysis.origin,
             },
@@ -159,8 +187,14 @@ def _by_right_density(
 
 
 def _lot_split_feasibility(
-    *, address, municipality, district_code, lot_size_sqft, lot_width_ft,
-    standard, source_url,
+    *,
+    address,
+    municipality,
+    district_code,
+    lot_size_sqft,
+    lot_width_ft,
+    standard,
+    source_url,
 ) -> InfillScenarioResult:
     """Scenario 2: lot-split feasibility (speculative — hypothesis).
 
@@ -172,10 +206,8 @@ def _lot_split_feasibility(
         min_lot = standard.min_lot_area_sqft
         potential_lots = int(lot_size_sqft // min_lot)
         min_width_ok = (
-            (standard.min_lot_width_ft and lot_width_ft
-             and lot_width_ft >= standard.min_lot_width_ft)
-            or lot_width_ft is None
-        )
+            standard.min_lot_width_ft and lot_width_ft and lot_width_ft >= standard.min_lot_width_ft
+        ) or lot_width_ft is None
         feasible = potential_lots >= 2 and min_width_ok
         summary = (
             f"Lot-split screen: {lot_size_sqft:,.0f} sqft ÷ {min_lot:,.0f} min = "
@@ -213,7 +245,12 @@ def _lot_split_feasibility(
 
 
 def _missing_middle_adu(
-    *, address, municipality, district_code, standard, source_url,
+    *,
+    address,
+    municipality,
+    district_code,
+    standard,
+    source_url,
 ) -> InfillScenarioResult:
     """Scenario 3: missing-middle / ADU eligibility (speculative — hypothesis).
 
@@ -225,10 +262,14 @@ def _missing_middle_adu(
     is_single_family = district_code.upper().startswith(("RS", "R-1", "R-2"))
     if is_single_family:
         eligible_for = "ADU (accessory dwelling unit)"
-        next_step = "Confirm ADU ordinance for {} (max size, height, owner-occupancy).".format(municipality)
+        next_step = "Confirm ADU ordinance for {} (max size, height, owner-occupancy).".format(
+            municipality
+        )
     elif density and density >= 8:
         eligible_for = "duplex/triplex (missing-middle)"
-        next_step = "Confirm use table permits multifamily in {} {}.".format(municipality, district_code)
+        next_step = "Confirm use table permits multifamily in {} {}.".format(
+            municipality, district_code
+        )
     else:
         eligible_for = "uncertain"
         next_step = "Check use regulations for {} {}.".format(municipality, district_code)
@@ -251,7 +292,12 @@ def _missing_middle_adu(
 
 
 def _assemblage_potential(
-    *, address, municipality, district_code, lot_size_sqft, source_url,
+    *,
+    address,
+    municipality,
+    district_code,
+    lot_size_sqft,
+    source_url,
 ) -> InfillScenarioResult:
     """Scenario 4: assemblage potential (speculative — hypothesis).
 

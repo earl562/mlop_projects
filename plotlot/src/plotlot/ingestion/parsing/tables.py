@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 
 class TableKind(str, Enum):
     """Master spec §7 chunk_kind classification."""
+
     DIMENSIONAL_TABLE = "dimensional_table"
     USE_TABLE = "use_table"
     PARKING = "parking"
@@ -34,6 +35,7 @@ class ParsedTable:
 
 
 # ── HTML table parsing ──────────────────────────────────────────────────────
+
 
 def parse_html_table(html: str) -> ParsedTable | None:
     """Parse the first <table> in HTML, preserving headers + rows.
@@ -88,7 +90,7 @@ def parse_markdown_table(text: str) -> ParsedTable | None:
         if i + 1 < len(lines) and _MD_SEP_RE.match(lines[i + 1]):
             headers = [c.strip() for c in ln.strip("|").split("|")]
             rows: list[list[str]] = []
-            for rl in lines[i + 2:]:
+            for rl in lines[i + 2 :]:
                 if "|" not in rl:
                     break
                 cells = [c.strip() for c in rl.strip("|").split("|")]
@@ -102,10 +104,28 @@ def parse_markdown_table(text: str) -> ParsedTable | None:
 # ── Table classification (master spec §7 chunk_kind) ────────────────────────
 
 _DIMENSIONAL_KEYWORDS = (
-    "setback", "yard", "lot area", "lot size", "lot width", "density",
-    "height", "floor area", "far", "coverage", "stories",
+    "setback",
+    "yard",
+    "lot area",
+    "lot size",
+    "lot width",
+    "density",
+    "height",
+    "floor area",
+    "far",
+    "coverage",
+    "stories",
 )
-_USE_KEYWORDS = ("permitted use", "conditional use", "principal use", "accessory use", "use regulations", "prohibited", "permitted", "conditional")
+_USE_KEYWORDS = (
+    "permitted use",
+    "conditional use",
+    "principal use",
+    "accessory use",
+    "use regulations",
+    "prohibited",
+    "permitted",
+    "conditional",
+)
 _PARKING_KEYWORDS = ("parking", "loading", "spaces required", "vehicle")
 _DEFINITION_KEYWORDS = ("definition", "defined terms", "term", "meaning")
 

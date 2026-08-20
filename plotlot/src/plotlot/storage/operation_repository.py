@@ -195,10 +195,7 @@ async def set_tenant(session: AsyncSession, tenant_id: str) -> None:
 
 async def lock_object(session: AsyncSession, tenant_id: str, object_key: str) -> None:
     await session.execute(
-        text(
-            "SELECT pg_advisory_xact_lock_shared("
-            "hashtextextended('plotlot-storage-backup', 0))"
-        )
+        text("SELECT pg_advisory_xact_lock_shared(hashtextextended('plotlot-storage-backup', 0))")
     )
     await session.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),

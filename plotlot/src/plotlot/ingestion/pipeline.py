@@ -16,7 +16,10 @@ from bs4 import BeautifulSoup
 
 from plotlot.ingestion.events import HarnessEvent, IngestionEventType
 from plotlot.ingestion.parsing.tables import (
-    ParsedTable, TableKind, classify_table, parse_html_table,
+    ParsedTable,
+    TableKind,
+    classify_table,
+    parse_html_table,
 )
 from plotlot.ingestion.snapshot_service import fetch_and_snapshot
 from plotlot.ingestion.snapshots import OrdinanceSourceSnapshot
@@ -28,6 +31,7 @@ Fetcher = Callable[[str], Awaitable[tuple[int, str]]]
 @dataclass
 class IngestedChunk:
     """A chunk produced by ingestion, linked to its authority + snapshot."""
+
     id: str
     text: str
     chunk_kind: str
@@ -64,50 +68,84 @@ async def run_ingestion(
     4. compute coverage quality score; emit jurisdiction_quality_scored.
     """
     snap_result = await fetch_and_snapshot(
-        source_authority_id=authority.id, source_url=authority.source_url,
-        fetcher=fetcher, prior_snapshot=prior_snapshot,
+        source_authority_id=authority.id,
+        source_url=authority.source_url,
+        fetcher=fetcher,
+        prior_snapshot=prior_snapshot,
     )
     events: list[HarnessEvent] = [snap_result.event]
 
     # Unchanged / failed → no parsing.
     if snap_result.snapshot is None or not snap_result.changed:
         return IngestionResult(
-            snapshot=snap_result.snapshot, chunks=[], events=events,
+            snapshot=snap_result.snapshot,
+            chunks=[],
+            events=events,
             changed=snap_result.changed,
         )
 
     snapshot = snap_result.snapshot
-    events.append(HarnessEvent(
-        type=IngestionEventType.PARSER_STARTED, severity="debug",
-        payload={"authority_id": authority.id, "snapshot_id": snapshot.content_hash[:16],
-                 "parser_version": "phase5-v1"},
-    ))
+    events.append(
+        HarnessEvent(
+            type=IngestionEventType.PARSER_STARTED,
+            severity="debug",
+            payload={
+                "authority_id": authority.id,
+                "snapshot_id": snapshot.content_hash[:16],
+                "parser_version": "phase5-v1",
+            },
+        )
+    )
 
-    chunks = _parse_to_chunks(html=snapshot.content, authority_id=authority.id,
-                              snapshot_id=snapshot.content_hash[:16], events=events)
+    chunks = _parse_to_chunks(
+        html=snapshot.content,
+        authority_id=authority.id,
+        snapshot_id=snapshot.content_hash[:16],
+        events=events,
+    )
 
-    events.append(HarnessEvent(
-        type=IngestionEventType.PARSER_COMPLETED, severity="info",
-        payload={"authority_id": authority.id, "sections": len({c.section_heading for c in chunks}),
-                 "chunks": len(chunks), "tables": sum(1 for c in chunks if c.chunk_kind != "narrative"),
-                 "warnings": []},
-    ))
+    events.append(
+        HarnessEvent(
+            type=IngestionEventType.PARSER_COMPLETED,
+            severity="info",
+            payload={
+                "authority_id": authority.id,
+                "sections": len({c.section_heading for c in chunks}),
+                "chunks": len(chunks),
+                "tables": sum(1 for c in chunks if c.chunk_kind != "narrative"),
+                "warnings": [],
+            },
+        )
+    )
 
     quality = _compute_quality_score(chunks)
-    events.append(HarnessEvent(
-        type=IngestionEventType.JURISDICTION_QUALITY_SCORED, severity="info",
-        payload={"authority_id": authority.id, "coverage_score": quality,
-                 "dimensions": ["chunk_count", "table_ratio", "dimensional_table_present"]},
-    ))
+    events.append(
+        HarnessEvent(
+            type=IngestionEventType.JURISDICTION_QUALITY_SCORED,
+            severity="info",
+            payload={
+                "authority_id": authority.id,
+                "coverage_score": quality,
+                "dimensions": ["chunk_count", "table_ratio", "dimensional_table_present"],
+            },
+        )
+    )
 
     return IngestionResult(
-        snapshot=snapshot, chunks=chunks, events=events,
-        changed=True, quality_score=quality,
+        snapshot=snapshot,
+        chunks=chunks,
+        events=events,
+        changed=True,
+        quality_score=quality,
     )
 
 
 def _parse_to_chunks(
-    *, html: str, authority_id: str, snapshot_id: str, events: list[HarnessEvent],
+    *,
+    html: str,
+    authority_id: str,
+    snapshot_id: str,
+    events: list[HarnessEvent],
 ) -> list[IngestedChunk]:
     """Parse HTML into chunks: each <table> becomes a dimensional/use/etc chunk;
     prose between tables becomes narrative chunks. Preserves header→cell association."""
@@ -130,17 +168,27 @@ def _parse_to_chunks(
         text = _serialize_table(parsed)
         chunk = IngestedChunk(
             id=f"chunk_{uuid.uuid4().hex[:12]}",
-            text=text, chunk_kind=kind.value,
-            source_authority_id=authority_id, snapshot_id=snapshot_id,
-            section_heading=section_heading, chunk_index=idx,
+            text=text,
+            chunk_kind=kind.value,
+            source_authority_id=authority_id,
+            snapshot_id=snapshot_id,
+            section_heading=section_heading,
+            chunk_index=idx,
             metadata={"headers": parsed.headers, "row_count": len(parsed.rows)},
         )
         chunks.append(chunk)
-        events.append(HarnessEvent(
-            type=IngestionEventType.CHUNK_CREATED, severity="debug",
-            payload={"chunk_id": chunk.id, "section_id": section_heading,
-                     "chunk_kind": chunk.chunk_kind, "chunk_index": idx},
-        ))
+        events.append(
+            HarnessEvent(
+                type=IngestionEventType.CHUNK_CREATED,
+                severity="debug",
+                payload={
+                    "chunk_id": chunk.id,
+                    "section_id": section_heading,
+                    "chunk_kind": chunk.chunk_kind,
+                    "chunk_index": idx,
+                },
+            )
+        )
         idx += 1
 
     # Prose (non-table text) → narrative chunks, split to max size.
@@ -151,16 +199,26 @@ def _parse_to_chunks(
         for piece in _split_text(text, _MAX_CHUNK_CHARS):
             chunk = IngestedChunk(
                 id=f"chunk_{uuid.uuid4().hex[:12]}",
-                text=piece, chunk_kind="narrative",
-                source_authority_id=authority_id, snapshot_id=snapshot_id,
-                section_heading=section_heading, chunk_index=idx,
+                text=piece,
+                chunk_kind="narrative",
+                source_authority_id=authority_id,
+                snapshot_id=snapshot_id,
+                section_heading=section_heading,
+                chunk_index=idx,
             )
             chunks.append(chunk)
-            events.append(HarnessEvent(
-                type=IngestionEventType.CHUNK_CREATED, severity="debug",
-                payload={"chunk_id": chunk.id, "section_id": section_heading,
-                         "chunk_kind": "narrative", "chunk_index": idx},
-            ))
+            events.append(
+                HarnessEvent(
+                    type=IngestionEventType.CHUNK_CREATED,
+                    severity="debug",
+                    payload={
+                        "chunk_id": chunk.id,
+                        "section_id": section_heading,
+                        "chunk_kind": "narrative",
+                        "chunk_index": idx,
+                    },
+                )
+            )
             idx += 1
     return chunks
 
@@ -170,7 +228,11 @@ def _serialize_table(table: ParsedTable) -> str:
     lines = [f"Headers: {' | '.join(table.headers)}"]
     for row in table.rows:
         label = row[0] if row else ""
-        pairs = [f"{table.headers[i]}: {row[i]}" for i in range(1, min(len(row), len(table.headers))) if row[i]]
+        pairs = [
+            f"{table.headers[i]}: {row[i]}"
+            for i in range(1, min(len(row), len(table.headers)))
+            if row[i]
+        ]
         lines.append(f"{label} — {'; '.join(pairs)}" if pairs else label)
     return "\n".join(lines)
 
@@ -178,7 +240,7 @@ def _serialize_table(table: ParsedTable) -> str:
 def _split_text(text: str, max_size: int) -> list[str]:
     if len(text) <= max_size:
         return [text]
-    return [text[i:i + max_size] for i in range(0, len(text), max_size)]
+    return [text[i : i + max_size] for i in range(0, len(text), max_size)]
 
 
 def _compute_quality_score(chunks: list[IngestedChunk]) -> float:
