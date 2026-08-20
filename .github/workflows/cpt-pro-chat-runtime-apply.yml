@@ -3,6 +3,7 @@ name: CPT PRO Chat Runtime Apply
 on:
   push:
     branches: [feat/cpt-pro-chat-runtime]
+  workflow_dispatch:
 
 permissions:
   contents: write
