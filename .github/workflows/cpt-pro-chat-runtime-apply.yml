@@ -1,0 +1,76 @@
+name: CPT PRO Chat Runtime Apply
+
+on:
+  push:
+    branches: [feat/cpt-pro-chat-runtime]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cpt-pro-chat-runtime-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: plotlot/uv.lock
+      - name: Verify and apply canonical chat-runtime slice
+        run: |
+          python .github/scripts/apply_plotlot_slice2.py --repo . --dry-run
+          python .github/scripts/apply_plotlot_slice2.py --repo .
+          rm -rf .plotlot-slice2-backup
+      - name: Install backend dependencies
+        working-directory: plotlot
+        run: uv sync --frozen --extra dev --extra eval
+      - name: Format changed Python files
+        working-directory: plotlot
+        run: |
+          uv run ruff format \
+            src/plotlot/harness/tool_registry.py \
+            src/plotlot/api/chat.py \
+            tests/unit/test_tool_registry_llm_schemas.py \
+            tests/unit/test_chat_runtime_consolidation.py
+      - name: Run focused chat-runtime verification
+        working-directory: plotlot
+        run: |
+          uv run ruff check \
+            src/plotlot/harness/tool_registry.py \
+            src/plotlot/api/chat.py \
+            tests/unit/test_tool_registry_llm_schemas.py \
+            tests/unit/test_chat_runtime_consolidation.py
+          uv run pytest \
+            tests/unit/test_tool_registry_llm_schemas.py \
+            tests/unit/test_chat_runtime_consolidation.py \
+            tests/unit/test_chat_live_tools.py \
+            tests/unit/test_chat_analyze_property.py \
+            tests/unit/test_chat_doc_context.py \
+            tests/unit/test_session_property_context.py \
+            tests/unit/test_harness_runtime.py \
+            tests/unit/test_core_runtime_parity.py -q
+          uv run mypy src/plotlot/harness/tool_registry.py src/plotlot/api/chat.py --no-error-summary
+      - name: Publish a clean Earl Perry commit
+        env:
+          BASE_SHA: a54c5f7a1de9b27496b898e0d62932e75fe28880
+        run: |
+          rm -f .github/scripts/apply_plotlot_slice2.py
+          rm -f .github/workflows/cpt-pro-chat-runtime-apply.yml
+          git reset --soft "$BASE_SHA"
+          git add -A
+          git diff --cached --stat
+          git config user.name "Earl Perry"
+          git config user.email "46470256+earl562@users.noreply.github.com"
+          git commit -m "refactor(harness): route chat through canonical runtime"
+          git push --force origin HEAD:feat/cpt-pro-chat-runtime
