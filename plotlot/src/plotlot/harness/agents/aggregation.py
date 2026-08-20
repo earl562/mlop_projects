@@ -59,8 +59,7 @@ def agent_summaries(
         elif any(result.status == TaskStatus.COMPLETED for result in agent_results):
             status = MultiAgentRunStatus.NEEDS_REVIEW
         elif any(
-            result.status in {TaskStatus.FAILED, TaskStatus.BLOCKED}
-            for result in agent_results
+            result.status in {TaskStatus.FAILED, TaskStatus.BLOCKED} for result in agent_results
         ):
             status = MultiAgentRunStatus.FAILED
         else:
@@ -78,9 +77,7 @@ def agent_summaries(
                     result.status in {TaskStatus.FAILED, TaskStatus.BLOCKED}
                     for result in agent_results
                 ),
-                skipped_tasks=sum(
-                    result.status == TaskStatus.SKIPPED for result in agent_results
-                ),
+                skipped_tasks=sum(result.status == TaskStatus.SKIPPED for result in agent_results),
                 approval_ids=approvals,
             )
         )

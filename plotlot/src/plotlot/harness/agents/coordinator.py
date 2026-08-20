@@ -122,18 +122,14 @@ class MultiAgentCoordinator:
                 for result in completed:
                     results[result.task_id] = result
                     kind: EventKind = (
-                        "task_skipped"
-                        if result.status == TaskStatus.SKIPPED
-                        else "task_completed"
+                        "task_skipped" if result.status == TaskStatus.SKIPPED else "task_completed"
                     )
                     events.append(task_event(kind, result))
 
         ordered_results = tuple(results[task.task_id] for task in plan.tasks)
         evidence_ids = ordered_evidence_ids(ordered_results)
         artifacts = {
-            result.task_id: result.artifacts
-            for result in ordered_results
-            if result.artifacts
+            result.task_id: result.artifacts for result in ordered_results if result.artifacts
         }
         questions = open_questions(plan, ordered_results)
         status = run_status(plan, ordered_results, questions)
@@ -169,8 +165,7 @@ class MultiAgentCoordinator:
     ) -> bool:
         dependencies = [results[dependency] for dependency in task.depends_on]
         required_success = [
-            results[dependency]
-            for dependency in task.required_success_dependencies
+            results[dependency] for dependency in task.required_success_dependencies
         ]
         return (
             task.dependency_mode == "all_success"

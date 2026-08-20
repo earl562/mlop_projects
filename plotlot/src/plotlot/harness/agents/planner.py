@@ -290,13 +290,9 @@ class MultiAgentPlanner:
                     if key in _SCREEN_BUY_BOX_KEYS and value is not None
                 },
             }
-            if "min_lot_sqft" not in screen_args and request.buy_box.get(
-                "min_lot_size_sqft"
-            ):
+            if "min_lot_sqft" not in screen_args and request.buy_box.get("min_lot_size_sqft"):
                 screen_args["min_lot_sqft"] = request.buy_box["min_lot_size_sqft"]
-            if "max_lot_sqft" not in screen_args and request.buy_box.get(
-                "max_lot_size_sqft"
-            ):
+            if "max_lot_sqft" not in screen_args and request.buy_box.get("max_lot_size_sqft"):
                 screen_args["max_lot_sqft"] = request.buy_box["max_lot_size_sqft"]
             if request.market:
                 if "states" not in screen_args and request.market.state:
@@ -323,14 +319,10 @@ class MultiAgentPlanner:
                         task_id="report.generate",
                         agent_name="reporting",
                         tool_name="generate_document",
-                        arguments={
-                            "title": request.report_title or "PlotLot Lead Sourcing Report"
-                        },
+                        arguments={"title": request.report_title or "PlotLot Lead Sourcing Report"},
                         depends_on=dependencies,
                         dependency_mode="all_terminal",
-                        required_success_dependencies=(primary_task_id,)
-                        if primary_task_id
-                        else (),
+                        required_success_dependencies=(primary_task_id,) if primary_task_id else (),
                         optional=True,
                         collect_evidence=True,
                     )

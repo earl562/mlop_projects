@@ -102,10 +102,14 @@ class MultiAgentRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def _require_workflow_scope(self) -> "MultiAgentRunRequest":
-        if self.workflow in {
-            WorkflowIntent.SITE_FEASIBILITY,
-            WorkflowIntent.DEEP_UNDERWRITING,
-        } and not self.address:
+        if (
+            self.workflow
+            in {
+                WorkflowIntent.SITE_FEASIBILITY,
+                WorkflowIntent.DEEP_UNDERWRITING,
+            }
+            and not self.address
+        ):
             raise ValueError(f"{self.workflow.value} requires address")
         if (
             self.workflow == WorkflowIntent.LEAD_SOURCING
