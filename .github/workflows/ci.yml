@@ -180,6 +180,9 @@ jobs:
           cache-dependency-glob: plotlot/uv.lock
       - run: uv sync --frozen --extra dev --extra eval
         working-directory: plotlot
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
+        working-directory: plotlot
       - run: uv run uvicorn plotlot.api.main:app --host 127.0.0.1 --port 8000 > /tmp/plotlot-api.log 2>&1 &
         working-directory: plotlot
       - name: Wait for backend health
