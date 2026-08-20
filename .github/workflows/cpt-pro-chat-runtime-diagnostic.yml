@@ -1,0 +1,78 @@
+name: CPT PRO Chat Runtime Diagnostic
+
+on:
+  push:
+    branches: [feat/cpt-pro-chat-runtime]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: plotlot/uv.lock
+      - name: Run diagnostic sequence
+        id: diagnostics
+        shell: bash
+        run: |
+          set +e
+          LOG="$RUNNER_TEMP/chat-runtime-diagnostics.txt"
+          STATUS=0
+
+          run_step() {
+            local label="$1"
+            shift
+            {
+              echo
+              echo "===== ${label} ====="
+              echo "+ $*"
+            } >> "$LOG"
+            "$@" >> "$LOG" 2>&1
+            local rc=$?
+            echo "exit_code=${rc}" >> "$LOG"
+            if [ "$rc" -ne 0 ]; then STATUS="$rc"; fi
+            return "$rc"
+          }
+
+          run_step patch_dry_run python .github/scripts/apply_plotlot_slice2.py --repo . --dry-run
+          DRY_RC=$?
+          if [ "$DRY_RC" -eq 0 ]; then
+            run_step patch_apply python .github/scripts/apply_plotlot_slice2.py --repo .
+            APPLY_RC=$?
+          else
+            APPLY_RC=1
+          fi
+
+          if [ "$APPLY_RC" -eq 0 ]; then
+            run_step uv_sync bash -lc 'cd plotlot && uv sync --frozen --extra dev --extra eval'
+            run_step ruff_format bash -lc 'cd plotlot && uv run ruff format src/plotlot/harness/tool_registry.py src/plotlot/api/chat.py tests/unit/test_tool_registry_llm_schemas.py tests/unit/test_chat_runtime_consolidation.py'
+            run_step ruff_check bash -lc 'cd plotlot && uv run ruff check src/plotlot/harness/tool_registry.py src/plotlot/api/chat.py tests/unit/test_tool_registry_llm_schemas.py tests/unit/test_chat_runtime_consolidation.py'
+            run_step pytest bash -lc 'cd plotlot && uv run pytest tests/unit/test_tool_registry_llm_schemas.py tests/unit/test_chat_runtime_consolidation.py tests/unit/test_chat_live_tools.py tests/unit/test_chat_analyze_property.py tests/unit/test_chat_doc_context.py tests/unit/test_session_property_context.py tests/unit/test_harness_runtime.py tests/unit/test_core_runtime_parity.py -q'
+            run_step mypy bash -lc 'cd plotlot && uv run mypy src/plotlot/harness/tool_registry.py src/plotlot/api/chat.py --no-error-summary'
+            run_step git_diff git diff --stat
+            run_step git_status git status --short
+          fi
+
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chat-runtime-diagnostics
+          path: ${{ runner.temp }}/chat-runtime-diagnostics.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail when diagnostic sequence failed
+        if: steps.diagnostics.outputs.status != '0'
+        run: exit 1
