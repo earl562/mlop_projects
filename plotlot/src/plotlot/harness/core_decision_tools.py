@@ -8,7 +8,7 @@ depend on HTTP requests, SSE envelopes, browser state, or chat session memory.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, cast
 
 from plotlot.harness.runtime import HarnessRuntime
 from plotlot.land_use.models import ToolContext
@@ -24,8 +24,8 @@ def _jsonable(value: Any) -> Any:
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         return model_dump(mode="json")
-    if is_dataclass(value):
-        return asdict(value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(cast(Any, value))
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):
