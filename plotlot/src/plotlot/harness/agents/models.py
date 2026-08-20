@@ -83,7 +83,7 @@ class MultiAgentRunRequest(BaseModel):
 
     @field_validator("addresses", mode="before")
     @classmethod
-    def _normalize_addresses(cls, value: Any) -> list[str]:
+    def _normalize_addresses(cls, value: Any) -> Any:
         if value is None:
             return []
         if not isinstance(value, list):
