@@ -7,10 +7,10 @@ adapters (REST/chat/MCP) can render.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
-import uuid
 
 from plotlot.harness.events import EventKind, HarnessEvent
 from plotlot.harness.policy import HarnessPolicyEngine
@@ -40,8 +40,16 @@ class HarnessRuntime:
         event_sink: Callable[[HarnessEvent], None] | None = None,
     ) -> None:
         self._policy = policy or HarnessPolicyEngine()
-        self._handlers = handlers or {}
+        self._handlers = dict(handlers) if handlers is not None else {}
         self._event_sink = event_sink
+
+        # A runtime with no explicit handler map is a production PlotLot runtime,
+        # so bootstrap the intrinsic decision tools once here. Tests and embedded
+        # callers that supply a handler map remain fully isolated.
+        if handlers is None:
+            from plotlot.harness.core_decision_tools import register_core_decision_tools
+
+            register_core_decision_tools(self)
 
     def _emit(
         self,
