@@ -1,0 +1,33 @@
+name: CPT PRO Format Diagnostic
+
+on:
+  push:
+    branches: [cpt-pro-format-diagnostic]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  formatter-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: plotlot
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: plotlot/uv.lock
+      - run: uv sync --frozen --extra dev --extra eval
+      - name: Print Ruff formatter diff
+        run: |
+          uv run ruff format --diff \
+            src/plotlot/harness/agents/aggregation.py \
+            src/plotlot/harness/agents/coordinator.py \
+            src/plotlot/harness/agents/models.py \
+            src/plotlot/harness/agents/planner.py
+          exit 1
