@@ -217,3 +217,9 @@ async def requeue_dead_letter(
             detail="Only dead-lettered jobs can be requeued",
         ) from exc
     return job.model_dump(mode="json")
+
+
+# Multi-agent runs share the same authenticated harness-job boundary.
+from plotlot.api.agent_runs import router as agent_runs_router  # noqa: E402
+
+router.include_router(agent_runs_router, dependencies=[Depends(actor_for_jobs)])
