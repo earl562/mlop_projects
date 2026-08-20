@@ -3,6 +3,8 @@ name: CPT PRO Format Diagnostic
 on:
   push:
     branches: [cpt-pro-format-diagnostic]
+  pull_request:
+    branches: [cpt-pro]
   workflow_dispatch:
 
 permissions:
