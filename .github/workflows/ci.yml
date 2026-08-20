@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - cpt-pro
       - "dev/**"
       - "feat/**"
       - "fix/**"
