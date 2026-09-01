@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-01T23:20:00Z",
+  "case_count": 16,
+  "markets": [
+    "Broward, FL",
+    "Miami-Dade, FL",
+    "Palm Beach, FL",
+    "Mecklenburg, NC",
+    "San Diego, CA"
+  ],
+  "source_files": [
+    {
+      "source_file_id": "drive_sha256:d5487f296b84fcc1",
+      "label": "south_florida_multifamily_addresses",
+      "sheet": "Addresses",
+      "property_columns": ["C", "D", "E"],
+      "selected_rows": [4, 5, 8, 15, 53, 54, 55, 73, 93]
+    },
+    {
+      "source_file_id": "drive_sha256:bb2bb4f11d92f9b0",
+      "label": "multifamily_inventory",
+      "sheet": "Sheet1",
+      "property_columns": ["B", "C", "D"],
+      "selected_rows": [2, 111, 140]
+    },
+    {
+      "source_file_id": "drive_sha256:21bc040e7e149db4",
+      "label": "property_export",
+      "sheet": "Properties",
+      "property_columns": ["A", "B", "C", "D", "E", "F", "G"],
+      "selected_rows": [143, 144, 145]
+    },
+    {
+      "source_file_id": "drive_sha256:cf05daf4bc2e736a",
+      "label": "active_pipeline_reference",
+      "sheet": "Active Pipeline",
+      "property_columns": ["D", "J"],
+      "selected_rows": [8],
+      "origin": "The exact 1233 Hueneme St address came from the user's explicit PlotLot analysis request; contact and prospect columns were not copied."
+    }
+  ],
+  "privacy_exclusions": [
+    "owner names",
+    "seller names",
+    "phone numbers",
+    "email addresses",
+    "mailing addresses",
+    "prospect notes",
+    "outreach status",
+    "free-text contact notes"
+  ]
+}
