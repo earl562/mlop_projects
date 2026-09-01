@@ -18,25 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v6
       - name: Check deployed PlotLot health endpoint
         env:
           PLOTLOT_HEALTH_URL: ${{ vars.PLOTLOT_HEALTH_URL }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          url = os.environ.get("PLOTLOT_HEALTH_URL") or "https://plotlot-api.onrender.com/health"
-          with urllib.request.urlopen(url, timeout=15) as response:
-              body = response.read().decode("utf-8")
-
-          print(body)
-          payload = json.loads(body)
-          status = payload.get("status")
-          if status != "healthy":
-              raise SystemExit(f"Expected deployed PlotLot health status to be healthy, got {status!r}")
-          PY
+          PLOTLOT_HEALTH_ATTEMPTS: "3"
+          PLOTLOT_HEALTH_TIMEOUT_SECONDS: "8"
+          PLOTLOT_HEALTH_BACKOFF_SECONDS: "2"
+        run: PYTHONPATH=plotlot/src python3 -m plotlot.health.probes
 
   live-provider-health:
     name: Live Provider Health
@@ -53,4 +42,8 @@ jobs:
           python-version: "3.12"
           cache-dependency-glob: plotlot/uv.lock
       - run: uv sync --frozen --extra dev --extra eval
-      - run: uv run python -m pytest tests/integration/test_hub_live.py tests/integration/test_universal_validation.py -m live -v --tb=short
+      - run: >-
+          uv run python -m pytest
+          tests/integration/test_hub_live.py
+          tests/integration/test_universal_validation.py
+          -m live -v --tb=short

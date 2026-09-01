@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
-"""Fail when generated artifacts or banned media are tracked in git."""
+"""Fail when non-product state, generated artifacts, or banned media are tracked."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
+
+AGENT_WORKSPACE_PREFIXES = (
+    ".claude/",
+    ".omo/",
+    "plotlot/.omx/",
+)
+
+PERSONAL_INSTRUCTION_FILES = {
+    "CLAUDE.md",
+    "GEMINI.md",
+    "plotlot/CLAUDE.md",
+}
 
 BANNED_DIR_PREFIXES = (
     ".playwright-mcp/",
@@ -48,28 +60,35 @@ def list_tracked_files(repo_root: Path | None = None) -> list[str]:
     return [path for path in result.stdout.decode("utf-8").split("\x00") if path]
 
 
+def _matches_prefix(path: str, prefix: str) -> bool:
+    return path == prefix.removesuffix("/") or path.startswith(prefix)
+
+
 def find_violations(paths: list[str]) -> list[tuple[str, str]]:
     violations: list[tuple[str, str]] = []
     for path in paths:
         normalized = path.replace("\\", "/")
-        if any(
-            normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
-            for prefix in BANNED_DIR_PREFIXES
-        ):
+
+        if any(_matches_prefix(normalized, prefix) for prefix in AGENT_WORKSPACE_PREFIXES):
+            violations.append((normalized, "agent-workspace-state"))
+            continue
+
+        if normalized in PERSONAL_INSTRUCTION_FILES:
+            violations.append((normalized, "personal-instruction-file"))
+            continue
+
+        if any(_matches_prefix(normalized, prefix) for prefix in BANNED_DIR_PREFIXES):
             violations.append((normalized, "generated-artifact-directory"))
             continue
 
         if any(
-            normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
+            _matches_prefix(normalized, prefix)
             for prefix in NON_CANONICAL_FRONTEND_PREFIXES
         ):
             violations.append((normalized, "non-canonical-frontend-root"))
             continue
 
-        if any(
-            normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
-            for prefix in ALLOWED_DIR_PREFIXES
-        ):
+        if any(_matches_prefix(normalized, prefix) for prefix in ALLOWED_DIR_PREFIXES):
             continue
 
         suffix = PurePosixPath(normalized).suffix.lower()
@@ -88,20 +107,23 @@ def main() -> int:
 
     print("Repository hygiene check failed.", file=sys.stderr)
     print("", file=sys.stderr)
-    print(
-        "The following tracked files violate the no-media / no-generated-artifacts policy:",
-        file=sys.stderr,
-    )
+    print("Tracked non-product or generated files:", file=sys.stderr)
     for path, reason in violations:
         print(f"- {path} [{reason}]", file=sys.stderr)
 
     print("", file=sys.stderr)
     print(
-        "Move screenshots, Playwright outputs, and other large generated artifacts to ignored local paths or GitHub Actions artifacts instead of git history.",
+        "Remove AI workspace state and personal instruction files from git; keep one "
+        "neutral AGENTS.md as the repository contract.",
         file=sys.stderr,
     )
     print(
-        "Keep tracked frontend code under plotlot/frontend/. Duplicate tracked frontend roots are not allowed.",
+        "Store screenshots, Playwright output, and generated evaluation evidence in "
+        "ignored paths or GitHub Actions artifacts.",
+        file=sys.stderr,
+    )
+    print(
+        "Keep tracked frontend code under plotlot/frontend/ only.",
         file=sys.stderr,
     )
     return 1

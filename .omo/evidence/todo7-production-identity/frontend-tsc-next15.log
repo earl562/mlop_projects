@@ -1,3 +1,0 @@
-scenario: frontend TypeScript production identity typecheck
-invocation: npx tsc --noEmit --pretty false
-exit_code: 0
