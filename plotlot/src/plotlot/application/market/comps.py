@@ -61,9 +61,7 @@ def _distance_miles(subject: SubjectProperty, sale: ComparableSale) -> float | N
     longitude_delta = math.radians(float(sale.longitude) - float(subject.longitude))
     value = (
         math.sin(latitude_delta / 2) ** 2
-        + math.cos(subject_lat)
-        * math.cos(sale_lat)
-        * math.sin(longitude_delta / 2) ** 2
+        + math.cos(subject_lat) * math.cos(sale_lat) * math.sin(longitude_delta / 2) ** 2
     )
     return 2 * _EARTH_RADIUS_MILES * math.asin(math.sqrt(value))
 
@@ -94,31 +92,19 @@ def _select_valuation_basis(
     subject: SubjectProperty,
     candidates: Sequence[tuple[ComparableSale, float | None, int]],
 ) -> tuple[ValuationBasis, float, list[float]]:
-    if subject.building_sqft and all(
-        sale.building_sqft for sale, _distance, _age in candidates
-    ):
+    if subject.building_sqft and all(sale.building_sqft for sale, _distance, _age in candidates):
         return (
             "building_sqft",
             subject.building_sqft,
-            [
-                sale.sale_price / float(sale.building_sqft)
-                for sale, _distance, _age in candidates
-            ],
+            [sale.sale_price / float(sale.building_sqft) for sale, _distance, _age in candidates],
         )
-    if subject.lot_size_sqft and all(
-        sale.lot_size_sqft for sale, _distance, _age in candidates
-    ):
+    if subject.lot_size_sqft and all(sale.lot_size_sqft for sale, _distance, _age in candidates):
         return (
             "lot_sqft",
             subject.lot_size_sqft,
-            [
-                sale.sale_price / float(sale.lot_size_sqft)
-                for sale, _distance, _age in candidates
-            ],
+            [sale.sale_price / float(sale.lot_size_sqft) for sale, _distance, _age in candidates],
         )
-    return "sale_price", 1.0, [
-        sale.sale_price for sale, _distance, _age in candidates
-    ]
+    return "sale_price", 1.0, [sale.sale_price for sale, _distance, _age in candidates]
 
 
 def _is_outlier(
@@ -166,18 +152,12 @@ def _confidence(qualified: Sequence[QualifiedComparable]) -> CompConfidence:
     if statistics.median(item.age_days for item in qualified) <= 365:
         score += 1
 
-    distances = [
-        item.distance_miles
-        for item in qualified
-        if item.distance_miles is not None
-    ]
+    distances = [item.distance_miles for item in qualified if item.distance_miles is not None]
     if distances and statistics.median(distances) <= 1:
         score += 1
 
     providers = {
-        item.sale.source.provider.casefold()
-        for item in qualified
-        if item.sale.source is not None
+        item.sale.source.provider.casefold() for item in qualified if item.sale.source is not None
     }
     if len(providers) >= 2:
         score += 1
@@ -291,9 +271,7 @@ def qualify_comps(
             )
         )
 
-    evidence_ids = tuple(
-        item.sale.evidence_id for item in qualified if item.sale.evidence_id
-    )
+    evidence_ids = tuple(item.sale.evidence_id for item in qualified if item.sale.evidence_id)
     if len(qualified) < policy.min_comps:
         return CompSetResult(
             status=CompStatus.INSUFFICIENT_EVIDENCE,
@@ -323,9 +301,7 @@ def qualify_comps(
         valuation_median=round(valuation_median, 2),
         valuation_high=round(valuation_high, 2),
         evidence_ids=evidence_ids,
-        message=(
-            f"{len(qualified)} qualified comparable sales support the valuation range."
-        ),
+        message=(f"{len(qualified)} qualified comparable sales support the valuation range."),
     )
 
 

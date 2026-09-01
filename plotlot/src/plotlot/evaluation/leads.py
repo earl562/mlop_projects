@@ -254,9 +254,7 @@ def _assert_value_is_private_data_free(value: Any, *, key: str) -> None:
         for child_key, child_value in value.items():
             normalized_key = _normalize_key(str(child_key))
             if any(marker in normalized_key for marker in _BANNED_KEY_MARKERS):
-                raise LeadPrivacyError(
-                    f"forbidden contact or outreach field: {normalized_key}"
-                )
+                raise LeadPrivacyError(f"forbidden contact or outreach field: {normalized_key}")
             _assert_value_is_private_data_free(child_value, key=normalized_key)
         return
     if isinstance(value, (list, tuple)):
