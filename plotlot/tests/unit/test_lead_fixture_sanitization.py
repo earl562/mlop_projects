@@ -60,9 +60,11 @@ def test_sanitize_lead_row_keeps_property_facts_and_discards_contact_data():
 
 
 def test_sanitize_lead_row_returns_none_without_a_property_address():
+    row = {"Owner Email": "owner@example.com", "City": "Hollywood"}
+
     assert (
         sanitize_lead_row(
-            {"Owner Email": "owner@example.com", "City": "Hollywood"},
+            row,
             source_file_id="drive-sheet-1",
             source_row=2,
         )
@@ -96,44 +98,42 @@ def test_stable_case_id_uses_normalized_property_identity():
 
 
 def test_fixture_validator_rejects_contact_keys_and_values():
+    contact_key_fixture = [
+        {
+            "case_id": "case_1",
+            "address": "1 Main St",
+            "owner_email": "x@y.com",
+        }
+    ]
+    email_value_fixture = [{"case_id": "case_1", "address": "owner@example.com"}]
+    phone_value_fixture = [
+        {
+            "case_id": "case_1",
+            "address": "1 Main St",
+            "county": "954-555-1212",
+        }
+    ]
+
     with pytest.raises(LeadPrivacyError, match="owner_email"):
-        assert_fixture_is_sanitized(
-            [
-                {
-                    "case_id": "case_1",
-                    "address": "1 Main St",
-                    "owner_email": "x@y.com",
-                }
-            ]
-        )
+        assert_fixture_is_sanitized(contact_key_fixture)
 
     with pytest.raises(LeadPrivacyError, match="email-like value"):
-        assert_fixture_is_sanitized(
-            [{"case_id": "case_1", "address": "owner@example.com"}]
-        )
+        assert_fixture_is_sanitized(email_value_fixture)
 
     with pytest.raises(LeadPrivacyError, match="phone-like value"):
-        assert_fixture_is_sanitized(
-            [
-                {
-                    "case_id": "case_1",
-                    "address": "1 Main St",
-                    "county": "954-555-1212",
-                }
-            ]
-        )
+        assert_fixture_is_sanitized(phone_value_fixture)
 
 
 def test_fixture_validator_accepts_property_only_cases():
-    assert_fixture_is_sanitized(
-        [
-            {
-                "case_id": "case_1",
-                "address": "5201 NW 16th St",
-                "city": "Plantation",
-                "state": "FL",
-                "county": "Broward",
-                "asking_price": 450000,
-            }
-        ]
-    )
+    fixture = [
+        {
+            "case_id": "case_1",
+            "address": "5201 NW 16th St",
+            "city": "Plantation",
+            "state": "FL",
+            "county": "Broward",
+            "asking_price": 450000,
+        }
+    ]
+
+    assert_fixture_is_sanitized(fixture)
