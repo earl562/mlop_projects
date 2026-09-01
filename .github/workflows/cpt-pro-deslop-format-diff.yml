@@ -1,0 +1,31 @@
+name: CPT PRO De-Slop Format Diff
+
+on:
+  push:
+    branches: [feat/cpt-pro-deslop]
+
+permissions:
+  contents: read
+
+jobs:
+  formatter-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: plotlot
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: plotlot/uv.lock
+      - run: uv sync --frozen --extra dev --extra eval
+      - name: Print exact Ruff formatter diff
+        run: |
+          uv run ruff format --diff \
+            src/plotlot/application/market/comps.py \
+            src/plotlot/application/market/decision.py \
+            src/plotlot/evaluation/leads.py
+          exit 1
