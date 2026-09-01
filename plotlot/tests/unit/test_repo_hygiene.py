@@ -51,10 +51,33 @@ def test_flags_generated_artifact_directories_even_without_media_suffixes():
     ) in violations
 
 
+def test_flags_agent_workspace_state_and_personal_instruction_files():
+    violations = repo_hygiene.find_violations(
+        [
+            ".claude/agents/comp-analyst.md",
+            ".omo/evidence/run.json",
+            "plotlot/.omx/context/session.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            "plotlot/CLAUDE.md",
+        ]
+    )
+
+    assert violations == [
+        (".claude/agents/comp-analyst.md", "agent-workspace-state"),
+        (".omo/evidence/run.json", "agent-workspace-state"),
+        ("plotlot/.omx/context/session.md", "agent-workspace-state"),
+        ("CLAUDE.md", "personal-instruction-file"),
+        ("GEMINI.md", "personal-instruction-file"),
+        ("plotlot/CLAUDE.md", "personal-instruction-file"),
+    ]
+
+
 def test_allows_normal_source_and_docs_files():
     violations = repo_hygiene.find_violations(
         [
             "README.md",
+            "AGENTS.md",
             "plotlot/frontend/public/next.svg",
             "plotlot/src/plotlot/api/main.py",
         ]
