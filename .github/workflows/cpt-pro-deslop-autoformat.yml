@@ -1,0 +1,44 @@
+name: CPT PRO De-Slop Autoformat
+
+on:
+  push:
+    branches: [feat/cpt-pro-deslop]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cpt-pro-deslop-autoformat
+  cancel-in-progress: false
+
+jobs:
+  format-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: feat/cpt-pro-deslop
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: plotlot/uv.lock
+      - run: uv sync --frozen --extra dev --extra eval
+        working-directory: plotlot
+      - name: Format market and evaluation modules
+        working-directory: plotlot
+        run: |
+          uv run ruff format \
+            src/plotlot/application/market/comps.py \
+            src/plotlot/application/market/decision.py \
+            src/plotlot/evaluation/leads.py
+      - name: Publish formatted source and remove this workflow
+        run: |
+          rm -f .github/workflows/cpt-pro-deslop-autoformat.yml
+          git add -A
+          git config user.name "Earl Perry"
+          git config user.email "46470256+earl562@users.noreply.github.com"
+          git commit -m "style(market): format comps and evaluation modules"
+          git push origin HEAD:feat/cpt-pro-deslop
