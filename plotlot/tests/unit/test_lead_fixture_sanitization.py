@@ -98,7 +98,13 @@ def test_stable_case_id_uses_normalized_property_identity():
 def test_fixture_validator_rejects_contact_keys_and_values():
     with pytest.raises(LeadPrivacyError, match="owner_email"):
         assert_fixture_is_sanitized(
-            [{"case_id": "case_1", "address": "1 Main St", "owner_email": "x@y.com"}]
+            [
+                {
+                    "case_id": "case_1",
+                    "address": "1 Main St",
+                    "owner_email": "x@y.com",
+                }
+            ]
         )
 
     with pytest.raises(LeadPrivacyError, match="email-like value"):
@@ -108,7 +114,13 @@ def test_fixture_validator_rejects_contact_keys_and_values():
 
     with pytest.raises(LeadPrivacyError, match="phone-like value"):
         assert_fixture_is_sanitized(
-            [{"case_id": "case_1", "address": "1 Main St", "county": "954-555-1212"}]
+            [
+                {
+                    "case_id": "case_1",
+                    "address": "1 Main St",
+                    "county": "954-555-1212",
+                }
+            ]
         )
 
 
