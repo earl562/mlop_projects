@@ -1,47 +1,45 @@
 # PlotLot De-Slop, Lead Intelligence, and Evaluation Architecture
 
 **Date:** 2026-09-01  
-**Revision:** 2026-09-01 — integrated dual-plane architecture approved; reliable comps moved before underwriting  
+**Revision:** Integrated dual-plane architecture approved; reliable comps moved before underwriting  
 **Base:** `cpt-pro@a3531aed37b6d7186addc1ef3b8ee00ec5199778`  
 **Work branch:** `feat/cpt-pro-deslop`
 
-## Approved Product Decision
+## Approved Decisions
 
 PlotLot will use **Option 1: one integrated product with two controlled data planes**.
 
-1. **Property Intelligence Plane** — parcel identity, zoning, site constraints, reliable comparable sales, underwriting, evidence, and decision support.
+1. **Property Intelligence Plane** — property identity, zoning, site constraints, reliable comparable sales, underwriting, evidence, and decision support.
 2. **Restricted Contact and Outreach Plane** — owners, trusts, entities, registered agents, sellers, brokers, contact observations, verified contact points, suppression records, outreach, responses, and follow-ups.
 
-The planes share one authenticated product, application-service layer, PostgreSQL deployment, evidence model, audit trail, and human-review workflow. Sensitive contact data is not flattened into unrestricted property records and is never copied into public fixtures, ordinary logs, analytics events, or model traces.
+Both planes share one authenticated product, application-service layer, PostgreSQL deployment, evidence model, audit trail, and human-review workflow. Sensitive contact data is not flattened into unrestricted property records and is never copied into Git, public fixtures, ordinary logs, analytics events, exception messages, or model traces.
 
-A second architectural decision is also approved:
+The second approved decision is a hard dependency:
 
 > **Reliable comparable-sale qualification is completed before market-derived underwriting.**
 
-Underwriting may not independently select comps, accept an unqualified market value, or produce an acquisition recommendation before a `CompQualificationResult` exists. When comparable evidence is insufficient, PlotLot must abstain, request inputs, or produce an explicitly incomplete scenario. It may not silently substitute an LLM estimate.
+Underwriting may not retrieve or select its own comps, accept an unqualified market value, or produce an acquisition recommendation before a `CompQualificationResult` exists. When comparable evidence is insufficient, stale, or conflicting, PlotLot must abstain or produce an explicitly incomplete hypothetical scenario. It may not substitute an LLM estimate.
 
 ## Objective
 
-Reduce PlotLot to one understandable, reproducible product architecture while preserving the useful multi-agent harness and expanding it into a governed property-to-outreach system.
-
-The system must:
+Create one understandable and reproducible property-to-outreach system that can:
 
 - resolve the correct property and parcel
 - retrieve source-backed zoning and site evidence
 - qualify reliable comparable transactions
-- perform deterministic underwriting only after comps are qualified
+- perform deterministic underwriting only after comps qualify
 - resolve owners, entities, sellers, agents, and contact points with provenance
-- independently verify all decision-critical claims
+- independently verify every decision-critical claim
 - present one review packet to a human
-- generate and execute compliant outreach only after approval
+- execute policy-governed outreach only after approval
 - track responses and follow-ups into a warm-lead pipeline
-- support exact replay against stored evidence and refresh against current sources
+- replay a historical result and refresh it against current sources
 
-The cleanup must not conceal existing failures, invent market coverage, weaken approval controls, expose sensitive contact data, or make an LLM responsible for deterministic zoning, comparable-sale, or underwriting calculations.
+The cleanup must not hide existing failures, invent coverage, weaken approvals, expose sensitive contact data, or make an LLM responsible for deterministic zoning, comp selection, valuation, underwriting, suppression, or channel eligibility.
 
 ## Program Deliverables
 
-1. Establish and record the real operational and test baseline.
+1. Establish and record the operational and test baseline.
 2. Work in an isolated branch based on `cpt-pro`.
 3. Add characterization and architecture tests before moving behavior.
 4. Remove tracked AI workspace state, stale personal instructions, and disconnected scaffolding.
@@ -49,8 +47,8 @@ The cleanup must not conceal existing failures, invent market coverage, weaken a
 6. Introduce one governed tool-execution transaction for all transports.
 7. Add deterministic comparable-sale qualification as a prerequisite to underwriting.
 8. Refactor underwriting to consume qualified comps and explicit, versioned assumptions.
-9. Add restricted party, ownership, contact-observation, contact-point, suppression, and outreach models.
-10. Add a read-only independent Verification Agent and a unified human-review packet.
+9. Add restricted party, property-party relationship, contact, suppression, and outreach models.
+10. Add a read-only independent Verification Agent and unified human-review packet.
 11. Maintain separate repository-safe and restricted evaluation corpora.
 12. Integrate approved outreach, response classification, and follow-up tracking without creating a second product architecture.
 
@@ -71,11 +69,11 @@ The cleanup must not conceal existing failures, invent market coverage, weaken a
 - Nightly provider health on `main`: Hub discovery rejects Miami-Dade, Broward, and Palm Beach candidates; Broward legacy lookup also times out.
 - Deployed API health on `main`: the Render health endpoint does not return within the current 15-second single-attempt probe.
 
-These are baseline defects. Cleanup work may fix them, but must not relabel, skip, or suppress them.
+These are baseline defects. Cleanup may fix them but may not relabel, skip, or suppress them.
 
 ## Architectural Decision
 
-Use an incremental strangler migration, not a rewrite and not a new microservice.
+Use an incremental strangler migration, not a rewrite and not a new outreach microservice.
 
 ```text
 HTTP JSON / SSE / Chat / MCP / CLI / Multi-agent coordinator
@@ -121,7 +119,7 @@ Transport modules may authenticate, validate transport envelopes, and render res
         +------------------------------+
         |                              |
         v                              v
-6. Acquisition decision packet    Contact-match and channel eligibility
+6. Acquisition decision packet    Contact verification and channel eligibility
         |                              |
         +---------------+--------------+
                         v
@@ -143,7 +141,7 @@ Transport modules may authenticate, validate transport envelopes, and render res
 12. Qualified or warm-lead pipeline
 ```
 
-Contact enrichment may begin after the property identity is resolved and may execute concurrently with zoning and comps retrieval. This parallelism does not change the financial dependency: **reliable comps must finish before underwriting**, and both must pass verification before the case can advance.
+Contact enrichment may start after property identity resolves and may run concurrently with zoning and comp retrieval. This parallelism does not alter the financial dependency: **comps finish before underwriting**, and property analysis plus contact eligibility pass independent verification before the case becomes approval-ready.
 
 ## Canonical Analysis Service
 
@@ -163,37 +161,37 @@ Requirements:
 
 - One execution path for synchronous JSON and streamed SSE analysis.
 - Structured events are emitted by the service; SSE only serializes them.
-- Existing deterministic provider, ordinance, calculation, comps, and pro-forma components are reused behind explicit interfaces.
+- Existing provider, ordinance, comp, calculation, and pro-forma components are reused behind explicit interfaces.
 - No API route imports underscore-prefixed pipeline functions.
-- Partial coverage and timeouts become explicit typed outcomes.
-- The current `lookup_address()` function remains a compatibility adapter until all callers migrate.
-- The service records a claim ledger and evidence references rather than returning only narrative prose.
-- The pipeline order is enforced in code and tests: property identity, zoning/site evidence, qualified comps, underwriting, and decision packet.
+- Partial coverage and timeouts become typed outcomes.
+- `lookup_address()` remains a compatibility adapter until callers migrate.
+- The service records a claim ledger and evidence references rather than only narrative prose.
+- The execution order is enforced in code and tests: identity, zoning/site evidence, qualified comps, underwriting, decision packet.
 
 ## Canonical Tool Executor
 
-`HarnessRuntime` remains the low-level policy and handler runtime. Add one application-level `ToolExecutor` transaction around it to own:
+`HarnessRuntime` remains the low-level policy and handler runtime. One application-level `ToolExecutor` transaction owns:
 
 1. canonical contract lookup and argument validation
 2. workspace, project, site, property, party, and outreach-case context resolution
 3. durable approval validation
 4. role and purpose authorization
-5. governed runtime call
+5. governed runtime execution
 6. tool-run persistence
 7. evidence validation and persistence
 8. artifact, report, and document persistence
 9. sensitive-field redaction for logs and traces
 10. audit events
 11. commit or rollback
-12. canonical transport-neutral result mapping
+12. transport-neutral result mapping
 
-REST tools, chat, HTTP MCP, FastMCP, and multi-agent execution must call this executor instead of duplicating approval, PII-access, persistence, or policy behavior.
+REST tools, chat, HTTP MCP, FastMCP, and multi-agent execution must call this executor instead of duplicating approval, sensitive-data access, persistence, or policy behavior.
 
 ## Property Identity Contract
 
 An address string is an input, not the permanent identity of a site.
 
-The property resolver must produce:
+The property resolver produces:
 
 - stable internal `property_id`
 - canonical address
@@ -205,11 +203,11 @@ The property resolver must produce:
 - source observations and retrieval timestamps
 - identity confidence
 
-Owner, contact, zoning, comp, and outreach records may be attached only after property identity resolution. Ambiguous or conflicting parcel resolution produces `ambiguous_property` and blocks underwriting and outreach.
+Owner, zoning, comp, underwriting, contact, and outreach records may attach only after identity resolution. Ambiguous or conflicting parcel resolution returns `ambiguous_property` and blocks underwriting and outreach.
 
 ## Reliable Comparable Sales — Required Before Underwriting
 
-Comparable-sale qualification is a dedicated deterministic capability, not a prompt instruction and not a hidden step inside underwriting.
+Comparable qualification is a dedicated deterministic capability, not a prompt instruction or hidden underwriting step.
 
 ### Inputs
 
@@ -233,7 +231,7 @@ A candidate is rejected when it is:
 - incompatible by property type, land-use type, or development potential
 - materially incompatible by lot size, building size, unit count, condition, or entitlement state
 - a statistical price outlier without corroboration
-- missing the transaction fields required for the selected valuation basis
+- missing fields required for the selected valuation basis
 
 ### Required output
 
@@ -248,43 +246,44 @@ class CompQualificationResult:
     source_diversity: int
     policy_version: str
     evidence_ids: tuple[str, ...]
-    status: str
+    status: CompQualificationStatus
 ```
+
+`CompQualificationStatus` is one of `qualified`, `insufficient_evidence`, `conflict`, or `stale`.
 
 Every accepted and rejected candidate retains its source, retrieval time, normalized transaction fields, computed distance, similarity measurements, and exact acceptance or rejection reasons.
 
-Valuation is withheld unless the configured minimum number of qualified transactions remains. The initial default is three qualified sales, subject to property-type-specific policy. Confidence depends on count, freshness, distance, similarity, transaction quality, and source diversity.
+Valuation is withheld unless the configured minimum number of qualified transactions remains. The initial default is three qualified sales, subject to a versioned property-type policy. Confidence depends on count, freshness, distance, similarity, transaction quality, and source diversity.
 
 The LLM may explain the result. It may not re-admit an excluded transaction, invent a transaction, alter a recorded value, or create a market value when the deterministic capability abstains.
 
 ### Hard underwriting gate
 
-`UnderwritingService` requires a `CompQualificationResult` argument. It may not query or select comps itself.
+`UnderwritingService` requires a `CompQualificationResult` argument and may not query or select comps itself.
 
 - `qualified`: market-derived underwriting may proceed.
 - `insufficient_evidence`: market-derived underwriting is blocked.
-- `conflict`: underwriting is blocked until review or refresh.
-- `stale`: the comps capability must refresh or the user must explicitly approve a stale-evidence exception.
+- `conflict`: market-derived underwriting is blocked pending review or refresh.
+- `stale`: market-derived underwriting is blocked until the comps capability refreshes.
 
-A cost-only or user-supplied hypothetical scenario may still be calculated, but it must be labeled `incomplete_scenario`, may not be represented as market-supported, and may not produce `advance_for_review`.
+A cost-only or user-supplied hypothetical scenario may still run, but it is labeled `incomplete_scenario`, cannot be represented as market-supported, and cannot produce `advance_for_review`.
 
 ## Deterministic Underwriting
 
-Underwriting begins only after the comps gate passes.
+Underwriting starts only after the comps gate passes.
 
-The underwriting service consumes:
+The service consumes:
 
 - `CompQualificationResult`
-- verified zoning and site envelope
-- explicit development program assumptions
+- source-backed zoning and site envelope from the analysis stage
+- explicit development-program assumptions
 - versioned cost, financing, timing, rent, sale, and exit assumptions
 - user overrides with author, timestamp, and reason
 
 It produces:
 
-- market-supported revenue assumptions derived from accepted comps or explicitly identified external inputs
-- development costs
-- financing and carry costs
+- market-supported revenue assumptions derived from accepted comps or separately identified evidence
+- development, financing, and carry costs
 - residual land value
 - sensitivity ranges
 - missing-input and model-risk flags
@@ -293,23 +292,23 @@ It produces:
 
 The acquisition decision basis is the lower supported value of:
 
-- the conservative floor or policy-selected bound of the qualified comparable-sale range
+- the conservative floor or policy-selected bound of the qualified comp range
 - the deterministic residual land-value ceiling
 
-Possible decision outcomes are:
+Decision outcomes are:
 
 - `advance_for_review`
 - `hold_for_inputs`
 - `reject_buy_box`
 - `insufficient_evidence`
 
-No result is an autonomous purchase instruction. No missing market input becomes an unlabeled estimate.
+The later Verification Agent independently rechecks the source-backed zoning inputs, accepted comps, formulas, and outcome. No result is an autonomous purchase instruction, and no missing market input becomes an unlabeled estimate.
 
 ## Integrated Dual-Plane Data Model
 
 ### Property Intelligence Plane
 
-Core entities include:
+Core entities:
 
 - `Property`
 - `ParcelIdentityObservation`
@@ -326,7 +325,7 @@ Core entities include:
 
 ### Restricted Contact and Outreach Plane
 
-Core entities include:
+Core entities:
 
 - `Party`
 - `PropertyPartyRelationship`
@@ -343,19 +342,18 @@ Core entities include:
 
 ### Relationship-first identity
 
-A party is not assumed to be the owner merely because a name appears near a property.
+A party is not assumed to own or represent a property merely because a name appears near it.
 
 `PropertyPartyRelationship` records:
 
-- `property_id`
-- `party_id`
+- property and party IDs
 - role: owner, co-owner, trustee, manager, officer, registered agent, seller, listing agent, broker, attorney, or other representative
 - source and evidence IDs
 - effective and observed dates
 - match confidence
 - verification status
 
-A phone number or email is never stored as an unqualified `owner_phone` or `owner_email` field. It is a contact observation associated with a party and source, then promoted to a canonical contact point only after normalization, deduplication, and verification.
+A phone number or email is never stored as an unqualified `owner_phone` or `owner_email`. It begins as a source-linked `ContactObservation` and is promoted to a canonical `ContactPoint` only after normalization, deduplication, and verification.
 
 ### Contact-point contract
 
@@ -364,28 +362,52 @@ A canonical contact point records:
 - party ID
 - channel: phone, email, mailing address, or professional profile
 - encrypted normalized value
+- keyed hash for exact-match lookup and deduplication
 - masked display value
 - source observations
 - retrieval and last-verification dates
-- ownership or role-match confidence
+- party-match confidence
 - deliverability or validity status
 - suppression status
 - channel eligibility and policy version
 
-Public availability is evidence provenance, not blanket permission to use every channel.
+Public availability is source provenance, not blanket permission to use every channel.
+
+## Sensitive-Data Isolation and Access
+
+Contact values use application-layer envelope encryption. Encryption keys are managed outside PostgreSQL; plaintext canonical values are not stored in database columns. A keyed hash supports equality matching without exposing the value.
+
+Additional requirements:
+
+- role-based and purpose-based authorization
+- masked values in ordinary UI, support tooling, logs, and analytics
+- explicit audit events for every unmask, export, verification, and outreach use
+- no real contact values in Git, fixtures, prompts, CI output, telemetry, exceptions, or model traces
+- minimum-necessary context passed to models and agents
+- configurable retention and deletion policies
+- workspace and tenant isolation
+- suppression checks before a contact becomes send-eligible
+
+Initial roles:
+
+- property analyst
+- contact reviewer
+- outreach operator
+- workspace administrator
+- read-only auditor
 
 ## Contact Intelligence Service
 
-The contact service resolves the legal or represented party first and enriches contact points second.
+The service resolves the legal or represented party first and enriches contact points second.
 
 ### Individual ownership
 
 ```text
 authoritative ownership record
-    -> individual identity candidates
+    -> identity candidates
     -> corroborating records
     -> candidate contact observations
-    -> party and contact match scoring
+    -> party-match and contact-match scoring
 ```
 
 ### Entity, trust, or institutional ownership
@@ -393,15 +415,15 @@ authoritative ownership record
 ```text
 ownership record
     -> legal entity, trust, or institution
-    -> business or registration records
+    -> registration or business records
     -> officers, managers, trustees, registered agents, or authorized representatives
     -> candidate contact observations
     -> role-specific match scoring
 ```
 
-The service distinguishes between confidence that a party controls or represents the property and confidence that a contact point belongs to that party.
+Confidence that a party controls or represents the property is distinct from confidence that a contact point belongs to that party.
 
-Contact outcomes are:
+Contact outcomes:
 
 - `verified`
 - `likely_match`
@@ -411,50 +433,39 @@ Contact outcomes are:
 - `wrong_party`
 - `insufficient_evidence`
 
-Only policy-approved `verified` and narrowly defined `likely_match` records can advance to human outreach review. All other outcomes block sending.
+In the initial release, only `verified` contact points are send-eligible. A `likely_match` may appear in the review packet for manual research but cannot be scheduled or sent. Changing that rule requires a separate approved policy revision.
 
-## Sensitive-Data Isolation and Access
+## Channel Eligibility and Suppression
 
-Sensitive contact records remain inside the integrated PlotLot product but receive stricter controls than ordinary parcel facts.
+`ChannelEligibility` is deterministic, versioned, and evaluated outside the LLM. It considers:
 
-Requirements:
+- party role and contact verification status
+- workspace campaign type and purpose
+- source restrictions and provider terms
+- jurisdiction and channel policy profile
+- consent or relationship evidence where required
+- company-specific and statutory suppression records
+- prior opt-outs, complaints, bounces, and invalidations
+- allowed contact windows and frequency caps
 
-- field-level or application-layer encryption for contact values
-- role-based and purpose-based authorization
-- masked values in ordinary UI, logs, support tooling, and analytics
-- explicit audit events for every unmask, export, verification, and outreach use
-- no real contact data in Git, repository fixtures, prompt templates, ordinary CI output, telemetry, exception messages, or model traces
-- minimum-necessary context passed to models and agents
-- configurable retention and deletion policies
-- tenant and workspace isolation
-- suppression records checked before drafting, scheduling, or sending
-
-Initial roles should distinguish at least:
-
-- property analyst
-- contact reviewer
-- outreach operator
-- workspace administrator
-- read-only auditor
+Policy profiles are approved operational configuration, not model-generated rules. If the required policy or suppression provider is unavailable, sending fails closed.
 
 ## Independent Verification Agent
 
-The Verification Agent is read-only and cannot approve, rewrite, or send.
+The Verification Agent is read-only and cannot approve, rewrite, promote contacts, change accepted comps, or send.
 
-It receives a claim ledger, source references, deterministic inputs, and proposed outcomes. It must not merely reread the final prose and agree with it.
+It receives the claim ledger, evidence references, deterministic inputs, and proposed outcomes. It must not merely reread the final prose and agree with it.
 
-### Verification behavior
+Verification behavior:
 
-1. Re-resolve the property identity from authoritative sources.
+1. Re-resolve property identity from authoritative sources.
 2. Re-fetch decision-critical zoning and transaction records where practical.
-3. Use an alternate source or adapter when one is available.
+3. Use an alternate source or adapter when available.
 4. Recompute distance, similarity, density, valuation, and underwriting calculations.
 5. Verify party-to-property relationships separately from contact-point ownership.
-6. Verify freshness, validity, and suppression status for proposed outreach channels.
+6. Verify freshness, validity, suppression, and channel eligibility.
 7. Compare evidence hashes, effective dates, retrieval dates, and policy versions.
-8. Record conflicts without overwriting the original analysis.
-
-### Claim statuses
+8. Record conflicts without overwriting the original run.
 
 Every critical claim receives one status:
 
@@ -465,66 +476,35 @@ Every critical claim receives one status:
 - `unverifiable`
 - `insufficient_evidence`
 
-A critical property, ownership, zoning, comps, underwriting, or contact conflict blocks the review packet from becoming approval-ready. A contact conflict or suppression match blocks outreach regardless of the property opportunity score.
+A critical property, zoning, comp, underwriting, ownership, contact, suppression, or channel conflict blocks approval readiness. A contact conflict or suppression match blocks outreach regardless of the property score.
 
 ## Unified Human-Review Packet
 
-The completed case is presented as one review packet with five sections.
+The case is presented in five sections.
 
 ### 1. Property identity
 
-- canonical address
-- parcel or folio
-- jurisdiction
-- map boundary
-- identity confidence
-- source observations
-- unresolved ambiguity
+Canonical address, parcel or folio, jurisdiction, geometry, identity confidence, source observations, and unresolved ambiguity.
 
 ### 2. Development feasibility
 
-- zoning and permitted uses
-- density and dimensional standards
-- site constraints
-- deterministic calculations
-- citations
-- unresolved discretionary approvals or coverage gaps
+Zoning, permitted uses, density, dimensional standards, site constraints, calculations, citations, discretionary approvals, and coverage gaps.
 
 ### 3. Comparable transactions and underwriting
 
-- every accepted and rejected comp
-- qualification reasons
-- source and freshness
-- valuation range and confidence
-- underwriting assumptions and formulas
-- residual value and sensitivities
-- verifier result for each material calculation
+Every accepted and rejected comp, exact qualification reason, source and freshness, valuation range, confidence, underwriting assumptions, formulas, residual value, sensitivities, and verifier results.
 
-The UI must make the approved dependency visible: **comps qualified first, underwriting calculated second**.
+The UI makes the dependency visible: **comps qualified first; underwriting calculated second**.
 
 ### 4. Ownership and contact intelligence
 
-- each party and its property role
-- effective dates
-- contact observations and canonical contact points
-- source provenance
-- match and verification confidence
-- freshness, validity, deliverability, and suppression status
-- outreach eligibility by channel
+Each party, its property role, effective dates, contact observations, canonical contact points, provenance, match confidence, freshness, validity, suppression, and channel eligibility.
 
 ### 5. Decision and outreach
 
-- supported decision status
-- unknowns and conflicts
-- proposed next action
-- proposed message and channel
-- proposed follow-up schedule
-- required approvals
-- complete policy and audit context
+Decision status, unknowns, conflicts, proposed next action, proposed message and channel, follow-up schedule, approvals, and audit context.
 
-Human corrections are stored as versioned labels. They never silently mutate the historical run.
-
-Supported review labels include:
+Human corrections are versioned labels and never silently mutate the historical run. Labels include:
 
 - correct
 - incorrect
@@ -540,86 +520,58 @@ Supported review labels include:
 
 ## Outreach and Follow-Up Service
 
-The initial production release uses human approval before external outreach.
+The initial production release requires human approval before external outreach.
 
 The service may:
 
 - generate a property-specific draft from verified facts
-- propose the best eligible channel
+- propose an eligible channel
 - schedule an approved message
 - execute through an authenticated connector
 - record delivery, bounce, reply, opt-out, and error events
 - classify responses into neutral workflow states
 - propose follow-up tasks
-- stop follow-ups when suppression, opt-out, conflict, or policy rules require it
+- stop follow-ups when opt-out, suppression, conflict, invalidation, or policy rules require it
 
 The service may not:
 
-- send to an ambiguous, stale, invalid, wrong-party, or suppressed contact
+- send to a likely, ambiguous, stale, invalid, wrong-party, or suppressed contact
 - infer sensitive personal traits
 - conceal sender identity
-- bypass provider, platform, statutory, or workspace rules
+- bypass provider, platform, privacy, suppression, or communication rules
 - continue after an opt-out
 - represent a hypothetical development outcome as an approved entitlement
-- let the LLM decide channel eligibility or suppression
+- let an LLM decide eligibility or suppression
 
-Later automation may reduce review requirements only after channel-specific precision, complaint, suppression, and conversion gates are met and approved as a separate change.
-
-## Migration from `feature/outreach-agent`
-
-The separate outreach branch is a source of reusable adapters and concepts, not the target architecture.
-
-Selectively reuse or port:
-
-- email enrichment adapters
-- authenticated email delivery
-- message drafting patterns
-- interaction and pipeline concepts
-- provider error handling
-- event or professional-network discovery only where it serves an approved product workflow
-
-Replace or retire:
-
-- the generic prospect record as the primary property lead identity
-- a separate SQLite production database
-- direct autonomous campaign execution
-- unverified person-to-property matching
-- status-only tracking without claim and evidence provenance
-- any orchestrator that can enrich and send before verification and human approval
-
-The existing PlotLot `OutreachPanel` should evolve into the unified review and approval surface rather than remain a manually entered email form disconnected from party and contact evidence.
+Reducing human review later requires a separate approved design backed by precision, complaint, suppression, and conversion evidence.
 
 ## Evaluation Corpora
 
-Two corpora are required because reproducible testing and real-world contact verification have different privacy requirements.
+Two corpora are required because repository-safe testing and real-world contact verification have different privacy requirements.
 
 ### Repository-safe CI corpus
 
-Contains only property-level and synthetic data needed for deterministic tests:
+Contains property-level and synthetic data only:
 
-- normalized address
-- city, county, and state
-- parcel or folio
-- asking price
-- lot and building attributes
-- property type
-- zoning hint
+- normalized address, jurisdiction, and parcel identifiers
+- asking price and physical attributes
+- property type and zoning hint
 - expected workflow and outcomes
-- synthetic parties and contact points for contact-policy unit tests
+- synthetic parties and contacts for policy unit tests
 
 It contains no real owner names, phones, emails, mailing addresses, seller or agent contact data, free-text contact notes, or outreach history.
 
-The existing privacy-safe `LeadEvaluationCase` remains appropriate for this corpus. Its purpose is repository and CI safety, not the full production lead schema.
+The existing privacy-safe `LeadEvaluationCase` remains appropriate for this corpus. It is not the full production lead schema.
 
 ### Restricted evaluation corpus
 
-Contains the real source material needed to measure production quality:
+Contains real source material needed to measure production quality:
 
 - property and parcel identity
 - owners, entities, trusts, sellers, agents, and representatives
-- source-backed party relationships
-- mailing addresses, phone numbers, emails, and professional contact points
-- source provenance and freshness
+- evidence-backed party relationships
+- mailing addresses, phones, emails, and professional contact points
+- provenance and freshness
 - comp and underwriting outcomes
 - outreach and response history
 - human correctness labels
@@ -632,7 +584,7 @@ Requirements:
 - redacted benchmark output by default
 - no raw values in logs or model traces
 - versioned manifests with source IDs and extraction timestamps
-- deletion and retention support
+- retention and deletion support
 
 CI consumes only the repository-safe corpus. Restricted benchmarks run as explicit authenticated jobs.
 
@@ -643,50 +595,42 @@ Every material run records:
 - analysis run ID
 - property and parcel IDs
 - normalized input
-- source record identifiers
-- retrieval timestamps
-- source-content hashes or immutable source references
+- source record identifiers and retrieval timestamps
+- source hashes or immutable references
 - ordinance effective dates
 - provider and adapter versions
 - code commit SHA
-- tool-contract version
-- comp-policy version
-- formula version
-- model and prompt version
-- contact-match policy version
-- channel-eligibility and suppression-policy versions
+- tool-contract, comp-policy, formula, contact-policy, and channel-policy versions
+- model and prompt versions
 - accepted and rejected comp IDs
-- contact-observation and canonical contact-point IDs
+- contact-observation and contact-point IDs
 - verification run ID
 - human-review version
 - outreach approval and execution IDs
 
-PlotLot supports two rerun modes:
+Rerun modes:
 
-- **Replay** — run against the exact stored evidence snapshot to reproduce the historical conclusion.
+- **Replay** — use the exact stored evidence snapshot to reproduce the historical result.
 - **Refresh** — retrieve current evidence and produce a structured change report.
 
-## Evaluation Metrics and Release Gates
+## Evaluation Metrics and Initial Gates
 
 ### Property and zoning
 
-- parcel-resolution precision
-- jurisdiction-resolution accuracy
-- zoning-code accuracy
+- parcel and jurisdiction precision
+- zoning and dimensional-standard accuracy
 - citation coverage
-- dimensional-standard accuracy
-- deterministic calculation exactness
+- calculation exactness
 - correct abstention rate
 
 ### Comparable sales
 
-- accepted-comp precision
-- relevant-comp recall
+- accepted-comp precision and relevant-comp recall
 - rejection-reason accuracy
-- duplicate and subject-property rejection rate
-- recorded sale-price accuracy
-- source-diversity and freshness distribution
-- valuation-range difference from manual review
+- subject and duplicate rejection rate
+- recorded-price accuracy
+- source diversity and freshness
+- valuation difference from manual review
 - confidence calibration
 
 ### Underwriting
@@ -695,19 +639,14 @@ PlotLot supports two rerun modes:
 - assumption-lineage completeness
 - sensitivity reproducibility
 - conservative-basis accuracy
-- rate of recommendations produced without required inputs, which must be zero
+- recommendations produced without required inputs: zero
 
 ### Ownership and contacts
 
-- current-owner precision
-- party-role precision
+- owner and party-role precision
 - entity-to-decision-maker precision
-- phone-match precision
-- email-match precision
-- mailing-address accuracy
-- wrong-party contact rate
-- stale and invalid contact rate
-- bounce rate
+- phone, email, and mailing-address precision
+- wrong-party, stale, invalid, and bounce rates
 - suppression-check coverage
 
 ### Verification
@@ -716,99 +655,136 @@ PlotLot supports two rerun modes:
 - false-conflict rate
 - critical-claim coverage
 - percentage of human corrections predicted by the verifier
-- percentage of critical errors that reached human review undetected
+- critical errors reaching human review undetected
 
 ### Outreach
 
-- approved-to-sent rate
-- delivery and bounce rate
-- reply rate
-- positive-response rate
-- qualified-lead and meeting rate
-- opt-out and complaint rate
+- approved-to-sent, delivery, bounce, reply, positive-response, qualified-lead, and meeting rates
+- opt-out and complaint rates
 - follow-up conversion
 
 ### Initial hard gates
 
 - 100% reproducible deterministic calculations
-- no underwriting invocation before a comp qualification result
-- no market-supported recommendation when comps are insufficient
-- no unresolved parcel, zoning, ownership, comp, or underwriting conflict
-- no outreach to an ambiguous, stale, invalid, wrong-party, or suppressed contact
-- 100% suppression check before scheduling and sending
-- human approval required before production outreach
+- no underwriting invocation before `CompQualificationResult`
+- no market-supported recommendation when comps are insufficient, stale, or conflicting
+- no unresolved critical parcel, zoning, comp, underwriting, ownership, or contact conflict
+- no outreach to a non-verified or suppressed contact
+- 100% suppression and channel-eligibility checks before scheduling or sending
+- human approval before production outreach
 
-## Provider Health
+## Migration from `feature/outreach-agent`
 
-Health checks distinguish:
+The separate outreach branch is a source of reusable adapters and concepts, not the target architecture.
 
-- application unavailable
-- provider unavailable or timed out
-- discovery candidate rejected by quality validation
-- source reachable but stale
-- authorization or quota failure
-- contact provider unavailable
-- suppression provider unavailable
+Selectively reuse or port:
 
-The deployed API probe uses bounded retries with per-attempt evidence. Provider tests log candidate URLs or source IDs, validation scores, and rejection reasons while redacting sensitive values. A live provider outage does not cause deterministic unit-test failure, but the nightly health workflow remains red and actionable.
+- email enrichment adapters
+- authenticated email delivery
+- message-drafting patterns
+- interaction and pipeline concepts
+- provider error handling
+- event or professional-network discovery only when it serves an approved workflow
+
+Replace or retire:
+
+- the generic prospect record as the primary property lead identity
+- a separate SQLite production database
+- direct autonomous campaign execution
+- unverified person-to-property matching
+- status-only tracking without claim and evidence provenance
+- any orchestrator that can enrich and send before verification and approval
+
+The existing PlotLot `OutreachPanel` evolves into the unified review and approval surface rather than remaining a manually entered email form disconnected from party and contact evidence.
+
+## Program Decomposition
+
+This document is the umbrella architecture. It is intentionally decomposed into independently reviewable implementation slices rather than one mega-change.
+
+### Slice A — Canonical core and property identity
+
+Characterization tests, `AnalysisService`, `ToolExecutor`, typed outcomes, claim ledger, and property identity contract.
+
+### Slice B — Reliable comps and underwriting gate
+
+Deterministic comp qualification, immutable accepted and rejected sets, hard `CompQualificationResult` dependency, underwriting refactor, and conservative decision packet.
+
+### Slice C — Restricted contact intelligence
+
+Party and relationship models, encrypted contact observations and points, contact verification, channel eligibility, suppression, and access auditing.
+
+### Slice D — Independent verification and review packet
+
+Read-only verifier, claim comparison, replay and refresh, conflict gates, human labels, and unified review UI.
+
+### Slice E — Governed outreach and evaluation
+
+Approved connector execution, response and follow-up state, restricted benchmark corpus, metrics, and release gates.
+
+Each slice receives its own detailed implementation plan, tests, review, and terminal verification. Slice B must preserve the domain dependency **reliable comps before underwriting**, even if contact work is developed concurrently on a separate branch later.
+
+## High-Level Delivery Order
+
+1. baseline and characterization tests
+2. canonical application-service and tool-executor boundaries
+3. property identity contract
+4. reliable comparable-sale qualification
+5. underwriting refactor requiring qualified comps
+6. restricted party, relationship, contact, and suppression models
+7. Contact Intelligence Service
+8. independent Verification Agent
+9. unified human-review packet
+10. governed outreach and follow-up integration
+11. restricted benchmark and release gates
+
+This sequence is architecture, not permission to implement before the written specification is reviewed.
 
 ## Testing Strategy
 
-### Characterization
+### Characterization and architecture
 
 - Sync and streamed analysis share the same final report for an injected deterministic pipeline.
-- All transports return equivalent policy outcomes for the same tool and context.
-- Approval IDs are validated once through the canonical executor.
-- Evidence identifiers survive tool execution and reporting.
-- Existing specialist boundaries are preserved during migration.
+- All transports return equivalent policy outcomes.
+- Approval IDs are validated once through `ToolExecutor`.
+- Evidence IDs survive execution and reporting.
+- API routes do not import underscore-prefixed pipeline helpers.
+- Domain modules do not import API or storage transports.
+- Underwriting cannot retrieve or select comps.
+- Outreach cannot send outside `OutreachService` and `ToolExecutor`.
+- Sensitive contact data cannot be accessed outside authorized services.
+- No second property-analysis or outreach architecture is introduced.
 
-### Architecture
+### Comps-before-underwriting
 
-AST and import tests prohibit:
-
-- API routes importing underscore-prefixed pipeline helpers
-- chat or MCP directly invoking canonical tool handlers
-- domain modules importing API or storage transports
-- a second independent property-analysis or outreach architecture
-- underwriting selecting or retrieving comps
-- outreach sending outside `OutreachService` and `ToolExecutor`
-- contact data access outside authorized application services
-- tracked `.claude`, `.omo`, or `.omx` paths
-
-### Comps-before-underwriting contract
-
-- `UnderwritingService` rejects a missing comp qualification result
-- insufficient, stale, or conflicting comps block market-derived underwriting
-- qualified comps pass normalized values and evidence IDs into underwriting
-- accepted and rejected sets remain immutable within the underwriting run
-- replay reproduces the same qualification and underwriting result
+- missing qualification results are rejected
+- insufficient, stale, or conflicting results block market-derived underwriting
+- accepted and rejected sets remain immutable during underwriting
+- evidence IDs and normalized values pass into underwriting
+- replay reproduces qualification and underwriting outcomes
 
 ### Contact and outreach
 
 - party and contact confidence are scored separately
-- ambiguous relationships block canonical contact promotion
-- suppression blocks draft scheduling and sending
-- masked fields remain masked without an authorized unmask operation
+- ambiguous relationships block contact promotion
+- only verified contacts become send-eligible
+- suppression blocks scheduling and sending
+- masked values require an audited authorization to unmask
 - every send has evidence, policy, approval, and audit references
-- opt-out terminates follow-up tasks
+- opt-out terminates follow-ups
 
-### Verification
+### Verification and evaluation
 
 - the verifier is read-only
 - critical claims are independently re-fetched or recomputed
 - conflicts never overwrite the original run
-- a critical conflict blocks approval readiness
-
-### Evaluation
-
-- the repository-safe fixture contains no real contact data
-- restricted corpus exports are redacted by default
-- each property has a normalized identity and stable case ID
+- critical conflicts block approval readiness
+- repository-safe fixtures contain no real contact data
+- restricted exports are redacted by default
 - benchmark output records evidence, abstention, conflict, and human-correction behavior
 
 ## Error Handling
 
-Canonical application errors include:
+Canonical errors include:
 
 - `bad_input`
 - `not_found`
@@ -831,7 +807,21 @@ Canonical application errors include:
 - `insufficient_evidence`
 - `internal_error`
 
-No unavailable source is replaced with an unlabeled model estimate. No failed contact verification is converted into an eligible contact by narrative reasoning.
+No unavailable source becomes an unlabeled model estimate. No failed contact verification becomes eligible through narrative reasoning.
+
+## Provider Health
+
+Health checks distinguish:
+
+- application unavailable
+- provider unavailable or timed out
+- discovery candidate rejected by validation
+- source reachable but stale
+- authorization or quota failure
+- contact provider unavailable
+- suppression provider unavailable
+
+The deployed API probe uses bounded retries with per-attempt evidence. Provider tests record source IDs, validation scores, and rejection reasons while redacting sensitive values. Live provider outages do not fail deterministic unit tests, but nightly health remains red and actionable.
 
 ## Repository Scaffolding Policy
 
@@ -840,17 +830,16 @@ Remove from the product tree:
 - `.claude/`
 - `.omo/`
 - `plotlot/.omx/`
-- root `CLAUDE.md`
-- nested `plotlot/CLAUDE.md`
+- root and nested `CLAUDE.md`
 - `GEMINI.md`
 - hard-coded personal prospect lists, identities, or outreach instructions used as source code
 - generated agent execution evidence used as source code
 
-This restriction does not prohibit authenticated customer or workspace lead records in the production database. It prohibits embedding personal operational data in the repository.
+This does not prohibit authenticated workspace lead records in the production database. It prohibits embedding personal operational data in the repository.
 
-Retain one neutral root `AGENTS.md`. Deterministic fixtures required by tests move to `plotlot/tests/fixtures/`. Repository hygiene fails if removed workspace-state directories or personal-context files return.
+Retain one neutral root `AGENTS.md`. Deterministic fixtures move to `plotlot/tests/fixtures/`. Repository hygiene fails if removed workspace-state directories or personal-context files return.
 
-Dagster and dbt are not deleted in this first cleanup commit. They remain documented as non-runtime analytics tooling until active ownership and deployment are verified; destructive removal requires a separate evidence-backed decision.
+Dagster and dbt remain documented as non-runtime analytics tooling until active ownership and deployment are verified. Destructive removal requires a separate evidence-backed decision.
 
 ## Non-goals
 
@@ -859,43 +848,25 @@ Dagster and dbt are not deleted in this first cleanup commit. They remain docume
 - replacing PostgreSQL or the existing job queue
 - autonomous purchasing or binding offers
 - unreviewed or policy-ungoverned mass outreach
-- bypassing platform, provider, suppression, privacy, or communication rules
+- bypassing platform, provider, privacy, suppression, or communication rules
 - storing real contact data in Git or public CI artifacts
 - deleting analytics projects without ownership evidence
 - claiming uniform nationwide zoning, comp, owner, or contact coverage
-- a broad visual redesign unrelated to the review and approval workflow
-
-## High-Level Delivery Order
-
-The implementation must preserve the approved dependency order:
-
-1. baseline and characterization tests
-2. canonical application-service and tool-executor boundaries
-3. property identity contract
-4. reliable comparable-sale qualification
-5. underwriting refactor to require qualified comps
-6. restricted party, relationship, contact, and suppression models
-7. contact intelligence service
-8. independent Verification Agent
-9. unified human-review packet
-10. governed outreach and follow-up integration
-11. restricted benchmark and release gates
-
-This is sequencing within one architecture, not approval to implement before the written specification is reviewed.
+- a broad visual redesign unrelated to review and approval
 
 ## Definition of Done
 
-1. Baseline failures are documented with reproducible commands and root-cause evidence.
-2. The cleanup branch contains no tracked AI workspace state or personal tool instructions.
+1. Baseline failures have reproducible commands and root-cause evidence.
+2. The branch contains no tracked AI workspace state or personal tool instructions.
 3. One analysis service powers JSON and SSE while compatibility adapters preserve callers.
-4. One governed tool executor owns approvals, sensitive-data access, persistence, evidence, artifacts, and audit outcomes across transports.
-5. Property identity is resolved before owner, comp, underwriting, or outreach records are attached.
-6. Reliable comps deterministically accept or reject candidates and are completed before underwriting.
-7. Underwriting cannot select comps and cannot produce a market-supported recommendation when comps are insufficient.
-8. Property and restricted contact data remain linked through evidence-backed party relationships without flattening PII into unrestricted records.
-9. The Verification Agent independently checks property, zoning, comps, underwriting, ownership, contacts, and channel eligibility without mutation authority.
-10. A unified human-review packet exposes accepted and rejected evidence, calculations, conflicts, contact eligibility, and proposed outreach.
-11. Production outreach requires verified contact eligibility, suppression checks, and human approval.
-12. Repository-safe and restricted evaluation corpora exist with explicit privacy boundaries and reproducible manifests.
-13. Full backend, frontend, Playwright, provider-health, restricted-benchmark, and release gates have explicit terminal results.
-14. No cleanup or lead-intelligence commit is merged into `main` without required checks and review.
+4. One governed tool executor owns approvals, sensitive-data access, persistence, evidence, artifacts, and audit outcomes.
+5. Property identity resolves before owner, comp, underwriting, contact, or outreach records attach.
+6. Reliable comps deterministically accept or reject candidates and complete before underwriting.
+7. Underwriting cannot select comps or issue a market-supported recommendation when comps are insufficient, stale, or conflicting.
+8. Property and restricted contact data are linked through evidence-backed party relationships without flattening sensitive values.
+9. The Verification Agent independently checks property, zoning, comps, underwriting, ownership, contacts, suppression, and channel eligibility without mutation authority.
+10. A unified review packet exposes accepted and rejected evidence, calculations, conflicts, contact eligibility, and proposed outreach.
+11. Production outreach requires verified contacts, suppression and eligibility checks, and human approval.
+12. Repository-safe and restricted corpora have explicit privacy boundaries and reproducible manifests.
+13. Backend, frontend, Playwright, provider-health, restricted-benchmark, and release gates have explicit terminal results.
+14. No cleanup or lead-intelligence change merges into `main` without required checks and review.
