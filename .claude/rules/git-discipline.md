@@ -5,6 +5,20 @@ globs: *
 
 # Git Discipline
 
+## Checkpoint Standard (User-Approved September 7, 2026)
+- Create small, coherent commits after completed work passes relevant checks.
+- Push verified checkpoints to the confirmed GitHub development branch; current
+  work targets `origin/cpt-pro`. Do not leave completed work only on this machine.
+- This approval supersedes earlier no-commit/no-push goal wording. It does not
+  authorize deployment, merging to `main`, force-pushing or history rewriting.
+- Review exact staged changes and check for secrets before committing or pushing.
+  Keep implementation and direct tests together. Preserve unrelated dirty work;
+  never use blanket staging, deletion or ignore rules to conceal it.
+- For an accumulated mixed tree, test isolated staged snapshots where practical
+  so uncommitted dependencies cannot make a broken checkpoint appear to pass.
+- Report pushed hashes, verification scope, CI status and remaining dirty work.
+  A checkpoint is not a release approval.
+
 ## Commit Messages
 - Format: `type: short description` (lowercase, no period)
 - Types: `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `chore`, `perf`
