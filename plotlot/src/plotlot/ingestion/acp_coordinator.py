@@ -29,6 +29,7 @@ from plotlot.core.errors import NoAdapterError
 from plotlot.ingestion.adapters import resolve_adapter
 from plotlot.ingestion.embedder import MODEL_ID as EMBEDDING_MODEL_ID
 from plotlot.ingestion.embedder import embed_texts
+from plotlot.ingestion.source_acquisition import SourceAcquisitionError
 from plotlot.pipeline.ingest import validate_chunks
 from plotlot.storage.db import get_session, init_db
 from plotlot.storage.models import OrdinanceChunk
@@ -113,6 +114,19 @@ async def run_on_demand_ingestion(
             complete=True,
         )
         return
+    except SourceAcquisitionError as exc:
+        logger.error(
+            "acp_source_incomplete municipality=%s reason=%s",
+            municipality,
+            exc.reason,
+        )
+        yield IngestProgress(
+            stage="error",
+            message=str(exc),
+            error="incomplete_source",
+            complete=True,
+        )
+        return
     except Exception as exc:
         logger.warning("acp_resolve_failed municipality=%s error=%s", municipality, exc)
         yield IngestProgress(
@@ -137,6 +151,19 @@ async def run_on_demand_ingestion(
 
     try:
         chunks = await adapter.fetch_chunks()
+    except SourceAcquisitionError as exc:
+        logger.error(
+            "acp_source_incomplete municipality=%s reason=%s",
+            municipality,
+            exc.reason,
+        )
+        yield IngestProgress(
+            stage="error",
+            message=str(exc),
+            error="incomplete_source",
+            complete=True,
+        )
+        return
     except Exception as exc:
         logger.error("acp_fetch_failed municipality=%s error=%s", municipality, exc)
         yield IngestProgress(
