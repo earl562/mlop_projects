@@ -80,15 +80,19 @@ describe("Optional building illustrations", () => {
   it("does not attach a late illustration to a changed property", async () => {
     // Given a requested illustration that is still in flight.
     const user = userEvent.setup();
-    const pending = Promise.withResolvers<Response>();
-    const request = vi.spyOn(globalThis, "fetch").mockReturnValue(pending.promise);
+    let resolveResponse: (response: Response) => void = () => {
+      throw new Error("Expected the illustration request to start before resolving it");
+    };
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(() => (
+      new Promise<Response>((resolve) => { resolveResponse = resolve; })
+    ));
     const viewer = render(<BuildingRenderViewer {...props} />);
     await user.click(screen.getByRole("button", { name: "Generate AI views" }));
     expect(screen.getByRole("status")).toBeVisible();
 
     // When a different property replaces it before the old response arrives.
     viewer.rerender(<BuildingRenderViewer {...props} lotWidthFt={120} />);
-    await act(async () => pending.resolve(Response.json(result)));
+    await act(async () => resolveResponse(Response.json(result)));
 
     // Then the new envelope remains idle without old imagery or another request.
     expect(screen.queryByRole("img")).not.toBeInTheDocument();

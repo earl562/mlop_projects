@@ -78,3 +78,14 @@ evidence across the Florida/NC launch markets, integration of the comp pipeline,
 and remaining release gates. Sign-in configuration remains deferred. Pre-existing
 design and analysis-evidence test files retain their small opt-in adaptations
 with that backlog; they are not silently included in this isolated checkpoint.
+
+## CI portability follow-up
+
+The first published checkpoint, `94a44c930d49239ebb140d2c08940a4a24753cc5`,
+passed GitHub's build, lint, backend quality and backend unit checks, but the new
+late-response test failed on CI's Node 20: `Promise.withResolvers` is unavailable
+there. Local verification used Node 26.3.0. The follow-up replaces only that test
+helper with the standard Promise constructor, retaining every behavioral
+assertion. The isolated 44-test suite, type checking and scoped lint pass again.
+Rendered production code and its reviewed component blob are unchanged. CI's
+actual Node 20 run remains the authoritative runtime-compatibility check.
