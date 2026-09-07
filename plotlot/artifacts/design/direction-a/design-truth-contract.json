@@ -1,0 +1,108 @@
+{
+  "schema_version": "plotlot-direction-a-truth-contract/v1.0.0",
+  "contract_id": "direction-a-operational-intelligence-workbench",
+  "prompt_binding": {
+    "version": "direction-a/v1.2.0",
+    "sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+    "role": "hash-bound generation input; not an executable semantic contract"
+  },
+  "reference_binding": {
+    "selected_asset": "reference-direction-a-v4.png",
+    "sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+    "role": "non-authoritative visual reference"
+  },
+  "required_state_ids": [
+    "evidence.verified",
+    "evidence.not_hash_bound",
+    "decision.abstained",
+    "scenario.conditional_not_reliance_ready",
+    "coverage.private_beta",
+    "coverage.municipality_required",
+    "coverage.planned_not_enabled"
+  ],
+  "inputs": {
+    "parking_rule": {
+      "state_id": "evidence.not_hash_bound",
+      "trust_critical": true
+    }
+  },
+  "decision_outputs": {
+    "maximum_units": {
+      "state_id": "decision.abstained",
+      "current_value": null,
+      "depends_on": ["parking_rule"],
+      "scenario": {
+        "state_id": "scenario.conditional_not_reliance_ready",
+        "value": 2,
+        "unit": "units"
+      }
+    },
+    "purchase_ceiling": {
+      "state_id": "decision.abstained",
+      "current_value": null,
+      "depends_on": ["parking_rule", "maximum_units"],
+      "scenario": {
+        "state_id": "scenario.conditional_not_reliance_ready",
+        "value": 418000,
+        "currency": "USD"
+      }
+    }
+  },
+  "dependency_rules": [
+    {
+      "rule_id": "parking-not-hash-bound-abstains-capacity",
+      "when": {
+        "input": "parking_rule",
+        "state_id": "evidence.not_hash_bound"
+      },
+      "then": {
+        "output": "maximum_units",
+        "state_id": "decision.abstained",
+        "current_value": null
+      }
+    },
+    {
+      "rule_id": "parking-not-hash-bound-abstains-underwriting",
+      "when": {
+        "input": "parking_rule",
+        "state_id": "evidence.not_hash_bound"
+      },
+      "then": {
+        "output": "purchase_ceiling",
+        "state_id": "decision.abstained",
+        "current_value": null
+      }
+    }
+  ],
+  "privacy": {
+    "display_identifier_policy": "opaque_synthetic_only",
+    "allowed_deal_id_pattern": "^DEAL-(MIA|BRW|PBC|SD)-[0-9]{4}$",
+    "allowed_deal_ids": [
+      "DEAL-MIA-0420",
+      "DEAL-MIA-0150",
+      "DEAL-BRW-0010",
+      "DEAL-PBC-1234",
+      "DEAL-SD-0000"
+    ],
+    "prohibited_visible_data_classes": [
+      "street_number",
+      "street_name",
+      "street_suffix",
+      "full_or_partial_address",
+      "folio",
+      "apn",
+      "owner_name",
+      "phone",
+      "email",
+      "coordinates",
+      "parcel_url",
+      "source_url"
+    ]
+  },
+  "coverage": {
+    "miami_dade": "coverage.private_beta",
+    "broward": "coverage.municipality_required",
+    "palm_beach": "coverage.municipality_required",
+    "san_diego": "coverage.planned_not_enabled"
+  }
+}

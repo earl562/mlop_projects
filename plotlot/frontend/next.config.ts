@@ -4,9 +4,11 @@ import type { NextConfig } from "next";
 
 // Keep tracing and Turbopack aligned at the repo root for monorepo/Vercel builds.
 const workspaceRoot = path.join(__dirname, "..", "..");
+const isPlaywrightTest = process.env.PLAYWRIGHT_TESTING === "1";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  distDir: isPlaywrightTest ? ".next-playwright" : ".next",
+  ...(isPlaywrightTest ? {} : { output: "standalone" as const }),
   outputFileTracingRoot: workspaceRoot,
   turbopack: {
     root: workspaceRoot,

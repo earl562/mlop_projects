@@ -13,6 +13,7 @@ from plotlot.ingestion.discovery import (
 )
 from plotlot.core.types import TocNode
 from plotlot.ingestion.scraper import MunicodeScraper
+from plotlot.ingestion.source_acquisition import SourceAcquisitionError
 from plotlot.land_use.citations import ordinance_citation
 from plotlot.land_use.models import OrdinanceSearchArgs, OrdinanceSearchResult
 
@@ -49,7 +50,7 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
         if nodes is None:
             try:
                 nodes = await scraper.walk_toc(client, config, config.zoning_node_id, max_depth=3)
-            except httpx.HTTPError:
+            except (httpx.HTTPError, SourceAcquisitionError):
                 return []
             _TOC_CACHE[cache_key] = nodes
 
@@ -67,7 +68,7 @@ async def search_municode_live(args: OrdinanceSearchArgs) -> list[OrdinanceSearc
             parent = node.parent_heading or ""
             try:
                 html = await scraper.get_section_content(client, config, node.node_id)
-            except httpx.HTTPError:
+            except (httpx.HTTPError, SourceAcquisitionError):
                 continue
             snippet = (html or "").replace("\n", " ")
             snippet = snippet[:300].strip() or heading

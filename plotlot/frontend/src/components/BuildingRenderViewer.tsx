@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { renderBuilding, type BuildingRenderData } from "@/lib/api";
 
 interface BuildingRenderViewerProps {
@@ -23,7 +23,16 @@ const VIEW_LABELS: Record<string, string> = {
   side: "Side",
 };
 
-export default function BuildingRenderViewer({
+export default function BuildingRenderViewer(props: BuildingRenderViewerProps) {
+  const envelopeKey = JSON.stringify([
+    props.lotWidthFt, props.lotDepthFt, props.setbackFrontFt, props.setbackSideFt,
+    props.setbackRearFt, props.maxHeightFt, props.maxStories, props.propertyType,
+    props.maxUnits, props.zoningDistrict, props.municipality,
+  ]);
+  return <BuildingRenderSession key={envelopeKey} {...props} />;
+}
+
+function BuildingRenderSession({
   lotWidthFt,
   lotDepthFt,
   setbackFrontFt,
@@ -37,7 +46,7 @@ export default function BuildingRenderViewer({
   municipality,
 }: BuildingRenderViewerProps) {
   const [result, setResult] = useState<BuildingRenderData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState("front");
   const renderCache = useRef<Map<string, BuildingRenderData>>(new Map());
@@ -97,18 +106,14 @@ export default function BuildingRenderViewer({
     municipality, propType, stories,
   ]);
 
-  useEffect(() => {
-    fetchRender();
-  }, [fetchRender]);
-
   const views = result?.views || [];
   const currentImage = views.find((v) => v.view === activeView) || views[0];
 
   const tabClass = (key: string) =>
-    `rounded-full px-3.5 py-1.5 text-xs font-medium transition-all active:scale-[0.98] ${
+    `min-h-11 rounded-full px-3.5 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] active:scale-[0.98] ${
       activeView === key
         ? "bg-[var(--text-primary)] text-[var(--bg-primary)]"
-        : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-hover)] hover:text-[var(--text-secondary)]"
+        : "border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
     }`;
 
   return (
@@ -117,7 +122,7 @@ export default function BuildingRenderViewer({
       <div className="flex flex-wrap gap-2">
         {views.length > 0
           ? views.map((v) => (
-              <button type="button" key={v.view} onClick={() => setActiveView(v.view)} className={tabClass(v.view)}>
+              <button type="button" key={v.view} aria-pressed={activeView === v.view} onClick={() => setActiveView(v.view)} className={tabClass(v.view)}>
                 {VIEW_LABELS[v.view] || v.view}
               </button>
             ))
@@ -125,8 +130,8 @@ export default function BuildingRenderViewer({
               <button
                 type="button"
                 key={v}
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60"
+                disabled
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-2 text-xs font-medium text-[var(--text-muted)] opacity-60"
               >
                 {loading && (
                   <svg aria-hidden="true" className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -142,25 +147,25 @@ export default function BuildingRenderViewer({
 
       {/* Content */}
       {loading ? (
-        <div className="flex h-[400px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)]">
+        <div role="status" className="flex h-[400px] items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)]">
           <div className="flex flex-col items-center gap-3">
             <svg aria-hidden="true" className="h-6 w-6 animate-spin text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-sm text-[var(--text-muted)]">Generating AI architectural views...</span>
+            <span className="text-sm text-[var(--text-secondary)]">Generating AI architectural views...</span>
           </div>
         </div>
       ) : error ? (
-        <div className="flex h-[300px] flex-col items-center justify-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)]">
+        <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)] p-6 text-center">
           <svg aria-hidden="true" className="h-8 w-8 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V5.25a1.5 1.5 0 00-1.5-1.5H3.75a1.5 1.5 0 00-1.5 1.5v14.25a1.5 1.5 0 001.5 1.5z" />
           </svg>
-          <p className="text-sm text-[var(--text-muted)]">{error}</p>
+          <p role="alert" className="text-sm text-[var(--text-secondary)]">{error}</p>
           <button
             type="button"
             onClick={fetchRender}
-            className="rounded-full border border-[var(--border)] px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)] active:scale-[0.98]"
+            className="min-h-11 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] active:scale-[0.98]"
           >
             Retry
           </button>
@@ -173,10 +178,29 @@ export default function BuildingRenderViewer({
             className="w-full object-cover"
           />
         </div>
-      ) : null}
+      ) : (
+        <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-raised)] p-6 text-center">
+          <p className="text-sm font-medium text-[var(--text-primary)]">Optional AI illustration</p>
+          <p className="max-w-sm text-xs text-[var(--text-secondary)]">
+            Generate concept views only when needed. Requires a configured image provider;
+            provider charges may apply.
+          </p>
+          <button
+            type="button"
+            onClick={fetchRender}
+            className="min-h-11 rounded-full border border-[var(--border)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] active:scale-[0.98]"
+          >
+            Generate AI views
+          </button>
+        </div>
+      )}
+
+      <p className="text-xs text-[var(--text-secondary)]">
+        Concept illustration only, not a verified design or zoning approval.
+      </p>
 
       {/* Caption */}
-      <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
         <span>
           {currentImage
             ? `${VIEW_LABELS[currentImage.view]}${result?.cached ? " (cached)" : ` — ${views.length} views in ${((result?.generation_time_ms || 0) / 1000).toFixed(1)}s`}`

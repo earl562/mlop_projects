@@ -9,6 +9,7 @@ steps are always the same, so we don't waste LLM turns on orchestration.
 The LLM focuses on what it's good at: reasoning over the data.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -16,7 +17,15 @@ import re
 import time
 from dataclasses import fields as dataclass_fields
 
-from plotlot.core.types import NumericZoningParams, Setbacks, SourceRef, ZoningReport
+from plotlot.core.types import (
+    NumericZoningParams,
+    SearchResult,
+    Setbacks,
+    SourceRef,
+    ZoningReport,
+)
+from plotlot.domain.dimensional_standard import DistrictDimensionalStandard
+from plotlot.domain.claims import Claim, ClaimKind, ClaimOrigin
 from plotlot.observability.tracing import (
     log_dict,
     log_metrics,
@@ -31,16 +40,50 @@ from plotlot.pipeline.calculator import calculate_max_units, calculate_max_gla, 
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.retrieval.property import lookup_property
 from plotlot.retrieval.search import hybrid_search
+from plotlot.retrieval.zoning_crosswalk import crosswalk_zoning_code
+from plotlot.storage.dimensional_standards import get_dimensional_standard
 from plotlot.storage.db import get_session
 
 logger = logging.getLogger(__name__)
 
-MAX_ANALYSIS_TURNS = 3
+MAX_ANALYSIS_TURNS = 6
 PIPELINE_VERSION = "v2.2"
 
 # Pipeline result cache — 30min TTL (Care Access: 86% cost reduction with caching)
 _pipeline_cache: dict[str, tuple["ZoningReport", float]] = {}
 PIPELINE_CACHE_TTL = 1800  # 30 minutes
+
+# Generic fallback query when no zoning code is known. The municipality name
+# (e.g. "San Jose") has no semantic overlap with ordinance text and returns 0
+# results, so we query for generic zoning terms instead.
+GENERIC_ZONING_QUERY = "zoning district residential density setbacks height limits parking"
+
+
+def _format_sources(results: list[SearchResult]) -> list[str]:
+    """Render retrieved chunks as citation strings for the report.
+
+    Many municipalities (Tiburon, Oakland, Marin County, …) were ingested with
+    only ``section_title`` populated and an empty ``section``. Filtering on
+    ``section`` alone dropped EVERY citation for those places, so a grounded
+    result (real chunks retrieved, zoning extracted) displayed with zero
+    sources — looking unsourced. Include a chunk when EITHER field is present.
+    """
+    sources: list[str] = []
+    for r in results:
+        section = (r.section or "").strip()
+        title = (r.section_title or "").strip()
+        if section and title:
+            sources.append(f"{section} — {title}")
+        elif section or title:
+            sources.append(section or title)
+    return sources
+
+
+# Auto-ingestion guard — don't re-attempt the same municipality within this window.
+# Ingestion is an idempotent upsert; the guard only prevents hammering a dead source
+# (e.g. a city not on Municode) on every analysis call.
+_AUTOINGEST_TTL = 86400.0  # 24h
+_autoingest_attempts: dict[str, float] = {}
 
 
 # Geocodio accuracy levels that indicate a confident location match
@@ -109,6 +152,93 @@ def report_to_dict(report: ZoningReport) -> dict:  # noqa: C901
         result["property_record"] = None
 
     return result
+
+
+async def _run_hybrid_search(
+    municipality: str,
+    query: str,
+    limit: int = 15,
+    zone_code_boost: str | None = None,
+) -> list:
+    """Run a single hybrid search with its own DB session."""
+    session = await get_session()
+    try:
+        return await hybrid_search(
+            session, municipality, query, limit=limit, zone_code_boost=zone_code_boost
+        )
+    finally:
+        await session.close()
+
+
+async def _gather_ordinance_sections(
+    municipality: str,
+    state: str,
+    county: str,
+    search_query: str,
+    *,
+    zone_code_boost: str | None = None,
+) -> tuple[list, str]:
+    """Search indexed ordinances; auto-ingest once on a miss, then re-search.
+
+    This is the self-healing coverage path that makes the MCP/ACP work for any
+    municipality whose code is reachable by a source adapter (Municode/PDF/HTML)
+    without a manual ``plotlot-ingest`` run. When ingestion is not possible
+    (no adapter, empty source) it degrades honestly — the caller still has the
+    ArcGIS zoning code and reports the gap instead of fabricating data.
+
+    Returns:
+        (search_results, coverage_status) where coverage_status is one of:
+          ``"indexed"``        results came from already-indexed data
+          ``"auto_ingested"``  ingestion ran and produced results
+          ``"ingest_empty"``   ingestion attempted but yielded no usable text
+          ``"uncovered"``      no municipality/state available to ingest
+    """
+    results = await _run_hybrid_search(municipality, search_query, zone_code_boost=zone_code_boost)
+    if results:
+        return results, "indexed"
+
+    if not municipality.strip() or not state.strip():
+        return results, "uncovered"
+
+    # Guard: don't re-ingest the same place repeatedly (esp. dead sources).
+    key = f"{municipality.lower().strip()}|{state.lower().strip()}"
+    now = time.monotonic()
+    last_attempt = _autoingest_attempts.get(key)
+    if last_attempt is not None and now - last_attempt < _AUTOINGEST_TTL:
+        logger.info("Skipping auto-ingest for %s, %s (attempted recently)", municipality, state)
+        return results, "ingest_empty"
+    _autoingest_attempts[key] = now
+
+    from plotlot.ingestion.acp_coordinator import IngestRequest, run_on_demand_ingestion
+
+    logger.info("Auto-ingesting %s, %s on zoning search miss", municipality, state)
+    final_stage, final_error = "", None
+    try:
+        async for prog in run_on_demand_ingestion(
+            IngestRequest(
+                municipality=municipality,
+                state=state,
+                county=county or None,
+                trigger="pipeline_search_miss",
+            )
+        ):
+            final_stage, final_error = prog.stage, prog.error
+    except Exception:
+        logger.warning("Auto-ingestion crashed for %s, %s", municipality, state, exc_info=True)
+        return results, "ingest_empty"
+
+    if final_stage != "complete":
+        logger.info(
+            "Auto-ingest did not complete for %s, %s (stage=%s error=%s)",
+            municipality,
+            state,
+            final_stage,
+            final_error,
+        )
+        return results, "ingest_empty"
+
+    results = await _run_hybrid_search(municipality, search_query, zone_code_boost=zone_code_boost)
+    return results, ("auto_ingested" if results else "ingest_empty")
 
 
 @trace(name="lookup_address", span_type="CHAIN")
@@ -204,21 +334,39 @@ async def lookup_address(address: str) -> ZoningReport | None:
         else:
             logger.warning("No property record found for %s in %s County", address, county)
 
-        # Step 3: Hybrid search — use actual zoning code if we have it, else municipality
-        search_query = (
-            prop_record.zoning_code if prop_record and prop_record.zoning_code else municipality
+        # Step 3: Hybrid search with self-healing coverage. The GIS layer's zoning
+        # code (Track 1) and the ordinance code book (Track 2) often use different
+        # labels for the same district — e.g. GIS "RS20" vs. Clark County Title 30
+        # "R-E" — so we crosswalk the GIS code to the ordinance code BEFORE searching,
+        # else the ingested text never matches. When no crosswalk exists the code is
+        # used unchanged. The municipality name alone returns 0 results, so fall back
+        # to generic zoning terms when no code is known. On a search miss, auto-ingest
+        # the municipality's ordinance via the ACP coordinator and re-search — so the
+        # MCP/ACP path works for any source-adapter-reachable place, not just pre-ingested ones.
+        gis_zoning_code = prop_record.zoning_code if prop_record else ""
+        crosswalk = crosswalk_zoning_code(
+            gis_zoning_code, state=state, county=county, municipality=municipality
         )
-        session = await get_session()
-        try:
-            search_results = await hybrid_search(session, municipality, search_query, limit=15)
-        finally:
-            await session.close()
+        if crosswalk.matched:
+            logger.info("Zoning crosswalk: %s", crosswalk.note)
+
+        if gis_zoning_code:
+            search_query: str = crosswalk.search_code
+            zone_boost: str | None = crosswalk.search_code
+        else:
+            search_query = GENERIC_ZONING_QUERY
+            zone_boost = None
+
+        search_results, coverage_status = await _gather_ordinance_sections(
+            municipality, state, county, search_query, zone_code_boost=zone_boost
+        )
 
         logger.info(
-            "Search: %d chunks for query '%s' in %s",
+            "Search: %d chunks for query '%s' in %s (coverage=%s)",
             len(search_results),
             search_query,
             municipality,
+            coverage_status,
         )
 
         # Log Phase 1 results as params
@@ -230,7 +378,10 @@ async def lookup_address(address: str) -> ZoningReport | None:
                 "zoning_code": prop_record.zoning_code
                 if prop_record and prop_record.zoning_code
                 else "N/A",
+                "ordinance_zoning_code": crosswalk.search_code if gis_zoning_code else "N/A",
+                "zoning_crosswalk_matched": str(crosswalk.matched),
                 "search_result_count": str(len(search_results)),
+                "coverage_status": coverage_status,
             }
         )
 
@@ -243,6 +394,7 @@ async def lookup_address(address: str) -> ZoningReport | None:
             search_results=search_results,
             municipality=municipality,
             county=county,
+            ordinance_code=crosswalk.search_code if crosswalk.matched else "",
         )
 
         # ── Phase 3: Deterministic max-units calculation ──
@@ -252,6 +404,8 @@ async def lookup_address(address: str) -> ZoningReport | None:
             and report.property_record
             and report.property_record.lot_size_sqft > 0
         ):
+            from plotlot.pipeline.extraction_verify import is_field_verified
+
             lot_width, lot_depth = parse_lot_dimensions(
                 report.property_record.lot_dimensions or "",
             )
@@ -269,17 +423,114 @@ async def lookup_address(address: str) -> ZoningReport | None:
                     report.density_analysis.confidence,
                 )
             else:
-                report.density_analysis = calculate_max_units(
-                    lot_size_sqft=report.property_record.lot_size_sqft,
-                    params=report.numeric_params,
-                    lot_width_ft=lot_width,
-                    lot_depth_ft=lot_depth,
-                )
+                # San Diego Coastal Height Limit (Prop D) — a 30 ft cap generally
+                # west of I-5 that limits stories and can pull units below base
+                # zoning. Deterministic point-in-polygon, gated to City of San
+                # Diego, CA (a no-op everywhere else). Best-effort: a failure
+                # leaves the firm number intact and surfaces a verify-warning
+                # rather than silently cutting units. Wiring it here (not just in
+                # the SSE route) means the JSON /analyze, batch screening, and the
+                # chat analyze_property tool all apply Prop D consistently.
+                coastal_height_limit: float | None = None
+                try:
+                    from plotlot.pipeline.coastal_overlay import fetch_coastal_height_overlay
+
+                    c_lat = report.property_record.lat or lat
+                    c_lng = report.property_record.lng or lng
+                    if c_lat is not None and c_lng is not None:
+                        coastal = await asyncio.wait_for(
+                            fetch_coastal_height_overlay(
+                                c_lat,
+                                c_lng,
+                                city=municipality,
+                                county=county,
+                                state=state,
+                            ),
+                            timeout=12,
+                        )
+                        if coastal.status != "not_applicable":
+                            report.coastal_overlay = coastal
+                        if coastal.applies and coastal.height_limit_ft:
+                            coastal_height_limit = coastal.height_limit_ft
+                            report.warnings.append(coastal.note)
+                        elif coastal.status == "unverified":
+                            report.warnings.append(coastal.note)
+                except Exception as exc:  # noqa: BLE001 — non-blocking
+                    logger.warning("Coastal overlay step skipped: %s", exc)
+
+                # ── Verified-fact path (WIRE-1.1b) ──
+                # Before LLM-extracted params, try the typed dimensional
+                # standard: a verified-fact row from the ordinance's Schedule
+                # of District Regulations, stored at ingestion time. When
+                # present, it replaces NumericZoningParams as the calculator
+                # input and the result is labeled origin=local_authority
+                # (verified-fact grade), not assumption-grade LLM extraction.
+                # District code: prefer the crosswalked ordinance code (the
+                # code book's label) so the right row is read out of a
+                # multi-district dimensional table; fall back to the parcel's
+                # GIS zone code, then the LLM-reported district string.
+                typed_standard: DistrictDimensionalStandard | None = None
+                lookup_codes: list[str] = []
+                if crosswalk.matched and crosswalk.search_code:
+                    lookup_codes.append(crosswalk.search_code)
+                if gis_zoning_code:
+                    lookup_codes.append(gis_zoning_code)
+                if report.zoning_district:
+                    lookup_codes.append(report.zoning_district)
+                seen: set[str] = set()
+                for code in lookup_codes:
+                    key = code.strip().upper()
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    try:
+                        typed_standard = await get_dimensional_standard(municipality, code)
+                    except Exception as exc:  # noqa: BLE001 — DB may be offline
+                        logger.debug(
+                            "Dimensional standard lookup failed for %s/%s: %s",
+                            municipality,
+                            code,
+                            exc,
+                        )
+                        typed_standard = None
+                    if typed_standard is not None:
+                        logger.info(
+                            "Typed dimensional standard found for %s/%s → "
+                            "verified-fact density path (origin=local_authority)",
+                            municipality,
+                            code,
+                        )
+                        break
+
+                if typed_standard is not None:
+                    report.density_analysis = calculate_max_units(
+                        lot_size_sqft=report.property_record.lot_size_sqft,
+                        params=typed_standard,
+                        lot_width_ft=lot_width,
+                        lot_depth_ft=lot_depth,
+                        height_limit_ft=coastal_height_limit,
+                    )
+                else:
+                    # LLM-extracted fallback (origin=unknown, assumption grade).
+                    report.density_analysis = calculate_max_units(
+                        lot_size_sqft=report.property_record.lot_size_sqft,
+                        params=report.numeric_params,
+                        lot_width_ft=lot_width,
+                        lot_depth_ft=lot_depth,
+                        density_verified=is_field_verified(
+                            report.extraction_verification, "max_density_units_per_acre"
+                        ),
+                        min_lot_area_verified=is_field_verified(
+                            report.extraction_verification, "min_lot_area_per_unit_sqft"
+                        ),
+                        height_limit_ft=coastal_height_limit,
+                    )
                 logger.info(
-                    "Max units: %d (governing: %s, confidence: %s)",
+                    "Max units: %d (governing: %s, confidence: %s, origin: %s)",
                     report.density_analysis.max_units,
                     report.density_analysis.governing_constraint,
                     report.density_analysis.confidence,
+                    report.density_analysis.origin,
                 )
 
         # Log analysis metrics
@@ -316,12 +567,15 @@ async def _agentic_analysis(
     search_results: list,
     municipality: str,
     county: str,
+    ordinance_code: str = "",
 ) -> ZoningReport:
     """LLM analysis with tool access for additional searches."""
     from plotlot.retrieval.llm import call_llm
 
     # Build context message with all collected data
-    context_msg = _build_context_message(address, geo, prop_record, search_results)
+    context_msg = _build_context_message(
+        address, geo, prop_record, search_results, ordinance_code=ordinance_code
+    )
 
     # Tools available during analysis
     tools = [
@@ -466,7 +720,7 @@ async def _agentic_analysis(
         {"role": "user", "content": context_msg},
     ]
 
-    all_sources = [f"{r.section} — {r.section_title}" for r in search_results if r.section]
+    all_sources = _format_sources(search_results)
 
     for turn in range(MAX_ANALYSIS_TURNS):
         logger.info("Analysis turn %d/%d", turn + 1, MAX_ANALYSIS_TURNS)
@@ -504,9 +758,13 @@ async def _agentic_analysis(
                 {
                     "role": "user",
                     "content": (
-                        "STOP searching. Call the submit_report tool NOW with your analysis. "
-                        "Fill in all fields using the data you have. If some data is missing, "
-                        "use your expert knowledge and set confidence accordingly. "
+                        "You have gathered enough data. Call submit_report NOW with your findings. "
+                        "For any field where you did not find explicit text in the retrieved chunks, "
+                        "set the value to null (numeric) or empty string (text). "
+                        "Do NOT fill in values from general knowledge — null is correct when the "
+                        "ordinance text does not state a value. Set confidence based on how many "
+                        "fields are supported by retrieved text: high = all key fields found, "
+                        "medium = most found, low = critical fields missing. "
                         "You MUST call submit_report immediately."
                     ),
                 }
@@ -546,9 +804,7 @@ async def _agentic_analysis(
                     finally:
                         await session.close()
 
-                    all_sources.extend(
-                        [f"{r.section} — {r.section_title}" for r in extra_results if r.section]
-                    )
+                    all_sources.extend(_format_sources(extra_results))
 
                     if extra_results:
                         chunks = [
@@ -589,7 +845,13 @@ async def _agentic_analysis(
     return _build_fallback_report(address, geo, prop_record, list(dict.fromkeys(all_sources)))
 
 
-def _build_context_message(address: str, geo: dict, prop_record, search_results: list) -> str:
+def _build_context_message(
+    address: str,
+    geo: dict,
+    prop_record,
+    search_results: list,
+    ordinance_code: str = "",
+) -> str:
     """Build the data context for the LLM analysis."""
     parts = [
         f"# Property Analysis: {address}\n",
@@ -607,7 +869,14 @@ def _build_context_message(address: str, geo: dict, prop_record, search_results:
         if prop_record.owner:
             parts.append(f"- Owner: {prop_record.owner}")
         if prop_record.zoning_code:
-            parts.append(f"- Zoning Code: {prop_record.zoning_code}")
+            parts.append(f"- Zoning Code (GIS map label): {prop_record.zoning_code}")
+        if ordinance_code and ordinance_code != prop_record.zoning_code:
+            parts.append(
+                f"- Ordinance District Code: {ordinance_code} — the adopted code book uses "
+                f"this label for the same district that the GIS layer labels "
+                f"'{prop_record.zoning_code}'. Search the ordinance and report standards "
+                f"under '{ordinance_code}'."
+            )
         if prop_record.zoning_description:
             parts.append(f"- Zoning Description: {prop_record.zoning_description}")
         if prop_record.land_use_description:
@@ -794,6 +1063,122 @@ def _extract_fallback_insights(
     return (extracted, params if has_any else None)
 
 
+def _extract_claims_from_report(
+    args: dict,
+    search_results: list | None,
+    prop_record,
+) -> list[Claim]:
+    """Emit typed, provenanced Claims for the zoning facts _agentic_analysis
+    extracted (WIRE-2.1b).
+
+    Grounding rule (criterion 2): a fact is ``verified_fact`` / ``origin=
+    local_authority`` when sourced from indexed ordinance text
+    (``search_results`` non-empty) OR the county GIS zone code
+    (``prop_record.zoning_code`` — a local-authority ArcGIS record). Otherwise
+    it is LLM-fallback: ``assumption`` / ``origin=unknown``.
+
+    Namespace/boundary rule: ``zoning.*`` is a local-authority namespace, so
+    the Claim invariant forbids ``zoning.*`` with ``origin=unknown``. An
+    ungrounded LLM district assertion therefore lives under the distinct
+    ``assumed_zoning.district`` namespace (``origin=unknown``, ``kind=
+    assumption``) — ``zoning.*`` is reserved for local-authority-grounded
+    facts. ``standards.*`` is unconstrained and carries whichever origin the
+    grounding warrants. ``cost.*`` / ``financing.*`` are never emitted here
+    (they come from the pro-forma, not the zoning LLM) and the Claim
+    constructor forbids ``cost.*`` as ``verified_fact`` regardless (criterion 3
+    holds at the emission point by construction).
+    """
+    claims: list[Claim] = []
+
+    ordinance_grounded = bool(search_results)
+    gis_code = (getattr(prop_record, "zoning_code", "") or "").strip()
+    district = (args.get("zoning_district", "") or "").strip() or gis_code
+    grounded = ordinance_grounded or bool(gis_code)
+
+    # Source URL for grounded claims (first ordinance source or empty).
+    source_url = ""
+    if search_results:
+        first = search_results[0]
+        source_url = getattr(first, "source_url", "") or getattr(first, "url", "") or ""
+
+    # zoning.district (grounded) vs assumed_zoning.district (LLM fallback).
+    if district:
+        if grounded:
+            claims.append(
+                Claim(
+                    field_key="zoning.district",
+                    value=district,
+                    kind=ClaimKind.VERIFIED_FACT,
+                    origin=ClaimOrigin.LOCAL_AUTHORITY,
+                    source_url=source_url,
+                    metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+                )
+            )
+        else:
+            # Ungrounded LLM assertion — zoning.* forbids origin=unknown, so it
+            # lives under assumed_zoning.* (assumption grade, confidence-capped).
+            claims.append(
+                Claim(
+                    field_key="assumed_zoning.district",
+                    value=district,
+                    kind=ClaimKind.ASSUMPTION,
+                    origin=ClaimOrigin.UNKNOWN,
+                    confidence=0.4,
+                    metadata={"grounded_by": "llm_fallback"},
+                )
+            )
+
+    # standards.* — numeric zoning standards. Namespace is unconstrained, so the
+    # origin tracks grounding directly (verified_fact/local_authority when
+    # grounded, assumption/unknown when LLM fallback).
+    std_specs = [
+        ("standards.setback_front_ft", "setback_front_ft"),
+        ("standards.setback_side_ft", "setback_side_ft"),
+        ("standards.setback_rear_ft", "setback_rear_ft"),
+        ("standards.max_height_ft", "max_height_ft"),
+        ("standards.max_density_units_per_acre", "max_density_units_per_acre"),
+        ("standards.min_lot_area_per_unit_sqft", "min_lot_area_per_unit_sqft"),
+        ("standards.far", "far_numeric"),
+        ("standards.max_lot_coverage_pct", "max_lot_coverage_pct"),
+        ("standards.min_lot_width_ft", "min_lot_width_ft"),
+        ("standards.parking_spaces_per_unit", "parking_spaces_per_unit"),
+    ]
+    for field_key, arg_key in std_specs:
+        val = args.get(arg_key)
+        if val is None:
+            continue
+        try:
+            num = float(val)
+            if num <= 0:
+                continue
+        except (ValueError, TypeError):
+            continue
+        if grounded:
+            claims.append(
+                Claim(
+                    field_key=field_key,
+                    value=num,
+                    kind=ClaimKind.VERIFIED_FACT,
+                    origin=ClaimOrigin.LOCAL_AUTHORITY,
+                    source_url=source_url,
+                    metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+                )
+            )
+        else:
+            claims.append(
+                Claim(
+                    field_key=field_key,
+                    value=num,
+                    kind=ClaimKind.ASSUMPTION,
+                    origin=ClaimOrigin.UNKNOWN,
+                    confidence=0.4,
+                    metadata={"grounded_by": "llm_fallback"},
+                )
+            )
+
+    return claims
+
+
 def _build_report(
     args: dict,
     address: str,
@@ -809,11 +1194,24 @@ def _build_report(
     # Build source_refs from top search results (for inline citations)
     source_refs = _build_source_refs(search_results)
 
+    # Deterministically verify the LLM's value-drivers against the source text.
+    from plotlot.pipeline.extraction_verify import verify_numeric_params
+
+    # Prefer the parcel's authoritative ArcGIS zone code (e.g. "RM-3-7") over the
+    # LLM-supplied district string — zone-aware grounding needs the exact code to
+    # read the right row out of a multi-zone density table (San Diego lists every
+    # RM zone in one chunk, so the wrong code grounds a neighbor's density).
+    zone_code = (getattr(prop_record, "zoning_code", "") or "").strip() or args.get(
+        "zoning_district", ""
+    )
+    verification = verify_numeric_params(numeric_params, search_results, zone_code)
+
     return ZoningReport(
         address=address,
         formatted_address=geo.get("formatted_address", address),
         municipality=geo.get("municipality", ""),
         county=geo.get("county", ""),
+        state=geo.get("state", ""),
         lat=geo.get("lat"),
         lng=geo.get("lng"),
         zoning_district=args.get("zoning_district", ""),
@@ -838,6 +1236,9 @@ def _build_report(
         sources=sources,
         confidence=args.get("confidence", "low"),
         source_refs=source_refs,
+        extraction_verification=verification,
+        warnings=list(verification.warnings),
+        claims=_extract_claims_from_report(args, search_results, prop_record),
     )
 
 
@@ -905,6 +1306,39 @@ def _extract_numeric_params(args: dict) -> NumericZoningParams | None:
     return params if has_any else None
 
 
+def _fallback_claims(
+    zoning_district: str,
+    prop_record,
+    search_results: list | None,
+) -> list[Claim]:
+    """Emit claims for the LLM-didn't-submit fallback path.
+
+    The fallback is grounded in ordinance text (``search_results``) and/or the
+    county GIS zone code — both local-authority sources — so the district claim
+    is ``verified_fact`` / ``local_authority``. Numeric standards from the
+    fallback are string-form (recovered prose), so only the district claim is
+    emitted here; numeric standard claims come through ``_build_report``.
+    """
+    gis_code = (getattr(prop_record, "zoning_code", "") or "").strip()
+    grounded = bool(search_results) or bool(gis_code)
+    if not zoning_district or not grounded:
+        return []
+    source_url = ""
+    if search_results:
+        first = search_results[0]
+        source_url = getattr(first, "source_url", "") or getattr(first, "url", "") or ""
+    return [
+        Claim(
+            field_key="zoning.district",
+            value=zoning_district,
+            kind=ClaimKind.VERIFIED_FACT,
+            origin=ClaimOrigin.LOCAL_AUTHORITY,
+            source_url=source_url,
+            metadata={"grounded_by": "gis_code" if gis_code else "ordinance_text"},
+        )
+    ]
+
+
 def _build_fallback_report(
     address: str,
     geo: dict,
@@ -961,4 +1395,5 @@ def _build_fallback_report(
         sources=deduped_sources,
         confidence="low",
         source_refs=_build_source_refs(search_results),
+        claims=_fallback_claims(zoning_district, prop_record, search_results),
     )

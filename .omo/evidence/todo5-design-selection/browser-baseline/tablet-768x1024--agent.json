@@ -1,0 +1,71 @@
+{
+  "viewport": {
+    "name": "tablet-768x1024",
+    "width": 768,
+    "height": 1024
+  },
+  "state": {
+    "name": "agent",
+    "url": "/workspace?mode=agent"
+  },
+  "httpStatus": 200,
+  "metrics": {
+    "title": "PlotLot - AI Zoning Analysis",
+    "url": "http://127.0.0.1:3215/workspace?mode=agent",
+    "bodyText": "P\n\nPlotLot\n\nAI ZONING ANALYSIS\n\n⊕\nNew analysis\n⌘ K\n⌖\nSite Finder\n◫\nAnalyses\n◉\nEvidence\n☰\nReports\n✳\nHarness Workspace\n◎\nConnectors\nCHAT HISTORY\n\nNo conversations yet\n\n104 municipalities\nFree\nP\nPlotLot\nPLOTLOT\nHi there\nAsk anything about zoning & land\n\nSearch properties, research zoning codes, or get answers from our database. Use agent mode when you need an exploratory partner, not just a single lookup.\n\nLookup\nAgent\n\nPlotLot analyzes zoning, density, comps & pro forma for any US property",
+    "documentWidth": 768,
+    "viewportWidth": 768,
+    "horizontalOverflow": false,
+    "activeElement": "TEXTAREA",
+    "placeholders": [
+      {
+        "tag": "INPUT",
+        "placeholder": "Search conversations...",
+        "x": -308,
+        "width": 295,
+        "right": -13,
+        "visible": true,
+        "fontSize": "14px",
+        "whiteSpace": "normal",
+        "overflow": "clip",
+        "textOverflow": "clip"
+      },
+      {
+        "tag": "TEXTAREA",
+        "placeholder": "Ask about zoning, density, or property data...",
+        "x": 45,
+        "width": 499.078125,
+        "right": 544.078125,
+        "visible": true,
+        "fontSize": "17px",
+        "whiteSpace": "pre-wrap",
+        "overflow": "auto",
+        "textOverflow": "clip"
+      }
+    ],
+    "headings": [
+      {
+        "tag": "H1",
+        "text": "Ask anything about zoning & land",
+        "lines": 2
+      }
+    ],
+    "buttons": [
+      "Toggle dark mode",
+      "⊕New analysis⌘ K",
+      "⌖Site Finder",
+      "◫Analyses",
+      "◉Evidence",
+      "☰Reports",
+      "✳Harness Workspace",
+      "◎Connectors",
+      "Toggle sidebar",
+      "Lookup",
+      "Agent",
+      "Send message"
+    ]
+  },
+  "console": [],
+  "requestFailures": [],
+  "badResponses": []
+}

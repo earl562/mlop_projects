@@ -1,0 +1,44 @@
+(node:43016) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:43019) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:43019) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:43019) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/auth-roles.spec.ts:7:5 › each authenticated role exposes only its configured capabilities (193ms)
+  ✘  2 [chromium] › tests/auth-roles.spec.ts:37:5 › production auth source contains no anonymous test bypass (45ms)
+(node:43035) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:43035) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:43035) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium] › tests/auth-roles.spec.ts:50:5 › production startup rejects incomplete Clerk configuration (3ms)
+
+
+  1) [chromium] › tests/auth-roles.spec.ts:37:5 › production auth source contains no anonymous test bypass
+
+    Error: ENOENT: no such file or directory, open 'src/middleware.ts'
+
+      37 | test("production auth source contains no anonymous test bypass", async ({ page }) => {
+      38 |   const proxySource = readFileSync("src/proxy.ts", "utf8");
+    > 39 |   const middlewareSource = readFileSync("src/middleware.ts", "utf8");
+         |                                        ^
+      40 |
+      41 |   await page.setContent("<p data-auth-state>protected</p>");
+      42 |
+        at /Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/tests/auth-roles.spec.ts:39:40
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/auth-roles-production-auth-1cf90-ns-no-anonymous-test-bypass-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/auth-roles-production-auth-1cf90-ns-no-anonymous-test-bypass-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › tests/auth-roles.spec.ts:37:5 › production auth source contains no anonymous test bypass
+  2 passed (2.3s)

@@ -31,6 +31,7 @@ from plotlot.api.middleware import RateLimiter
 from plotlot.config import settings
 from plotlot.storage.db import get_session
 from plotlot.storage.models import ConnectorCredential
+from plotlot.security.context import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,10 @@ def _reset_daily_count_if_needed(cred: ConnectorCredential) -> ConnectorCredenti
 
 async def _get_credential(session_id: str, db: AsyncSession) -> ConnectorCredential | None:
     result = await db.execute(
-        select(ConnectorCredential).where(ConnectorCredential.session_id == session_id)
+        select(ConnectorCredential).where(
+            ConnectorCredential.workspace_id == current_tenant_id(),
+            ConnectorCredential.session_id == session_id,
+        )
     )
     return result.scalar_one_or_none()
 
@@ -275,6 +279,7 @@ async def configure_email(
         cred.from_name = body.from_name
     else:
         cred = ConnectorCredential(
+            workspace_id=current_tenant_id(),
             session_id=session_id,
             smtp_host=smtp_host,
             smtp_port=smtp_port,

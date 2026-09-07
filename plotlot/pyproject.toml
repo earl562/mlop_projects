@@ -7,7 +7,7 @@ dependencies = [
     "httpx>=0.27",
     "anthropic>=0.42",
     "pydantic>=2.0",
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.2",
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.29",
     "pgvector>=0.3",
@@ -15,8 +15,8 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "alembic>=1.18.4",
-    "pyjwt>=2.11.0",
-    "cryptography>=42.0",
+    "pyjwt>=2.13.0",
+    "cryptography>=48.0.1",
     "stripe>=11.0",
     "shapely>=2.0",
     "reportlab>=4.0",
@@ -28,13 +28,16 @@ dependencies = [
     "pyyaml>=6.0",
     "openpyxl>=3.1",
     "openai>=2.31.0",
-    "aiosmtplib>=3.0",
+    "aiosmtplib>=5.1.1",
     "email-validator>=2.0",
-    "pypdf>=6.12.2",
+    "pypdf>=6.14.2",
+    "fastmcp>=3.4.0",
+    "boto3>=1.42",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "hypothesis>=6.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
@@ -57,6 +60,7 @@ plotlot-ingest = "plotlot.cli:ingest_main"
 plotlot-search = "plotlot.cli:search_main"
 plotlot-api = "plotlot.api.main:run"
 plotlot-codex-login = "plotlot.oauth.openai_auth:cli_main"
+plotlot-mcp = "plotlot.mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -115,3 +119,8 @@ do_not_mutate = [
 ]
 mutate_only_covered_lines = false
 debug = true
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
+]

@@ -1,0 +1,42 @@
+{
+  "fixture_version": "direction-b-v1",
+  "privacy": {
+    "address": "REDACTED — no street address retained",
+    "parcel_id": "30-••••••-••••",
+    "folio": "12-••••••-••••",
+    "coordinates": "REDACTED — illustrative geometry only"
+  },
+  "market": {
+    "market_id": "miami_dade_private_beta",
+    "label": "Miami-Dade private beta",
+    "analysis_state": "eligible_only_after_parcel_and_record_resolution"
+  },
+  "parcel": {
+    "canonical_identity_status": "verified",
+    "area_sqft": 12500,
+    "geometry_source": "E-01",
+    "zoning_claim": { "value": "R-3 illustrative", "status": "verified", "citations": ["E-02"] },
+    "setbacks_claim": { "front_ft": 20, "side_ft": 7.5, "rear_ft": null, "status": "needs_verification", "citations": ["E-03"] },
+    "constraints_claim": { "value": "flood layer returned: review required", "status": "needs_verification", "citations": ["E-04"] },
+    "survey_plat_claim": { "value": "recorded plat reference", "status": "verified", "citations": ["E-01"] }
+  },
+  "capacity": {
+    "status": "needs_verification",
+    "formula": "min(zoning_density_limit, buildable_envelope_limit, overlay_limit)",
+    "result": null,
+    "governing_unknown": "rear setback / overlay review",
+    "citations": ["E-02", "E-03", "E-04"]
+  },
+  "underwriting": {
+    "purchase_ceiling": null,
+    "status": "needs_verification",
+    "blocked_by": ["capacity", "comp_set"],
+    "equation": "stabilized_value - hard_cost - soft_cost - finance - target_margin - contingency"
+  },
+  "evidence": [
+    { "id": "E-01", "kind": "survey_or_plat", "authority": "recorded document", "status": "verified", "retrieved_at": "2026-07-01" },
+    { "id": "E-02", "kind": "zoning_record", "authority": "municipal code record", "status": "verified", "retrieved_at": "2026-07-01" },
+    { "id": "E-03", "kind": "dimensional_schedule", "authority": "municipal code record", "status": "needs_verification", "retrieved_at": "2026-07-01" },
+    { "id": "E-04", "kind": "constraint_layer", "authority": "public overlay source", "status": "needs_verification", "retrieved_at": "2026-07-01" }
+  ]
+}

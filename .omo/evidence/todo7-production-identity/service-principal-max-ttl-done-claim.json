@@ -1,0 +1,41 @@
+{
+  "DoneClaim": {
+    "task": "Todo7 service-principal maximum lifetime trust-boundary fix",
+    "base_commit": "24c351ab403aa5b55a9874f54f615849d1853eed",
+    "commit_subject": "fix(auth): bound service principal token lifetime",
+    "changed_files": [
+      "plotlot/src/plotlot/api/service_auth.py",
+      "plotlot/tests/security/test_service_principals.py"
+    ],
+    "success_criteria": [
+      {
+        "scenario": "Independently signed tokens with 901-second and 365-day lifetimes expose the missing verification bound",
+        "invocation": "uv run pytest tests/security/test_service_principals.py -k 'verification_rejects_independently_signed_overlong' -q",
+        "observable": "RED: 2 failed because verify_service_principal_token did not raise",
+        "artifact": ".omo/evidence/todo7-production-identity/service-principal-max-ttl-red.log"
+      },
+      {
+        "scenario": "Verification enforces 0 < exp-iat <= 900 seconds",
+        "invocation": "uv run pytest tests/security/test_clerk_auth.py tests/security/test_service_principals.py -q",
+        "observable": "27 passed, including 901-second and 365-day rejection, exact 900-second acceptance, and signed non-positive lifetime rejection",
+        "artifact": ".omo/evidence/todo7-production-identity/service-principal-max-ttl-final-targeted.log"
+      },
+      {
+        "scenario": "Backend regression and static validation",
+        "invocation": "uv run pytest tests/unit -q; uv run ruff check ...; uv run mypy --follow-imports=silent src/plotlot/api/service_auth.py",
+        "observable": "1872 passed; Ruff exit 0; mypy exit 0",
+        "artifact": ".omo/evidence/todo7-production-identity/service-principal-max-ttl-backend-validation.log"
+      },
+      {
+        "scenario": "Production browser, build, startup fail-closed, and bypass-artifact validation",
+        "invocation": "PLOTLOT_TEST_AUTH_BYPASS=0 npx playwright test ...; npm run build; rg ...; standalone server without Clerk keys",
+        "observable": "3 passed; build exit 0 with Middleware; rg exit 1/no matches; startup exit 1 before serving",
+        "artifact": ".omo/evidence/todo7-production-identity/service-principal-max-ttl-frontend-final.log"
+      }
+    ],
+    "risks": [
+      "PyJWT independently rejects expired non-positive-lifetime tokens before the explicit exp-iat guard; the verifier still contains the requested lower-bound check as defense in depth.",
+      "No unrelated shared-worktree changes are included."
+    ]
+  }
+}

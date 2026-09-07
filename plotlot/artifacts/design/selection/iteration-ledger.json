@@ -1,0 +1,72 @@
+{
+  "schema_version": "plotlot-design-iteration-ledger/v1.0.0",
+  "baseline_commit": "719e3179a77722e74df3ced161b350f60b5e6ad7",
+  "baseline_capture": ".omo/evidence/todo5-design-selection/browser-baseline",
+  "status": "design-resolution-criteria-only",
+  "implementation_owner": "Todo21",
+  "defects": [
+    {
+      "id": "BL-01",
+      "observed": "Workspace headline claims analysis for any property in the US.",
+      "evidence": "desktop-1440x900--lookup.png and desktop-1440x900--lookup.aria.txt",
+      "selected_design_resolution": "Replace national availability language with an explicit coverage gate: Miami-Dade private beta; Broward and Palm Beach municipality-conditional; San Diego planned/not enabled.",
+      "binary_acceptance": "No nationwide/countywide enabled claim exists; unsupported markets disable analysis and underwriting."
+    },
+    {
+      "id": "BL-02",
+      "observed": "Lookup and Agent are presented as a generic chat-composer shell with a large marketing-style welcome state.",
+      "evidence": "desktop-1440x900--lookup.png and desktop-1440x900--agent.png",
+      "selected_design_resolution": "Make the workbench’s deal queue, evidence ledger, decision rail, structured brief, blocker, and bounded handoff the primary objects; retain Agent only as a structured handoff/analysis capability downstream of evidence.",
+      "binary_acceptance": "No generic assistant composer is the primary workspace surface."
+    },
+    {
+      "id": "BL-03",
+      "observed": "The workspace has no visible parcel identity, citations, freshness, source hashes, governing constraint, evidence completeness, or abstention state.",
+      "evidence": "desktop-1440x900--workspace.png and desktop-1440x900--workspace.aria.txt",
+      "selected_design_resolution": "Render the numbered evidence sequence and anchored decision rail defined by DESIGN.md.",
+      "binary_acceptance": "A representative verified/conditional deal exposes parcel, coverage, cited rule, freshness, hash, formula, governing constraint, result, blocker, and replay path in semantic DOM."
+    },
+    {
+      "id": "BL-04",
+      "observed": "At 390px the address field is only about 141px wide after the mode toggle and send action; the placeholder is visibly clipped.",
+      "evidence": "mobile-390x844--lookup.png and mobile-390x844--lookup.json",
+      "selected_design_resolution": "Use the selected sequential mobile composition and ensure the input/action anatomy reflows rather than competing in one narrow row.",
+      "binary_acceptance": "At 390px the complete input purpose is visible or has an equivalent persistent label; controls retain 44px targets and do not obscure input text."
+    },
+    {
+      "id": "BL-05",
+      "observed": "The known 375px placeholder defect reproduces: the address input is about 126px wide and clips its placeholder.",
+      "evidence": "diagnostic-375x844--lookup-placeholder.png and diagnostic-375x844--lookup-placeholder.json",
+      "selected_design_resolution": "Todo21 must implement a labeled, wrapping/reflowing mobile input anatomy. This is a current-app implementation gap, not a pass/fail claim about the selected design packet.",
+      "binary_acceptance": "At 375px and 320px, the full input purpose remains perceivable, no action overlaps it, and no horizontal scroll is introduced."
+    },
+    {
+      "id": "BL-06",
+      "observed": "Hidden desktop conversation-search input remains laid out off-canvas at tablet/mobile coordinates.",
+      "evidence": "tablet-768x1024--workspace.json and mobile-390x844--workspace.json",
+      "selected_design_resolution": "Collapsed regions must be inert and removed from the focus/accessibility tree; the mobile deal switcher is an explicit sheet/control.",
+      "binary_acceptance": "No off-canvas hidden control is tabbable, announced, or reported as visible at tablet/mobile."
+    },
+    {
+      "id": "BL-07",
+      "observed": "Landing and workspace use different surface, accent, typography, density, and brand grammars.",
+      "evidence": "desktop-1440x900--landing.png and desktop-1440x900--workspace.png",
+      "selected_design_resolution": "Share PlotLot’s paper, ink, rule, moss, and technical type tokens across marketing transition points and product chrome while retaining appropriate route density.",
+      "binary_acceptance": "Both surfaces resolve through the authoritative token families; Instrument Serif does not enter the operational workbench."
+    },
+    {
+      "id": "BL-08",
+      "observed": "Landing prefetch requests for sign-in/sign-up abort during settled capture.",
+      "evidence": "desktop-1440x900--landing.json and tablet-768x1024--landing.json",
+      "selected_design_resolution": "Treat aborted speculative prefetches as baseline network noise unless user-triggered navigation fails; Todo21 should keep interaction captures free of failed required requests.",
+      "binary_acceptance": "User-triggered primary routes return successful responses; no required API or asset request fails."
+    },
+    {
+      "id": "BL-09",
+      "observed": "The landing route presents a 'Trusted by' claim with named companies, but the audited design artifact provides no evidence binding those endorsements.",
+      "evidence": "mobile-390x844--landing.png and mobile-390x844--landing.aria.txt",
+      "selected_design_resolution": "Remove unverified partner/endorsement claims. Prove trust with source provenance, coverage truth, a redacted evidence replay, and bounded product capabilities.",
+      "binary_acceptance": "No customer, partner, testimonial, or endorsement claim ships without an approved evidence source; no fake partner marks appear."
+    }
+  ]
+}

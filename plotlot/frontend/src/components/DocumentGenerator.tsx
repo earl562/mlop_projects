@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Landmark } from "lucide-react";
+import { spring, springGentle } from "@/lib/motion";
 import {
   generateDocument,
   previewDocument,
@@ -11,6 +14,48 @@ import {
 
 interface DocumentGeneratorProps {
   report: ZoningReportData;
+}
+
+// Real discretionary entitlement vehicles (the local mechanism varies by
+// jurisdiction). Rendered verbatim into the clause, so keep them precise.
+const UPZONING_VEHICLES = [
+  "Special Use Permit",
+  "Rezoning",
+  "Planned Unit Development (PUD)",
+  "Conditional Use Permit",
+  "Variance",
+] as const;
+
+/** Accessible, spring-driven switch (amber when on — the value-creation accent). */
+function Switch({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <motion.button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      whileTap={{ scale: 0.94 }}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+        checked ? "bg-amber-600" : "bg-stone-300 dark:bg-stone-600"
+      }`}
+    >
+      <motion.span
+        initial={false}
+        animate={{ x: checked ? 22 : 2 }}
+        transition={spring}
+        className="inline-block h-4 w-4 rounded-full bg-white shadow-sm"
+      />
+    </motion.button>
+  );
 }
 
 const DOCUMENT_TYPES = [
@@ -139,9 +184,33 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
   const [sellerName, setSellerName] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
 
+  // Entitlement / rezoning contingency (the value-creation play — land deals only)
+  const [entitlementContingency, setEntitlementContingency] = useState(false);
+  const [upzoningVehicle, setUpzoningVehicle] = useState<string>(UPZONING_VEHICLES[0]);
+  const [targetUnits, setTargetUnits] = useState("");
+  const [pursuitDays, setPursuitDays] = useState("365");
+  const [extensionDays, setExtensionDays] = useState("180");
+
   const selectedDocType = DOCUMENT_TYPES.find((d) => d.value === documentType);
   const needsPartyInfo = documentType === "psa" || documentType === "loi";
   const supportsGoogleSheets = documentType === "proforma_spreadsheet";
+  // The entitlement-contingency clause is registered for land deals on the LOI/PSA.
+  const showEntitlement = needsPartyInfo && dealType === "land_deal";
+
+  function composeContext(): Record<string, string | number | boolean> {
+    const ctx: Record<string, string | number | boolean> = buildContextFromReport(report);
+    if (buyerName) ctx.buyer_name = buyerName;
+    if (sellerName) ctx.seller_name = sellerName;
+    if (purchasePrice) ctx.purchase_price = parseFloat(purchasePrice);
+    if (showEntitlement && entitlementContingency) {
+      ctx.entitlement_contingency = true;
+      if (upzoningVehicle) ctx.upzoning_vehicle = upzoningVehicle;
+      if (targetUnits) ctx.target_units = parseInt(targetUnits, 10);
+      if (pursuitDays) ctx.entitlement_close_days = parseInt(pursuitDays, 10);
+      if (extensionDays) ctx.entitlement_extension_days = parseInt(extensionDays, 10);
+    }
+    return ctx;
+  }
 
   function getDefaultFormat(nextDocumentType: string): string {
     return nextDocumentType === "proforma_spreadsheet" ? "google_sheets" : "docx";
@@ -156,10 +225,7 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
     setError(null);
     setGeneratedSheet(null);
     try {
-      const ctx = buildContextFromReport(report);
-      if (buyerName) ctx.buyer_name = buyerName;
-      if (sellerName) ctx.seller_name = sellerName;
-      if (purchasePrice) ctx.purchase_price = parseFloat(purchasePrice);
+      const ctx = composeContext();
 
       const result = await generateDocument({
         document_type: documentType,
@@ -199,10 +265,7 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
     setError(null);
     setPreview(null);
     try {
-      const ctx = buildContextFromReport(report);
-      if (buyerName) ctx.buyer_name = buyerName;
-      if (sellerName) ctx.seller_name = sellerName;
-      if (purchasePrice) ctx.purchase_price = parseFloat(purchasePrice);
+      const ctx = composeContext();
 
       const data = await previewDocument({
         document_type: documentType,
@@ -343,6 +406,134 @@ export default function DocumentGenerator({ report }: DocumentGeneratorProps) {
           </div>
         </div>
       )}
+
+      {/* Entitlement / rezoning contingency — land-deal value-creation play */}
+      <AnimatePresence initial={false}>
+        {showEntitlement && (
+          <motion.div
+            key="entitlement"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={springGentle}
+            className="mt-4"
+          >
+            <div
+              className={`rounded-xl border p-4 transition-colors ${
+                entitlementContingency
+                  ? "border-amber-300 bg-amber-50/60 dark:border-amber-700/60 dark:bg-amber-950/20"
+                  : "border-stone-200 dark:border-stone-700"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <Landmark
+                    className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500"
+                    strokeWidth={2}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                      Entitlement / rezoning contingency
+                    </div>
+                    <p className="mt-0.5 max-w-[52ch] text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+                      Tie closing to obtaining a rezoning or special-use approval — control
+                      the parcel, create the upside, then close. Adds the contingent close,
+                      a long pursuit period, an extension option, and seller cooperation as
+                      record owner.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={entitlementContingency}
+                  onChange={setEntitlementContingency}
+                  label="Entitlement contingency"
+                />
+              </div>
+
+              <AnimatePresence initial={false}>
+                {entitlementContingency && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={springGentle}
+                    className="mt-4 grid gap-4 sm:grid-cols-2"
+                  >
+                    <div>
+                      <label
+                        htmlFor="upzoning-vehicle"
+                        className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400"
+                      >
+                        Approval vehicle
+                      </label>
+                      <select
+                        id="upzoning-vehicle"
+                        value={upzoningVehicle}
+                        onChange={(e) => setUpzoningVehicle(e.target.value)}
+                        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        {UPZONING_VEHICLES.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="target-units"
+                        className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400"
+                      >
+                        Target units / lots
+                      </label>
+                      <input
+                        id="target-units"
+                        type="number"
+                        value={targetUnits}
+                        onChange={(e) => setTargetUnits(e.target.value)}
+                        placeholder="e.g. 12"
+                        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm tabular-nums dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="pursuit-days"
+                        className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400"
+                      >
+                        Pursuit period (days)
+                      </label>
+                      <input
+                        id="pursuit-days"
+                        type="number"
+                        value={pursuitDays}
+                        onChange={(e) => setPursuitDays(e.target.value)}
+                        placeholder="365"
+                        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm tabular-nums dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="extension-days"
+                        className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400"
+                      >
+                        Extension option (days)
+                      </label>
+                      <input
+                        id="extension-days"
+                        type="number"
+                        value={extensionDays}
+                        onChange={(e) => setExtensionDays(e.target.value)}
+                        placeholder="180"
+                        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm tabular-nums dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Actions */}
       <div className="mt-4 flex gap-3">

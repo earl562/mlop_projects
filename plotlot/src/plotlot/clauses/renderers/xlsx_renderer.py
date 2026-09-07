@@ -183,7 +183,7 @@ def _build_revenue_sheet(wb: Workbook, ctx: DealContext) -> None:
 
     rows = [
         ["Gross Development Value (GDV)", _fmt_currency(gdv)],
-        ["Builder Margin", _fmt_pct(margin * 100) if margin < 1 else _fmt_pct(margin)],
+        ["Builder Margin", _fmt_currency(margin)],
         ["Max Land Price", _fmt_currency(max_land)],
         ["After-Development Value / Unit", _fmt_currency(adv)],
     ]
@@ -235,10 +235,10 @@ def _build_returns_sheet(wb: Workbook, ctx: DealContext) -> None:
     ws.column_dimensions["B"].width = 20
 
     gdv = ctx.gross_development_value
-    total_cost = (
-        ctx.hard_costs + ctx.soft_costs + (ctx.purchase_price or ctx.estimated_land_value or 0)
-    )
-    profit = gdv - total_cost if gdv and total_cost else 0
+    land = ctx.purchase_price or ctx.estimated_land_value or 0
+    contingency = ctx.hard_costs * 0.10 if ctx.hard_costs else 0
+    total_cost = ctx.hard_costs + ctx.soft_costs + land + contingency
+    profit = gdv - total_cost
     roi = (profit / total_cost * 100) if total_cost > 0 else 0
 
     rows = [

@@ -16,6 +16,7 @@ from plotlot.core.types import (
     DensityAnalysis,
     NumericZoningParams,
     PropertyRecord,
+    SearchResult,
     Setbacks,
     ZoningReport,
 )
@@ -276,7 +277,20 @@ async def test_analyze_stream_passes_state_to_property_lookup(client):
         ) as mock_lookup,
         patch("plotlot.api.routes.get_cached_report", new_callable=AsyncMock, return_value=None),
         patch("plotlot.api.routes.get_session", new_callable=AsyncMock, return_value=mock_session),
-        patch("plotlot.api.routes.hybrid_search", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "plotlot.api.routes.hybrid_search",
+            new_callable=AsyncMock,
+            return_value=[
+                SearchResult(
+                    section="Sec. 401",
+                    section_title="Residential districts",
+                    zone_codes=["RS5"],
+                    chunk_text="Residential district standards.",
+                    score=1.0,
+                    municipality="Miramar",
+                )
+            ],
+        ),
         patch(
             "plotlot.api.routes._agentic_analysis",
             new_callable=AsyncMock,
@@ -332,6 +346,78 @@ async def test_chat_streams_response(client):
     body = resp.text
     assert "token" in body
     assert "done" in body
+
+
+@pytest.mark.asyncio
+async def test_chat_source_query_echoes_verified_citation_without_calling_llm(client):
+    """A 'what's the source?' follow-up is answered DETERMINISTICALLY.
+
+    The NIM narrator fabricated '§131.0445(a)' (borrowed from the FAR field's
+    conflict citation). With an active grounded analysis, the handler must echo the
+    VERIFIED driver's exact citation + section and never call the model — so the
+    high-stakes citation cannot be altered.
+    """
+    from plotlot.api.chat import _sessions
+
+    _sessions._conversations.clear()
+    _sessions._last_access.clear()
+
+    session_id = "trust-source-echo"
+    _sessions.set_analysis(
+        session_id,
+        {
+            "status": "success",
+            "zoning_code": "RM-3-7",
+            "lot_size_sqft": 6471,
+            "by_right": {
+                "max_units": 6,
+                "governing_constraint": "min_lot_area_per_unit_sqft",
+                "verification": "verified",
+                "offer_is_provisional": False,
+                "verified_drivers": [
+                    {
+                        "field": "min_lot_area_per_unit_sqft",
+                        "label": "Min lot area per unit (sqft)",
+                        "status": "verified",
+                        "source_value": 1000.0,
+                        "citation": "RM-3-7 permits a maximum density of 1 dwelling "
+                        "unit for each 1,000 square feet of lot area",
+                        "section": "Art.01 Div.04",
+                    },
+                    {
+                        "field": "far",
+                        "label": "Floor area ratio",
+                        "status": "conflict",
+                        "source_value": 4.0,
+                        "citation": "…[See Section 131.0445(a)] applies Max floor area ratio…",
+                        "section": "Art.01 Div.04",
+                    },
+                ],
+            },
+            "valuation": {"adv_source": "regional_default"},
+        },
+    )
+
+    # call_llm raising proves the deterministic path bypasses the model entirely.
+    with patch(
+        "plotlot.api.chat.call_llm",
+        new_callable=AsyncMock,
+        side_effect=AssertionError("LLM must not be called for a deterministic source echo"),
+    ):
+        resp = await client.post(
+            "/api/v1/chat",
+            json={
+                "message": "Can I trust that unit count — what's the source?",
+                "session_id": session_id,
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "1,000 square feet of lot area" in body  # verbatim ordinance sentence
+    assert "Art.01 Div.04" in body  # the verified driver's real section
+    assert "VERIFIED" in body
+    assert "131.0445" not in body  # never the fabricated / borrowed section
 
 
 @pytest.mark.asyncio
@@ -413,7 +499,7 @@ async def test_debug_llm_prefers_nvidia_when_stale_openai_token_exists(client):
 
     with (
         patch("openai.AsyncOpenAI", return_value=mock_client) as async_openai_ctor,
-        patch("plotlot.config.settings") as mock_settings,
+        patch("plotlot.api.main.settings") as mock_settings,
     ):
         mock_settings.nvidia_api_key = "nv-key"
         mock_settings.nvidia_base_url = "https://integrate.api.nvidia.com/v1"

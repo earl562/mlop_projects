@@ -638,10 +638,16 @@ class TestUniversalFallback:
         "plotlot.property.california.CaliforniaProvider._universal_fallback",
         new_callable=AsyncMock,
     )
-    async def test_unknown_county_uses_universal_fallback(self, mock_fallback):
+    @patch(
+        "plotlot.property.california.CaliforniaProvider._statewide_parcel",
+        new_callable=AsyncMock,
+    )
+    async def test_unknown_county_uses_universal_fallback(self, mock_statewide, mock_fallback):
+        mock_statewide.return_value = None
         mock_fallback.return_value = None
         provider = CaliforniaProvider()
         record = await provider.lookup("100 Test Ave, Fresno, CA", "Fresno", lat=36.7, lng=-119.7)
+        mock_statewide.assert_awaited_once()
         mock_fallback.assert_awaited_once()
         assert record is None
 
@@ -672,3 +678,110 @@ class TestRegistration:
             assert not isinstance(provider, CaliforniaProvider), (
                 f"FL/NC county {county} incorrectly got CaliforniaProvider"
             )
+
+
+# ---------------------------------------------------------------------------
+# San Diego authoritative assessor lot-size override + provenance
+# ---------------------------------------------------------------------------
+
+
+def _sd_statewide_feature(*, apn: str = "4364230200", area_sqm: float = 602.8) -> dict:
+    """The CA statewide layer feature San Diego resolves through (geometry lot)."""
+    return _make_feature(
+        {
+            "PARCEL_APN": apn,
+            "SITE_ADDR": "1233 HUENEME ST",
+            "SITE_CITY": "SAN DIEGO",
+            "Shape__Area": area_sqm,  # sq meters → ~6,489 sqft (a GIS estimate)
+        }
+    )
+
+
+def _mock_assessor_client(mock_client_cls, *, features: list[dict]) -> None:
+    """Wire httpx.AsyncClient so the assessor /query returns `features`."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"features": features}
+    mock_response.raise_for_status = MagicMock()
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client_cls.return_value = mock_client
+
+
+class TestSanDiegoAssessorLot:
+    """SD overrides the unreliable statewide polygon area with the legal lot."""
+
+    @pytest.fixture
+    def provider(self) -> CaliforniaProvider:
+        return CaliforniaProvider()
+
+    @patch("plotlot.property.california.httpx.AsyncClient")
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    async def test_assessor_lot_overrides_geometry(self, mock_spatial, mock_client_cls, provider):
+        """The assessor's recorded lot (7,710) replaces the polygon estimate (~6,489)."""
+        mock_spatial.return_value = [_sd_statewide_feature()]
+        _mock_assessor_client(
+            mock_client_cls,
+            features=[{"attributes": {"ACREAGE": None, "Shape.STArea()": 7710.49}}],
+        )
+
+        record = await provider.lookup(
+            "1233 Hueneme St, San Diego, CA 92110", "San Diego", lat=32.756, lng=-117.197
+        )
+
+        assert record is not None
+        assert record.folio == "4364230200"
+        # Authoritative legal lot, not the ~6,489 sqft statewide polygon.
+        assert record.lot_size_sqft == pytest.approx(7710.49)
+        assert record.lot_size_source == "assessor"
+
+    @patch("plotlot.property.california.httpx.AsyncClient")
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    async def test_assessor_prefers_recorded_acreage(self, mock_spatial, mock_client_cls, provider):
+        """When ACREAGE is populated it wins (legal figure) over geometry STArea."""
+        mock_spatial.return_value = [_sd_statewide_feature()]
+        _mock_assessor_client(
+            mock_client_cls,
+            features=[{"attributes": {"ACREAGE": 0.177, "Shape.STArea()": 7710.49}}],
+        )
+
+        record = await provider.lookup(
+            "1233 Hueneme St, San Diego, CA 92110", "San Diego", lat=32.756, lng=-117.197
+        )
+
+        assert record is not None
+        assert record.lot_size_sqft == pytest.approx(0.177 * 43_560, rel=0.001)
+        assert record.lot_size_source == "assessor"
+
+    @patch("plotlot.property.california.httpx.AsyncClient")
+    @patch("plotlot.property.california.spatial_query", new_callable=AsyncMock)
+    async def test_assessor_miss_keeps_geometry_and_flags_it(
+        self, mock_spatial, mock_client_cls, provider
+    ):
+        """Fail loud, not silently wrong: a miss keeps the estimate, flagged 'geometry'."""
+        mock_spatial.return_value = [_sd_statewide_feature()]
+        _mock_assessor_client(mock_client_cls, features=[])  # APN not found
+
+        record = await provider.lookup(
+            "1233 Hueneme St, San Diego, CA 92110", "San Diego", lat=32.756, lng=-117.197
+        )
+
+        assert record is not None
+        # Geometry estimate retained, but provenance marks it unconfirmed.
+        assert record.lot_size_sqft == pytest.approx(602.8 * 10.7639, rel=0.01)
+        assert record.lot_size_source == "geometry"
+
+
+class TestGeometryLotFieldDetection:
+    def test_polygon_area_fields_are_geometry(self):
+        from plotlot.property.california import _is_geometry_lot_field
+
+        for f in ("Shape__Area", "SHAPE_Area", "Shape.STArea()", "shape_area"):
+            assert _is_geometry_lot_field(f) is True
+
+    def test_named_assessor_fields_are_not_geometry(self):
+        from plotlot.property.california import _is_geometry_lot_field
+
+        for f in ("ACREAGE", "LOTSIZE", "AC", "LANDAREA"):
+            assert _is_geometry_lot_field(f) is False

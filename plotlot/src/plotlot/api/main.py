@@ -16,13 +16,14 @@ from typing import TypedDict
 from urllib.parse import urlparse
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from plotlot.api.auth import get_current_user
+from plotlot.api.security_middleware import TenantAuthorizationMiddleware
 from plotlot.api.billing import router as billing_router  # noqa: F401 — registered below
 from plotlot.api.chat import router as chat_router
+from plotlot.api.connectors.email import router as email_connector_router
 from plotlot.api.approvals import router as approvals_router
 from plotlot.api.workspaces import router as workspaces_router
 from plotlot.api.analyses import router as analyses_router
@@ -30,15 +31,22 @@ from plotlot.api.tools import router as tools_router
 from plotlot.api.evidence import router as evidence_router
 from plotlot.api.mcp import router as mcp_router
 from plotlot.api.geometry import router as geometry_router
+from plotlot.api.harness_jobs import (
+    admin_router as harness_jobs_admin_router,
+    router as harness_jobs_router,
+)
 from plotlot.api.middleware import rate_limiter
 from plotlot.api.ordinance import router as ordinance_router
 from plotlot.api.portfolio import router as portfolio_router
 from plotlot.api.render import router as render_router
+from plotlot.api.releases import router as releases_router
 from plotlot.api.routes import router
+from plotlot.api.screening import router as screening_router
 from plotlot.config import settings
 from plotlot.observability.logging import correlation_id, setup_logging
 from plotlot.observability.tracing import configure_mlflow
 from plotlot.oauth.openai_auth import has_saved_tokens
+from plotlot.protocol.openapi import install_engine_protocol
 from plotlot.retrieval.geocode import geocode_address
 from plotlot.storage.db import get_session, init_db
 
@@ -141,19 +149,6 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
             correlation_id.reset(token)
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """Resolve the current user (if any) and attach to request.state.
-
-    Runs on every request so downstream dependencies and the rate limiter
-    can distinguish authenticated from anonymous users.  When auth is
-    disabled this is essentially a no-op (sets user=None).
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        request.state.user = await get_current_user(request)
-        return await call_next(request)
-
-
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Apply rate limiting to expensive API endpoints.
 
@@ -184,7 +179,7 @@ app = FastAPI(
 # 4. Auth — resolve user from JWT (attaches to request.state.user)
 # 5. Rate limit — enforce per-IP/per-user limits on expensive endpoints
 app.add_middleware(RateLimitMiddleware)
-app.add_middleware(AuthMiddleware)
+app.add_middleware(TenantAuthorizationMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(
@@ -198,6 +193,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(billing_router)
 app.include_router(chat_router)
+app.include_router(email_connector_router)
 app.include_router(approvals_router)
 app.include_router(workspaces_router)
 app.include_router(analyses_router)
@@ -206,8 +202,13 @@ app.include_router(evidence_router)
 app.include_router(mcp_router)
 app.include_router(portfolio_router)
 app.include_router(geometry_router)
+app.include_router(harness_jobs_router)
+app.include_router(harness_jobs_admin_router)
 app.include_router(ordinance_router)
 app.include_router(render_router)
+app.include_router(screening_router)
+app.include_router(releases_router)
+install_engine_protocol(app)
 
 # Clause builder document generation (LOI, PSA, Deal Summary, Pro Forma)
 from plotlot.api.documents import router as documents_router  # noqa: E402
@@ -414,6 +415,8 @@ async def health():
 
 @app.get("/debug/traces")
 async def debug_traces(limit: int = 10):
+    if not settings.debug_mode:
+        raise HTTPException(status_code=404, detail="Not found")
     """View recent MLflow traces — pipeline runs, LLM calls, tool use."""
     from plotlot.observability.tracing import mlflow as _mlflow
 
@@ -455,28 +458,35 @@ async def debug_traces(limit: int = 10):
 @app.get("/debug/llm")
 async def debug_llm():
     """LLM connectivity test for the primary provider + Groq fallback."""
+    if not settings.debug_mode:
+        raise HTTPException(status_code=404, detail="Not found")
     import time
     from openai import AsyncOpenAI
-    from plotlot.config import settings as _s
 
     diag: dict = {"providers": {}}
 
-    using_nvidia = bool(_s.nvidia_api_key)
-    token = _s.nvidia_api_key if using_nvidia else (_s.openai_access_token or _s.openai_api_key)
+    using_nvidia = bool(settings.nvidia_api_key)
+    token = (
+        settings.nvidia_api_key
+        if using_nvidia
+        else (settings.openai_access_token or settings.openai_api_key)
+    )
     if token:
         t0 = time.monotonic()
         try:
             client_kwargs = {"api_key": token, "timeout": 15.0}
-            base_url = _s.nvidia_base_url if using_nvidia else _s.openai_base_url
+            base_url = settings.nvidia_base_url if using_nvidia else settings.openai_base_url
             if base_url:
                 client_kwargs["base_url"] = base_url
-            if _s.openai_organization and not using_nvidia:
-                client_kwargs["organization"] = _s.openai_organization
-            if _s.openai_project and not using_nvidia:
-                client_kwargs["project"] = _s.openai_project
+            if settings.openai_organization and not using_nvidia:
+                client_kwargs["organization"] = settings.openai_organization
+            if settings.openai_project and not using_nvidia:
+                client_kwargs["project"] = settings.openai_project
             client = AsyncOpenAI(**client_kwargs)
             kwargs = {
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": settings.nvidia_model
+                if using_nvidia
+                else (settings.openai_model or "gpt-4.1"),
                 "messages": (
                     [
                         {"role": "system", "content": "/no_think"},
@@ -489,13 +499,15 @@ async def debug_llm():
                 "temperature": 0,
             }
             if not using_nvidia:
-                kwargs["reasoning_effort"] = _s.openai_reasoning_effort
+                kwargs["reasoning_effort"] = settings.openai_reasoning_effort
             resp = await client.chat.completions.create(**kwargs)
             elapsed = round(time.monotonic() - t0, 2)
             text = resp.choices[0].message.content or ""
             diag["providers"]["nvidia" if using_nvidia else "openai"] = {
                 "status": "ok",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": settings.nvidia_model
+                if using_nvidia
+                else (settings.openai_model or "gpt-4.1"),
                 "base_url": base_url,
                 "latency_s": elapsed,
                 "response": text[:100],
@@ -504,7 +516,9 @@ async def debug_llm():
             elapsed = round(time.monotonic() - t0, 2)
             diag["providers"]["nvidia" if using_nvidia else "openai"] = {
                 "status": "error",
-                "model": _s.nvidia_model if using_nvidia else (_s.openai_model or "gpt-4.1"),
+                "model": settings.nvidia_model
+                if using_nvidia
+                else (settings.openai_model or "gpt-4.1"),
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }
@@ -512,14 +526,14 @@ async def debug_llm():
         diag["providers"]["nvidia" if using_nvidia else "openai"] = {"status": "no_credentials"}
 
     # --- Groq (fallback) ---
-    if _s.groq_api_key:
+    if settings.groq_api_key:
         t0 = time.monotonic()
         try:
-            model = _s.groq_model or "meta-llama/llama-4-scout-17b-16e-instruct"
+            model = settings.groq_model or "meta-llama/llama-4-scout-17b-16e-instruct"
 
             client = AsyncOpenAI(
-                api_key=_s.groq_api_key,
-                base_url=_s.groq_base_url,
+                api_key=settings.groq_api_key,
+                base_url=settings.groq_base_url,
                 timeout=15.0,
             )
             resp = await client.chat.completions.create(
@@ -533,7 +547,7 @@ async def debug_llm():
             diag["providers"]["groq"] = {
                 "status": "ok",
                 "model": model,
-                "base_url": _s.groq_base_url,
+                "base_url": settings.groq_base_url,
                 "latency_s": elapsed,
                 "response": text[:100],
             }
@@ -541,7 +555,7 @@ async def debug_llm():
             elapsed = round(time.monotonic() - t0, 2)
             diag["providers"]["groq"] = {
                 "status": "error",
-                "model": _s.groq_model or "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": settings.groq_model or "meta-llama/llama-4-scout-17b-16e-instruct",
                 "error": f"{type(e).__name__}: {e}",
                 "elapsed_s": elapsed,
             }

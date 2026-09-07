@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { connectorAuthorizationFailure } from "@/lib/connector-authorization";
+
 // Allowlist of ArcGIS hostnames. Only these are proxied.
 const ALLOWED_HOSTS = new Set([
   "hazards.fema.gov",
@@ -30,7 +32,11 @@ function extractTargetUrl(requestUrl: string): string | null {
   return target || null;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<Response> {
+  const authorizationFailure = await connectorAuthorizationFailure(request, "analysis:view");
+  if (authorizationFailure !== null) {
+    return authorizationFailure;
+  }
   const targetUrl = extractTargetUrl(request.url);
 
   if (!targetUrl) {

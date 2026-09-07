@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 /**
  * Phase 6B UAT — De-Wordification, Floor Plans, Address Autocomplete

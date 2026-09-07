@@ -1,0 +1,79 @@
+4:+++ b/plotlot/src/plotlot/config.py
+5:@@ -5,2 +5,4 @@ from urllib.parse import parse_qs, urlparse, urlunparse
+8:+from typing import Literal
+9:+
+10:+from pydantic import AliasChoices, Field, model_validator
+11:+from pydantic_settings import BaseSettings, SettingsConfigDict
+12:@@ -10,0 +13,4 @@ from plotlot.oauth.openai_auth import DEFAULT_AUTHORIZE_URL, DEFAULT_REDIRECT_UR
+13:+class ProductionIdentityConfigurationError(ValueError):
+14:+    pass
+15:+
+16:+
+17:@@ -11,0 +18,5 @@ class Settings(BaseSettings):
+18:+    deployment_environment: Literal["development", "test", "production"] = Field(
+19:+        default="development",
+20:+        validation_alias=AliasChoices("PLOTLOT_ENVIRONMENT", "PLOTLOT_ENV", "ENVIRONMENT"),
+21:+    )
+22:+
+23:@@ -71 +81,0 @@ class Settings(BaseSettings):
+25:@@ -73 +82,0 @@ class Settings(BaseSettings):
+27:@@ -74,0 +84,8 @@ class Settings(BaseSettings):
+28:+    clerk_issuer: str = ""
+29:+    clerk_audience: str = ""
+30:+    clerk_authorized_parties: list[str] = Field(default_factory=list)
+31:+    clerk_revoked_token_ids: list[str] = Field(default_factory=list)
+32:+    service_principal_signing_key: str = ""
+33:+    service_principal_issuer: str = "plotlot-service"
+34:+    service_principal_audience: str = "plotlot-api"
+35:+    service_principal_max_ttl_seconds: int = Field(default=900, ge=60, le=900)
+36:@@ -151,0 +169,5 @@ class Settings(BaseSettings):
+37:+            "clerk_issuer",
+38:+            "clerk_audience",
+39:+            "service_principal_signing_key",
+40:+            "service_principal_issuer",
+41:+            "service_principal_audience",
+42:@@ -170,0 +193,18 @@ class Settings(BaseSettings):
+43:+    @model_validator(mode="after")
+44:+    def _require_production_identity(self) -> "Settings":
+45:+        if self.deployment_environment != "production":
+46:+            return self
+47:+        configured = (
+48:+            self.auth_enabled
+49:+            and self.clerk_jwks_url.startswith("https://")
+50:+            and bool(self.clerk_issuer)
+51:+            and bool(self.clerk_audience)
+52:+            and bool(self.clerk_authorized_parties)
+53:+            and len(self.service_principal_signing_key) >= 32
+54:+        )
+55:+        if not configured:
+56:+            raise ProductionIdentityConfigurationError(
+57:+                "production identity configuration is incomplete"
+58:+            )
+59:+        return self
+60:+
+61:@@ -237 +277,5 @@ class Settings(BaseSettings):
+63:+    model_config = SettingsConfigDict(
+64:+        env_file=".env",
+65:+        extra="ignore",
+66:+        populate_by_name=True,
+67:+    )
+71:+++ b/plotlot/src/plotlot/storage/models.py
+72:@@ -332 +332,17 @@ class WorkspaceMember(Base):
+74:+    clerk_organization_id = Column(String(120), nullable=True, index=True)
+75:+    role = Column(String(50), nullable=False, default="viewer")
+76:+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+77:+
+78:+
+79:+class ServicePrincipal(Base):
+80:+    """Tenant-scoped non-human identity with an explicitly bounded action set."""
+81:+
+82:+    __tablename__ = "service_principals"
+83:+
+84:+    id = Column(String(120), primary_key=True)
+85:+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=False, index=True)
+86:+    name = Column(String(200), nullable=False)
+87:+    allowed_actions = Column(ARRAY(String), nullable=False, default=list)
+88:+    expires_at = Column(DateTime(timezone=True), nullable=False)
+89:+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+90:+    created_by_user_id = Column(String, nullable=False, index=True)
+PASS: remaining broad-except is pre-existing; oversized storage/models.py is pre-existing and only scoped identity fields were added

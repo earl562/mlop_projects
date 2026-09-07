@@ -267,18 +267,113 @@ export interface McpToolContract {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const STREAM_TIMEOUT_MS = 120_000;
 const FIRST_EVENT_TIMEOUT_MS = 15_000;
+const CHAT_STREAM_IDLE_TIMEOUT_MS = 30_000;
 const NETWORK_FAILURE_DETAIL = "Connection failed. The server may be starting up — try again in a moment.";
 const BACKEND_UNAVAILABLE_DETAIL =
   "Analysis is temporarily unavailable because the data backend is offline. Please try again shortly.";
 const STREAM_TIMEOUT_DETAIL =
   "Request timed out after 2 minutes. The server may be starting up — try again.";
+const ANALYSIS_INCOMPLETE_DETAIL =
+  "The analysis stream ended before a final result was returned.";
+const CHAT_INCOMPLETE_DETAIL =
+  "The response stream ended before completion. Please try again.";
+const CHAT_INVALID_DETAIL =
+  "The response stream sent invalid data. Please try again.";
+const CHAT_CANCELLED_DETAIL =
+  "The response was cancelled. Please try again.";
+const CHAT_TIMEOUT_DETAIL =
+  "The response timed out. Please try again.";
+const CHAT_CONNECTION_DETAIL =
+  "The response connection was interrupted. Please try again.";
+
+class SseProtocolError extends Error {}
+
+class SseReadTimeoutError extends Error {}
+
+interface ConsumeSseOptions {
+  readTimeoutMs?: () => number | undefined;
+  onActivity?: () => void;
+}
+
+async function consumeSseStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  onEvent: (eventType: string, parsed: unknown) => boolean,
+  options: ConsumeSseOptions = {},
+): Promise<boolean> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventType = "";
+  let dataLines: string[] = [];
+  let terminalSeen = false;
+
+  const dispatchEvent = () => {
+    if (!eventType || dataLines.length === 0) return;
+    const rawData = dataLines.join("\n");
+    eventType = eventType.trim();
+    dataLines = [];
+
+    if (terminalSeen) {
+      eventType = "";
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawData);
+    } catch {
+      throw new SseProtocolError(CHAT_INVALID_DETAIL);
+    }
+
+    terminalSeen = onEvent(eventType, parsed);
+    eventType = "";
+  };
+
+  const processLine = (rawLine: string) => {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (line.startsWith("event:")) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    } else if (line === "") {
+      dispatchEvent();
+    }
+  };
+
+  while (true) {
+    const timeoutMs = options.readTimeoutMs?.();
+    const readResult = timeoutMs
+      ? Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new SseReadTimeoutError("SSE_READ_TIMEOUT")),
+              timeoutMs,
+            );
+          }),
+        ])
+      : reader.read();
+    const { done, value } = await readResult;
+    if (done) break;
+
+    options.onActivity?.();
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) processLine(line);
+  }
+
+  buffer += decoder.decode();
+  if (buffer) processLine(buffer);
+  dispatchEvent();
+  return terminalSeen;
+}
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
 function isStreamStartupTimeout(error: unknown): boolean {
-  return error instanceof Error && error.message === "STREAM_FIRST_EVENT_TIMEOUT";
+  return error instanceof SseReadTimeoutError;
 }
 
 function isDbBackedAnalysisReady(health: RuntimeHealthData): boolean {
@@ -417,78 +512,54 @@ export async function streamAnalysis(
         return;
       }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let eventType = "";
-      let eventData = "";
       let receivedFirstEvent = false;
-      let receivedTerminalEvent = false;
-
-      while (true) {
-        const readResult = receivedFirstEvent
-          ? reader.read()
-          : Promise.race([
-              reader.read(),
-              new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error("STREAM_FIRST_EVENT_TIMEOUT")), FIRST_EVENT_TIMEOUT_MS);
-              }),
-            ]);
-        const { done, value } = await readResult;
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            eventData = line.slice(6).trim();
-          } else if (line === "" && eventType && eventData) {
-            try {
-              const parsed = JSON.parse(eventData);
-              receivedFirstEvent = true;
-              if (eventType === "status") {
-                onStatus(parsed as PipelineStatus);
-              } else if (eventType === "result") {
-                receivedTerminalEvent = true;
-                onResult(parsed as ZoningReportData);
-              } else if (eventType === "thinking") {
-                onThinking?.(parsed as ThinkingEvent);
-              } else if (eventType === "suggestions") {
-                onSuggestions?.(parsed.suggestions || []);
-              } else if (eventType === "error") {
-                receivedTerminalEvent = true;
-                onError({
-                  detail: parsed.detail || "Unknown error",
-                  errorType: (parsed.error_type || "unknown") as AnalysisErrorType,
-                });
-              }
-            } catch {
-              // Skip malformed events
-            }
-            eventType = "";
-            eventData = "";
+      const receivedTerminalEvent = await consumeSseStream(
+        reader,
+        (eventType, parsed) => {
+          receivedFirstEvent = true;
+          if (eventType === "status") {
+            onStatus(parsed as PipelineStatus);
+          } else if (eventType === "result") {
+            onResult(parsed as ZoningReportData);
+            return true;
+          } else if (eventType === "thinking") {
+            onThinking?.(parsed as ThinkingEvent);
+          } else if (eventType === "suggestions") {
+            const payload = parsed as { suggestions?: string[] };
+            onSuggestions?.(payload.suggestions || []);
+          } else if (eventType === "error") {
+            const payload = parsed as { detail?: string; error_type?: string };
+            onError({
+              detail: payload.detail || "Unknown error",
+              errorType: (payload.error_type || "unknown") as AnalysisErrorType,
+            });
+            return true;
           }
-        }
-      }
+          return false;
+        },
+        {
+          readTimeoutMs: () =>
+            receivedFirstEvent ? undefined : FIRST_EVENT_TIMEOUT_MS,
+        },
+      );
 
       if (!receivedTerminalEvent) {
-        const recoveredError = await recoverFromStreamFailure(
-          options,
-          onResult,
-          receivedFirstEvent
-            ? "The analysis stream ended before a final result was returned."
-            : NETWORK_FAILURE_DETAIL,
-        );
-        if (recoveredError) {
-          onError(recoveredError);
-        }
+        onError({
+          detail: ANALYSIS_INCOMPLETE_DETAIL,
+          errorType: "pipeline_error",
+        });
       }
 
       return; // Success — exit retry loop
     } catch (err) {
+      if (err instanceof SseProtocolError) {
+        onError({
+          detail: "The analysis stream sent invalid data.",
+          errorType: "pipeline_error",
+        });
+        return;
+      }
+
       if (isAbortError(err)) {
         onError({
           detail: STREAM_TIMEOUT_DETAIL,
@@ -631,83 +702,118 @@ export async function streamChat(
   onReasoning?: (event: ReasoningEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/v1/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      history,
-      report_context: reportContext,
-      session_id: sessionId || undefined,
-    }),
-    signal,
-  });
+  const controller = new AbortController();
+  let settled = false;
+  let timedOut = false;
+  let idleTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: "Request failed" }));
-    onError(extractErrorMessage(err, response.status));
-    return;
+  const emitError = (detail: string) => {
+    if (settled) return;
+    settled = true;
+    onError(detail);
+  };
+  const emitDone = (fullContent: string) => {
+    if (settled) return;
+    settled = true;
+    onDone(fullContent);
+  };
+  const refreshIdleDeadline = () => {
+    if (idleTimeout) clearTimeout(idleTimeout);
+    idleTimeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, CHAT_STREAM_IDLE_TIMEOUT_MS);
+  };
+  const abortFromCaller = () => controller.abort();
+
+  if (signal?.aborted) {
+    controller.abort();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
   }
+  refreshIdleDeadline();
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    onError("No response stream available");
-    return;
-  }
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        history,
+        report_context: reportContext,
+        session_id: sessionId || undefined,
+      }),
+      signal: controller.signal,
+    });
+    refreshIdleDeadline();
 
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let eventType = "";
-  let eventData = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        eventData = line.slice(6).trim();
-      } else if (line === "" && eventType && eventData) {
-        try {
-          const parsed = JSON.parse(eventData);
-          if (eventType === "session") {
-            onSession?.(parsed.session_id);
-          } else if (eventType === "token") {
-            onToken(parsed.content);
-          } else if (eventType === "thinking") {
-            onThinking?.(parsed as ThinkingEvent);
-          } else if (eventType === "tool_use") {
-            onToolUse?.(parsed as ToolUseEvent);
-          } else if (eventType === "tool_result") {
-            onToolResult?.({
-              tool: parsed.tool,
-              status: parsed.status,
-              message: parsed.message,
-            } as ToolResultEvent);
-          } else if (eventType === "agent_task") {
-            onTask?.(parsed as AgentTaskEvent);
-          } else if (eventType === "browser_action") {
-            onBrowserAction?.(parsed as BrowserActionEvent);
-          } else if (eventType === "reasoning") {
-            onReasoning?.(parsed as ReasoningEvent);
-          } else if (eventType === "done") {
-            onDone(parsed.full_content);
-          } else if (eventType === "error") {
-            onError(parsed.detail || "Unknown error");
-          }
-        } catch {
-          // Skip malformed events
-        }
-        eventType = "";
-        eventData = "";
-      }
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Request failed" }));
+      emitError(extractErrorMessage(err, response.status));
+      return;
     }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      emitError("No response stream available. Please try again.");
+      return;
+    }
+
+    const receivedTerminalEvent = await consumeSseStream(
+      reader,
+      (eventType, parsed) => {
+        if (settled) return true;
+        if (eventType === "session") {
+          const payload = parsed as { session_id?: string };
+          if (payload.session_id) onSession?.(payload.session_id);
+        } else if (eventType === "token") {
+          const payload = parsed as { content?: string };
+          onToken(payload.content || "");
+        } else if (eventType === "thinking") {
+          onThinking?.(parsed as ThinkingEvent);
+        } else if (eventType === "tool_use") {
+          onToolUse?.(parsed as ToolUseEvent);
+        } else if (eventType === "tool_result") {
+          const payload = parsed as ToolResultEvent;
+          onToolResult?.({
+            tool: payload.tool,
+            status: payload.status,
+            message: payload.message,
+          });
+        } else if (eventType === "agent_task") {
+          onTask?.(parsed as AgentTaskEvent);
+        } else if (eventType === "browser_action") {
+          onBrowserAction?.(parsed as BrowserActionEvent);
+        } else if (eventType === "reasoning") {
+          onReasoning?.(parsed as ReasoningEvent);
+        } else if (eventType === "done") {
+          const payload = parsed as { full_content?: string };
+          emitDone(payload.full_content || "");
+          return true;
+        } else if (eventType === "error") {
+          const payload = parsed as { detail?: string };
+          emitError(payload.detail || "Unknown error");
+          return true;
+        }
+        return false;
+      },
+      { onActivity: refreshIdleDeadline },
+    );
+
+    if (!receivedTerminalEvent) emitError(CHAT_INCOMPLETE_DETAIL);
+  } catch (error) {
+    if (error instanceof SseProtocolError) {
+      emitError(CHAT_INVALID_DETAIL);
+    } else if (timedOut) {
+      emitError(CHAT_TIMEOUT_DETAIL);
+    } else if (signal?.aborted || isAbortError(error)) {
+      emitError(CHAT_CANCELLED_DETAIL);
+    } else {
+      emitError(CHAT_CONNECTION_DETAIL);
+    }
+  } finally {
+    if (idleTimeout) clearTimeout(idleTimeout);
+    signal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -819,7 +925,7 @@ export interface DocumentTemplateInfo {
 export interface DocumentGenerateParams {
   document_type: string;
   deal_type: string;
-  context: Record<string, string | number>;
+  context: Record<string, string | number | boolean>;
   output_format?: string;
 }
 

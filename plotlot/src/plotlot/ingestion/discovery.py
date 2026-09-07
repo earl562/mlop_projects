@@ -928,27 +928,75 @@ def _search_toc_for_zoning(toc_items: list[dict]) -> list[dict]:
     return matches
 
 
+def _toc_node_id(item: dict) -> str:
+    return str(item.get("Id") or item.get("id") or item.get("NodeId") or item.get("nodeId") or "")
+
+
+# Top-level titles worth descending into to find a nested zoning chapter
+# (e.g. Tiburon's "Chapter 16 - Zoning" lives under "Title IV - Land ... and Use").
+_DESCEND_HINTS = ("zon", "land", "develop", "use", "planning", "part ii", "code of ordinance")
+
+
+def zoning_rank(heading: str) -> int:
+    """Rank a TOC candidate as the *primary* zoning/development code (lower = better).
+
+    A naive "contains the word zoning" match is wrong: Marin's "Title 20 - Coastal
+    Zoning Code" contains "zoning" but is a specialized partial code, while the real
+    ordinance is "Title 22 - Development Code". This penalizes specialized/partial
+    codes and prefers the main code or an actual "... Zoning" chapter.
+    """
+    h = (heading or "").lower()
+    # Specialized / partial codes — never the primary ordinance even if they say "zoning".
+    if any(
+        x in h
+        for x in (
+            "coastal",
+            "overlay",
+            "sign",
+            "historic",
+            "trip reduction",
+            "specific plan",
+            "redevelopment",
+            "subdivision",
+            "appendix",
+        )
+    ):
+        return 6
+    if "development code" in h or "land development code" in h or "unified land" in h:
+        return 0
+    if "zoning ordinance" in h or "zoning code" in h or "comprehensive zoning" in h:
+        return 1
+    if "zoning" in h:
+        return 2
+    if "development regulations" in h or "land development" in h:
+        return 3
+    if "land use" in h:
+        return 4
+    return 5
+
+
 async def _deep_search_toc(
     client: httpx.AsyncClient,
     product_id: int,
     job_id: int,
     root_toc: list[dict],
 ) -> list[dict]:
-    """Search one level deeper in the TOC for zoning chapters.
+    """Collect candidate zoning nodes from the TOC, top-level AND one level deep.
 
-    Some municipalities nest zoning under "Part II", "Code of Ordinances",
-    or "Appendices" — this checks children of top-level nodes.
+    The old version returned early on ANY top-level keyword hit, so a weak match
+    ("Title III - Businesses, Professions and Utilities") short-circuited the
+    search and the real nested "Chapter 16 - Zoning" was never surfaced. We now
+    always also descend into land/zoning/development-ish titles and merge, leaving
+    the final pick to :func:`zoning_rank`.
     """
-    matches = _search_toc_for_zoning(root_toc)
-    if matches:
-        return matches
+    matches: list[dict] = list(_search_toc_for_zoning(root_toc))
 
-    # Search children of top-level nodes
     for item in root_toc:
-        node_id = str(
-            item.get("Id") or item.get("id") or item.get("NodeId") or item.get("nodeId") or ""
-        )
+        node_id = _toc_node_id(item)
         if not node_id:
+            continue
+        heading = (item.get("Heading") or item.get("heading") or "").lower()
+        if not any(hint in heading for hint in _DESCEND_HINTS):
             continue
         children = await _fetch_json(
             client,
@@ -958,10 +1006,17 @@ async def _deep_search_toc(
             nodeId=node_id,
         )
         if children and isinstance(children, list):
-            child_matches = _search_toc_for_zoning(children)
-            matches.extend(child_matches)
+            matches.extend(_search_toc_for_zoning(children))
 
-    return matches
+    # Dedup by node id, preserving first-seen order.
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for m in matches:
+        nid = _toc_node_id(m)
+        if nid and nid not in seen:
+            seen.add(nid)
+            deduped.append(m)
+    return deduped
 
 
 async def _fetch_json(
@@ -1039,15 +1094,7 @@ async def _discover_municipality(
             if not matches:
                 continue
 
-            def _sort_key(m):
-                h = (m.get("Heading") or "").lower()
-                if "zoning" in h:
-                    return 0
-                if "land development" in h or "land use" in h:
-                    return 1
-                return 2
-
-            sorted_matches = sorted(matches, key=_sort_key)
+            sorted_matches = sorted(matches, key=lambda m: zoning_rank(m.get("Heading") or ""))
 
             for candidate in sorted_matches:
                 node_id = str(

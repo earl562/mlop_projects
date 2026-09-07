@@ -19,11 +19,9 @@ BANNED_DIR_PREFIXES = (
     "plotlot/tests/screenshots/",
 )
 
-# Static product assets in Next.js public/ directories are intentionally tracked.
-ALLOWED_DIR_PREFIXES = (
-    "plotlot/frontend/public/",
-    "apps/plotlot/frontend/public/",
-)
+# Static product assets in the canonical Next.js public/ directory are
+# intentionally tracked. Generated test output remains banned above.
+ALLOWED_DIR_PREFIXES = ("plotlot/frontend/public/",)
 
 BANNED_MEDIA_SUFFIXES = {
     ".png",
@@ -66,6 +64,12 @@ def find_violations(paths: list[str]) -> list[tuple[str, str]]:
             for prefix in NON_CANONICAL_FRONTEND_PREFIXES
         ):
             violations.append((normalized, "non-canonical-frontend-root"))
+            continue
+
+        if any(
+            normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
+            for prefix in ALLOWED_DIR_PREFIXES
+        ):
             continue
 
         suffix = PurePosixPath(normalized).suffix.lower()

@@ -1,0 +1,8 @@
+19 src/lib/auth-config.ts
+27 src/lib/auth-roles.ts
+17 src/instrumentation.ts
+31 src/proxy.ts
+8 src/middleware.ts
+68 tests/global-setup.ts
+56 tests/auth-roles.spec.ts
+18 tests/auth-playwright.config.ts

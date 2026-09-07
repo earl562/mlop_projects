@@ -1,0 +1,48 @@
+
+> frontend@0.1.0 lint
+> eslint
+
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/app/api/video/generate/route.ts
+  9:20  warning  'lat' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  9:25  warning  'lng' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/BuildingRenderViewer.tsx
+  170:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/FloorPlanViewer.tsx
+  4:29  warning  'FloorPlanInput' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/OutreachPanel.tsx
+  65:18  warning  'setToName' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/ParcelViewer.tsx
+  134:10  warning  'TabBar' is defined but never used                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+  176:10  warning  'StreetViewTab' is defined but never used                                                                                                                                                                                                                                                @typescript-eslint/no-unused-vars
+  191:11  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  229:7   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/ProjectTree.tsx
+  186:26  warning  'session' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/PropertyFlyoverVideo.tsx
+  162:14  warning  Unused eslint-disable directive (no problems were reported from 'jsx-a11y/media-has-caption')
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/SatelliteMap.tsx
+   3:20  warning  'useEffect' is defined but never used                                                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+   5:3   warning  'APIProvider' is defined but never used                                                                                                                                                                                                                                                  @typescript-eslint/no-unused-vars
+   6:3   warning  'Map' is defined but never used                                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   7:3   warning  'AdvancedMarker' is defined but never used                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+   8:3   warning  'InfoWindow' is defined but never used                                                                                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+   9:3   warning  'useMap' is defined but never used                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+  46:9   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  69:9   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/frontend/src/components/Sidebar.tsx
+  6:8  warning  'PortfolioPanel' is defined but never used     @typescript-eslint/no-unused-vars
+  7:8  warning  'ProjectTree' is defined but never used        @typescript-eslint/no-unused-vars
+  8:8  warning  'WorkspaceSelector' is defined but never used  @typescript-eslint/no-unused-vars
+  9:8  warning  'NewProjectModal' is defined but never used    @typescript-eslint/no-unused-vars
+
+✖ 23 problems (0 errors, 23 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.

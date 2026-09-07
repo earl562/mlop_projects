@@ -63,11 +63,23 @@ def test_allows_normal_source_and_docs_files():
     assert violations == []
 
 
+def test_allows_static_product_media_in_canonical_public_directory():
+    violations = repo_hygiene.find_violations(
+        [
+            "plotlot/frontend/public/plotlot-assets/hero-aerial-clean.png",
+            "plotlot/frontend/public/plotlot-assets/card.jpg",
+        ]
+    )
+
+    assert violations == []
+
+
 def test_flags_tracked_duplicate_frontend_roots():
     violations = repo_hygiene.find_violations(
         [
             "frontend/package.json",
             "apps/plotlot/frontend/src/app/page.tsx",
+            "apps/plotlot/frontend/public/generated.png",
             "plotlot/frontend/src/app/page.tsx",
         ]
     )
@@ -75,6 +87,10 @@ def test_flags_tracked_duplicate_frontend_roots():
     assert ("frontend/package.json", "non-canonical-frontend-root") in violations
     assert (
         "apps/plotlot/frontend/src/app/page.tsx",
+        "non-canonical-frontend-root",
+    ) in violations
+    assert (
+        "apps/plotlot/frontend/public/generated.png",
         "non-canonical-frontend-root",
     ) in violations
     assert (

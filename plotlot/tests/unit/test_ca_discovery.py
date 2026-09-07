@@ -233,6 +233,10 @@ class TestGetAllConfigsIncludesCA:
             patch("plotlot.ingestion.discovery.discover_ga", side_effect=mock_empty),
             patch("plotlot.ingestion.discovery.discover_sc", side_effect=mock_empty),
             patch("plotlot.ingestion.discovery.discover_ca", side_effect=mock_ca),
+            patch(
+                "plotlot.ingestion.discovery.discover_county_authorities",
+                side_effect=mock_empty,
+            ),
         ):
             configs = await get_all_municode_configs()
 

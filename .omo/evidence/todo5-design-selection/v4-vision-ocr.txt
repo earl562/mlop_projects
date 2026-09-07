@@ -1,0 +1,152 @@
+=
+PlotLot Direction A
+Operational Intelligence Workbench
+Q Search
+Notes
+Exports
+A Alerts
+JD
+Deal queue
+Evidence spine - DEAL-MIA-0420
+Acquisition decision
+Parcel identity
+Verified
+J-01|
+MAX UNITS
+DEAL-MIA-0420
+• Active
+MIAMI-DADE PRIVATE BETA
+ABSTAINED
+PARCEL ID
+SOURCE ID
+Evidence 6/7
+PARCEL OUTLINE (NOT MAP)
+PARCEL ID REDACTED
+P-01
+SHA-256
+Governing blocker
+DEAL-MIA-0150
+• Active
+JURISDICTION
+7f4a...c91e
+PARKING RULE NOT HASH-BOUND
+MIAMI-DADE PRIVATE BETA
+UNINCORPORATED MIAMI-DADE
+Source: Z-03 (
+CAPTURED
+Evidence 5/7
+PROGRAM
+2024-05-02
+MIAMI-DADE PRIVATE BETA
+NOTES
+PURCHASE CEILING
+DEAL-BRW-0010
+• Blocked
+Illustrative outline only.
+ABSTAINED
+BROWARD • MUNICIPALITY REQUIRED
+Not a survey.
+Evidence 2/7
+> 2 Jurisdiction & coverage
+Verified
+J-01
+V
+Reason
+DEAL-PBC-1234
+• Blocked
+REQUIRED INPUT MISSING
+3 Zoning
+Verified
+Z-01
+PALM BEACH • MUNICIPALITY REQUIRED
+CONDITIONAL SCENARIO • NOT RELIANCE-READY
+Evidence 2/7
+4 Setbacks & dimensional rules
+Verified
+Z-02
+V
+Example fixture (illustrative only)
+Max units (two-unit scenario)
+DEAL-SD-0000
+• Planned
+5 Overlays & constraints
+Blocking
+Z-03
+V
+SAN DIEGO COUNTY •
+Purchase ceiling (illustrative only)
+PLANNED, NOT ENABLED
+› 6 Capacity & maximum units
+Abstained
+A-01
+$418,000
+Evidence 0/7
+Verified
+S-01
+Assumes parking provided by code.
+7 Survey / plat / construction docs
+Not reliance-ready.
+8 Comps
+Verified
+C-01
+EVIDENCE COMPLETENESS
+> 9 Underwriting
+Abstained
+U-01
+EVIDENCE 6/7 VERIFIED
+v 10 Provenance
+Verified
+p-00
+SHA256 7f4a...c91e [
+SOURCE ID
+INACiiNCNTYVoS
+ADTtIOSN
+SHA-256
+OPPORTUNITY BRIEF (GROUNDED)
+Parcel identity
+p-01
+Parcel extract
+2024-05-02
+7f4a...c91e
+Two-unit fixture scenario requires
+Jurisdiction & coverage
+J-01
+PIONIATIAn MAMA
+2024-05-02
+34b1...2e7d
+parking evidence [Z-03] [C-02].
+Zoning
+2-01
+Zoning code excerpt
+2024-05-02
+9c12...4a0f|
+Without hash-bound parking rule,
+value is indeterminate.
+Setbacks & dimensional rules
+2-02
+Dimensional table
+2024-05-02
+b2d3...8f11
+Overlays & constraints
+2-03
+Overlay memo
+2024-05-02
+eSaa….0690
+NEXT HANDOFF
+Capacity & maximum units
+A-01
+Capacity analysis
+2024-05-02
+1a7c...6d2b
+Abstain: parking rule is not hash-bound
+Comps
+C-01
+Underwriting agent • awaiting parking evidence
+Comps memo
+2024-05-02
+6d44...af03
+Resolve blocker
+→
++ Add deal
+What is provenance?
+Illustrative fixtures only. Not legal advice.

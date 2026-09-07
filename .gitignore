@@ -32,8 +32,16 @@ mlruns.db
 plotlot_tmp_mlflow.db
 mlruns/
 
-# Firebase local logs
-firebase-debug.log
+# Generated/private SQLite state is never source
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Generated package-manager and Firebase CLI debug logs
+**/firebase-debug.log
+**/npm-debug.log
+**/yarn-debug.log
+**/yarn-error.log
 
 # Frontend
 **/node_modules/
@@ -52,6 +60,10 @@ apps/plotlot/tests/screenshots/
 apps/plotlot/frontend/playwright-chat-before.png
 apps/plotlot/frontend/playwright-chat-after.png
 apps/plotlot/frontend/IMAGE_TO_CODE_WORKFLOW.md
+
+# Agent/browser evidence and generated design renders
+.omo/evidence/
+plotlot/artifacts/design/**/reference-*.png
 
 # Frontend design/reference assets (not required to run PlotLot)
 apps/plotlot/frontend/public/plotlot-assets/

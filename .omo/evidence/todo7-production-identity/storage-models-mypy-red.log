@@ -1,0 +1,4 @@
+src/plotlot/domain/steps.py:177: error: Argument "produces" to "StepDef" has incompatible type "str"; expected "tuple[str, ...]"  [arg-type]
+src/plotlot/storage/models.py:345: error: Need type annotation for "allowed_actions"  [var-annotated]
+src/plotlot/storage/models.py:757: error: Argument "extracted_at" to "DistrictDimensionalStandard" has incompatible type "datetime | now"; expected "datetime"  [arg-type]
+Found 3 errors in 2 files (checked 1 source file)

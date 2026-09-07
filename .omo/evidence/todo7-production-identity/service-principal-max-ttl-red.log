@@ -1,0 +1,85 @@
+scenario: RED independently signed overlong service-principal token must be rejected
+invocation: uv run pytest tests/security/test_service_principals.py -k "verification_rejects_independently_signed_overlong" -q
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_service_principal_verification_rejects_independently_signed_overlong_token[901] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1439aa600>
+ttl_seconds = 901
+
+    @pytest.mark.parametrize("ttl_seconds", [901, 365 * 24 * 60 * 60])
+    def test_service_principal_verification_rejects_independently_signed_overlong_token(
+        monkeypatch: pytest.MonkeyPatch,
+        ttl_seconds: int,
+    ) -> None:
+        monkeypatch.setattr(settings, "service_principal_signing_key", "t" * 32)
+        monkeypatch.setattr(settings, "service_principal_max_ttl_seconds", 900)
+        issued_at = int(datetime.now(UTC).timestamp())
+        token = jwt.encode(
+            {
+                "sub": "sp_external",
+                "iss": settings.service_principal_issuer,
+                "aud": settings.service_principal_audience,
+                "iat": issued_at,
+                "nbf": issued_at,
+                "exp": issued_at + ttl_seconds,
+                "jti": f"external-{ttl_seconds}",
+                "tenant_id": "tenant_a",
+                "actions": ["analysis:run"],
+                "token_type": "service_principal",
+            },
+            settings.service_principal_signing_key,
+            algorithm="HS256",
+        )
+
+>       with pytest.raises(jwt.InvalidTokenError, match="lifetime"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'jwt.exceptions.InvalidTokenError'>
+
+tests/security/test_service_principals.py:140: Failed
+_ test_service_principal_verification_rejects_independently_signed_overlong_token[31536000] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x143ca4ad0>
+ttl_seconds = 31536000
+
+    @pytest.mark.parametrize("ttl_seconds", [901, 365 * 24 * 60 * 60])
+    def test_service_principal_verification_rejects_independently_signed_overlong_token(
+        monkeypatch: pytest.MonkeyPatch,
+        ttl_seconds: int,
+    ) -> None:
+        monkeypatch.setattr(settings, "service_principal_signing_key", "t" * 32)
+        monkeypatch.setattr(settings, "service_principal_max_ttl_seconds", 900)
+        issued_at = int(datetime.now(UTC).timestamp())
+        token = jwt.encode(
+            {
+                "sub": "sp_external",
+                "iss": settings.service_principal_issuer,
+                "aud": settings.service_principal_audience,
+                "iat": issued_at,
+                "nbf": issued_at,
+                "exp": issued_at + ttl_seconds,
+                "jti": f"external-{ttl_seconds}",
+                "tenant_id": "tenant_a",
+                "actions": ["analysis:run"],
+                "token_type": "service_principal",
+            },
+            settings.service_principal_signing_key,
+            algorithm="HS256",
+        )
+
+>       with pytest.raises(jwt.InvalidTokenError, match="lifetime"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'jwt.exceptions.InvalidTokenError'>
+
+tests/security/test_service_principals.py:140: Failed
+=============================== warnings summary ===============================
+tests/security/test_service_principals.py::test_service_principal_verification_rejects_independently_signed_overlong_token[901]
+  /Users/aaliyahmatthews/Desktop/plotlot/.worktrees/plotlot-production-agentic-harness-mvp/plotlot-v2/plotlot/.venv/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/utils.py:178: FutureWarning: The filesystem tracking backend (e.g., './mlruns') will be deprecated in February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://github.com/mlflow/mlflow/issues/18534 for more details and migration guidance. For migrating existing data, https://github.com/mlflow/mlflow-export-import can be used.
+    return FileStore(store_uri, store_uri)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/security/test_service_principals.py::test_service_principal_verification_rejects_independently_signed_overlong_token[901]
+FAILED tests/security/test_service_principals.py::test_service_principal_verification_rejects_independently_signed_overlong_token[31536000]
+2 failed, 7 deselected, 1 warning in 0.42s
+exit_code: 1

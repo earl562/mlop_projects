@@ -10,9 +10,48 @@ from plotlot.pipeline.lookup import (
     _build_context_message,
     _build_report,
     _build_fallback_report,
+    _format_sources,
     lookup_address,
     report_to_dict,
 )
+
+
+def _sr(section: str, section_title: str) -> SearchResult:
+    return SearchResult(
+        section=section,
+        section_title=section_title,
+        zone_codes=[],
+        chunk_text="x",
+        score=1.0,
+        municipality="Tiburon",
+    )
+
+
+class TestFormatSources:
+    """Regression: municipalities ingested with an empty ``section`` (Tiburon,
+    Oakland, Marin County, …) must still surface citations from section_title,
+    otherwise a grounded result renders with zero sources and looks unsourced."""
+
+    def test_section_only(self):
+        assert _format_sources([_sr("16-21.040", "")]) == ["16-21.040"]
+
+    def test_title_only_empty_section(self):
+        # The Tiburon case — section is empty, title carries the citation.
+        assert _format_sources([_sr("", "16-21.040 - Residential zones")]) == [
+            "16-21.040 - Residential zones"
+        ]
+
+    def test_both_fields_joined(self):
+        assert _format_sources([_sr("§10.22.010", "Residential Districts")]) == [
+            "§10.22.010 — Residential Districts"
+        ]
+
+    def test_neither_field_skipped(self):
+        assert _format_sources([_sr("", ""), _sr("", "   ")]) == []
+
+    def test_mixed_list(self):
+        out = _format_sources([_sr("", "Title A"), _sr("S2", "Title B"), _sr("", "")])
+        assert out == ["Title A", "S2 — Title B"]
 
 
 @pytest.fixture(autouse=True)

@@ -1,0 +1,31 @@
+{
+  "artifactVersion": "direction-c/v1.0.0",
+  "generation": {
+    "mode": "built-in image_gen",
+    "useCase": "ui-mockup",
+    "callsMade": 1,
+    "canonicalPrompt": "../direction-c.prompt.md",
+    "promptSha256": "172494983061bc1b8748d25c9a8a29f3eeebeff810759ae2ea9a2711410f96e9",
+    "promptCharacters": 5368,
+    "sourceOutput": "/Users/aaliyahmatthews/.codex/generated_images/019fa195-dc17-7771-ada6-8336d89d0355/exec-acea0e82-24d2-4a50-916f-a931dac242b6.png",
+    "projectCopy": "reference-direction-c-v1.png"
+  },
+  "output": {
+    "sha256": "6806a87c67ce205edfa1030c850189bad993bce8737f8bde3741da051908e8c0",
+    "format": "PNG RGB",
+    "dimensions": [1586, 992],
+    "requestedDimensions": [1440, 900],
+    "alphaChannel": false
+  },
+  "deterministicFixture": {
+    "path": "sample-fixture-redacted.json",
+    "sha256": "273b58161c2f22eae5ad1babea137ee2fe984c44ac6bf1bb49d76b33cc81dcba",
+    "privacy": "stable-redacted illustrative data only"
+  },
+  "validation": {
+    "pngSignatureAndNonzeroBytes": "pass",
+    "visualInspection": "pass: stage-gate spine, capacity dossier, handoff/approval rail, survey/plat, comps, ceiling, cited analysis, and abstention are visible; no map, chat composer, luxury/beach imagery, or screenshot-in-device composition observed",
+    "knownVariance": "Built-in output is 1586×992 rather than requested 1440×900. It remains a non-authoritative visual reference; written responsive specs are authoritative.",
+    "knownRasterLimit": "Generated raster text can be inaccurate. Product implementation must use the written copy, state matrix, and coverage truth."
+  }
+}

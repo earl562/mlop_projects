@@ -1,7 +1,7 @@
-import { expect, Page, APIRequestContext } from "@playwright/test";
+import { type Page, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
-export { test } from "@playwright/test";
-export { expect };
+export { test, expect };
 
 export interface BackendPreflight {
   status: string;
@@ -32,14 +32,25 @@ async function parseHealthResponse(
 
   const body = (await health.json()) as Record<string, unknown>;
   const status = typeof body.status === "string" ? body.status : "unknown";
+  const checks =
+    typeof body.checks === "object" && body.checks !== null
+      ? (body.checks as Record<string, unknown>)
+      : {};
+  const database = checks.database;
+  const databaseHealthy =
+    database === "ok" ||
+    (typeof database === "object" &&
+      database !== null &&
+      (database as Record<string, unknown>).status === "ok");
+  const healthy = status === "healthy" && databaseHealthy;
   return {
     status,
-    healthy: status === "healthy",
+    healthy,
     reachable: true,
     reason:
-      status === "healthy"
-        ? "Backend healthy"
-        : `Backend preflight expected healthy but got ${status}`,
+      healthy
+        ? "Backend and database healthy"
+        : `Backend preflight expected status=healthy and checks.database=ok but got status=${status}, database=${JSON.stringify(database)}`,
     body,
   };
 }
@@ -47,6 +58,17 @@ async function parseHealthResponse(
 export async function getBackendPreflight(
   request?: APIRequestContext,
 ): Promise<BackendPreflight> {
+  if (process.env.PLOTLOT_QUALITY_MUTATION === "unhealthy-db") {
+    return {
+      status: "unhealthy",
+      healthy: false,
+      reachable: true,
+      reason:
+        "Backend preflight expected status=healthy and checks.database=ok but got status=unhealthy, database=\"error\"",
+      body: { status: "unhealthy", checks: { database: "error" } },
+    };
+  }
+
   try {
     if (request) {
       const health = await request.get(HEALTH_URL, { timeout: 5_000 });
@@ -73,9 +95,9 @@ export async function requireHealthyBackend(
   const preflight = await getBackendPreflight(request);
   if (preflight.healthy) return preflight;
 
-  if (process.env.CI) {
+  if (process.env.CI || process.env.PLOTLOT_RELEASE_GATE === "1") {
     throw new Error(
-      `${preflight.reason}. CI db-backed lane must fail instead of silently downgrading.`,
+      `${preflight.reason}. Release db-backed lane must fail instead of silently downgrading.`,
     );
   }
 
@@ -98,16 +120,26 @@ export async function gotoLanding(page: Page) {
 }
 
 export async function switchToAgent(page: Page) {
-  await page.getByRole("button", { name: "Agent" }).click();
-  await expect(page.getByTestId("agent-input")).toBeVisible();
+  const agentInput = page.getByTestId("agent-input");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.getByRole("button", { name: "Agent" }).click();
+    if (await agentInput.isVisible().catch(() => false)) break;
+    await page.waitForTimeout(200);
+  }
+  await expect(agentInput).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
   await expect(page).toHaveURL(/\/workspace(?:\?mode=(?:agent|lookup))?$/);
 }
 
 export async function switchToLookup(page: Page) {
-  await page.getByRole("button", { name: "Lookup" }).click();
+  const lookupInput = page.getByTestId("lookup-input");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.getByRole("button", { name: "Lookup" }).click();
+    if (await lookupInput.isVisible().catch(() => false)) break;
+    await page.waitForTimeout(200);
+  }
   await expect(page).toHaveURL(/\/workspace\?mode=lookup$/);
-  await expect(page.getByTestId("lookup-input")).toBeVisible();
+  await expect(lookupInput).toBeVisible();
   await expect(page.getByTestId("send-button")).toBeVisible();
 }
 
@@ -118,12 +150,23 @@ export async function runLookupFlow(
   const input = page.getByTestId("lookup-input");
   const sendButton = page.getByTestId("send-button");
 
-  // In some environments the page can hydrate after the first fill, wiping the input value.
-  // Retry until the controlled value "sticks" before attempting to submit.
+  await page.route("**/api/v1/autocomplete**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ suggestions: [] }),
+    }));
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    await input.fill("");
     await input.fill(address);
-    if ((await input.inputValue().catch(() => "")) === address) break;
     await page.waitForTimeout(150);
+    if (
+      (await input.inputValue().catch(() => "")) === address &&
+      (await sendButton.isEnabled().catch(() => false))
+    ) {
+      break;
+    }
   }
 
   await expect(input).toHaveValue(address, { timeout: 10_000 });

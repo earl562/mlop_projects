@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "environment": "production",
+  "deployment": {
+    "frontend": {
+      "provider": "vercel",
+      "plan": "pro",
+      "deployment_id": "dpl_plotlot_production",
+      "public_https": true
+    },
+    "services": [
+      {
+        "name": "plotlot-api",
+        "provider": "render",
+        "plan": "standard",
+        "exposure": "public",
+        "tls": "required",
+        "image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-api", "issuer": "plotlot-release-controller", "key_owner": "Security Owner", "kid": "plotlot-api-assertion-2026-01", "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
+      },
+      {
+        "name": "plotlot-worker",
+        "provider": "render",
+        "plan": "standard",
+        "exposure": "private",
+        "tls": "required",
+        "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "plotlot-worker", "issuer": "plotlot-api", "key_owner": "Security Owner", "kid": "plotlot-worker-assertion-2026-01", "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
+      },
+      {
+        "name": "byright-api",
+        "provider": "render",
+        "plan": "standard",
+        "exposure": "private",
+        "tls": "required",
+        "image_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "byright-api", "issuer": "plotlot-worker", "key_owner": "Security Owner", "kid": "byright-api-assertion-2026-01", "payload_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
+      },
+      {
+        "name": "byright-worker",
+        "provider": "render",
+        "plan": "standard",
+        "exposure": "private",
+        "tls": "required",
+        "image_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "service_assertion": {"version": "1.0", "algorithm": "Ed25519", "audience": "byright-worker", "issuer": "byright-api", "key_owner": "Security Owner", "kid": "byright-worker-assertion-2026-01", "payload_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ", "issued_at": "2026-07-26T12:00:00Z", "expires_at": "2026-07-26T12:05:00Z"}
+      }
+    ]
+  },
+  "database": {
+    "provider": "neon",
+    "network_access": "private",
+    "tls": "verify-full",
+    "schemas": [
+      {"name": "plotlot", "role": "plotlot_app"},
+      {"name": "byright", "role": "byright_engine"}
+    ],
+    "backup": {"enabled": true, "pitr": true, "restore_owner": "Platform Operations", "rpo_minutes": 15, "rto_hours": 4}
+  },
+  "object_store": {
+    "compatibility": "s3",
+    "access": "private",
+    "tls": "required",
+    "immutability": "object-lock",
+    "encryption": "SSE-KMS",
+    "key_owner": "Security Owner"
+  },
+  "secrets": [
+    {"name": "database-credentials", "owner": "Platform Operations", "rotation_days": 90},
+    {"name": "service-assertion-key", "owner": "Security Owner", "rotation_days": 90},
+    {"name": "evidence-kms-key", "owner": "Security Owner", "rotation_days": 365}
+  ],
+  "governance": {
+    "data_policies": [
+      {"classification": "customer-confidential", "rights_basis": "customer contract", "retention_days": 2555, "deletion_owner": "Data Protection Owner"},
+      {"classification": "licensed-source", "rights_basis": "source license and provenance receipt", "retention_days": 365, "deletion_owner": "Data Protection Owner"},
+      {"classification": "immutable-release-evidence", "rights_basis": "legal interest and customer contract", "retention_days": 2555, "deletion_owner": "Compliance Owner"}
+    ],
+    "entitlements": {"mode": "manual", "owner": "Workspace Admin"},
+    "dedicated_deployments": {"code_fork": false, "digest_parity": true, "schema_parity": true, "setup": "paid"},
+    "incident": {"owner": "Incident Commander", "rollback_owner": "Release Manager", "rollback_manifest": "previous-signed-manifest"},
+    "slos": [
+      {"name": "availability", "target": "99.5% monthly", "owner": "Platform Operations"},
+      {"name": "first-event", "target": "p95 <= 2s", "owner": "Platform Operations"},
+      {"name": "queue-start", "target": "p95 <= 10s", "owner": "Workflow Operations"},
+      {"name": "terminal-analysis", "target": "p95 <= 120s; p99 <= 180s at concurrency 2", "owner": "Workflow Operations"},
+      {"name": "evidence-durability", "target": "99.999999999%", "owner": "Compliance Owner"}
+    ]
+  },
+  "contracts": {
+    "plotlot_openapi_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "byright_expected_openapi_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "migration_head": "20260725_release_contract",
+    "database_schema_sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "release-signing-2026-01",
+    "signed_by": "Release Manager",
+    "payload_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "value": "fixture-signature-not-for-production"
+  }
+}

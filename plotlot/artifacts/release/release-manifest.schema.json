@@ -1,0 +1,648 @@
+{
+  "$defs": {
+    "Backup": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "pitr": {
+          "title": "Pitr",
+          "type": "boolean"
+        },
+        "restore_owner": {
+          "title": "Restore Owner",
+          "type": "string"
+        },
+        "rpo_minutes": {
+          "title": "Rpo Minutes",
+          "type": "integer"
+        },
+        "rto_hours": {
+          "title": "Rto Hours",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enabled",
+        "pitr",
+        "restore_owner",
+        "rpo_minutes",
+        "rto_hours"
+      ],
+      "title": "Backup",
+      "type": "object"
+    },
+    "Contracts": {
+      "additionalProperties": false,
+      "properties": {
+        "byright_expected_openapi_sha256": {
+          "title": "Byright Expected Openapi Sha256",
+          "type": "string"
+        },
+        "database_schema_sha256": {
+          "title": "Database Schema Sha256",
+          "type": "string"
+        },
+        "migration_head": {
+          "title": "Migration Head",
+          "type": "string"
+        },
+        "plotlot_openapi_sha256": {
+          "title": "Plotlot Openapi Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plotlot_openapi_sha256",
+        "byright_expected_openapi_sha256",
+        "migration_head",
+        "database_schema_sha256"
+      ],
+      "title": "Contracts",
+      "type": "object"
+    },
+    "DataPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "classification": {
+          "title": "Classification",
+          "type": "string"
+        },
+        "deletion_owner": {
+          "title": "Deletion Owner",
+          "type": "string"
+        },
+        "retention_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retention Days"
+        },
+        "rights_basis": {
+          "title": "Rights Basis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "classification",
+        "rights_basis",
+        "deletion_owner"
+      ],
+      "title": "DataPolicy",
+      "type": "object"
+    },
+    "Database": {
+      "additionalProperties": false,
+      "properties": {
+        "backup": {
+          "$ref": "#/$defs/Backup"
+        },
+        "network_access": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "title": "Network Access",
+          "type": "string"
+        },
+        "provider": {
+          "const": "neon",
+          "title": "Provider",
+          "type": "string"
+        },
+        "schemas": {
+          "items": {
+            "$ref": "#/$defs/DatabaseSchema"
+          },
+          "title": "Schemas",
+          "type": "array"
+        },
+        "tls": {
+          "enum": [
+            "verify-full",
+            "disabled"
+          ],
+          "title": "Tls",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "network_access",
+        "tls",
+        "schemas",
+        "backup"
+      ],
+      "title": "Database",
+      "type": "object"
+    },
+    "DatabaseSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "title": "DatabaseSchema",
+      "type": "object"
+    },
+    "DedicatedDeployments": {
+      "additionalProperties": false,
+      "properties": {
+        "code_fork": {
+          "title": "Code Fork",
+          "type": "boolean"
+        },
+        "digest_parity": {
+          "title": "Digest Parity",
+          "type": "boolean"
+        },
+        "schema_parity": {
+          "title": "Schema Parity",
+          "type": "boolean"
+        },
+        "setup": {
+          "const": "paid",
+          "title": "Setup",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code_fork",
+        "digest_parity",
+        "schema_parity",
+        "setup"
+      ],
+      "title": "DedicatedDeployments",
+      "type": "object"
+    },
+    "Deployment": {
+      "additionalProperties": false,
+      "properties": {
+        "frontend": {
+          "$ref": "#/$defs/Frontend"
+        },
+        "services": {
+          "items": {
+            "$ref": "#/$defs/Service"
+          },
+          "title": "Services",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frontend",
+        "services"
+      ],
+      "title": "Deployment",
+      "type": "object"
+    },
+    "Entitlements": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "manual",
+          "title": "Mode",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "owner"
+      ],
+      "title": "Entitlements",
+      "type": "object"
+    },
+    "Frontend": {
+      "additionalProperties": false,
+      "properties": {
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "plan": {
+          "title": "Plan",
+          "type": "string"
+        },
+        "provider": {
+          "const": "vercel",
+          "title": "Provider",
+          "type": "string"
+        },
+        "public_https": {
+          "title": "Public Https",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "plan",
+        "deployment_id",
+        "public_https"
+      ],
+      "title": "Frontend",
+      "type": "object"
+    },
+    "Governance": {
+      "additionalProperties": false,
+      "properties": {
+        "data_policies": {
+          "items": {
+            "$ref": "#/$defs/DataPolicy"
+          },
+          "title": "Data Policies",
+          "type": "array"
+        },
+        "dedicated_deployments": {
+          "$ref": "#/$defs/DedicatedDeployments"
+        },
+        "entitlements": {
+          "$ref": "#/$defs/Entitlements"
+        },
+        "incident": {
+          "$ref": "#/$defs/Incident"
+        },
+        "slos": {
+          "items": {
+            "$ref": "#/$defs/Slo"
+          },
+          "title": "Slos",
+          "type": "array"
+        }
+      },
+      "required": [
+        "data_policies",
+        "entitlements",
+        "dedicated_deployments",
+        "incident",
+        "slos"
+      ],
+      "title": "Governance",
+      "type": "object"
+    },
+    "Incident": {
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "rollback_manifest": {
+          "title": "Rollback Manifest",
+          "type": "string"
+        },
+        "rollback_owner": {
+          "title": "Rollback Owner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "rollback_owner",
+        "rollback_manifest"
+      ],
+      "title": "Incident",
+      "type": "object"
+    },
+    "ObjectStore": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "enum": [
+            "private",
+            "public"
+          ],
+          "title": "Access",
+          "type": "string"
+        },
+        "compatibility": {
+          "const": "s3",
+          "title": "Compatibility",
+          "type": "string"
+        },
+        "encryption": {
+          "title": "Encryption",
+          "type": "string"
+        },
+        "immutability": {
+          "const": "object-lock",
+          "title": "Immutability",
+          "type": "string"
+        },
+        "key_owner": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Owner"
+        },
+        "tls": {
+          "enum": [
+            "required",
+            "disabled"
+          ],
+          "title": "Tls",
+          "type": "string"
+        }
+      },
+      "required": [
+        "compatibility",
+        "access",
+        "tls",
+        "immutability",
+        "encryption"
+      ],
+      "title": "ObjectStore",
+      "type": "object"
+    },
+    "Secret": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner"
+        },
+        "rotation_days": {
+          "title": "Rotation Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "rotation_days"
+      ],
+      "title": "Secret",
+      "type": "object"
+    },
+    "Service": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "enum": [
+            "public",
+            "private"
+          ],
+          "title": "Exposure",
+          "type": "string"
+        },
+        "image_digest": {
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "plan": {
+          "title": "Plan",
+          "type": "string"
+        },
+        "provider": {
+          "const": "render",
+          "title": "Provider",
+          "type": "string"
+        },
+        "service_assertion": {
+          "$ref": "#/$defs/ServiceAssertion"
+        },
+        "tls": {
+          "enum": [
+            "required",
+            "disabled"
+          ],
+          "title": "Tls",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "provider",
+        "plan",
+        "exposure",
+        "tls",
+        "image_digest",
+        "service_assertion"
+      ],
+      "title": "Service",
+      "type": "object"
+    },
+    "ServiceAssertion": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519",
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "audience": {
+          "minLength": 1,
+          "title": "Audience",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "issued_at": {
+          "format": "date-time",
+          "title": "Issued At",
+          "type": "string"
+        },
+        "issuer": {
+          "minLength": 1,
+          "title": "Issuer",
+          "type": "string"
+        },
+        "key_owner": {
+          "minLength": 1,
+          "title": "Key Owner",
+          "type": "string"
+        },
+        "kid": {
+          "minLength": 1,
+          "title": "Kid",
+          "type": "string"
+        },
+        "payload_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Payload Sha256",
+          "type": "string"
+        },
+        "signature": {
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "title": "Signature",
+          "type": "string"
+        },
+        "version": {
+          "const": "1.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "algorithm",
+        "audience",
+        "issuer",
+        "key_owner",
+        "kid",
+        "payload_sha256",
+        "signature",
+        "issued_at",
+        "expires_at"
+      ],
+      "title": "ServiceAssertion",
+      "type": "object"
+    },
+    "Signature": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519",
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "key_id": {
+          "title": "Key Id",
+          "type": "string"
+        },
+        "payload_sha256": {
+          "title": "Payload Sha256",
+          "type": "string"
+        },
+        "signed_by": {
+          "title": "Signed By",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "key_id",
+        "signed_by",
+        "payload_sha256",
+        "value"
+      ],
+      "title": "Signature",
+      "type": "object"
+    },
+    "Slo": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "owner"
+      ],
+      "title": "Slo",
+      "type": "object"
+    }
+  },
+  "$id": "https://plotlot.app/schemas/release-manifest-v1.json",
+  "additionalProperties": false,
+  "properties": {
+    "contracts": {
+      "$ref": "#/$defs/Contracts"
+    },
+    "database": {
+      "$ref": "#/$defs/Database"
+    },
+    "deployment": {
+      "$ref": "#/$defs/Deployment"
+    },
+    "environment": {
+      "const": "production",
+      "title": "Environment",
+      "type": "string"
+    },
+    "governance": {
+      "$ref": "#/$defs/Governance"
+    },
+    "object_store": {
+      "$ref": "#/$defs/ObjectStore"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "secrets": {
+      "items": {
+        "$ref": "#/$defs/Secret"
+      },
+      "title": "Secrets",
+      "type": "array"
+    },
+    "signature": {
+      "$ref": "#/$defs/Signature"
+    }
+  },
+  "required": [
+    "schema_version",
+    "environment",
+    "deployment",
+    "database",
+    "object_store",
+    "secrets",
+    "governance",
+    "contracts",
+    "signature"
+  ],
+  "title": "ReleaseManifest",
+  "type": "object"
+}

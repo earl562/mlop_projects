@@ -1,6 +1,7 @@
 """Tests for the ingestion pipeline module."""
 
-from unittest.mock import AsyncMock, patch
+from dataclasses import replace
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -14,10 +15,11 @@ from plotlot.pipeline.ingest import (
     _resolve_all_configs,
     _resolve_config,
     _safe_log_metrics,
+    _store_ordinance_sections,
     ingest_all,
     ingest_municipality,
 )
-from plotlot.storage.models import OrdinanceChunk
+from plotlot.storage.models import OrdinanceChunk, OrdinanceSection
 
 
 class TestResolveConfig:
@@ -64,6 +66,62 @@ class TestResolveConfig:
         ):
             with pytest.raises(ValueError, match="Unknown municipality key"):
                 await _resolve_config("nonexistent_city")
+
+    @pytest.mark.asyncio
+    async def test_resolve_live_discovery_with_state(self):
+        """A warm-cache miss + state falls back to targeted single-name discovery
+        (re-ingesting a county-batch city like Tiburon, not in the curated cache)."""
+        discovered = MunicodeConfig(
+            municipality="Tiburon",
+            county="marin",
+            client_id=9796,
+            product_id=16657,
+            job_id=475397,
+            zoning_node_id="CH16ZO",
+        )
+
+        async def empty_cache():
+            return {}
+
+        with (
+            patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache),
+            patch(
+                "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+                new=AsyncMock(return_value=discovered),
+            ) as mock_disc,
+        ):
+            config = await _resolve_config("tiburon", state="CA")
+
+        assert config.municipality == "Tiburon"
+        # Key was de-slugged to a proper jurisdiction name for the lookup.
+        mock_disc.assert_awaited_once_with("Tiburon", "CA")
+
+    @pytest.mark.asyncio
+    async def test_resolve_non_municode_with_state_raises(self):
+        """When live discovery finds nothing (non-Municode codifier, e.g. Sausalito),
+        the error must say so rather than silently doing nothing."""
+
+        async def empty_cache():
+            return {}
+
+        with (
+            patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache),
+            patch(
+                "plotlot.ingestion.discovery.discover_municode_authority_for_name",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            with pytest.raises(ValueError, match="non-Municode codifier"):
+                await _resolve_config("sausalito", state="CA")
+
+    @pytest.mark.asyncio
+    async def test_resolve_unknown_without_state_hints_state_flag(self):
+        async def empty_cache():
+            return {}
+
+        with patch("plotlot.ingestion.discovery.get_municode_configs", side_effect=empty_cache):
+            with pytest.raises(ValueError, match="--state"):
+                await _resolve_config("tiburon")
 
 
 class TestResolveAllConfigs:
@@ -180,8 +238,9 @@ class TestIngestMunicipality:
             count = await ingest_municipality("miami_dade")
 
         assert count == 1
-        mock_session.execute.assert_called_once()  # pg_insert upsert
-        mock_session.commit.assert_called_once()
+        # Two execute calls now: chunks upsert + sections index upsert (Slice 3.1)
+        assert mock_session.execute.call_count == 2
+        assert mock_session.commit.call_count == 2
         mock_session.close.assert_called_once()
 
     @pytest.mark.asyncio
@@ -286,6 +345,7 @@ class TestIngestAll:
                 "plotlot.ingestion.discovery.get_municode_configs", new_callable=AsyncMock
             ) as mock_disc,
             patch("plotlot.pipeline.ingest.MunicodeScraper") as MockScraper,
+            patch("plotlot.pipeline.ingest.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
             mock_disc.return_value = configs
             mock_instance = MockScraper.return_value
@@ -293,6 +353,8 @@ class TestIngestAll:
 
             results = await ingest_all()
 
+        assert mock_sleep.await_args_list == [call(30.0), call(0)]
+        assert call_count["n"] == 3
         assert len(results) == 2
         assert results["good_city"] == 0
         assert results["bad_city"] == 0
@@ -504,8 +566,10 @@ class TestIngestMunicipalityMLflowMetrics:
             count = await ingest_municipality("miami_dade")
 
         assert count == 1
-        mock_session.execute.assert_called_once()
-        mock_session.commit.assert_called_once()
+        # Two execute calls now: chunks upsert + sections index upsert (Slice 3.1)
+        assert mock_session.execute.call_count == 2
+        assert mock_session.commit.call_count == 2
+        mock_session.close.assert_called_once()
 
 
 class TestIngestAllMLflowMetrics:
@@ -549,3 +613,187 @@ class TestIngestAllMLflowMetrics:
         assert "ingest.total_chunks" in agg_metrics
         assert "ingest.municipalities_processed" in agg_metrics
         assert "ingest.municipalities_failed" in agg_metrics
+
+
+class TestOrdinanceSectionModel:
+    """Slice 3.1: OrdinanceSection is the structural index over chunks."""
+
+    def test_has_structural_columns(self):
+        cols = {c.name for c in OrdinanceSection.__table__.columns}
+        # Path + cross_refs + referenced_by are the three structural fields.
+        assert "path" in cols
+        assert "cross_refs" in cols
+        assert "referenced_by" in cols
+        assert "section_type" in cols
+        assert "section_number" in cols
+
+    def test_natural_key_constraint(self):
+        constrs = {c.name for c in OrdinanceSection.__table__.constraints}
+        assert "uq_section_natural_key" in constrs
+
+    def test_default_section_type_is_regulation(self):
+        col = OrdinanceSection.__table__.c.section_type
+        # server_default is the SQL-level default; the model default is "regulation"
+        assert col.default.arg == "regulation"
+
+    def test_referenced_by_defaults_empty(self):
+        col = OrdinanceSection.__table__.c.referenced_by
+        assert col.default.arg == []
+
+    def test_path_and_cross_refs_are_string_arrays(self):
+        # Both must be ARRAY(String) for pgvector/Postgres storage.
+        from sqlalchemy.dialects.postgresql import ARRAY
+
+        assert isinstance(OrdinanceSection.__table__.c.path.type, ARRAY)
+        assert isinstance(OrdinanceSection.__table__.c.cross_refs.type, ARRAY)
+        assert isinstance(OrdinanceSection.__table__.c.referenced_by.type, ARRAY)
+
+    def test_has_lineage_columns(self):
+        # Provenance mirrors OrdinanceChunk so freshness (3.4) / boundary
+        # checks can resolve against the section, not just chunks.
+        cols = {c.name for c in OrdinanceSection.__table__.columns}
+        assert "source_url" in cols
+        assert "scraped_at" in cols
+        assert "state" in cols
+
+
+class TestStoreOrdinanceSections:
+    """Slice 3.1: ingest now indexes one OrdinanceSection per unique node_id."""
+
+    @pytest.mark.asyncio
+    async def test_upserts_one_row_per_unique_node(self):
+        from plotlot.core.types import ChunkMetadata, TextChunk
+        from plotlot.core.types import MunicodeConfig
+
+        config = MunicodeConfig(
+            municipality="Fort Lauderdale",
+            county="broward",
+            client_id=1,
+            product_id=2,
+            job_id=3,
+            zoning_node_id="Z",
+        )
+        # Two chunks sharing one node_id -> ONE section row.
+        meta = ChunkMetadata(
+            municipality="Fort Lauderdale",
+            county="broward",
+            chapter="Chapter 47",
+            section="Sec. 47-5.60",
+            section_title="Schedule of District Regulations",
+            zone_codes=["RS-8"],
+            chunk_index=0,
+            municode_node_id="NODE_A",
+            path=["Chapter 47", "Sec. 47-5.60"],
+            cross_refs=["47-24.3"],
+            section_type="dimensional_table",
+        )
+        chunks = [
+            TextChunk(text="part one", metadata=meta),
+            TextChunk(text="part two", metadata=replace(meta, chunk_index=1)),
+        ]
+
+        with patch("plotlot.pipeline.ingest.pg_insert") as mock_insert:
+            mock_stmt = MagicMock()
+            mock_insert.return_value = mock_stmt
+            mock_stmt.on_conflict_do_update.return_value = mock_stmt
+            session = AsyncMock()
+
+            count = await _store_ordinance_sections(session, chunks, config)
+
+        assert count == 1
+        # pg_insert(Model) -> .values(row_dicts); row_dicts are on the .values call.
+        mock_insert.assert_called_once_with(OrdinanceSection)
+        session.execute.assert_awaited_once()
+        session.commit.assert_awaited_once()
+        row_dicts = mock_stmt.values.call_args[0][0]
+        assert len(row_dicts) == 1
+        row = row_dicts[0]
+        assert row["node_id"] == "NODE_A"
+        assert row["section_type"] == "dimensional_table"
+        assert row["path"] == ["Chapter 47", "Sec. 47-5.60"]
+        assert row["cross_refs"] == ["47-24.3"]
+        # referenced_by is NOT set by the indexer (defaults to [] in the model /
+        # DB) — the backfill owns it, so it's intentionally absent from row_dicts.
+        assert "referenced_by" not in row
+        # The conflict target must be the natural-key constraint (NOT a column
+        # list) — referenced_by must NOT be in the update set (backfill owns it).
+        conflict_call = mock_stmt.values.return_value.on_conflict_do_update.call_args
+        assert conflict_call.kwargs.get("constraint") == "uq_section_natural_key"
+        set_ = conflict_call.kwargs.get("set_", {})
+        assert "referenced_by" not in set_
+
+    @pytest.mark.asyncio
+    async def test_skips_chunks_without_node_id(self):
+        from plotlot.core.types import ChunkMetadata, TextChunk
+        from plotlot.core.types import MunicodeConfig
+
+        config = MunicodeConfig(
+            municipality="San Diego",
+            county="san_diego",
+            client_id=1,
+            product_id=2,
+            job_id=3,
+            zoning_node_id="Z",
+        )
+        meta = ChunkMetadata(
+            municipality="San Diego",
+            county="san_diego",
+            chapter="Ch 11",
+            section="Sec. 11",
+            section_title="x",
+            zone_codes=[],
+            chunk_index=0,
+            municode_node_id="",
+            path=["Ch 11"],
+            cross_refs=[],
+            section_type="regulation",
+        )
+        chunks = [TextChunk(text="t", metadata=meta)]
+
+        session = AsyncMock()
+        count = await _store_ordinance_sections(session, chunks, config)
+        assert count == 0
+        session.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_distinct_node_ids_produce_distinct_rows(self):
+        from plotlot.core.types import ChunkMetadata, TextChunk
+        from plotlot.core.types import MunicodeConfig
+
+        config = MunicodeConfig(
+            municipality="M",
+            county="c",
+            client_id=1,
+            product_id=2,
+            job_id=3,
+            zoning_node_id="Z",
+        )
+        metas = [
+            ChunkMetadata(
+                municipality="M",
+                county="c",
+                chapter="Ch 47",
+                section=f"Sec. 47-5.{i}",
+                section_title="x",
+                zone_codes=[],
+                chunk_index=0,
+                municode_node_id=f"NODE_{i}",
+                path=["Ch 47"],
+                cross_refs=[],
+                section_type="regulation",
+            )
+            for i in range(3)
+        ]
+        chunks = [TextChunk(text=f"t{i}", metadata=m) for i, m in enumerate(metas)]
+
+        with patch("plotlot.pipeline.ingest.pg_insert") as mock_insert:
+            mock_stmt = MagicMock()
+            mock_insert.return_value = mock_stmt
+            mock_stmt.on_conflict_do_update.return_value = mock_stmt
+            session = AsyncMock()
+
+            count = await _store_ordinance_sections(session, chunks, config)
+
+        assert count == 3
+        row_dicts = mock_stmt.values.call_args[0][0]
+        assert {r["node_id"] for r in row_dicts} == {"NODE_0", "NODE_1", "NODE_2"}

@@ -8,25 +8,42 @@ processes may create fresh loops between calls, so we rebuild the engine when
 the active loop changes instead of reusing a stale pooled connection.
 """
 
-import asyncio
 import logging
 
-from sqlalchemy import text
+import anyio
+from sqlalchemy import event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, SessionTransaction
 
 from plotlot.config import settings
-from plotlot.storage.models import Base
+from plotlot.security.context import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
 _engine = None
 _session_factory = None
 _engine_loop_id = None
+_engine_lock = anyio.Lock()
+
+
+@event.listens_for(Session, "after_begin")
+def _set_transaction_tenant(
+    _session: Session,
+    _transaction: SessionTransaction,
+    connection: Connection,
+) -> None:
+    tenant_id = current_tenant_id()
+    if tenant_id is not None:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": tenant_id},
+        )
 
 
 def _current_loop_id() -> int | None:
     try:
-        return id(asyncio.get_running_loop())
+        return id(anyio.lowlevel.current_token())
     except RuntimeError:
         return None
 
@@ -59,71 +76,34 @@ def _get_engine():
 async def _ensure_engine():
     global _engine, _session_factory, _engine_loop_id
 
-    current_loop_id = _current_loop_id()
-    if (
-        _engine is not None
-        and _engine_loop_id is not None
-        and current_loop_id is not None
-        and _engine_loop_id != current_loop_id
-    ):
-        try:
+    async with _engine_lock:
+        current_loop_id = _current_loop_id()
+        if (
+            _engine is not None
+            and _engine_loop_id is not None
+            and current_loop_id is not None
+            and _engine_loop_id != current_loop_id
+        ):
             await _engine.dispose()
-        except Exception:
-            logger.warning("Failed to dispose stale async engine", exc_info=True)
-        _engine = None
-        _session_factory = None
-        _engine_loop_id = None
+            _engine = None
+            _session_factory = None
+            _engine_loop_id = None
 
-    if _engine is None:
-        _engine = _get_engine()
-        _engine_loop_id = current_loop_id
+        if _engine is None:
+            _engine = _get_engine()
+            _engine_loop_id = current_loop_id
 
     return _engine
 
 
 async def init_db() -> None:
-    """Create all tables and install triggers if they don't exist."""
+    """Verify database connectivity after externally managed migrations."""
     engine = await _ensure_engine()
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        await conn.run_sync(Base.metadata.create_all)
+    async with engine.connect():
+        logger.info("Database connection verified")
+    from plotlot.storage.runtime import initialize_configured_storage_runtime
 
-        # Auto-populate search_vector on INSERT/UPDATE via trigger
-        await conn.execute(
-            text("""
-            CREATE OR REPLACE FUNCTION ordinance_chunks_search_vector_update()
-            RETURNS trigger AS $$
-            BEGIN
-                NEW.search_vector := to_tsvector('english', COALESCE(NEW.chunk_text, ''));
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
-        )
-        await conn.execute(
-            text("""
-            DO $$ BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_search_vector_update'
-                ) THEN
-                    CREATE TRIGGER trg_search_vector_update
-                    BEFORE INSERT OR UPDATE OF chunk_text
-                    ON ordinance_chunks
-                    FOR EACH ROW
-                    EXECUTE FUNCTION ordinance_chunks_search_vector_update();
-                END IF;
-            END $$;
-        """)
-        )
-        # GIN index for fast full-text search
-        await conn.execute(
-            text("""
-            CREATE INDEX IF NOT EXISTS idx_search_vector
-            ON ordinance_chunks USING GIN (search_vector);
-        """)
-        )
-
-    logger.info("Database initialized")
+    await initialize_configured_storage_runtime()
 
 
 async def get_session() -> AsyncSession:

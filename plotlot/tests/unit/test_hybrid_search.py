@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from plotlot.retrieval.search import _hybrid_rrf, hybrid_search
+from plotlot.retrieval.search import _hybrid_rrf, _keyword_only, hybrid_search
 
 
 def test_hybrid_search_accepts_zone_code_boost_param():
@@ -91,6 +91,57 @@ async def test_hybrid_search_passes_boost_through_to_rrf():
     assert kwargs.get("zone_code_boost") == "RM-3-7" or mock_rrf.call_args[0][-1] == "RM-3-7"
 
 
+@pytest.mark.asyncio
+async def test_hybrid_rrf_municipality_match_is_bidirectional():
+    """Regression: the parcel layer returns composite CDP names ("Belvedere
+    Tiburon") while ordinances are ingested under the city ("Tiburon"). The
+    municipality filter must match in BOTH directions so the requested name can
+    contain the stored key, not only the reverse."""
+    mock_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = []
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    await _hybrid_rrf(
+        session=mock_session,
+        municipality="Belvedere Tiburon",
+        zone_code="density",
+        embedding=[0.0] * 5,
+        limit=10,
+        zone_code_boost=None,
+    )
+
+    clause, params = mock_session.execute.call_args[0][0], mock_session.execute.call_args[0][1]
+    sql = str(clause)
+    # Reverse-direction predicate present (requested name LIKE %stored_key%)
+    assert ":municipality_raw ILIKE" in sql
+    # Raw (unwrapped) municipality is passed for the reverse match
+    assert params["municipality_raw"] == "Belvedere Tiburon"
+    # Forward direction still present (stored key LIKE %requested%)
+    assert params["municipality"] == "%Belvedere Tiburon%"
+
+
+@pytest.mark.asyncio
+async def test_keyword_only_municipality_match_is_bidirectional():
+    """The keyword-only fallback path must use the same bidirectional match."""
+    mock_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = []
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    await _keyword_only(
+        session=mock_session,
+        municipality="Belvedere Tiburon",
+        zone_code="density",
+        limit=10,
+    )
+
+    clause, params = mock_session.execute.call_args[0][0], mock_session.execute.call_args[0][1]
+    assert ":municipality_raw ILIKE" in str(clause)
+    assert params["municipality_raw"] == "Belvedere Tiburon"
+    assert params["municipality"] == "%Belvedere Tiburon%"
+
+
 def test_chat_agent_prompt_contains_zone_code_prefix_instruction():
     """System prompt must instruct agent to prefix queries with zone code."""
     from plotlot.observability.prompts import get_active_prompt
@@ -112,7 +163,7 @@ def test_chat_agent_prompt_contains_permitted_uses_diversification():
 def test_chat_agent_prompt_version_updated():
     from plotlot.observability.prompts import get_prompt_version
 
-    assert get_prompt_version("chat_agent") == "v5"
+    assert get_prompt_version("chat_agent") == "v7"
 
 
 def test_chat_agent_prompt_contains_generate_document_instruction():

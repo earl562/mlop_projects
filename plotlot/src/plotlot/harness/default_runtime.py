@@ -415,15 +415,47 @@ async def _handle_fetch_ordinance_section(
         await session.close()
 
 
-_PDF_SCRAPED_MUNICIPALITIES: frozenset[str] = frozenset(
-    {
-        "san diego",
-    }
-)
-
-
 def _is_pdf_scraped(municipality: str) -> bool:
-    return municipality.strip().lower() in _PDF_SCRAPED_MUNICIPALITIES
+    """True when the municipality is served by a PDF-only adapter (not on Municode).
+
+    Registry-driven (see :func:`pdf_registered_municipalities`), so adding a PDF
+    city is a single registry entry — no per-city change here.
+    """
+    from plotlot.ingestion.adapters.registry import pdf_registered_municipalities
+
+    return municipality.strip().lower() in pdf_registered_municipalities()
+
+
+async def _indexed_ordinance_fallback(
+    args: dict[str, Any], context: ToolContext, municipality: str
+) -> dict[str, Any]:
+    """Serve indexed ordinance sections when no live Municode authority exists.
+
+    Used for PDF/HTML-sourced cities (e.g. San Diego) and any jurisdiction not on
+    Municode. Delegates to the indexed ordinance search so the agent gets real,
+    cited ordinance content in ONE call instead of a dead-end redirect. A live
+    PDF/HTML re-scrape is deliberately avoided here — it would risk the 30s proxy
+    timeout, and the content is already in pgvector. Degrades honestly when nothing
+    is indexed: never fabricates sections, values, or URLs.
+    """
+    indexed = await _handle_search_ordinances({**args, "municipality": municipality}, context)
+    if indexed.get("results"):
+        indexed["source"] = "indexed"
+        indexed["message"] = (
+            f"{municipality} is not on Municode; returning indexed ordinance sections "
+            "from the local PlotLot database."
+        )
+        return indexed
+    return {
+        "status": "no_results",
+        "results": [],
+        "evidence": [],
+        "message": (
+            f"{municipality} is not on Municode and has no indexed ordinance text yet. "
+            "Ingest the municipality, then use search_zoning_ordinance. Do not fabricate "
+            "ordinance sections, numeric values, office names, or URLs."
+        ),
+    }
 
 
 async def _handle_search_municode_live(
@@ -439,16 +471,10 @@ async def _handle_search_municode_live(
     municipality = str(args.get("municipality", "")).strip()
     query = str(args.get("query", "")).strip()
 
+    # Known non-Municode (PDF/HTML) source → its ordinance lives in the local index.
+    # Serve it directly rather than dead-ending against Municode.
     if _is_pdf_scraped(municipality):
-        return {
-            "status": "no_results",
-            "results": [],
-            "evidence": [],
-            "message": (
-                f"{municipality} uses a local PDF index, not Municode. "
-                "Use search_zoning_ordinance instead to query the indexed ordinance chunks."
-            ),
-        }
+        return await _indexed_ordinance_fallback(args, context, municipality)
 
     state = str(args.get("state") or "").strip().upper()
     configs = await get_municode_configs()
@@ -456,12 +482,9 @@ async def _handle_search_municode_live(
     if config is None and state:
         config = await discover_municode_authority_for_name(municipality, state)
     if config is None:
-        return {
-            "status": "no_results",
-            "results": [],
-            "evidence": [],
-            "message": f"No Municode authority configured for {municipality}",
-        }
+        # Not on Municode at all — fall back to the local index so the agent gets
+        # real ordinance text (any indexed non-Municode city) instead of nothing.
+        return await _indexed_ordinance_fallback(args, context, municipality)
 
     state = str(state or config.state or "").strip().upper()
     if not state:

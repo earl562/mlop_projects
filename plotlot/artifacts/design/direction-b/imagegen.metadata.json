@@ -1,0 +1,22 @@
+{
+  "artifact": "reference-direction-b-v1.png",
+  "prompt_artifact": "../direction-b.prompt.md",
+  "prompt_version": "v1",
+  "mode": "built-in image_gen",
+  "use_case": "ui-mockup",
+  "invocation_count_for_direction_b": 1,
+  "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa195-a5cb-79b3-a3d9-3c7eceb4419b/exec-289f0eb3-29a8-4913-b0a5-2e807ef142fe.png",
+  "copied_project_path": "artifacts/design/direction-b/reference-direction-b-v1.png",
+  "file_signature": "PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced",
+  "output_sha256": "7bffefab7b23eb1adba0c1a632b4852a5feb6f6f748b5c667551e0f9b9ac5af6",
+  "prompt_sha256": "c7e23c9abc2d922da92c9f7dd8d23327f812160279eac0bbc5537788083ff963",
+  "fixture_sha256": "9e963e23873989f436bbbcce4ca98d7ae74352a3e6ff445adac01195760d3d7d",
+  "inspection": {
+    "visual_observation": "Three-region atlas/dossier/evidence layout, paper/ink material, APN/folio prominence, evidence rows, and a textual warning state are visible.",
+    "known_limitations": [
+      "Generated in-image labels and numbers are illustrative and may not match the contract.",
+      "The image does not establish market eligibility, zoning facts, capacity, or purchase-ceiling outputs.",
+      "The output dimensions differ from the requested 1440x900 framing; it remains a reference image only."
+    ]
+  }
+}

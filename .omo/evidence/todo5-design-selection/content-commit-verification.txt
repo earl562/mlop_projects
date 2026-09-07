@@ -1,0 +1,148 @@
+TODO5_V4_CONTENT_COMMIT_VERIFICATION
+timestamp_utc=2026-07-27T04:36:59Z
+content_commit=24c351ab403aa5b55a9874f54f615849d1853eed
+scenario=immutable v4 content identity/tree/scope/blob manifest, one-call provenance, structural truth contract, Vision OCR privacy, abstention, selection, checksums, and evidence counts
+invocation=git object audit + machine JSON contract validation + Vision OCR scan + verify-todo5.sh
+binary_observable=all assertions exit 0; no prompt-prose includes; OCR privacy/truth PASS; TODO5_VERIFICATION: PASS; TODO5_V4_CONTENT_COMMIT: PASS
+content_identity_tree_parent=PASS
+binding_commit=PASS
+binding_tree=PASS
+binding_parent=PASS
+binding_file_count=PASS
+binding_path_order=PASS
+blob_plotlot/DESIGN.md=PASS
+blob_plotlot/artifacts/design/direction-a.prompt.md=PASS
+blob_plotlot/artifacts/design/direction-a/DESIGN.md=PASS
+blob_plotlot/artifacts/design/direction-a/DONE_CLAIM.json=PASS
+blob_plotlot/artifacts/design/direction-a/README.md=PASS
+blob_plotlot/artifacts/design/direction-a/SELF_AUDIT.md=PASS
+blob_plotlot/artifacts/design/direction-a/checksums.sha256=PASS
+blob_plotlot/artifacts/design/direction-a/design-truth-contract.json=PASS
+blob_plotlot/artifacts/design/direction-a/design-truth-contract.sha256=PASS
+blob_plotlot/artifacts/design/direction-a/imagegen.metadata.json=PASS
+blob_plotlot/artifacts/design/direction-a/reference-direction-a-v4.png=PASS
+blob_plotlot/artifacts/design/selection/README.md=PASS
+blob_plotlot/artifacts/design/selection/packet-audit.json=PASS
+content_scope_no_frontend_source=PASS
+content_inputs_match_immutable_commit=PASS
+brittle_prose_assertions=PASS
+single_fresh_call=PASS
+truthful_generation_history=PASS
+tool_output_binding=PASS
+prompt_hash_only_binding=PASS
+source_project_hash=PASS
+truth_contract_hash=PASS
+prompt_non_executable_role=PASS
+parking_state=PASS
+maximum_units_abstained=PASS
+purchase_ceiling_abstained=PASS
+opaque_identifier_policy=PASS
+selection_binding=PASS
+ocr_privacy=PASS deal_ids=DEAL-MIA-0420,DEAL-MIA-0150,DEAL-BRW-0010,DEAL-PBC-1234,DEAL-SD-0000
+ocr_decision_truth=PASS outputs abstained; fixture scenario visibly conditional/not-reliance-ready
+plotlot/artifacts/design/direction-a/reference-direction-a-v4.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+{
+  "result": "pass",
+  "selected": "Operational Intelligence Workbench",
+  "totals": {
+    "a": 100,
+    "b": 72.8,
+    "c": 83.2
+  },
+  "coverage": {
+    "miami_dade": "private_beta",
+    "broward": "municipality_conditional",
+    "palm_beach": "municipality_conditional",
+    "san_diego": "planned_not_enabled"
+  },
+  "viewports": [
+    "1440x900",
+    "768x1024",
+    "390x844",
+    "375x844"
+  ],
+  "requiredStateCount": 19,
+  "baselineDefectCount": 9,
+  "newImageCalls": 1,
+  "selectedDirectionAAsset": "reference-direction-a-v4.png",
+  "decisionRailTruth": "pass: maximum units and purchase ceiling are visibly abstained because parking is not hash-bound",
+  "privacyTruth": "pass: visible parcel/deal identifiers are opaque synthetic DEAL-* IDs only",
+  "truthContractSchema": "plotlot-direction-a-truth-contract/v1.0.0"
+}
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+fixtures/redacted-acquisition-case.json: OK
+reference-direction-a-v1.png: OK
+reference-direction-a-v2.png: OK
+reference-direction-a-v3.png: OK
+reference-direction-a-v4.png: OK
+../direction-a.prompt.md: OK
+CONTENT_FIXTURES_AND_GROUNDING.md: OK
+ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+STATE_MATRIX.md: OK
+RESPONSIVE_WIREFRAMES.md: OK
+SELF_AUDIT.md: OK
+DESIGN.md: OK
+README.md: OK
+design-truth-contract.json: OK
+design-truth-contract.sha256: OK
+imagegen.metadata.json: OK
+DONE_CLAIM.json: OK
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+design-truth-contract.json: OK
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+artifacts/design/direction-b/CONTENT_FIXTURES_AND_GROUNDING.md: OK
+artifacts/design/direction-b/DESIGN.md: OK
+artifacts/design/direction-b/DONE_CLAIM.json: OK
+artifacts/design/direction-b/README.md: OK
+artifacts/design/direction-b/RESPONSIVE_WIREFRAMES.md: OK
+artifacts/design/direction-b/ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+artifacts/design/direction-b/SELF_AUDIT.md: OK
+artifacts/design/direction-b/STATE_MATRIX.md: OK
+artifacts/design/direction-b/fixture-direction-b-v1.json: OK
+artifacts/design/direction-b/imagegen.metadata.json: OK
+artifacts/design/direction-b/reference-direction-b-v1.png: OK
+artifacts/design/direction-b.prompt.md: OK
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LC_ALL = "C.UTF-8",
+	LC_CTYPE = "C.UTF-8",
+	LANG = "C.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+../direction-c.prompt.md: OK
+sample-fixture-redacted.json: OK
+RESPONSIVE_WIREFRAMES.md: OK
+STATE_MATRIX.md: OK
+SELF_AUDIT.md: OK
+ROUTES_FLOW_PANEL_HIERARCHY.md: OK
+reference-direction-c-v1.png: OK
+imagegen.metadata.json: OK
+DESIGN.md: OK
+DONE_CLAIM.json: OK
+README.md: OK
+CONTENT_FIXTURES_AND_GROUNDING.md: OK
+plotlot/artifacts/design/direction-a/reference-direction-a-v4.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+plotlot/artifacts/design/direction-b/reference-direction-b-v1.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+plotlot/artifacts/design/direction-c/reference-direction-c-v1.png: PNG image data, 1586 x 992, 8-bit/color RGB, non-interlaced
+BROWSER_ARTIFACT_COUNTS: screenshots=13 aria=12 json=14
+TODO5_VERIFICATION: PASS
+fresh_visual_proof=PASS v4 queue/parcel uses opaque DEAL-* IDs only; no address-like text/folio/APN/private contact/location strings; MAX UNITS and PURCHASE CEILING abstained; scenario values explicitly conditional and not reliance-ready
+TODO5_V4_CONTENT_COMMIT: PASS

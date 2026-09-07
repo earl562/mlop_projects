@@ -1,0 +1,7 @@
+   ▲ Next.js 15.5.21
+   - Local:        http://127.0.0.1:3997
+   - Network:      http://127.0.0.1:3997
+
+ ✓ Starting...
+Production startup requires complete Clerk configuration
+PASS: production startup exited 1 before serving without complete Clerk configuration

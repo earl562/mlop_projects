@@ -1,0 +1,75 @@
+{
+  "schema_version": "plotlot-design-selection/v1.0.0",
+  "method": {
+    "scale": {
+      "minimum": 1,
+      "maximum": 5,
+      "meaning": "Integer score assigned from written packet evidence. Weighted points = (score / 5) * weight."
+    },
+    "weights": {
+      "workflow_speed": 22,
+      "evidence_comprehension": 22,
+      "market_specificity": 16,
+      "accessibility": 16,
+      "responsive_integrity": 14,
+      "brand_continuity": 10
+    },
+    "tie_break_order": [
+      "evidence_comprehension",
+      "workflow_speed",
+      "accessibility",
+      "responsive_integrity",
+      "market_specificity",
+      "brand_continuity",
+      "direction_id_ascending"
+    ],
+    "blocker_rule": "A direction cannot win if it contains private/customer lead data, raster-as-interactive-UI instructions, unsupported coverage claims, missing required viewport/state contracts, or a generic chat/SaaS primary surface."
+  },
+  "directions": [
+    {
+      "direction_id": "a",
+      "name": "Operational Intelligence Workbench",
+      "scores": {
+        "workflow_speed": 5,
+        "evidence_comprehension": 5,
+        "market_specificity": 5,
+        "accessibility": 5,
+        "responsive_integrity": 5,
+        "brand_continuity": 5
+      },
+      "weighted_total": 100.0,
+      "blockers": []
+    },
+    {
+      "direction_id": "b",
+      "name": "Parcel Atlas and Evidence Dossier",
+      "scores": {
+        "workflow_speed": 3,
+        "evidence_comprehension": 4,
+        "market_specificity": 4,
+        "accessibility": 4,
+        "responsive_integrity": 3,
+        "brand_continuity": 4
+      },
+      "weighted_total": 72.8,
+      "blockers": []
+    },
+    {
+      "direction_id": "c",
+      "name": "Preconstruction Deal Room and Stage-Gate Binder",
+      "scores": {
+        "workflow_speed": 4,
+        "evidence_comprehension": 4,
+        "market_specificity": 5,
+        "accessibility": 4,
+        "responsive_integrity": 4,
+        "brand_continuity": 4
+      },
+      "weighted_total": 83.2,
+      "blockers": []
+    }
+  ],
+  "selected_direction_id": "a",
+  "selected_name": "Operational Intelligence Workbench",
+  "selection_reason": "Highest deterministic total and no blocker."
+}

@@ -2,7 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches:
+      - main
+      - dev
+      - cpt-pro
+      - "dev/**"
+      - "feat/**"
+      - "fix/**"
+      - "hotfix/**"
+      - "codex/**"
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -172,6 +180,9 @@ jobs:
           cache-dependency-glob: plotlot/uv.lock
       - run: uv sync --frozen --extra dev --extra eval
         working-directory: plotlot
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
+        working-directory: plotlot
       - run: uv run uvicorn plotlot.api.main:app --host 127.0.0.1 --port 8000 > /tmp/plotlot-api.log 2>&1 &
         working-directory: plotlot
       - name: Wait for backend health
@@ -217,3 +228,73 @@ jobs:
             plotlot/frontend/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  repository-pair:
+    name: Repository Pair Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [backend-unit, frontend-quality, playwright-no-db, playwright-db]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: plotlot
+          POSTGRES_PASSWORD: plotlot
+          POSTGRES_DB: plotlot
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U plotlot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://plotlot:plotlot@localhost:5433/plotlot
+      PAIR_MANIFEST_SIGNING_KEY: ${{ secrets.PAIR_MANIFEST_SIGNING_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: artifacts/clones/plotlot
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.BYRIGHT_REPOSITORY }}
+          ref: ${{ vars.BYRIGHT_RELEASE_SHA }}
+          path: artifacts/clones/byright
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.12"
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Create signed pair manifest
+        run: |
+          python3 artifacts/clones/plotlot/scripts/ci/create_repository_pair_manifest.py \
+            --plotlot-clone artifacts/clones/plotlot \
+            --byright-clone artifacts/clones/byright \
+            --artifact-root "$PWD/artifacts/evidence" \
+            --output artifacts/baseline/repository-pair.json \
+            --previous-plotlot-sha "${{ github.event.before || github.sha }}" \
+            --verified-at "${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Verify complete repository pair
+        run: |
+          ./artifacts/clones/plotlot/scripts/ci/verify_repository_pair.sh \
+            --plotlot-clone artifacts/clones/plotlot \
+            --byright-clone artifacts/clones/byright \
+            --manifest artifacts/baseline/repository-pair.json \
+            --full
+      - name: Verify poison matrix
+        run: |
+          python3 artifacts/clones/plotlot/scripts/ci/run_poison_matrix.py \
+            artifacts/evidence/poison-matrix.json
+      - name: Upload redacted pair evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: repository-pair-evidence
+          path: |
+            artifacts/baseline/repository-pair.json
+            artifacts/evidence
+          if-no-files-found: error
+          retention-days: 30

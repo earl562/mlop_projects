@@ -1,0 +1,53 @@
+{
+  "schema_version": "plotlot-design-acceptance-matrix/v1.0.0",
+  "implementation_target": "Todo21",
+  "routes": [
+    "landing",
+    "workspace-deal-queue",
+    "lookup",
+    "agent-handoff",
+    "evidence-replay"
+  ],
+  "viewports": [
+    {"name": "desktop", "width": 1440, "height": 900},
+    {"name": "tablet", "width": 768, "height": 1024},
+    {"name": "mobile", "width": 390, "height": 844},
+    {"name": "narrow-reflow-diagnostic", "width": 375, "height": 844}
+  ],
+  "required_states": [
+    "empty",
+    "resolving",
+    "verified",
+    "partial",
+    "missing",
+    "stale",
+    "conflict",
+    "hash_mismatch",
+    "conditional",
+    "abstained",
+    "error",
+    "offline",
+    "municipality_required",
+    "planned_not_enabled",
+    "handoff_running",
+    "handoff_requires_review",
+    "handoff_failed",
+    "focus_visible",
+    "reduced_motion"
+  ],
+  "coverage_assertions": {
+    "miami_dade": "private_beta",
+    "broward": "municipality_conditional",
+    "palm_beach": "municipality_conditional",
+    "san_diego": "planned_not_enabled"
+  },
+  "binary_release_rules": [
+    "Every route/state/viewport combination in the implementation test plan has a fresh same-size screenshot and DOM assertion.",
+    "No primary content horizontal overflow at 1440, 768, 390, 375, 320 CSS pixels, or 200% zoom.",
+    "No interactive control or content region is supplied by a raster screenshot.",
+    "Status has text and icon; focus remains visible; touch targets are at least 44 by 44 CSS pixels.",
+    "Unsupported or conditional coverage never renders a stale zoning, capacity, or underwriting result as current.",
+    "Reduced motion removes transforms and nonessential fades without removing information.",
+    "The mobile decision dock never clips the input placeholder, focused control, status, or primary action."
+  ]
+}

@@ -76,6 +76,17 @@ def _safe_int(value: object, field: str) -> int:
         ) from e
 
 
+def _safe_bool(value: object) -> bool:
+    """Coerce a context value to bool (JSON bool, numeric, or 'true'/'1'/'yes' strings)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    return False
+
+
 def _build_deal_context(req: DocumentGenerateRequest) -> DealContext:
     """Convert API request into a DealContext for the clause engine."""
     ctx = req.context
@@ -158,6 +169,17 @@ def _build_deal_context(req: DocumentGenerateRequest) -> DealContext:
         inspection_days=_safe_int(ctx.get("inspection_days", 30), "inspection_days"),
         closing_days=_safe_int(ctx.get("closing_days", 60), "closing_days"),
         feasibility_days=_safe_int(ctx.get("feasibility_days", 45), "feasibility_days"),
+        # Entitlement / upzoning contingency (the value-creation play — control the
+        # parcel, then rezone/subdivide before closing). Off unless opted in.
+        entitlement_contingency=_safe_bool(ctx.get("entitlement_contingency", False)),
+        upzoning_vehicle=ctx.get("upzoning_vehicle", ""),
+        entitlement_close_days=_safe_int(
+            ctx.get("entitlement_close_days", 0), "entitlement_close_days"
+        ),
+        entitlement_extension_days=_safe_int(
+            ctx.get("entitlement_extension_days", 0), "entitlement_extension_days"
+        ),
+        target_units=_safe_int(ctx.get("target_units", 0), "target_units"),
         # Escrow
         escrow_agent_name=ctx.get("escrow_agent_name", ""),
         escrow_agent_address=ctx.get("escrow_agent_address", ""),
@@ -188,7 +210,17 @@ _TEMPLATE_INFO: list[DocumentTemplateInfo] = [
         ],
         supported_formats=["docx"],
         required_fields=["property_address"],
-        optional_fields=["buyer_name", "seller_name", "purchase_price", "financing_type"],
+        optional_fields=[
+            "buyer_name",
+            "seller_name",
+            "purchase_price",
+            "financing_type",
+            "entitlement_contingency",
+            "upzoning_vehicle",
+            "entitlement_close_days",
+            "entitlement_extension_days",
+            "target_units",
+        ],
     ),
     DocumentTemplateInfo(
         document_type="psa",
@@ -204,7 +236,17 @@ _TEMPLATE_INFO: list[DocumentTemplateInfo] = [
         ],
         supported_formats=["docx"],
         required_fields=["property_address", "buyer_name", "seller_name"],
-        optional_fields=["purchase_price", "financing_type", "inspection_days", "closing_days"],
+        optional_fields=[
+            "purchase_price",
+            "financing_type",
+            "inspection_days",
+            "closing_days",
+            "entitlement_contingency",
+            "upzoning_vehicle",
+            "entitlement_close_days",
+            "entitlement_extension_days",
+            "target_units",
+        ],
     ),
     DocumentTemplateInfo(
         document_type="deal_summary",

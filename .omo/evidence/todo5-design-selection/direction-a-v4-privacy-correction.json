@@ -1,0 +1,55 @@
+{
+  "schema_version": "todo5-direction-a-privacy-correction/v1.0.0",
+  "content_commit": "24c351ab403aa5b55a9874f54f615849d1853eed",
+  "generation": {
+    "fresh_calls_for_this_correction": 1,
+    "mode": "built-in image_gen.imagegen",
+    "use_case": "ui-mockup",
+    "invoked_at_utc": "2026-07-27T04:27:24Z",
+    "prompt_version": "direction-a/v1.2.0",
+    "prompt_sha256": "5a719e1b805562486e691a6a65310fce135fbf2a4dfe4101ede276d4ab9fc510",
+    "tool_scoped_output": "call_rvzv9UecapZkYRet64S9f95J.png",
+    "generated_source_path": "/Users/aaliyahmatthews/.codex/generated_images/019fa1a5-0076-79d3-adfd-acf330998a6c/call_rvzv9UecapZkYRet64S9f95J.png",
+    "project_copy": "plotlot/artifacts/design/direction-a/reference-direction-a-v4.png"
+  },
+  "output": {
+    "sha256": "07ea1dd9a5d42a9d3060f7f8197878cc578d89be586b4335b164135a960f2c7b",
+    "bytes": 1398226,
+    "format": "PNG RGB",
+    "width": 1586,
+    "height": 992
+  },
+  "truth_contract": {
+    "path": "plotlot/artifacts/design/direction-a/design-truth-contract.json",
+    "sha256": "c6015707ba71ff5661a879f595795794bbbbc487d05410e72875904a214d46f3",
+    "schema_version": "plotlot-direction-a-truth-contract/v1.0.0",
+    "prompt_role": "hash-bound generation input; not an executable semantic contract"
+  },
+  "reviewer_defect": "Direction A v3 visibly included address-like queue text, including 1050 ISLAND AVE, despite a synthetic/redacted-only evidence claim.",
+  "privacy_observable": {
+    "allowed_visible_deal_ids": [
+      "DEAL-MIA-0420",
+      "DEAL-MIA-0150",
+      "DEAL-BRW-0010",
+      "DEAL-PBC-1234",
+      "DEAL-SD-0000"
+    ],
+    "address_like_strings_observed": [],
+    "folio_or_apn_observed": [],
+    "owner_phone_email_coordinates_or_url_observed": [],
+    "vision_ocr_artifact": ".omo/evidence/todo5-design-selection/v4-vision-ocr.txt",
+    "result": "pass"
+  },
+  "decision_observable": {
+    "maximum_units": "ABSTAINED / PARKING RULE NOT HASH-BOUND",
+    "purchase_ceiling": "ABSTAINED / REQUIRED INPUT MISSING",
+    "fixture_values": "2 and $418,000 appear only inside CONDITIONAL SCENARIO / NOT RELIANCE-READY",
+    "result": "pass"
+  },
+  "selection": {
+    "direction_a": 100.0,
+    "direction_c": 83.2,
+    "direction_b": 72.8,
+    "winner_unchanged": true
+  }
+}

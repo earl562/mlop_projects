@@ -1,0 +1,134 @@
+{
+  "viewport": {
+    "name": "desktop-1440x900",
+    "width": 1440,
+    "height": 900
+  },
+  "state": {
+    "name": "landing",
+    "url": "/"
+  },
+  "httpStatus": 200,
+  "metrics": {
+    "title": "PlotLot - AI Zoning Analysis",
+    "url": "http://127.0.0.1:3215/",
+    "bodyText": "Plotlot\nProduct\nv\nSolutions\nv\nResources\nv\nPricing\nAbout\nLog in\nAnalyze a Lot\n->\n\nLAND INTELLIGENCE PLATFORM\n\nSee What Fits.\n\nUnderstand zoning potential, parcel constraints, and development possibilities in minutes.\n\nAnalyze a Lot\n->\nView Demo\nTRUSTED BY DEVELOPERS, ARCHITECTS, AND MUNICIPAL TEAMS\nGensler\nClayco\nCIRofus\nHines\nMcWhinney\nSite Summary\nx\nAddress\n123 Glenwood Ave\nLot Area\n8,250 sf\nZoning\nSF-3-NP\nMax Height\n50 ft\nMax FAR\n2.0:1\nMax Units\n4 du\nView Full Report\n->\nZoning Layers\nx\nZoning Districts\nHeight Limits\nOverlays\nSetbacks\nFloodplain\nLayer Opacity\n\nTRUST & PROOF\n\nTrusted for faster diligence.\n\nBuilt for real estate, design, and municipal teams who move projects forward.\n\nCBRE\nEastdil Secured\nGensler\nSkidmore Owings & Merrill\nRelated\nClayco\nToronto\n10x\nfaster site review\n\nAutomated discovery and surface what matters instantly.\n\n[ ]\nParcel + zoning + overlays\n\nAll key layers in one place. Always up to date.\n\nOK\nMinutes, not days.\n\nFrom search to site summary in just a few clicks.\n\nCAPABILITIES\n\nEverything needed to evaluate a lot.\n\nAll the context, constraints, and tools you need in one place.\n\nZoning Intelligence\n->\n\nInstantly understand zoning, overlays, and land use rules.\n\nSetbacks & Overlays\n->\n\nSee building envelopes, setbacks, and overlay constraints.\n\nMassing Studies\n->\n\nTest bulk, height, and scale with real-time massing.\n\nParcel Insights\n->\n\nExplore parcel details, dimensions, ownership, and more.\n\nExport Reports\n->\n\nGenerate clean, shareable reports with all key findings.\n\nCollaborative Review\n->\n\nShare, comment, and align with your team.\n\nPRODUCT SHOWCASE\n\nA clearer view of the site.\n\nFrom zoning and constraints to massing and compliance, everything lives in one place.\n\nExplore the Product\n->\nSite Summary\nx\nAddress\n123 Glenwood Ave\nLot Area\n10,019 sf\nZoning\nSF-3-NP\nOverlays\nNPB, COA\nMax FAR\n2.0:1\nView Full Report\n->\nMassing Study\n[]\nCompliance\nx\nOK Height Limit\nCompliant\nOK Setbacks\nCompliant\nOK FAR\nCompliant\n! Open Space\nReview\nView Full Compliance\n->\n\n05\nHOW IT WORKS\n\nFrom address to answer.\n\nPlotlot turns complexity into clarity. Our workflow gives you faster insights, so you can move with confidence.\n\n1\nEnter an address\n\nSearch any site to get started in seconds.\n\n2\nReview zoning & parcel constraints\n\nUnderstand what is possible on your site.\n\n3\nExplore massing options\n\nCompare options that fit the rules and context.\n\n4\nExport a report\n\nDownload a shareable report with key findings.\n\n06\nBUILT FOR EVERY STAKEHOLDER\n\nBuilt for land decisions.\n\nPlotlot brings clarity to every stage of the land lifecycle for the people who move projects forward.\n\nDEVELOPERS\n\nSize opportunities with confidence.\nValidate feasibility, yield, and risk before you buy.\n\nBROKERS\n\nStrengthen listings with insights.\nAdd zoning clarity and upside to every deal.\n\nARCHITECTS\n\nExplore concepts faster.\nTest massing, setbacks, and code in real time.\n\nMUNICIPAL TEAMS\n\nReview projects with clarity.\nStandardize analysis and communicate with confidence.\n\n07\nPROOF IN PRACTICE\n\nWhat teams say.\n\nPlotlot helps real estate and planning teams move faster with confidence.\n\n\"\nPlotlot helped us go from a napkin sketch to a feasible plan in minutes. It is now part of every early conversation.\nSarah Thompson\nVP of Development, Gensler\n\"\n\nThe zoning and massing insights are incredibly accurate and save us days of back-and-forth.\n\nMichael Lee\n\"\n\nWe use Plotlot to test more scenarios, earlier. It helps us design smarter and de-risk every site.\n\nAlicia Morgan\n\n8\nPRICING & GET STARTED\n\nStart with one lot.\n\nPlans built for every stage of land intelligence.\n\nStart analyzing\n->\nTalk to our team\n->\nStarter\n\nExplore with confidence.\n\n$0\nFree forever\nOK 3 lot analyses / month\nOK Standard reports\nOK Community support\nGet started\n->\nMOST POPULAR\nPro\n\nFor professionals who move fast.\n\n$49/ month\nBilled monthly\nOK Unlimited lot analyses\nOK Advanced reports\nOK Export & data layers\nOK Priority support\nStart Pro\nTeam\n\nScale insights across your team.\n\n$199/ month\nBilled monthly\nOK Everything in Pro\nOK Team collaboration\nOK Shared workspaces\nOK Dedicated support\nContact sales\n->\nPlotlot\n\nLand intelligence, made simple.\n\n(c) 2026 Plotlot. All rights reserved.",
+    "documentWidth": 1440,
+    "viewportWidth": 1440,
+    "horizontalOverflow": false,
+    "activeElement": "BODY",
+    "placeholders": [],
+    "headings": [
+      {
+        "tag": "H1",
+        "text": "See What Fits.",
+        "lines": 2
+      },
+      {
+        "tag": "H2",
+        "text": "Trusted for faster diligence.",
+        "lines": 3
+      },
+      {
+        "tag": "H2",
+        "text": "Everything needed to evaluate a lot.",
+        "lines": 3
+      },
+      {
+        "tag": "H2",
+        "text": "A clearer view of the site.",
+        "lines": 3
+      },
+      {
+        "tag": "H2",
+        "text": "From address to answer.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Enter an address",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Review zoning & parcel constraints",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Explore massing options",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Export a report",
+        "lines": 2
+      },
+      {
+        "tag": "H2",
+        "text": "Built for land decisions.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Size opportunities with confidence.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Strengthen listings with insights.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Explore concepts faster.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Review projects with clarity.",
+        "lines": 2
+      },
+      {
+        "tag": "H2",
+        "text": "What teams say.",
+        "lines": 2
+      },
+      {
+        "tag": "H2",
+        "text": "Start with one lot.",
+        "lines": 2
+      },
+      {
+        "tag": "H3",
+        "text": "Starter",
+        "lines": 1
+      },
+      {
+        "tag": "H3",
+        "text": "Pro",
+        "lines": 1
+      },
+      {
+        "tag": "H3",
+        "text": "Team",
+        "lines": 1
+      }
+    ],
+    "buttons": []
+  },
+  "console": [],
+  "requestFailures": [
+    {
+      "url": "http://127.0.0.1:3215/sign-in?_rsc=3lb4g",
+      "method": "GET",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://127.0.0.1:3215/sign-up?intent=report&_rsc=3lb4g",
+      "method": "GET",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "badResponses": []
+}

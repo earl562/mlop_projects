@@ -5,6 +5,29 @@
 
 ---
 
+## Current User Direction (September 7, 2026)
+
+- Work on `cpt-pro`. Launch targets are Miami-Dade, Broward, Palm Beach and Lee
+  counties in Florida, plus Mecklenburg and Gaston counties in North Carolina.
+  San Diego is deferred; preserve its existing code, data and evidence.
+- Make small, reviewed checkpoint commits as work is completed and verified, and
+  push those commits to this project's GitHub development branch. The user has
+  explicitly authorized this as the standard; it supersedes earlier no-commit and
+  no-push instructions in historical production-readiness notes.
+- Inspect and stage exact paths or hunks. Keep implementation with its direct
+  tests; exclude secrets, generated diagnostics and unrelated/pre-existing work.
+  Do not use blanket staging to make a mixed dirty tree look clean.
+- Verify the branch, remote, staged content and relevant checks before each push.
+  Report checkpoint hashes, GitHub/CI status, and remaining uncommitted work.
+  A checkpoint is not a production-readiness or deployment claim.
+- No force-push, history rewriting, merge to `main`, deployment or production
+  database migration without separate explicit authorization. Keep Earl Perry's
+  configured authorship and do not add Co-Authored-By trailers.
+- Reliable real-property results remain the priority before sign-in configuration.
+  The dated handoff sections below are history, not current release evidence.
+
+---
+
 ## Who You Are Working With
 
 **User:** Phat (Vietnamese-American, based in Bay Area/San Diego market)

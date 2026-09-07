@@ -1,0 +1,19 @@
+id: psa.entitlement_contingency
+category: contingencies
+title: "Entitlement / Rezoning Contingency"
+document_types: [psa]
+deal_types: [land_deal]
+order_weight: 420
+is_required: false
+condition_expr: "context.entitlement_contingency == True"
+source: "Entitlement value-creation play (control + upzone before close)"
+content_template: |
+  Entitlement Contingency ({{ context.upzoning_vehicle or 'rezoning / upzoning approval' }}): Closing is expressly contingent upon Buyer obtaining, at Buyer's sole cost and expense, final approval of {{ context.upzoning_vehicle or 'the rezoning, special use permit, or other land-use entitlement' }} authorizing {% if context.target_units > 0 %}up to {{ context.target_units }} units/lots{% else %}Buyer's intended development{% endif %} on the Property (the "Entitlement"). If the Entitlement is not obtained on terms acceptable to Buyer in Buyer's reasonable discretion prior to Closing, Buyer may terminate this Contract by written notice to Seller and the Deposit shall be returned to Buyer.
+
+  Pursuit Period: Buyer shall have {{ context.entitlement_close_days or 365 }} days from the Effective Date to obtain the Entitlement and close (the "Pursuit Period"), inclusive of the {{ context.feasibility_days or 90 }}-day feasibility period during which Buyer may terminate for any reason in Buyer's sole and absolute discretion with a full refund of the Deposit.
+
+  Extension Option: If the Entitlement remains pending through no fault of Buyer at the end of the Pursuit Period, Buyer may extend the Closing Date by an additional {{ context.entitlement_extension_days or 180 }} days upon written notice to Seller delivered prior to the scheduled Closing Date.
+
+  Seller Cooperation: Seller shall reasonably cooperate with Buyer's entitlement efforts, including executing, as the record owner of the Property, any applications, subdivision plats, site plans, and consents required by the governing jurisdiction, at no out-of-pocket cost to Seller. Seller acknowledges that Buyer's applications will be submitted in Seller's name as current owner of record and that these efforts are intended to increase the value of the Property for the benefit of the transaction.
+
+  Buyer's Costs: Buyer shall be solely responsible for all entitlement costs (survey, civil engineering, architectural, environmental, and application fees) and shall keep the Property free of any liens arising from Buyer's pursuit of the Entitlement.
